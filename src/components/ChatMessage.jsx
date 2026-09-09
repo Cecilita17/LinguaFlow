@@ -14,7 +14,16 @@ export function ChatMessage({
 }) {
   const [showTranslation, setShowTranslation] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [justReanalyzed, setJustReanalyzed] = useState(false);
   const isUser = message.sender === 'user';
+
+  const handleReanalyzeClick = async () => {
+    if (onReanalyzeMessage) {
+      await onReanalyzeMessage(message);
+      setJustReanalyzed(true);
+      setTimeout(() => setJustReanalyzed(false), 2500);
+    }
+  };
 
   // Check if current message is in Arabic script
   const isArabic = targetLang === 'ar' ||
@@ -136,13 +145,27 @@ export function ChatMessage({
               {/* Re-analyze grammar button */}
               <button
                 type="button"
-                onClick={() => onReanalyzeMessage && onReanalyzeMessage(message)}
+                onClick={handleReanalyzeClick}
                 disabled={isReanalyzing === message.id}
                 className="px-2 py-1 bg-white/15 hover:bg-white/25 active:scale-95 rounded-lg transition-all flex items-center space-x-1 text-white text-[11px] font-semibold shadow-xs disabled:opacity-50"
                 title="Volver a analizar corrección estricta"
               >
-                <RotateCcw className={`w-3 h-3 text-rose-200 ${isReanalyzing === message.id ? 'animate-spin text-amber-300' : ''}`} />
-                <span>{isReanalyzing === message.id ? 'Analizando...' : 'Re-analizar'}</span>
+                {isReanalyzing === message.id ? (
+                  <>
+                    <RotateCcw className="w-3 h-3 text-amber-300 animate-spin" />
+                    <span className="text-amber-200">Analizando...</span>
+                  </>
+                ) : justReanalyzed ? (
+                  <>
+                    <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                    <span className="text-emerald-200">¡Actualizado!</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-3 h-3 text-rose-200" />
+                    <span>Re-analizar</span>
+                  </>
+                )}
               </button>
             </div>
 

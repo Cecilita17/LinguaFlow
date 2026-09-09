@@ -183,7 +183,19 @@ const DEEP_LANGUAGE_RULES = {
     { regex: /\bik\s+(zijn|is|bent)\b/gi, replacement: 'ik ben' },
     { regex: /\bik\s+(hebben|heeft)\b/gi, replacement: 'ik heb' },
     { regex: /\bik\s+willen\b/gi, replacement: 'ik wil' },
-    { regex: /\bik\s+gaan\b/gi, replacement: 'ik ga' }
+    { regex: /\bik\s+gaan\b/gi, replacement: 'ik ga' },
+    // Frequent Dutch learner spelling (double vowels before single consonants in open syllables)
+    { regex: /\bmaaken\b/gi, replacement: 'maken' },
+    { regex: /\bneemen\b/gi, replacement: 'nemen' },
+    { regex: /\bspreeken\b/gi, replacement: 'spreken' },
+    { regex: /\bkoopen\b/gi, replacement: 'kopen' },
+    { regex: /\bloopen\b/gi, replacement: 'lopen' },
+    { regex: /\bwoonen\b/gi, replacement: 'wonen' },
+    { regex: /\bzeegen\b/gi, replacement: 'zeggen' },
+    { regex: /\bgeeven\b/gi, replacement: 'geven' },
+    { regex: /\bleesen\b/gi, replacement: 'lezen' },
+    { regex: /\bik\s+komt\b/gi, replacement: 'ik kom' },
+    { regex: /\bik\s+werkt\b/gi, replacement: 'ik werk' }
   ],
   zh: [
     { regex: /我困/g, replacement: '我很困' },
@@ -202,7 +214,7 @@ export async function checkLanguageTool(text, targetLang) {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout for reliable LanguageTool response
 
     const res = await fetch('https://api.languagetool.org/v2/check', {
       method: 'POST',

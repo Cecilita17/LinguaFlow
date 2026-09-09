@@ -51,7 +51,6 @@ export function InputBar({
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (isProcessing || isTranscribingAudio) return;
 
-    e.preventDefault();
     e.stopPropagation();
 
     startCoordsRef.current = { x: e.clientX, y: e.clientY };

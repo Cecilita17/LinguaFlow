@@ -81,7 +81,18 @@ const GRAMMAR_RULES = {
     { regex: /\bik\s+(zijn|is|bent)\b/gi, replacement: 'ik ben' },
     { regex: /\bik\s+(hebben|heeft)\b/gi, replacement: 'ik heb' },
     { regex: /\bik\s+willen\b/gi, replacement: 'ik wil' },
-    { regex: /\bik\s+gaan\b/gi, replacement: 'ik ga' }
+    { regex: /\bik\s+gaan\b/gi, replacement: 'ik ga' },
+    { regex: /\bmaaken\b/gi, replacement: 'maken' },
+    { regex: /\bneemen\b/gi, replacement: 'nemen' },
+    { regex: /\bspreeken\b/gi, replacement: 'spreken' },
+    { regex: /\bkoopen\b/gi, replacement: 'kopen' },
+    { regex: /\bloopen\b/gi, replacement: 'lopen' },
+    { regex: /\bwoonen\b/gi, replacement: 'wonen' },
+    { regex: /\bzeegen\b/gi, replacement: 'zeggen' },
+    { regex: /\bgeeven\b/gi, replacement: 'geven' },
+    { regex: /\bleesen\b/gi, replacement: 'lezen' },
+    { regex: /\bik\s+komt\b/gi, replacement: 'ik kom' },
+    { regex: /\bik\s+werkt\b/gi, replacement: 'ik werk' }
   ],
   de: [
     { regex: /\bich\s+(habe|bin)\s+schlaf\b/gi, replacement: 'ich bin müde' },
@@ -432,6 +443,77 @@ const CONVERSATION_TOPICS = {
       vocabulary: {
         'koffie': { meaning: 'Café', part_of_speech: 'sustantivo' }
       }
+    },
+    {
+      id: 'nl_groentesoep',
+      triggers: ['soep', 'groenten', 'groente'],
+      response: 'Om groentesoep te maken, snijd je eerst groenten zoals wortel, prei en ui. Kook ze zachtjes in water met een bouillonblokje voor ongeveer twintig minuten. Wil je er ook soepballetjes of verse peterselie in?',
+      translation: 'Para hacer sopa de verduras, primero corta verduras como zanahoria, puerro y cebolla. Hiérvelas a fuego lento en agua con un cubito de caldo durante unos veinte minutos. ¿Quieres añadirle albóndigas o perejil fresco?',
+      tokens: [
+        { word: 'Om', clean_word: 'om', translit: null },
+        { word: 'groentesoep', clean_word: 'groentesoep', translit: null },
+        { word: 'te', clean_word: 'te', translit: null },
+        { word: 'maken,', clean_word: 'maken', translit: null },
+        { word: 'snijd', clean_word: 'snijd', translit: null },
+        { word: 'je', clean_word: 'je', translit: null },
+        { word: 'eerst', clean_word: 'eerst', translit: null },
+        { word: 'groenten', clean_word: 'groenten', translit: null },
+        { word: 'zoals', clean_word: 'zoals', translit: null },
+        { word: 'wortel,', clean_word: 'wortel', translit: null },
+        { word: 'prei', clean_word: 'prei', translit: null },
+        { word: 'en', clean_word: 'en', translit: null },
+        { word: 'ui.', clean_word: 'ui', translit: null }
+      ],
+      vocabulary: {
+        'groentesoep': { meaning: 'Sopa de verduras', part_of_speech: 'sustantivo' },
+        'snijd': { meaning: 'Cortas o picas (del verbo snijden)', part_of_speech: 'verbo' },
+        'koken': { meaning: 'Cocinar o hervir', part_of_speech: 'verbo' },
+        'bouillonblokje': { meaning: 'Cubito de caldo concentrado', part_of_speech: 'sustantivo' }
+      }
+    },
+    {
+      id: 'nl_koken',
+      triggers: ['koken', 'eten', 'maaltijd', 'recept', 'lunch', 'diner', 'avondeten', 'ontbijt', 'bakken', 'vlees', 'vegetarisch'],
+      response: 'Lekker eten klaarmaken is geweldig! Kook je het liefst volgens een vast recept of experimenteer je graag met kruiden?',
+      translation: '¡Preparar comida rica es genial! ¿Prefieres cocinar según una receta fija o te gusta experimentar con especias?',
+      tokens: [
+        { word: 'Lekker', clean_word: 'lekker', translit: null },
+        { word: 'eten', clean_word: 'eten', translit: null },
+        { word: 'klaarmaken', clean_word: 'klaarmaken', translit: null },
+        { word: 'is', clean_word: 'is', translit: null },
+        { word: 'geweldig!', clean_word: 'geweldig', translit: null }
+      ],
+      vocabulary: {
+        'klaarmaken': { meaning: 'Preparar o elaborar', part_of_speech: 'verbo' },
+        'recept': { meaning: 'Receta de cocina', part_of_speech: 'sustantivo' }
+      }
+    },
+    {
+      id: 'nl_hoe_kan_ik',
+      triggers: ['hoe kan ik', 'hoe doe je', 'hoe maak je', 'hoe moet ik'],
+      response: 'Een handige manier is om het stap voor stap aan te pakken. Zorg dat je alle spullen klaarzet en neem rustig de tijd. Welk onderdeel wil je als eerste proberen?',
+      translation: 'Una manera práctica es abordarlo paso a paso. Asegúrate de tener todas las cosas listas y tómate tu tiempo. ¿Qué parte quieres intentar primero?',
+      tokens: [
+        { word: 'Stap', clean_word: 'stap', translit: null },
+        { word: 'voor', clean_word: 'voor', translit: null },
+        { word: 'stap!', clean_word: 'stap', translit: null }
+      ],
+      vocabulary: {
+        'stap voor stap': { meaning: 'Paso a paso', part_of_speech: 'expresión adverbial' }
+      }
+    },
+    {
+      id: 'nl_weer',
+      triggers: ['weer', 'regen', 'zon', 'koud', 'warm', 'zomer', 'winter', 'herfst', 'lente'],
+      response: 'Het weer kan hier zo snel veranderen! Houd je meer van een warme zonnige middag of van knus binnenblijven als het regent?',
+      translation: '¡El clima aquí puede cambiar tan rápido! ¿Prefieres una tarde cálida y soleada o quedarte acogedor adentro cuando llueve?',
+      tokens: [
+        { word: 'Het', clean_word: 'het', translit: null },
+        { word: 'weer', clean_word: 'weer', translit: null }
+      ],
+      vocabulary: {
+        'weer': { meaning: 'Tiempo o clima', part_of_speech: 'sustantivo' }
+      }
     }
   ],
 
@@ -702,134 +784,129 @@ const CONVERSATION_TOPICS = {
 const ADAPTIVE_POOLS = {
   es: [
     {
-      response: '¡Muy bien expresado! ¿Cuánto tiempo llevas aprendiendo español?',
-      translation: 'Very well said! How long have you been learning Spanish?',
-      vocabulary: { 'expresado': { meaning: 'Dicho o formulado', part_of_speech: 'adjetivo' } }
+      response: '¡Muy bien formulado! Cuéntame un poco más sobre eso, me interesa tu punto de vista.',
+      translation: 'Very well formulated! Tell me a bit more about that, I am interested in your point of view.',
+      vocabulary: { 'formulado': { meaning: 'Dicho o expresado', part_of_speech: 'adjetivo' } }
     },
     {
-      response: '¡Eso suena muy interesante! ¿Qué cosas te gusta hacer en tu tiempo libre?',
-      translation: 'That sounds very interesting! What things do you like doing in your free time?',
-      vocabulary: { 'interesante': { meaning: 'Que capta la atención', part_of_speech: 'adjetivo' } }
+      response: '¡Totalmente de acuerdo! Es un tema genial para practicar conversación. ¿Qué opinas tú al respecto?',
+      translation: 'Totally agree! It is a great topic to practice conversation. What do you think about it?',
+      vocabulary: { 'opinas': { meaning: 'Consideras o piensas', part_of_speech: 'verbo' } }
     }
   ],
   en: [
     {
-      response: 'That was very well expressed! How long have you been learning English?',
-      translation: '¡Muy bien expresado! ¿Cuánto tiempo llevas aprendiendo inglés?',
+      response: 'That was very well expressed! Tell me a bit more about that, I would love to hear your thoughts.',
+      translation: '¡Muy bien expresado! Cuéntame un poco más sobre eso, me encantaría escuchar tus pensamientos.',
       vocabulary: { 'expressed': { meaning: 'Expresado o comunicado', part_of_speech: 'adjective' } }
     },
     {
-      response: 'That sounds really interesting! What do you enjoy doing on weekends?',
-      translation: '¡Eso suena muy interesante! ¿Qué disfrutas hacer los fines de semana?',
-      vocabulary: { 'enjoy': { meaning: 'Disfrutar', part_of_speech: 'verb' } }
+      response: 'I completely agree! That is a great topic to explore together. What is your perspective on it?',
+      translation: '¡Totalmente de acuerdo! Es un gran tema para explorar juntos. ¿Cuál es tu perspectiva al respecto?',
+      vocabulary: { 'perspective': { meaning: 'Perspectiva o punto de vista', part_of_speech: 'noun' } }
     }
   ],
   pl: [
     {
-      response: 'Bardzo dobrze to ująłeś! Jak długo już uczysz się polskiego?',
-      translation: '¡Lo dijiste muy bien! ¿Cuánto tiempo llevas aprendiendo polaco?',
-      vocabulary: { 'uczysz': { meaning: 'Aprendes o estudias', part_of_speech: 'verbo' } }
+      response: 'Bardzo dobrze to ująłeś! Opowiedz mi o tym coś więcej, chętnie posłucham.',
+      translation: '¡Lo dijiste muy bien! Cuéntame un poco más sobre eso, con gusto escucharé.',
+      vocabulary: { 'opowiedz': { meaning: 'Cuenta o relata (tú)', part_of_speech: 'verbo' } }
     },
     {
-      response: 'Świetnie ci idzie! Czy masz ulubiony temat do rozmów?',
-      translation: '¡Te va genial! ¿Tienes algún tema favorito para conversar?',
-      vocabulary: { 'świetnie': { meaning: 'Estupendamente o genial', part_of_speech: 'adverbio' } }
-    },
-    {
-      response: 'Całkowicie się zgadzam. O czym jeszcze chciałbyś porozmawiać?',
-      translation: 'Totalmente de acuerdo. ¿De qué más te gustaría hablar?',
-      vocabulary: { 'porozmawiać': { meaning: 'Charlar o conversar', part_of_speech: 'verbo' } }
+      response: 'Zgadzam się z tobą! To świetny temat do ćwiczenia języka. Co o tym sądzisz?',
+      translation: '¡Estoy de acuerdo contigo! Es un gran tema para practicar el idioma. ¿Qué opinas de esto?',
+      vocabulary: { 'sądzisz': { meaning: 'Opines o piensas', part_of_speech: 'verbo' } }
     }
   ],
   ar: [
     {
-      response: 'أَنْتَ تَتَحَدَّثُ بِطَرِيقَةٍ مُمْتَازَةٍ! كَمْ لَكَ مِنْ وَقْتٍ تَتَعَلَّمُ فِيهِ اللُّغَةَ الْعَرَبِيَّةَ؟',
-      translation: '¡Hablas de una manera excelente! ¿Cuánto tiempo llevas aprendiendo árabe?',
-      vocabulary: { 'ممتازة': { meaning: 'Excelente o magnífica', part_of_speech: 'adjetivo', translit: 'mumtāzah' } }
+      response: 'أَنْتَ تَتَحَدَّثُ بِطَرِيقَةٍ مُمْتَازَةٍ! أَخْبِرْنِي الْمَزِيدَ عَنْ ذَلِكَ، يَسُرُّنِي أَنْ أَسْمَعَ رَأْيَكَ.',
+      translation: '¡Hablas de una manera excelente! Cuéntame más sobre eso, me complace escuchar tu opinión.',
+      vocabulary: { 'أخبرني': { meaning: 'Cuéntame o dime', part_of_speech: 'verbo', translit: 'akhbirnī' } }
     },
     {
-      response: 'هَذَا رَائِعٌ جِدًّا! عَنْ أَيِّ مَوْضُوعٍ تُفَضِّلُ أَنْ نَتَحَدَّثَ الْآنَ؟',
-      translation: '¡Eso es maravilloso! ¿Sobre qué tema prefieres que conversemos ahora?',
-      vocabulary: { 'موضوع': { meaning: 'Tema o asunto', part_of_speech: 'sustantivo', translit: 'mawḍū‘' } }
+      response: 'أَنَا أُوَافِقُكَ الرَّأْيَ تَمَامًا! هَذَا مَوْضُوعٌ رَائِعٌ لِلتَّدْرِيبِ. مَاذَا تَعْتَقِدُ أَيْضًا؟',
+      translation: '¡Estoy totalmente de acuerdo contigo! Este es un tema maravilloso para practicar. ¿Qué opinas además?',
+      vocabulary: { 'أوافقك': { meaning: 'Estoy de acuerdo contigo', part_of_speech: 'verbo', translit: 'uwāfiquka' } }
     }
   ],
   zh: [
     {
-      response: '你说得非常好！平时你喜欢看什么类型的中国电影或者电视剧吗？',
-      translation: '¡Lo dijiste muy bien! ¿Qué tipo de películas o series chinas te gusta ver habitualmente?',
+      response: '你说得非常好！关于这个事情，你能跟我多分享一些具体的细节吗？',
+      translation: '¡Lo dijiste muy bien! Sobre este asunto, ¿puedes compartir conmigo más detalles específicos?',
       tokens: [
         { word: '你说得', clean_word: '说', translit: 'nǐ shuō de' },
         { word: '非常好！', clean_word: '非常好', translit: 'fēicháng hǎo!' }
       ],
-      vocabulary: { '非常好': { meaning: 'Muy bien o excelente', part_of_speech: 'frase', translit: 'fēicháng hǎo' } }
+      vocabulary: { '具体': { meaning: 'Concreto o específico', part_of_speech: 'adjetivo', translit: 'jùtǐ' } }
     },
     {
-      response: '太有意思了！每天多练习几句，你的中文表达会越来越地道。',
-      translation: '¡Qué interesante! Practicando unas frases cada día, tu expresión en chino será cada vez más auténtica.',
+      response: '我非常赞同你的看法！多用完整的句子表达，你的中文会越来越自然。',
+      translation: '¡Concuerdo mucho con tu opinión! Expresándote con oraciones completas, tu chino será cada vez más natural.',
       tokens: [
-        { word: '太有意思了！', clean_word: '有意思', translit: 'tài yǒu yìsi le!' }
+        { word: '赞同', clean_word: '赞同', translit: 'zàntóng' }
       ],
-      vocabulary: { '有意思': { meaning: 'Interesante o curioso', part_of_speech: 'adjetivo', translit: 'yǒu yìsi' } }
+      vocabulary: { '赞同': { meaning: 'Estar de acuerdo', part_of_speech: 'verbo', translit: 'zàntóng' } }
     }
   ],
   ru: [
     {
-      response: 'Ты отлично выражаешь свои мысли! Как давно ты изучаешь русский язык?',
-      translation: '¡Expresas tus ideas genial! ¿Cuánto tiempo llevas estudiando ruso?',
-      vocabulary: { 'отлично': { meaning: 'Excelente o genial', part_of_speech: 'adverbio', translit: 'otlichno' } }
+      response: 'Ты отлично выражаешь свои мысли! Расскажи мне об этом подробнее, мне очень интересно.',
+      translation: '¡Expresas tus ideas genial! Cuéntame de esto con más detalle, me interesa mucho.',
+      vocabulary: { 'подробнее': { meaning: 'Más detalladamente', part_of_speech: 'adverbio', translit: 'podrobneye' } }
     },
     {
-      response: 'Очень интересно! Какая тема для разговора тебе нравится больше всего?',
-      translation: '¡Muy interesante! ¿Qué tema de conversación te gusta más?',
-      vocabulary: { 'интересно': { meaning: 'Interesante', part_of_speech: 'adverbio', translit: 'interesno' } }
+      response: 'Я полностью согласен! Это отличная тема для практики. Что ты думаешь об этом?',
+      translation: '¡Estoy totalmente de acuerdo! Es un tema excelente para practicar. ¿Qué piensas de esto?',
+      vocabulary: { 'согласен': { meaning: 'De acuerdo', part_of_speech: 'adjetivo breve', translit: 'soglasen' } }
     }
   ],
   nl: [
     {
-      response: 'Wat goed gezegd! Hoe lang ben je al bezig met Nederlands leren?',
-      translation: '¡Qué bien dicho! ¿Cuánto tiempo llevas aprendiendo holandés?',
-      vocabulary: { 'bezig': { meaning: 'Ocupado o dedicado a algo', part_of_speech: 'adjetivo' } }
+      response: 'Wat goed geformuleerd! Vertel me daar graag wat meer over, ik luister met veel interesse.',
+      translation: '¡Qué bien formulado! Cuéntame un poco más sobre eso, escucho con mucho interés.',
+      vocabulary: { 'geformuleerd': { meaning: 'Formulado o expresado', part_of_speech: 'adjetief' } }
     },
     {
-      response: 'Heel interessant! Waar praat je het liefst over in je vrije tijd?',
-      translation: '¡Muy interesante! ¿De qué prefieres hablar en tu tiempo libre?',
-      vocabulary: { 'interessant': { meaning: 'Interesante', part_of_speech: 'adjetivo' } }
+      response: 'Dat is een heel goed punt! Het is fijn om hierover samen in het Nederlands te praten. Wat denk jij ervan?',
+      translation: '¡Ese es un muy buen punto! Es agradable hablar de esto juntos en neerlandés. ¿Qué opinas?',
+      vocabulary: { 'punt': { meaning: 'Punto o aspecto', part_of_speech: 'sustantivo' } }
     }
   ],
   de: [
     {
-      response: 'Das hast du super gesagt! Wie lange lernst du schon Deutsch?',
-      translation: '¡Lo dijiste súper bien! ¿Cuánto tiempo llevas aprendiendo alemán?',
-      vocabulary: { 'super': { meaning: 'Genial o excelente', part_of_speech: 'adverbio' } }
+      response: 'Das hast du super ausgedrückt! Erzähl mir gerne noch ein bisschen mehr darüber.',
+      translation: '¡Lo expresaste súper bien! Cuéntame un poco mehr über ello con gusto.',
+      vocabulary: { 'ausgedrückt': { meaning: 'Expresado', part_of_speech: 'partizip' } }
     },
     {
-      response: 'Sehr interessant! Worüber unterhältst du dich am liebsten?',
-      translation: '¡Muy interesante! ¿De qué prefieres conversar?',
-      vocabulary: { 'interessant': { meaning: 'Interesante', part_of_speech: 'adjetivo' } }
+      response: 'Da stimme ich dir vollkommen zu! Das ist ein prima Thema zum Üben. Was meinst du dazu?',
+      translation: '¡Estoy totalmente de acuerdo contigo! Es un gran tema para practicar. ¿Qué opinas al respecto?',
+      vocabulary: { 'vollkommen': { meaning: 'Completamente', part_of_speech: 'adverb' } }
     }
   ],
   fr: [
     {
-      response: "C'est très bien formulé ! Depuis combien de temps apprends-tu le français ?",
-      translation: '¡Está muy bien formulado! ¿Desde hace cuánto tiempo aprendes francés?',
+      response: "C'est très bien formulé ! Raconte-moi un peu plus à ce sujet, je t'écoute avec plaisir.",
+      translation: '¡Está muy bien formulado! Cuéntame un poco más al respecto, te escucho con mucho gusto.',
       vocabulary: { 'formulé': { meaning: 'Expresado o dicho', part_of_speech: 'adjectif' } }
     },
     {
-      response: "C'est passionnant ! De quel sujet aimes-tu discuter d'habitude ?",
-      translation: '¡Es apasionante! ¿De qué tema te gusta charlar habitualmente?',
-      vocabulary: { 'passionnant': { meaning: 'Apasionante o fascinante', part_of_speech: 'adjectif' } }
+      response: "Je suis tout à fait d'accord avec toi ! C'est un excellent sujet de discussion. Qu'en penses-tu ?",
+      translation: '¡Estoy totalmente de acuerdo contigo! Es un excelente tema de conversación. ¿Qué opinas?',
+      vocabulary: { 'accord': { meaning: 'Acuerdo', part_of_speech: 'nom' } }
     }
   ],
   it: [
     {
-      response: 'Complimenti, ti esprimi davvero bene! Da quanto tempo studi l’italiano?',
-      translation: '¡Felicitaciones, te expresas muy bien! ¿Desde hace cuánto tiempo estudias italiano?',
-      vocabulary: { 'complimenti': { meaning: 'Felicitaciones', part_of_speech: 'interiezione' } }
+      response: 'Ti esprimi davvero bene! Raccontami qualcosa in più su questo argomento, ti ascolto volentieri.',
+      translation: '¡Te expresas realmente bien! Cuéntame algo más sobre este tema, te escucho con gusto.',
+      vocabulary: { 'argomento': { meaning: 'Tema o asunto', part_of_speech: 'sostantivo' } }
     },
     {
-      response: 'Molto interessante! Di cosa ti piace parlare nel tuo tempo libero?',
-      translation: '¡Muy interesante! ¿De qué te gusta hablar en tu tiempo libre?',
-      vocabulary: { 'interessante': { meaning: 'Interesante', part_of_speech: 'aggettivo' } }
+      response: 'Sono d’accordissimo con te! È un ottimo spunto per fare pratica. Cosa ne pensi?',
+      translation: '¡Estoy de acuerdísimo contigo! Es un excelente punto para practicar. ¿Qué opinas?',
+      vocabulary: { 'ottimo': { meaning: 'Excelente u óptimo', part_of_speech: 'aggettivo' } }
     }
   ]
 };
@@ -870,7 +947,7 @@ export function processSmartConversation(message, targetLang = 'pl', nativeLang 
     }
   }
 
-  // 5. Adaptive turn fallback if no direct trigger
+  // 5. Contextual reflection fallback if no direct trigger
   if (!matchedTopic) {
     const turnCount = history.filter(h => h.sender === 'user').length;
     const pool = ADAPTIVE_POOLS[langKey] || ADAPTIVE_POOLS['pl'];

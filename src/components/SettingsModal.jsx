@@ -51,7 +51,15 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
             <div className="flex items-start space-x-1.5 mt-1.5 text-xs text-stone-500">
               <Info className="w-3.5 h-3.5 text-stone-400 flex-shrink-0 mt-0.5" />
               <span>
-                El chatbot incluye un motor conversacional continuo inteligente. Si ingresas tu clave de Gemini, el servidor detectará automáticamente el mejor modelo disponible.
+                El chatbot incluye un motor conversacional inteligente y contextual. Para respuestas con IA generativa completa en la nube, puedes obtener una clave gratis en{' '}
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-rose-600 hover:text-rose-700 underline font-semibold"
+                >
+                  Google AI Studio
+                </a>.
               </span>
             </div>
           </div>

@@ -119,31 +119,27 @@ export function useSpeech({
       return;
     }
 
+    const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;
+    // On mobile devices, continuous mode causes freezing or duplication in Android Chrome.
+    recognition.continuous = !isMobile;
     recognition.interimResults = true;
     recognition.lang = targetLangCode;
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      // Reconstruct strictly from 0 to results.length-1 to avoid mobile accumulator duplication
-      const finalParts = [];
       let interim = '';
-
-      for (let i = 0; i < event.results.length; i++) {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const item = event.results[i];
         const text = item[0]?.transcript || '';
         if (item.isFinal) {
-          finalParts.push(text);
+          fullTranscriptRef.current = (fullTranscriptRef.current ? fullTranscriptRef.current + ' ' : '') + text;
         } else {
           interim += text;
         }
       }
 
-      const finalString = cleanDuplicatePhrases(finalParts.join(' '));
-      fullTranscriptRef.current = finalString;
-
-      const combined = cleanDuplicatePhrases((finalString + ' ' + interim).trim());
+      const combined = cleanDuplicatePhrases((fullTranscriptRef.current + ' ' + interim).trim());
       setInterimTranscript(combined);
     };
 
@@ -154,7 +150,7 @@ export function useSpeech({
     };
 
     recognition.onend = () => {
-      // If currently recording and recognition stopped unexpectedly, try to restart unless duration reached
+      // If currently recording on mobile and recognition ended, restart to keep capturing while held
       if (isRecordingRef.current && recognitionRef.current) {
         try {
           recognitionRef.current.start();
@@ -306,7 +302,11 @@ export function useSpeech({
     }
 
     // 2. Non-blocking audio capture via MediaRecorder (for multimodal AI transcription when apiKey is present)
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    // CRITICAL: On mobile devices (Android / iOS), concurrent getUserMedia steals exclusive AudioRecord
+    // focus away from Web Speech recognition. Therefore, on mobile or when no apiKey is supplied,
+    // Web Speech recognition runs with exclusive access for maximum accuracy and speed.
+    const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (!isMobileDevice && (apiKey || '').trim() && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then((stream) => {
           // If recording already stopped before mic initialized, release tracks immediately

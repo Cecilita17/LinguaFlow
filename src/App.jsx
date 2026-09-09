@@ -396,6 +396,7 @@ export default function App() {
       id: tempUserId,
       sender: 'user',
       text: text.trim(),
+      originalText: text.trim(),
       correctedText: text.trim(),
       hasCorrection: false,
       diffTokens: [{ text: text.trim(), changed: false, original: null }]
@@ -423,6 +424,7 @@ export default function App() {
             if (m.id === tempUserId) {
               return {
                 ...m,
+                originalText: text.trim(),
                 correctedText: user_correction.corrected_text || m.text,
                 hasCorrection: user_correction.has_errors,
                 diffTokens: user_correction.diff_tokens || m.diffTokens
