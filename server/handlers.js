@@ -6,7 +6,7 @@ import {
   cleanAndParseJSON
 } from './promptTemplates.js';
 import { SUPPORTED_LANGUAGES } from './languageData.js';
-import { processSmartConversation } from './conversationEngine.js';
+import { processDeterministicLinguistics, processSmartConversation } from './conversationEngine.js';
 
 dotenv.config();
 
@@ -128,6 +128,7 @@ export async function handleChat(req, res) {
         const tryList = [activeModel, ...MODEL_CANDIDATES.filter(m => m !== activeModel)];
         const tried = new Set();
 
+        let lastGeminiError = null;
         for (const model of tryList) {
           if (tried.has(model)) continue;
           tried.add(model);
@@ -168,25 +169,42 @@ export async function handleChat(req, res) {
               }
             } else {
               const err = await response.json().catch(() => ({}));
-              console.warn(`Model ${model} error (${response.status}):`, err?.error?.message || response.statusText);
+              lastGeminiError = err?.error?.message || response.statusText;
+              console.warn(`Model ${model} error (${response.status}):`, lastGeminiError);
             }
           } catch (fetchErr) {
+            lastGeminiError = fetchErr.message;
             console.warn(`Call to ${model} threw:`, fetchErr.message);
           }
         }
+
+        // Gemini key was provided, but all candidate models failed
+        const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
+        return res.status(503).json({
+          success: false,
+          error: `El motor de IA de Google Gemini no pudo generar una respuesta: ${lastGeminiError || 'Servicio no disponible'}. Por favor verifica tu clave o intenta más tarde.`,
+          code: 'GEMINI_FAILED',
+          user_correction: deterministicCorrection
+        });
       } catch (geminiErr) {
-        console.warn('Gemini AI workflow failed, using local engine:', geminiErr.message);
+        console.warn('Gemini AI workflow failed:', geminiErr.message);
+        const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
+        return res.status(503).json({
+          success: false,
+          error: `Error al conectar con Google Gemini: ${geminiErr.message}.`,
+          code: 'GEMINI_ERROR',
+          user_correction: deterministicCorrection
+        });
       }
     }
 
-    // 2. Local Intelligent Multi-Turn Fallback (Never hangs, handles continuous dialogue)
-    console.log('Using smart multi-turn linguistic engine...');
-    const fallbackData = processSmartConversation(message.trim(), targetLang, nativeLang, history);
-
-    return res.status(200).json({
-      success: true,
-      source: 'smart_linguistic_engine',
-      data: fallbackData
+    // No API key provided: Return controlled error without fake/canned bot responses
+    const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
+    return res.status(400).json({
+      success: false,
+      error: 'Para conversar con LinguaFlow, ingresa tu API Key de Google Gemini en Ajustes ⚙️ (es gratis en Google AI Studio). Gemini es el motor exclusivo de conversación.',
+      code: 'MISSING_API_KEY',
+      user_correction: deterministicCorrection
     });
 
   } catch (error) {

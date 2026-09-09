@@ -30,6 +30,8 @@ export async function sendChatMessage({
 
   const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
   let lastGeminiError = null;
+  let serverCorrection = null;
+  let serverCode = null;
 
   // 1. If user entered Gemini API Key in Settings, call Google Gemini AI directly first (instant, 100% generative AI)
   if (effectiveKey) {
@@ -137,24 +139,37 @@ export async function sendChatMessage({
         }
       }
     } else {
-      console.warn(`/api/chat responded with status ${response.status}. Activating resilient client engine.`);
+      console.warn(`/api/chat responded with status ${response.status}.`);
+      const errData = await response.json().catch(() => ({}));
+      if (errData?.error) {
+        lastGeminiError = errData.error;
+      }
+      if (errData?.user_correction) {
+        serverCorrection = errData.user_correction;
+      }
+      if (errData?.code) {
+        serverCode = errData.code;
+      }
     }
   } catch (netErr) {
-    console.warn('/api/chat unreachable or timed out. Activating resilient client engine:', netErr.message);
+    console.warn('/api/chat unreachable or timed out:', netErr.message);
   }
 
-  // 3. Resilient smart multi-turn linguistic engine (with ZERO generic praise templates)
-  console.log('Using resilient smart multi-turn linguistic engine...');
-  const fallbackData = processSmartConversation(cleanMsg, targetLang, nativeLang, history);
-  const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);
-  if (deepCorrection && deepCorrection.has_errors) {
-    fallbackData.user_correction = deepCorrection;
-  }
-  return {
-    source: 'resilient_linguistic_engine',
-    geminiError: lastGeminiError,
-    data: fallbackData
-  };
+  // 3. Gemini is the SOLE generator of conversational responses.
+  // When Gemini cannot be reached or no key is provided, NEVER fabricate a bot response.
+  // Instead, compute strict deterministic pedagogical corrections for the student's message,
+  // and throw a controlled error informing the user.
+  console.log('Gemini AI unavailable for conversational response. Computing deterministic linguistics...');
+  const deterministicCorrection = serverCorrection || await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);
+  
+  const errorMessage = lastGeminiError || (effectiveKey
+    ? 'El motor de conversación de Google Gemini no pudo generar una respuesta. Verifica tu conexión o clave en Ajustes ⚙️.'
+    : 'Para conversar con LinguaFlow, ingresa tu API Key de Google Gemini en Ajustes ⚙️ (es gratis en Google AI Studio). Gemini es el motor exclusivo de conversación.');
+
+  const error = new Error(errorMessage);
+  error.code = serverCode || (effectiveKey ? 'GEMINI_FAILED' : 'MISSING_API_KEY');
+  error.user_correction = deterministicCorrection;
+  throw error;
 }
 
 /**
