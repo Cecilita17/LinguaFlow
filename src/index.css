@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased text-stone-900;
+    /* Rich Warm Chocolate Background */
+    background-color: #24120c;
+    background-image: radial-gradient(#381c13 1px, transparent 1px), radial-gradient(#381c13 1px, #24120c 1px);
+    background-size: 40px 40px;
+    background-position: 0 0, 20px 20px;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Transliteration Ruby Styling */
+ruby {
+  ruby-position: over;
+  ruby-align: center;
+  display: inline-ruby;
+  vertical-align: baseline;
+  padding: 0 1.5px;
+}
+
+/* Default rt transliteration: vibrant, clear sky-600 */
+rt {
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #0284c7;
+  user-select: none;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+/* Transliteration in user message: luminous soft rose/white */
+.user-ruby rt {
+  color: #ffe4e6 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* RTL Specific Rules for Arabic */
+[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+}
+
+[dir="rtl"] ruby rt {
+  direction: ltr !important;
+  unicode-bidi: embed !important;
+  text-align: center;
+}
+
+/* Font enhancements */
+.font-arabic {
+  font-family: 'Amiri', 'Traditional Arabic', 'Scheherazade New', Tahoma, serif;
+}
+
+.font-chinese {
+  font-family: 'Noto Sans SC', sans-serif;
+}
+
+/* Custom Scrollbars in Chocolate Theme */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e0f0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4a281d;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b3a2a;
+}
+
+/* Wave animation */
+@keyframes wavePulse {
+  0%, 100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.animate-soundwave {
+  animation: wavePulse 1s ease-in-out infinite;
+}
