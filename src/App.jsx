@@ -53,6 +53,7 @@ export default function App() {
   const {
     isRecording,
     recordingSeconds,
+    isTranscribingAudio,
     isSpeaking,
     interimTranscript,
     startRecording,
@@ -62,6 +63,9 @@ export default function App() {
     stopSpeaking
   } = useSpeech({
     targetLangCode: currentLangObj.speechCode,
+    targetLang,
+    nativeLang,
+    apiKey: config?.apiKey || '',
     handsFree,
     isProcessing,
     onSpeechResult: (spokenText) => {
@@ -473,9 +477,11 @@ export default function App() {
       {/* Input Bar */}
       <InputBar
         targetLang={targetLang}
+        nativeLang={nativeLang}
         onSendMessage={handleSendMessage}
         isRecording={isRecording}
         recordingSeconds={recordingSeconds}
+        isTranscribingAudio={isTranscribingAudio}
         onStartRecording={startRecording}
         onStopRecording={stopRecording}
         onCancelRecording={cancelRecording}

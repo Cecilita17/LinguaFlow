@@ -316,3 +316,111 @@ Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeL
     res.status(500).json({ error: 'Error en la búsqueda de palabra' });
   }
 }
+
+// Transcribe audio endpoint (Gemini Multimodal Audio for heavy accents & mixed languages)
+export async function handleTranscribe(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  try {
+    const body = parseRequestBody(req);
+    const { audioBase64, mimeType = 'audio/webm', targetLang = 'es', nativeLang = 'es', apiKey: clientApiKey } = body;
+
+    const effectiveApiKey = (clientApiKey || process.env.GEMINI_API_KEY || '').trim();
+
+    if (!audioBase64) {
+      return res.status(400).json({ error: 'No se recibió archivo de audio.' });
+    }
+
+    if (!effectiveApiKey) {
+      return res.status(400).json({ error: 'No hay API key disponible para transcripción multimodal con IA.' });
+    }
+
+    const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
+    const nativeObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
+    const targetName = langObj.englishName || langObj.name;
+    const nativeName = nativeObj.englishName || nativeObj.name;
+
+    const activeModel = await getBestGeminiModel(effectiveApiKey);
+
+    const prompt = `You are an expert multilingual audio transcriber specialized in language learners.
+The speaker is practicing target language: "${targetName}", and their native language is "${nativeName}".
+
+CRITICAL INSTRUCTIONS:
+1. The speaker may have a strong foreign accent (for example, native ${nativeName} accent while speaking ${targetName}). Transcribe the intended words accurately through the accent.
+2. The speaker may mix words or whole sentences in BOTH "${targetName}" and "${nativeName}" (code-switching, e.g. mixing Polish and Spanish, Arabic and Spanish, German and Spanish, etc.). Transcribe EXACTLY what was said in the original languages.
+3. Do NOT translate. Keep the original words in the languages spoken.
+4. Output ONLY the raw transcribed text. Do NOT add quotes, markdown formatting, explanations, or timestamps.`;
+
+    const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
+    let cleanMime = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
+    if (!cleanMime || cleanMime === 'audio/x-m4a') cleanMime = 'audio/mp4';
+
+    const tryList = [activeModel, ...MODEL_CANDIDATES.filter(m => m !== activeModel)];
+    const tried = new Set();
+
+    for (const model of tryList) {
+      if (tried.has(model)) continue;
+      tried.add(model);
+
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveApiKey}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const response = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: cleanMime,
+                      data: cleanBase64
+                    }
+                  },
+                  {
+                    text: prompt
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 1000
+            }
+          })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (transcript) {
+            console.log(`✅ Audio transcribed via Gemini [${model}]: "${transcript}"`);
+            return res.status(200).json({
+              success: true,
+              source: `gemini (${model})`,
+              transcript
+            });
+          }
+        } else {
+          const err = await response.json().catch(() => ({}));
+          console.warn(`Audio transcription model ${model} error (${response.status}):`, err?.error?.message || response.statusText);
+        }
+      } catch (err) {
+        console.warn(`Audio transcription call to ${model} threw:`, err.message);
+      }
+    }
+
+    return res.status(500).json({ error: 'No se pudo transcribir el audio con los modelos disponibles.' });
+  } catch (err) {
+    console.error('Server error in /api/transcribe:', err);
+    res.status(500).json({ error: 'Error en el servidor durante la transcripción de audio.' });
+  }
+}
+

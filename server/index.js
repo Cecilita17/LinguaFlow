@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { handleHealth, handleLanguages, handleChat, handleLookupWord } from './handlers.js';
+import { handleHealth, handleLanguages, handleChat, handleLookupWord, handleTranscribe } from './handlers.js';
 
 dotenv.config();
 
@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Routes supported both with /api prefix and without
 app.get('/api/health', handleHealth);
@@ -23,6 +23,9 @@ app.post('/chat', handleChat);
 
 app.post('/api/lookup-word', handleLookupWord);
 app.post('/lookup-word', handleLookupWord);
+
+app.post('/api/transcribe', handleTranscribe);
+app.post('/transcribe', handleTranscribe);
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {

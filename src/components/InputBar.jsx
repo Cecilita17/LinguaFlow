@@ -1,11 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, Square, X, Radio } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Send, Mic, X, Radio, Loader2, Sparkles } from 'lucide-react';
 
 export function InputBar({
   targetLang,
+  nativeLang,
   onSendMessage,
   isRecording,
   recordingSeconds = 0,
+  isTranscribingAudio = false,
   onStartRecording,
   onStopRecording,
   onCancelRecording,
@@ -17,11 +19,15 @@ export function InputBar({
   const [isDraggingCancel, setIsDraggingCancel] = useState(false);
   const inputRef = useRef(null);
 
+  const startCoordsRef = useRef(null);
+  const isPointerActiveRef = useRef(false);
+  const pointerIdRef = useRef(null);
+
   const isArabic = targetLang === 'ar' || /[\u0600-\u06FF]/.test(text);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!text.trim() || isProcessing || isRecording) return;
+    if (!text.trim() || isProcessing || isRecording || isTranscribingAudio) return;
     onSendMessage(text.trim());
     setText('');
   };
@@ -40,15 +46,52 @@ export function InputBar({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Push-to-Talk Handlers
-  const handleMouseDown = (e) => {
+  // Universal Pointer Events (Unified for Desktop Mouse, Mobile Touch & Stylus)
+  const handlePointerDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (isProcessing || isTranscribingAudio) return;
+
     e.preventDefault();
+    e.stopPropagation();
+
+    startCoordsRef.current = { x: e.clientX, y: e.clientY };
+    isPointerActiveRef.current = true;
+    pointerIdRef.current = e.pointerId;
     setIsDraggingCancel(false);
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {}
+
     onStartRecording();
   };
 
-  const handleMouseUp = (e) => {
+  const handlePointerMove = (e) => {
+    if (!isPointerActiveRef.current || !startCoordsRef.current) return;
+    const deltaY = startCoordsRef.current.y - e.clientY; // dragged up
+    const deltaX = Math.abs(startCoordsRef.current.x - e.clientX);
+
+    // Cancel only if dragged substantially away (> 70px vertical swipe)
+    if (deltaY > 70 || deltaX > 120) {
+      setIsDraggingCancel(true);
+    } else {
+      setIsDraggingCancel(false);
+    }
+  };
+
+  const handlePointerUp = (e) => {
+    if (!isPointerActiveRef.current) return;
     e.preventDefault();
+    e.stopPropagation();
+    isPointerActiveRef.current = false;
+
+    try {
+      if (pointerIdRef.current !== null && e.currentTarget.hasPointerCapture(pointerIdRef.current)) {
+        e.currentTarget.releasePointerCapture(pointerIdRef.current);
+      }
+    } catch (err) {}
+    pointerIdRef.current = null;
+
     if (isDraggingCancel) {
       onCancelRecording();
     } else {
@@ -57,38 +100,14 @@ export function InputBar({
     setIsDraggingCancel(false);
   };
 
-  const handleMouseLeave = () => {
-    if (isRecording) {
-      setIsDraggingCancel(true);
-    }
-  };
-
-  const handleMouseEnter = () => {
-    if (isRecording) {
-      setIsDraggingCancel(false);
-    }
-  };
-
-  // Mobile Touch Handlers
-  const handleTouchStart = (e) => {
-    setIsDraggingCancel(false);
-    onStartRecording();
-  };
-
-  const handleTouchMove = (e) => {
-    if (!isRecording) return;
-    const touch = e.touches[0];
-    const target = document.elementFromPoint(touch.clientX, touch.clientY);
-    const button = e.currentTarget;
-    if (target !== button && !button.contains(target)) {
-      setIsDraggingCancel(true);
-    } else {
-      setIsDraggingCancel(false);
-    }
-  };
-
-  const handleTouchEnd = (e) => {
+  const handlePointerCancel = (e) => {
+    if (!isPointerActiveRef.current) return;
     e.preventDefault();
+    e.stopPropagation();
+    isPointerActiveRef.current = false;
+    pointerIdRef.current = null;
+
+    // Guaranteed never to hang: if touch canceled by system, send recorded voice
     if (isDraggingCancel) {
       onCancelRecording();
     } else {
@@ -140,7 +159,7 @@ export function InputBar({
               {interimTranscript ? (
                 <span className="text-white font-medium not-italic">{interimTranscript}</span>
               ) : (
-                <span className="text-rose-300/60">Habla ahora... estamos escuchando en tu idioma de práctica</span>
+                <span className="text-rose-300/60">Habla con tranquilidad... escuchamos en tu idioma o mixto</span>
               )}
             </div>
 
@@ -153,9 +172,22 @@ export function InputBar({
             </div>
 
             <div className="flex justify-between text-[11px] text-rose-300/70 pt-0.5">
-              <span>{isDraggingCancel ? 'Suelta el botón para cancelar la grabación' : 'Mantén presionado para seguir hablando'}</span>
+              <span>{isDraggingCancel ? 'Suelta para cancelar la grabación' : 'Desliza hacia arriba para cancelar'}</span>
               <span className="font-semibold text-rose-200">Suelta para enviar</span>
             </div>
+          </div>
+        )}
+
+        {/* AI Audio Transcribing Banner */}
+        {isTranscribingAudio && (
+          <div className="mb-3 px-4 py-2.5 bg-gradient-to-r from-amber-950/80 via-rose-950/80 to-amber-950/80 border border-amber-500/50 rounded-2xl flex items-center justify-between text-xs text-amber-200 animate-pulse shadow-lg">
+            <div className="flex items-center space-x-2">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+              <span className="font-semibold text-white">Transcribiendo audio con IA multimodal...</span>
+            </div>
+            <span className="text-[11px] text-amber-300/80 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-400" /> Reconociendo acentos y mezcla de idiomas
+            </span>
           </div>
         )}
 
@@ -164,38 +196,47 @@ export function InputBar({
           <div className="relative flex-shrink-0">
             <button
               type="button"
-              onMouseDown={handleMouseDown}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseLeave}
-              onMouseEnter={handleMouseEnter}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              onContextMenu={(e) => e.preventDefault()}
-              disabled={isProcessing}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => setIsHovered(false)}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              disabled={isProcessing || isTranscribingAudio}
               title="Mantén presionado para hablar (máx. 1 min) • Suelta para enviar"
-              className={`p-3.5 rounded-2xl transition-all shadow-md flex items-center justify-center select-none active:scale-95 touch-none ${
+              style={{
+                touchAction: 'none',
+                WebkitTouchCallout: 'none',
+                userSelect: 'none',
+                WebkitUserSelect: 'none'
+              }}
+              className={`p-3.5 rounded-2xl transition-all shadow-md flex items-center justify-center select-none active:scale-95 touch-none cursor-pointer ${
                 isRecording
                   ? 'bg-gradient-to-tr from-rose-600 to-pink-500 text-white scale-110 ring-4 ring-rose-500/40 shadow-rose-900/70 animate-pulse'
+                  : isTranscribingAudio
+                  ? 'bg-amber-900/80 text-amber-200 border border-amber-600/50 cursor-wait'
                   : 'bg-[#3b1e15] hover:bg-[#4d281c] text-rose-200 hover:text-white border border-[#5d3022] hover:border-rose-500/40 hover:shadow-lg'
               }`}
             >
               {isRecording ? (
                 <Radio className="w-5 h-5 animate-spin fill-current" />
+              ) : isTranscribingAudio ? (
+                <Loader2 className="w-5 h-5 animate-spin text-amber-300" />
               ) : (
                 <Mic className="w-5 h-5 transition-transform group-hover:scale-110" />
               )}
             </button>
 
             {/* Hover Tooltip */}
-            {!isRecording && isHovered && (
+            {!isRecording && !isTranscribingAudio && isHovered && (
               <div className="absolute bottom-full left-0 mb-2 z-30 whitespace-nowrap bg-stone-900 text-rose-100 text-xs px-3 py-1.5 rounded-xl shadow-xl border border-stone-700 pointer-events-none animate-fade-in">
-                🎙️ <span className="font-bold text-white">Mantén presionado</span> para grabar voz, <span className="font-bold text-amber-300">suelta para enviar</span> (máx. 1 min)
+                🎙️ <span className="font-bold text-white">Mantén presionado</span> para hablar, <span className="font-bold text-amber-300">suelta para enviar</span>
               </div>
             )}
           </div>
 
-          {/* Text Input (White with crisp text and RTL support for Arabic) */}
+          {/* Text Input */}
           <div className="relative flex-1">
             <input
               ref={inputRef}
@@ -204,10 +245,12 @@ export function InputBar({
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={handleKeyDown}
-              disabled={isProcessing || isRecording}
+              disabled={isProcessing || isRecording || isTranscribingAudio}
               placeholder={
                 isRecording
                   ? "🔴 Grabando mensaje de voz... Suelta el micrófono para enviar"
+                  : isTranscribingAudio
+                  ? "⏳ Transcribiendo audio con IA de alta precisión..."
                   : isArabic
                   ? "اكتب رسالتك باللغة العربية هنا... (Escribe en árabe o mantén el micro)"
                   : "Escribe o mantén presionado el micrófono para hablar..."
@@ -221,10 +264,10 @@ export function InputBar({
           {/* Send Button */}
           <button
             type="submit"
-            disabled={!text.trim() || isProcessing || isRecording}
+            disabled={!text.trim() || isProcessing || isRecording || isTranscribingAudio}
             title="Enviar mensaje"
             className={`p-3 rounded-2xl transition-all shadow-md flex items-center justify-center flex-shrink-0 ${
-              text.trim() && !isProcessing && !isRecording
+              text.trim() && !isProcessing && !isRecording && !isTranscribingAudio
                 ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/50 transform active:scale-95'
                 : 'bg-[#3b1e15] text-rose-300/40 border border-[#4a261a] cursor-not-allowed'
             }`}
@@ -235,7 +278,7 @@ export function InputBar({
 
         <div className="mt-2 text-center">
           <p className="text-[11px] text-rose-200/60">
-            Mantén presionado <span className="text-rose-300 font-semibold">🎙️ Mic</span> para enviar mensaje de voz (máx. 1 min) • Los errores gramaticales se corrigen automáticamente en <span className="text-amber-300 font-bold">dorado</span>.
+            Mantén presionado <span className="text-rose-300 font-semibold">🎙️ Mic</span> para hablar (soporta acentos y mezcla de idiomas) • Suelta para enviar.
           </p>
         </div>
       </div>

@@ -1,5 +1,5 @@
 // Base URL for the backend API deployed on Render
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://linguaflow-fef0.onrender.com';
+export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'https://linguaflow-fef0.onrender.com';
 
 import { processSmartConversation } from '../../server/conversationEngine.js';
 import { getSystemPrompt } from '../../server/promptTemplates.js';
@@ -222,3 +222,53 @@ export async function fetchLanguagesApi() {
   }
   return null;
 }
+
+/**
+ * Transcribe recorded audio using high-precision Multimodal AI (/api/transcribe)
+ * Handles strong accents and mixed target + native language speech.
+ */
+export async function transcribeAudioApi({ audioBlob, targetLang, nativeLang, apiKey }) {
+  if (!audioBlob || audioBlob.size === 0) return null;
+
+  try {
+    const base64Data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(audioBlob);
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 14000);
+
+    const res = await fetch(`${API_BASE_URL}/api/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        audioBase64: base64Data,
+        mimeType: audioBlob.type || 'audio/webm',
+        targetLang,
+        nativeLang,
+        apiKey: (apiKey || '').trim()
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.transcript) {
+        return data.transcript.trim();
+      }
+    } else {
+      const err = await res.json().catch(() => ({}));
+      console.warn('Audio transcribe endpoint error:', err?.error || res.statusText);
+    }
+  } catch (err) {
+    console.warn('Audio transcribe fetch failed, using Web Speech transcript:', err.message);
+  }
+
+  return null;
+}
+

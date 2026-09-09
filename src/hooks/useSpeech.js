@@ -1,17 +1,92 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { transcribeAudioApi } from '../services/chatService.js';
 
 /**
- * Enhanced Speech Hook with Push-to-Talk (Press & Hold up to 1 min),
- * Live Audio Transcription, and Text-to-Speech (TTS).
+ * Intelligent phrase and n-gram deduplication to fix Android Chrome / mobile WebKit
+ * phrase repetition bug: e.g. "la casa la casa la casa es roja la casa es roja" -> "la casa es roja"
+ */
+export function cleanDuplicatePhrases(text) {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text.trim();
+  if (!cleaned) return '';
+
+  // 1. Remove duplicate adjacent sentences
+  const sentenceDelim = /([.!?]+|\n+)/;
+  const rawParts = cleaned.split(sentenceDelim);
+  if (rawParts.length > 2) {
+    let deduped = [];
+    for (let i = 0; i < rawParts.length; i++) {
+      const part = rawParts[i].trim();
+      if (!part) continue;
+      if (deduped.length > 0 && part.toLowerCase() === deduped[deduped.length - 1].toLowerCase()) {
+        continue;
+      }
+      deduped.push(part);
+    }
+    cleaned = deduped.join(' ');
+  }
+
+  // 2. Token-level iterative deduplication for n-grams (from 8 down to 1)
+  let words = cleaned.split(/\s+/).filter(Boolean);
+  let changed = true;
+  let passes = 0;
+
+  while (changed && passes < 4) {
+    changed = false;
+    passes++;
+    let result = [];
+    let i = 0;
+
+    while (i < words.length) {
+      let matchedGram = 0;
+      const maxGram = Math.min(8, Math.floor((words.length - i) / 2));
+
+      for (let k = maxGram; k >= 1; k--) {
+        const gram1 = words.slice(i, i + k).map(w => w.toLowerCase().replace(/[,.?!:;]/g, '')).join(' ');
+        const gram2 = words.slice(i + k, i + 2 * k).map(w => w.toLowerCase().replace(/[,.?!:;]/g, '')).join(' ');
+
+        if (gram1 && gram1 === gram2) {
+          matchedGram = k;
+          break;
+        }
+      }
+
+      if (matchedGram > 0) {
+        result.push(...words.slice(i, i + matchedGram));
+        i += matchedGram * 2;
+        changed = true;
+      } else {
+        result.push(words[i]);
+        i++;
+      }
+    }
+
+    words = result;
+  }
+
+  return words.join(' ').replace(/\s+([,.:;?!])/g, '$1').trim();
+}
+
+/**
+ * Enhanced Speech Hook with:
+ * 1. Push-to-Talk Pointer Events (instant stop & send on release, no 1-min hang)
+ * 2. Deduplicated real-time speech preview (fixes mobile phrase repetition)
+ * 3. MediaRecorder raw audio capture + Gemini Multimodal Audio transcription
+ *    (exceptional accuracy for strong foreign accents & mixed language code-switching)
+ * 4. Text-to-Speech (TTS)
  */
 export function useSpeech({
   targetLangCode = 'es-ES',
+  targetLang = 'es',
+  nativeLang = 'es',
+  apiKey = '',
   onSpeechResult,
   handsFree = false,
   isProcessing = false
 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -25,12 +100,18 @@ export function useSpeech({
   const isProcessingRef = useRef(isProcessing);
   const isRecordingRef = useRef(false);
 
+  // Audio capture refs
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const audioStreamRef = useRef(null);
+  const mimeTypeRef = useRef('audio/webm');
+
   isHandsFreeRef.current = handsFree;
   isSpeakingRef.current = isSpeaking;
   isProcessingRef.current = isProcessing;
   isRecordingRef.current = isRecording;
 
-  // Initialize Speech Recognition
+  // Initialize Speech Recognition for live visual feedback
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -44,34 +125,31 @@ export function useSpeech({
     recognition.lang = targetLangCode;
     recognition.maxAlternatives = 1;
 
-    recognition.onstart = () => {
-      // Speech recognition started
-    };
-
     recognition.onresult = (event) => {
-      let currentInterim = '';
-      let currentFinal = '';
+      // Reconstruct strictly from 0 to results.length-1 to avoid mobile accumulator duplication
+      const finalParts = [];
+      let interim = '';
 
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const transcriptPart = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          currentFinal += transcriptPart + ' ';
+      for (let i = 0; i < event.results.length; i++) {
+        const item = event.results[i];
+        const text = item[0]?.transcript || '';
+        if (item.isFinal) {
+          finalParts.push(text);
         } else {
-          currentInterim += transcriptPart;
+          interim += text;
         }
       }
 
-      if (currentFinal) {
-        fullTranscriptRef.current = (fullTranscriptRef.current + ' ' + currentFinal).trim();
-      }
+      const finalString = cleanDuplicatePhrases(finalParts.join(' '));
+      fullTranscriptRef.current = finalString;
 
-      const displayTranscript = (fullTranscriptRef.current + ' ' + currentInterim).trim();
-      setInterimTranscript(displayTranscript);
+      const combined = cleanDuplicatePhrases((finalString + ' ' + interim).trim());
+      setInterimTranscript(combined);
     };
 
     recognition.onerror = (event) => {
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
-        console.warn('Speech recognition warning:', event.error);
+        console.warn('Speech recognition status:', event.error);
       }
     };
 
@@ -93,15 +171,18 @@ export function useSpeech({
     };
   }, [targetLangCode]);
 
-  // Clean up timer on unmount
+  // Clean up timer and media tracks on unmount
   useEffect(() => {
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(track => track.stop());
+      }
     };
   }, []);
 
-  // Stop Recording helper (ends timer and resolves recorded text)
-  const stopRecordingInternal = useCallback((shouldSend = true) => {
+  // Internal helper to stop recording and process speech / audio
+  const stopRecordingInternal = useCallback(async (shouldSend = true) => {
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
@@ -110,26 +191,81 @@ export function useSpeech({
     setIsRecording(false);
     isRecordingRef.current = false;
 
+    // Stop SpeechRecognition
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch (e) {}
     }
 
-    const recordedText = (fullTranscriptRef.current || interimTranscript || '').trim();
+    // Stop MediaRecorder and get audio blob
+    let audioBlob = null;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        const stopPromise = new Promise(resolve => {
+          mediaRecorderRef.current.onstop = () => {
+            const blob = new Blob(audioChunksRef.current, { type: mimeTypeRef.current });
+            resolve(blob);
+          };
+          mediaRecorderRef.current.stop();
+        });
+        audioBlob = await stopPromise;
+      } catch (err) {
+        console.warn('Error stopping MediaRecorder:', err);
+      }
+    } else if (audioChunksRef.current.length > 0) {
+      audioBlob = new Blob(audioChunksRef.current, { type: mimeTypeRef.current });
+    }
+
+    // Release microphone stream hardware lock
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(t => t.stop());
+      audioStreamRef.current = null;
+    }
+
+    const localTranscript = cleanDuplicatePhrases((fullTranscriptRef.current || interimTranscript || '').trim());
     fullTranscriptRef.current = '';
     setInterimTranscript('');
     setRecordingSeconds(0);
 
-    if (shouldSend && recordedText && onSpeechResult) {
-      onSpeechResult(recordedText);
+    if (!shouldSend) {
+      audioChunksRef.current = [];
+      return;
     }
 
-    return recordedText;
-  }, [interimTranscript, onSpeechResult]);
+    // High-precision AI Multimodal Audio Transcription (for strong accents & mixed language)
+    let finalTranscribedText = localTranscript;
 
-  // Start Push-to-Talk Recording (Called on MouseDown / TouchStart)
-  const startRecording = useCallback(() => {
+    if (audioBlob && audioBlob.size > 1500) {
+      try {
+        setIsTranscribingAudio(true);
+        const aiTranscript = await transcribeAudioApi({
+          audioBlob,
+          targetLang,
+          nativeLang,
+          apiKey
+        });
+
+        if (aiTranscript && aiTranscript.trim()) {
+          console.log('Using AI Multimodal Audio transcription:', aiTranscript);
+          finalTranscribedText = cleanDuplicatePhrases(aiTranscript.trim());
+        }
+      } catch (err) {
+        console.warn('AI transcription fallback to Web Speech:', err);
+      } finally {
+        setIsTranscribingAudio(false);
+      }
+    }
+
+    audioChunksRef.current = [];
+
+    if (finalTranscribedText && onSpeechResult) {
+      onSpeechResult(finalTranscribedText);
+    }
+  }, [interimTranscript, onSpeechResult, targetLang, nativeLang, apiKey]);
+
+  // Start Push-to-Talk Recording (Called on PointerDown)
+  const startRecording = useCallback(async () => {
     if (isProcessing) return;
 
     // Cancel any active bot speaking
@@ -144,6 +280,7 @@ export function useSpeech({
     setIsRecording(true);
     isRecordingRef.current = true;
     startTimeRef.current = Date.now();
+    audioChunksRef.current = [];
 
     // Start 1-minute max countdown / counter
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -151,12 +288,46 @@ export function useSpeech({
       const elapsedSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
       setRecordingSeconds(elapsedSec);
 
-      // Max 1 minute (60 seconds) reached: auto-send
+      // Max 1 minute (60 seconds) reached: auto-send immediately
       if (elapsedSec >= 60) {
         stopRecordingInternal(true);
       }
     }, 250);
 
+    // 1. Start raw audio recording via MediaRecorder (for high accuracy AI transcription)
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioStreamRef.current = stream;
+
+        let selectedMime = 'audio/webm;codecs=opus';
+        if (typeof MediaRecorder !== 'undefined') {
+          if (!MediaRecorder.isTypeSupported(selectedMime)) {
+            if (MediaRecorder.isTypeSupported('audio/webm')) selectedMime = 'audio/webm';
+            else if (MediaRecorder.isTypeSupported('audio/mp4')) selectedMime = 'audio/mp4';
+            else if (MediaRecorder.isTypeSupported('audio/aac')) selectedMime = 'audio/aac';
+            else selectedMime = '';
+          }
+
+          mimeTypeRef.current = selectedMime || 'audio/webm';
+          const options = selectedMime ? { mimeType: selectedMime } : {};
+          const recorder = new MediaRecorder(stream, options);
+
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              audioChunksRef.current.push(e.data);
+            }
+          };
+
+          mediaRecorderRef.current = recorder;
+          recorder.start(250);
+        }
+      } catch (audioErr) {
+        console.warn('MediaRecorder audio capture unavailable, using Web Speech:', audioErr.message);
+      }
+    }
+
+    // 2. Start Web Speech recognition for live preview
     if (recognitionRef.current) {
       try {
         recognitionRef.current.lang = targetLangCode;
@@ -167,22 +338,22 @@ export function useSpeech({
     }
   }, [isProcessing, targetLangCode, stopRecordingInternal]);
 
-  // Stop Push-to-Talk Recording (Called on MouseUp / TouchEnd)
+  // Stop Push-to-Talk Recording (Called on PointerUp)
   const stopRecording = useCallback(() => {
     const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) : 0;
-    // If held for less than 300ms, consider it a tap/accidental click
-    if (elapsed < 300 && !fullTranscriptRef.current && !interimTranscript) {
+    // If held for less than 250ms with zero words, consider it an accidental tap
+    if (elapsed < 250 && !fullTranscriptRef.current && !interimTranscript && audioChunksRef.current.length === 0) {
       stopRecordingInternal(false);
       return;
     }
 
-    // Wait a brief 200ms to allow final words from Web Speech engine
+    // Allow a tiny 150ms buffer to finalize the last syllables
     setTimeout(() => {
       stopRecordingInternal(true);
-    }, 200);
+    }, 150);
   }, [interimTranscript, stopRecordingInternal]);
 
-  // Cancel Recording (Called on mouse leave / drag off)
+  // Cancel Recording (Called on drag off or cancel gesture)
   const cancelRecording = useCallback(() => {
     stopRecordingInternal(false);
   }, [stopRecordingInternal]);
@@ -224,6 +395,7 @@ export function useSpeech({
   return {
     isRecording,
     recordingSeconds,
+    isTranscribingAudio,
     isSpeaking,
     speechSupported,
     interimTranscript,
