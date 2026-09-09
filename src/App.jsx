@@ -6,6 +6,7 @@ import { InputBar } from './components/InputBar';
 import { SettingsModal } from './components/SettingsModal';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
+import { sendChatMessage } from './services/chatService';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'ar', name: 'Árabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
@@ -275,29 +276,18 @@ export default function App() {
     setMessages(prev => [...prev, rawUserMsg]);
     setIsProcessing(true);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          message: text.trim(),
-          targetLang,
-          nativeLang,
-          level: config.level,
-          apiKey: config.apiKey,
-          history: messages.slice(-6)
-        })
+      const result = await sendChatMessage({
+        message: text.trim(),
+        targetLang,
+        nativeLang,
+        level: config.level,
+        apiKey: config.apiKey,
+        history: messages.slice(-6)
       });
 
-      clearTimeout(timeoutId);
-      const resData = await response.json();
-
-      if (resData.success && resData.data) {
-        const { user_correction, bot_response } = resData.data;
+      if (result && result.data) {
+        const { user_correction, bot_response } = result.data;
 
         // Update user message with corrected text and amber-gold diffs
         setMessages(prev =>
@@ -371,25 +361,27 @@ export default function App() {
           apiKey: config.apiKey
         })
       });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setSelectedWord(data.data);
-      } else {
-        setSelectedWord({
-          word,
-          meaning: `Término en ${currentLangObj.name}: "${word}".`,
-          part_of_speech: 'término',
-          translit: null
-        });
+
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data && data.success && data.data) {
+            setSelectedWord(data.data);
+            return;
+          }
+        }
       }
     } catch (err) {
-      setSelectedWord({
-        word,
-        meaning: `Término en ${currentLangObj.name}: "${word}".`,
-        part_of_speech: 'término',
-        translit: null
-      });
+      console.warn('Word lookup fallback:', err);
     }
+
+    setSelectedWord({
+      word,
+      meaning: `Término en ${currentLangObj.name}: "${word}".`,
+      part_of_speech: 'término',
+      translit: null
+    });
   };
 
   // Play audio helper
