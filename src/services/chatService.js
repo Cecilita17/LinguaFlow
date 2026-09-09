@@ -25,58 +25,7 @@ export async function sendChatMessage({
 
   const effectiveKey = (apiKey || '').trim();
 
-  // 1. Try Render Backend API first (/api/chat)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
-
-    const response = await fetch(`${API_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        message: cleanMsg,
-        targetLang,
-        nativeLang,
-        level,
-        apiKey: effectiveKey,
-        history: history.slice(-6)
-      })
-    });
-
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const resData = await response.json();
-        if (resData && resData.success && resData.data?.user_correction && resData.data?.bot_response) {
-          // If server fell back to offline engine but client provided an API key, try direct client Gemini
-          if (resData.source === 'smart_linguistic_engine' && effectiveKey) {
-            console.log('Backend fell back to offline engine; activating direct Gemini AI on client...');
-          } else {
-            // If server didn't catch errors, run deep grammar analysis to guarantee detection
-            if (!resData.data.user_correction.has_errors) {
-              const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);
-              if (deepCorrection && deepCorrection.has_errors) {
-                resData.data.user_correction = deepCorrection;
-              }
-            }
-            return {
-              source: resData.source || 'server_api',
-              data: resData.data
-            };
-          }
-        }
-      }
-    } else {
-      console.warn(`/api/chat responded with status ${response.status}. Activating resilient client engine.`);
-    }
-  } catch (netErr) {
-    console.warn('/api/chat unreachable or timed out. Activating resilient client engine:', netErr.message);
-  }
-
-  // 2. If user entered Gemini API Key in UI Settings, try direct Gemini API call
+  // 1. If user entered Gemini API Key in Settings, call Google Gemini AI directly first (instant, 100% generative AI)
   if (effectiveKey) {
     try {
       const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
@@ -112,6 +61,8 @@ INSTRUCTIONS:
 Return strictly JSON matching this structure.`;
 
       const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
+      let lastErrMessage = null;
+
       for (const model of candidateModels) {
         try {
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveKey}`;
@@ -144,18 +95,62 @@ Return strictly JSON matching this structure.`;
             }
           } else {
             const errData = await directRes.json().catch(() => ({}));
-            console.warn(`Direct Gemini ${model} error (${directRes.status}):`, errData?.error?.message);
+            lastErrMessage = errData?.error?.message || `HTTP ${directRes.status}`;
+            console.warn(`Direct Gemini ${model} error (${directRes.status}):`, lastErrMessage);
           }
         } catch (candErr) {
-          // Continue to next model candidate
+          lastErrMessage = candErr.message;
         }
+      }
+
+      if (lastErrMessage) {
+        console.warn('Direct Gemini attempts failed, checking backend /api/chat:', lastErrMessage);
       }
     } catch (geminiErr) {
       console.warn('Direct Gemini call failed:', geminiErr.message);
     }
   }
 
-  // 3. Resilient smart multi-turn linguistic engine fallback
+  // 2. Try Render Backend API (/api/chat)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        message: cleanMsg,
+        targetLang,
+        nativeLang,
+        level,
+        apiKey: effectiveKey,
+        history: history.slice(-6)
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const resData = await response.json();
+        if (resData && resData.success && resData.data?.user_correction && resData.data?.bot_response) {
+          return {
+            source: resData.source || 'server_api',
+            data: resData.data
+          };
+        }
+      }
+    } else {
+      console.warn(`/api/chat responded with status ${response.status}. Activating resilient client engine.`);
+    }
+  } catch (netErr) {
+    console.warn('/api/chat unreachable or timed out. Activating resilient client engine:', netErr.message);
+  }
+
+  // 3. Resilient smart multi-turn linguistic engine (with ZERO generic praise templates)
   console.log('Using resilient smart multi-turn linguistic engine...');
   const fallbackData = processSmartConversation(cleanMsg, targetLang, nativeLang, history);
   const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);

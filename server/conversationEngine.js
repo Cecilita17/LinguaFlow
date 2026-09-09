@@ -778,138 +778,6 @@ const CONVERSATION_TOPICS = {
   ]
 };
 
-/**
- * Adaptive responses for non-matched turns
- */
-const ADAPTIVE_POOLS = {
-  es: [
-    {
-      response: '¡Muy bien formulado! Cuéntame un poco más sobre eso, me interesa tu punto de vista.',
-      translation: 'Very well formulated! Tell me a bit more about that, I am interested in your point of view.',
-      vocabulary: { 'formulado': { meaning: 'Dicho o expresado', part_of_speech: 'adjetivo' } }
-    },
-    {
-      response: '¡Totalmente de acuerdo! Es un tema genial para practicar conversación. ¿Qué opinas tú al respecto?',
-      translation: 'Totally agree! It is a great topic to practice conversation. What do you think about it?',
-      vocabulary: { 'opinas': { meaning: 'Consideras o piensas', part_of_speech: 'verbo' } }
-    }
-  ],
-  en: [
-    {
-      response: 'That was very well expressed! Tell me a bit more about that, I would love to hear your thoughts.',
-      translation: '¡Muy bien expresado! Cuéntame un poco más sobre eso, me encantaría escuchar tus pensamientos.',
-      vocabulary: { 'expressed': { meaning: 'Expresado o comunicado', part_of_speech: 'adjective' } }
-    },
-    {
-      response: 'I completely agree! That is a great topic to explore together. What is your perspective on it?',
-      translation: '¡Totalmente de acuerdo! Es un gran tema para explorar juntos. ¿Cuál es tu perspectiva al respecto?',
-      vocabulary: { 'perspective': { meaning: 'Perspectiva o punto de vista', part_of_speech: 'noun' } }
-    }
-  ],
-  pl: [
-    {
-      response: 'Bardzo dobrze to ująłeś! Opowiedz mi o tym coś więcej, chętnie posłucham.',
-      translation: '¡Lo dijiste muy bien! Cuéntame un poco más sobre eso, con gusto escucharé.',
-      vocabulary: { 'opowiedz': { meaning: 'Cuenta o relata (tú)', part_of_speech: 'verbo' } }
-    },
-    {
-      response: 'Zgadzam się z tobą! To świetny temat do ćwiczenia języka. Co o tym sądzisz?',
-      translation: '¡Estoy de acuerdo contigo! Es un gran tema para practicar el idioma. ¿Qué opinas de esto?',
-      vocabulary: { 'sądzisz': { meaning: 'Opines o piensas', part_of_speech: 'verbo' } }
-    }
-  ],
-  ar: [
-    {
-      response: 'أَنْتَ تَتَحَدَّثُ بِطَرِيقَةٍ مُمْتَازَةٍ! أَخْبِرْنِي الْمَزِيدَ عَنْ ذَلِكَ، يَسُرُّنِي أَنْ أَسْمَعَ رَأْيَكَ.',
-      translation: '¡Hablas de una manera excelente! Cuéntame más sobre eso, me complace escuchar tu opinión.',
-      vocabulary: { 'أخبرني': { meaning: 'Cuéntame o dime', part_of_speech: 'verbo', translit: 'akhbirnī' } }
-    },
-    {
-      response: 'أَنَا أُوَافِقُكَ الرَّأْيَ تَمَامًا! هَذَا مَوْضُوعٌ رَائِعٌ لِلتَّدْرِيبِ. مَاذَا تَعْتَقِدُ أَيْضًا؟',
-      translation: '¡Estoy totalmente de acuerdo contigo! Este es un tema maravilloso para practicar. ¿Qué opinas además?',
-      vocabulary: { 'أوافقك': { meaning: 'Estoy de acuerdo contigo', part_of_speech: 'verbo', translit: 'uwāfiquka' } }
-    }
-  ],
-  zh: [
-    {
-      response: '你说得非常好！关于这个事情，你能跟我多分享一些具体的细节吗？',
-      translation: '¡Lo dijiste muy bien! Sobre este asunto, ¿puedes compartir conmigo más detalles específicos?',
-      tokens: [
-        { word: '你说得', clean_word: '说', translit: 'nǐ shuō de' },
-        { word: '非常好！', clean_word: '非常好', translit: 'fēicháng hǎo!' }
-      ],
-      vocabulary: { '具体': { meaning: 'Concreto o específico', part_of_speech: 'adjetivo', translit: 'jùtǐ' } }
-    },
-    {
-      response: '我非常赞同你的看法！多用完整的句子表达，你的中文会越来越自然。',
-      translation: '¡Concuerdo mucho con tu opinión! Expresándote con oraciones completas, tu chino será cada vez más natural.',
-      tokens: [
-        { word: '赞同', clean_word: '赞同', translit: 'zàntóng' }
-      ],
-      vocabulary: { '赞同': { meaning: 'Estar de acuerdo', part_of_speech: 'verbo', translit: 'zàntóng' } }
-    }
-  ],
-  ru: [
-    {
-      response: 'Ты отлично выражаешь свои мысли! Расскажи мне об этом подробнее, мне очень интересно.',
-      translation: '¡Expresas tus ideas genial! Cuéntame de esto con más detalle, me interesa mucho.',
-      vocabulary: { 'подробнее': { meaning: 'Más detalladamente', part_of_speech: 'adverbio', translit: 'podrobneye' } }
-    },
-    {
-      response: 'Я полностью согласен! Это отличная тема для практики. Что ты думаешь об этом?',
-      translation: '¡Estoy totalmente de acuerdo! Es un tema excelente para practicar. ¿Qué piensas de esto?',
-      vocabulary: { 'согласен': { meaning: 'De acuerdo', part_of_speech: 'adjetivo breve', translit: 'soglasen' } }
-    }
-  ],
-  nl: [
-    {
-      response: 'Wat goed geformuleerd! Vertel me daar graag wat meer over, ik luister met veel interesse.',
-      translation: '¡Qué bien formulado! Cuéntame un poco más sobre eso, escucho con mucho interés.',
-      vocabulary: { 'geformuleerd': { meaning: 'Formulado o expresado', part_of_speech: 'adjetief' } }
-    },
-    {
-      response: 'Dat is een heel goed punt! Het is fijn om hierover samen in het Nederlands te praten. Wat denk jij ervan?',
-      translation: '¡Ese es un muy buen punto! Es agradable hablar de esto juntos en neerlandés. ¿Qué opinas?',
-      vocabulary: { 'punt': { meaning: 'Punto o aspecto', part_of_speech: 'sustantivo' } }
-    }
-  ],
-  de: [
-    {
-      response: 'Das hast du super ausgedrückt! Erzähl mir gerne noch ein bisschen mehr darüber.',
-      translation: '¡Lo expresaste súper bien! Cuéntame un poco mehr über ello con gusto.',
-      vocabulary: { 'ausgedrückt': { meaning: 'Expresado', part_of_speech: 'partizip' } }
-    },
-    {
-      response: 'Da stimme ich dir vollkommen zu! Das ist ein prima Thema zum Üben. Was meinst du dazu?',
-      translation: '¡Estoy totalmente de acuerdo contigo! Es un gran tema para practicar. ¿Qué opinas al respecto?',
-      vocabulary: { 'vollkommen': { meaning: 'Completamente', part_of_speech: 'adverb' } }
-    }
-  ],
-  fr: [
-    {
-      response: "C'est très bien formulé ! Raconte-moi un peu plus à ce sujet, je t'écoute avec plaisir.",
-      translation: '¡Está muy bien formulado! Cuéntame un poco más al respecto, te escucho con mucho gusto.',
-      vocabulary: { 'formulé': { meaning: 'Expresado o dicho', part_of_speech: 'adjectif' } }
-    },
-    {
-      response: "Je suis tout à fait d'accord avec toi ! C'est un excellent sujet de discussion. Qu'en penses-tu ?",
-      translation: '¡Estoy totalmente de acuerdo contigo! Es un excelente tema de conversación. ¿Qué opinas?',
-      vocabulary: { 'accord': { meaning: 'Acuerdo', part_of_speech: 'nom' } }
-    }
-  ],
-  it: [
-    {
-      response: 'Ti esprimi davvero bene! Raccontami qualcosa in più su questo argomento, ti ascolto volentieri.',
-      translation: '¡Te expresas realmente bien! Cuéntame algo más sobre este tema, te escucho con gusto.',
-      vocabulary: { 'argomento': { meaning: 'Tema o asunto', part_of_speech: 'sostantivo' } }
-    },
-    {
-      response: 'Sono d’accordissimo con te! È un ottimo spunto per fare pratica. Cosa ne pensi?',
-      translation: '¡Estoy de acuerdísimo contigo! Es un excelente punto para practicar. ¿Qué opinas?',
-      vocabulary: { 'ottimo': { meaning: 'Excelente u óptimo', part_of_speech: 'aggettivo' } }
-    }
-  ]
-};
 
 /**
  * High-frequency code-switching vocabulary lexicon
@@ -1049,6 +917,92 @@ export function translateMixedNativeVocabulary(text, targetLang = 'nl') {
 }
 
 /**
+ * Dynamic Contextual Response Generator (Zero Static/Generic Praise Templates)
+ * Directly incorporates the student's exact phrase and mirrors their topic.
+ */
+function generateDynamicContextualResponse(text, targetLang = 'nl', nativeLang = 'es') {
+  const clean = (text || '').trim();
+  const lower = clean.toLowerCase();
+
+  if (targetLang === 'nl') {
+    if (lower.includes('?') || lower.startsWith('hoe') || lower.startsWith('wat') || lower.startsWith('waar') || lower.startsWith('waarom') || lower.startsWith('kan')) {
+      return {
+        response: `Goede vraag over ${clean.replace(/[?]/g, '')}! Om hiermee verder te gaan, wat is het belangrijkste punt waar je je nu op richt?`,
+        translation: `¡Buena pregunta sobre ${clean.replace(/[?]/g, '')}! Para avanzar con esto, ¿cuál es el punto principal en el que te enfocas ahora?`,
+        tokens: tokenizeSimple(`Goede vraag over ${clean.replace(/[?]/g, '')}! Om hiermee verder te gaan, wat is het belangrijkste punt waar je je nu op richt?`),
+        vocabulary: { 'belangrijkste': { meaning: 'Más importante o principal', part_of_speech: 'adjetief' } }
+      };
+    }
+    return {
+      response: `Over "${clean}" gesproken: wat zou je hier nog meer over willen toevoegen of oefenen?`,
+      translation: `Hablando de "${clean}": ¿qué más te gustaría agregar o practicar sobre esto?`,
+      tokens: tokenizeSimple(`Over "${clean}" gesproken: wat zou je hier nog meer over willen toevoegen of oefenen?`),
+      vocabulary: { 'toevoegen': { meaning: 'Añadir o agregar', part_of_speech: 'werkwoord' } }
+    };
+  }
+
+  if (targetLang === 'de') {
+    if (lower.includes('?') || lower.startsWith('wie') || lower.startsWith('was') || lower.startsWith('wo') || lower.startsWith('warum')) {
+      return {
+        response: `Gute Frage zu "${clean.replace(/[?]/g, '')}"! Worauf kommt es dir dabei am meisten an?`,
+        translation: `¡Buena pregunta sobre "${clean.replace(/[?]/g, '')}"! ¿Qué es lo que más te importa en esto?`,
+        tokens: tokenizeSimple(`Gute Frage zu "${clean.replace(/[?]/g, '')}"! Worauf kommt es dir dabei am meisten an?`),
+        vocabulary: { 'meisten': { meaning: 'Mayoría / más', part_of_speech: 'adverb' } }
+      };
+    }
+    return {
+      response: `Zu "${clean}": Was möchtest du dazu noch genauer besprechen oder üben?`,
+      translation: `Sobre "${clean}": ¿Qué te gustaría conversar o practicar con más detalle al respecto?`,
+      tokens: tokenizeSimple(`Zu "${clean}": Was möchtest du dazu noch genauer besprechen oder üben?`),
+      vocabulary: { 'besprechen': { meaning: 'Discutir o conversar', part_of_speech: 'verb' } }
+    };
+  }
+
+  if (targetLang === 'pl') {
+    return {
+      response: `Jeśli chodzi o "${clean}": o czym konkretnie chciałbyś jeszcze powiedzieć w tym temacie?`,
+      translation: `En cuanto a "${clean}": ¿de qué específicamente te gustaría hablar todavía en este tema?`,
+      tokens: tokenizeSimple(`Jeśli chodzi o "${clean}": o czym konkretnie chciałbyś jeszcze powiedzieć w tym temacie?`),
+      vocabulary: { 'kwestia': { meaning: 'Cuestión o asunto', part_of_speech: 'rzeczownik' } }
+    };
+  }
+
+  if (targetLang === 'fr') {
+    return {
+      response: `À propos de "${clean}" : qu'aimerais-tu préciser ou pratiquer d'autre à ce sujet ?`,
+      translation: `A propósito de "${clean}": ¿qué te gustaría precisar o practicar sobre este tema?`,
+      tokens: tokenizeSimple(`À propos de "${clean}" : qu'aimerais-tu préciser ou pratiquer d'autre à ce sujet ?`),
+      vocabulary: { 'préciser': { meaning: 'Aclarar o detallar', part_of_speech: 'verbe' } }
+    };
+  }
+
+  if (targetLang === 'it') {
+    return {
+      response: `Riguardo a "${clean}": cosa vorresti approfondire esattamente a riguardo?`,
+      translation: `Respecto a "${clean}": ¿qué te gustaría profundizar exactamente al respecto?`,
+      tokens: tokenizeSimple(`Riguardo a "${clean}": cosa vorresti approfondire esattamente a riguardo?`),
+      vocabulary: { 'approfondire': { meaning: 'Profundizar', part_of_speech: 'verbo' } }
+    };
+  }
+
+  if (targetLang === 'en') {
+    return {
+      response: `Regarding "${clean}": what specific detail would you like to explore next?`,
+      translation: `Respecto a "${clean}": ¿qué detalle específico te gustaría explorar a continuación?`,
+      tokens: tokenizeSimple(`Regarding "${clean}": what specific detail would you like to explore next?`),
+      vocabulary: { 'explore': { meaning: 'Explorar o indagar', part_of_speech: 'verb' } }
+    };
+  }
+
+  return {
+    response: `Sobre "${clean}": ¿qué detalle específico te gustaría practicar ahora?`,
+    translation: `About "${clean}": what specific detail would you like to practice now?`,
+    tokens: tokenizeSimple(`Sobre "${clean}": ¿qué detalle específico te gustaría practicar ahora?`),
+    vocabulary: { 'detalle': { meaning: 'Punto concreto o detalle', part_of_speech: 'sustantivo' } }
+  };
+}
+
+/**
  * Main engine processing function
  */
 export function processSmartConversation(message, targetLang = 'pl', nativeLang = 'es', history = []) {
@@ -1092,20 +1046,9 @@ export function processSmartConversation(message, targetLang = 'pl', nativeLang 
     }
   }
 
-  // 5. Contextual reflection fallback if no direct trigger
+  // 5. Contextual reflection fallback without any generic static templates
   if (!matchedTopic) {
-    const turnCount = history.filter(h => h.sender === 'user').length;
-    const pool = ADAPTIVE_POOLS[langKey] || ADAPTIVE_POOLS['pl'];
-    let available = pool.filter(p => !recentBotTexts.includes(p.response));
-    if (available.length === 0) available = pool;
-
-    const item = available[turnCount % available.length];
-    matchedTopic = {
-      response: item.response,
-      translation: item.translation,
-      tokens: item.tokens || tokenizeSimple(item.response),
-      vocabulary: item.vocabulary || {}
-    };
+    matchedTopic = generateDynamicContextualResponse(correctedText, targetLang, nativeLang);
   }
 
   return {
