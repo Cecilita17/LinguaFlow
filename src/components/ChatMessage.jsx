@@ -52,6 +52,28 @@ export function ChatMessage({
     return <span key={key} dir={isArabic ? 'rtl' : 'ltr'}>{word}</span>;
   };
 
+  // Common Chinese Pinyin lexicon for guaranteed fallback
+  const PINYIN_LEXICON = {
+    '你好': 'nǐ hǎo', '您好': 'nín hǎo', '我': 'wǒ', '你': 'nǐ', '他': 'tā', '她': 'tā',
+    '我们': 'wǒmen', '你们': 'nǐmen', '他们': 'tāmen', '想': 'xiǎng', '要': 'yào',
+    '学': 'xué', '学习': 'xuéxí', '中文': 'zhōngwén', '汉语': 'hànyǔ', '说': 'shuō',
+    '吃': 'chī', '喝': 'hē', '咖啡': 'kāfēi', '茶': 'chá', '水': 'shuǐ', '很': 'hěn',
+    '太': 'tài', '好': 'hǎo', '高兴': 'gāoxìng', '累': 'lèi', '困': 'kùn',
+    '睡觉': 'shuìjiào', '谢谢': 'xièxie', '不客气': 'bù kèqi', '再见': 'zàijiàn',
+    '是': 'shì', '不': 'bù', '的': 'de', '了': 'le', '吗': 'ma', '呢': 'ne',
+    '在': 'zài', '有': 'yǒu', '什么': 'shénme', '怎么': 'zěnme'
+  };
+
+  const resolveTranslit = (token) => {
+    if (token.translit) return token.translit;
+    if (token.pinyin) return token.pinyin;
+    if (targetLang === 'zh') {
+      const clean = (token.text || '').trim();
+      if (PINYIN_LEXICON[clean]) return PINYIN_LEXICON[clean];
+    }
+    return null;
+  };
+
   // USER MESSAGE BUBBLE
   if (isUser) {
     const diffTokens = message.diffTokens || [];
@@ -71,7 +93,7 @@ export function ChatMessage({
         </div>
 
         <div className="max-w-[88%] sm:max-w-[78%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-2xl rounded-tr-xs px-4 py-3 shadow-lg shadow-black/30 border border-rose-400/30">
-          {/* Main text display with RTL support for Arabic */}
+          {/* Main text display with RTL support for Arabic and Ruby Pinyin for Chinese */}
           <div
             dir={isArabic ? 'rtl' : 'ltr'}
             className={`${
@@ -86,6 +108,7 @@ export function ChatMessage({
                 const cleanWord = rawWord.trim();
                 if (!cleanWord) return null;
                 const needsSpace = !isChinese && idx > 0;
+                const tokenTranslit = resolveTranslit(token);
 
                 if (token.changed) {
                   return (
@@ -96,10 +119,10 @@ export function ChatMessage({
                         className="relative inline-block mx-0.5 text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-help group/word"
                         title={token.original ? `Original: "${token.original}"` : 'Palabra corregida'}
                       >
-                        {showTransliteration && token.translit ? (
+                        {showTransliteration && tokenTranslit ? (
                           <ruby className="user-ruby inline-flex flex-col items-center">
                             <rt dir="ltr" className="text-[11px] text-amber-200 font-black leading-tight select-none">
-                              {token.translit}
+                              {tokenTranslit}
                             </rt>
                             <span dir={isArabic ? 'rtl' : 'ltr'}>{cleanWord}</span>
                           </ruby>
@@ -119,7 +142,7 @@ export function ChatMessage({
                 return (
                   <React.Fragment key={idx}>
                     {needsSpace && ' '}
-                    {renderUserRubyWord(cleanWord, token.translit, idx)}
+                    {renderUserRubyWord(cleanWord, tokenTranslit, idx)}
                   </React.Fragment>
                 );
               })

@@ -276,3 +276,61 @@ export async function transcribeAudioApi({ audioBlob, targetLang, nativeLang, ap
   return null;
 }
 
+// In-memory breakdown cache to make reopening instant
+const breakdownCache = new Map();
+
+/**
+ * Fetch sentence grammatical breakdown powered by AI (/api/sentence-breakdown)
+ */
+export async function fetchSentenceBreakdownApi({
+  sentence,
+  originalText = '',
+  targetLang = 'es',
+  nativeLang = 'es',
+  apiKey = ''
+}) {
+  if (!sentence || !sentence.trim()) return null;
+
+  const cacheKey = `${targetLang}:${nativeLang}:${sentence.trim()}`;
+  if (breakdownCache.has(cacheKey)) {
+    return breakdownCache.get(cacheKey);
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    const headers = { 'Content-Type': 'application/json' };
+    const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
+    if (effectiveKey) headers['x-api-key'] = effectiveKey;
+
+    const res = await fetch(`${API_BASE_URL}/api/sentence-breakdown`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        sentence: sentence.trim(),
+        originalText: originalText.trim(),
+        targetLang,
+        nativeLang,
+        apiKey: effectiveKey
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.data?.tokens && Array.isArray(data.data.tokens)) {
+        breakdownCache.set(cacheKey, data.data.tokens);
+        return data.data.tokens;
+      }
+    }
+  } catch (err) {
+    console.warn('Sentence breakdown API notice:', err.message);
+  }
+
+  return null;
+}
+
+

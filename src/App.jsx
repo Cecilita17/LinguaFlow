@@ -8,7 +8,7 @@ import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
-import { generateSentenceBreakdown } from './services/sentenceBreakdownEngine';
+import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
 import { reanalyzeGrammarStrictly } from './services/grammarEngine';
 
 const SUPPORTED_LANGUAGES = [
@@ -188,18 +188,44 @@ export default function App() {
 
   // State for Sentence Grammar Breakdown modal and Re-analysis
   const [breakdownData, setBreakdownData] = useState(null);
+  const [isBreakdownLoading, setIsBreakdownLoading] = useState(false);
   const [isReanalyzingId, setIsReanalyzingId] = useState(null);
 
-  // Open Grammar Breakdown modal
-  const handleOpenGrammarBreakdown = (msg) => {
+  // Open Grammar Breakdown modal with instantaneous local preview + deep AI analysis
+  const handleOpenGrammarBreakdown = async (msg) => {
     const correctedText = msg.correctedText || msg.text;
     const originalText = msg.originalText || msg.text;
-    const breakdown = generateSentenceBreakdown(correctedText, originalText, targetLang, nativeLang);
+
+    // 1. Initial fast breakdown so modal opens instantly with zero lag
+    const initialBreakdown = generateSentenceBreakdown(correctedText, originalText, targetLang, nativeLang);
     setBreakdownData({
-      breakdown,
+      breakdown: initialBreakdown,
       originalText,
       correctedText
     });
+    setIsBreakdownLoading(true);
+
+    // 2. Fetch authentic deep grammatical analysis from Groq AI
+    try {
+      const fullBreakdown = await getOrFetchSentenceBreakdown({
+        correctedText,
+        originalText,
+        targetLang,
+        nativeLang,
+        apiKey: config?.apiKey || ''
+      });
+      if (fullBreakdown && fullBreakdown.length > 0) {
+        setBreakdownData({
+          breakdown: fullBreakdown,
+          originalText,
+          correctedText
+        });
+      }
+    } catch (e) {
+      console.warn('Grammar breakdown fetch notice:', e);
+    } finally {
+      setIsBreakdownLoading(false);
+    }
   };
 
   // Re-analyze message with strict grammar engine
@@ -778,6 +804,7 @@ export default function App() {
         correctedText={breakdownData?.correctedText || ''}
         targetLang={targetLang}
         onPronounceWord={(word) => speakText(word, currentLangObj.speechCode, config.speechRate)}
+        isLoading={isBreakdownLoading}
       />
 
       {/* Settings Modal */}

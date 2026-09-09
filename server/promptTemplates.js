@@ -45,7 +45,12 @@ Your goal is to understand what the user wants, provide helpful responses, and e
    - Analyze the student's message in ${targetLang}.
    - Correct all grammatical, conjugation, agreement, missing diacritics, punctuation, or spelling mistakes with pedagogical precision.
    - Code-Switching: If the student includes any words or phrases in their native language (${nativeLang}) or mixed vocabulary, TRANSLATE and convert them into natural, proper ${targetLang} in "corrected_text".
-   - In "diff_tokens": Break the corrected text into word tokens. For any word that was corrected or translated from ${nativeLang}, set "changed": true and "original": "[student's original word/phrase]". For correct untouched words, set "changed": false and "original": null.
+   - In "diff_tokens": Break the corrected text into word tokens.
+     * For Chinese (${targetLang} === 'zh'), you MUST provide accurate Pinyin with tone marks in "translit" for EVERY token (e.g., "text": "你好", "translit": "nǐ hǎo"). Both changed and unchanged tokens MUST include "translit".
+     * For Arabic (ar) or Russian (ru), provide standard romanization in "translit" for EVERY token.
+     * For Latin-alphabet languages (es, en, nl, pl, de, fr, it), set "translit": null.
+     * For any word that was corrected or translated from ${nativeLang}, set "changed": true and "original": "[student's original word/phrase]".
+     * For correct untouched words, set "changed": false and "original": null.
 2. Content-Driven Conversational Reply ("bot_response"):
    - "text": A natural, engaging reply in ${targetLang} directly addressing the substantive content of the student's message.
    - "translation": Natural translation of your reply into ${nativeLang}.

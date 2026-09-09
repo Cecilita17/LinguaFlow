@@ -413,3 +413,129 @@ export async function handleTranscribe(req, res) {
   }
 }
 
+// Sentence Grammar Breakdown endpoint (Groq AI-powered deep morphosyntactic analysis)
+export async function handleSentenceBreakdown(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  try {
+    const body = parseRequestBody(req);
+    const {
+      sentence,
+      originalText = '',
+      targetLang = 'es',
+      nativeLang = 'es',
+      apiKey: clientApiKey
+    } = body;
+
+    if (!sentence || !sentence.trim()) {
+      return res.status(400).json({ error: 'Se requiere una oración para el desglose gramatical.' });
+    }
+
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
+
+    const activeModel = getSanitizedGroqModel();
+
+    if (effectiveApiKey) {
+      console.log(`Analyzing sentence breakdown with Groq (${activeModel}) for lang: ${targetLang}`);
+      const prompt = `You are a master linguistic professor and grammar teacher analyzing a sentence for a language student.
+Analyze the following sentence in language "${targetLang}" for a student whose native language is "${nativeLang}".
+
+Sentence to analyze: "${sentence.trim()}"
+Original sentence typed by student (before corrections, if any): "${originalText.trim()}"
+
+Provide an authentic, word-by-word morphosyntactic grammatical breakdown.
+CRITICAL REQUIREMENTS:
+- DO NOT output generic placeholder templates like "Palabra léxica", "Término en...", or repetition of the word as meaning!
+- Every single token must have:
+  * "word": the exact word, compound, or particle in "${targetLang}". For Chinese, group meaningful words/characters properly (e.g. "你好", "想", "学习", "中文").
+  * "pinyin": Pinyin with tone marks for Chinese (e.g. "nǐ hǎo"), standard romanization for Arabic/Russian, or null for Latin scripts.
+  * "pos": Precise, authentic Part of Speech in ${nativeLang} (e.g., "Verbo transitivo (1.ª pers. sing., presente)", "Sustantivo común femenino acusativo", "Palabra interrogativa", "Pronombre personal", "Partícula modal / aspecto").
+  * "lemma": The base/canonical dictionary lemma form (e.g., for "va" -> "ir", for "kawę" -> "kawa", for "learned" -> "learn").
+  * "meaning": Authentic, natural translation/definition of this word in ${nativeLang}.
+  * "explanation": A clear, educational grammatical explanation in ${nativeLang} explaining why this word appears in this form, its syntactic role in the sentence, agreement, case, or conjugation.
+  * "wasCorrected": true if this word was corrected or translated from the student's original sentence, otherwise false.
+  * "originalWord": The student's original word before correction, or null.
+
+Return STRICTLY valid JSON with no markdown formatting:
+{
+  "sentence": "${sentence.trim()}",
+  "targetLang": "${targetLang}",
+  "nativeLang": "${nativeLang}",
+  "tokens": [
+    {
+      "index": 1,
+      "word": "string",
+      "pinyin": "string or null",
+      "pos": "string",
+      "lemma": "string",
+      "meaning": "string",
+      "explanation": "string",
+      "wasCorrected": false,
+      "originalWord": null
+    }
+  ]
+}`;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are an expert multilingual morphosyntactic parser and language tutor. You always return strictly valid JSON matching the user prompt schema with 100% accurate grammatical analysis and zero placeholder templates.'
+              },
+              { role: 'user', content: prompt }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+            max_tokens: 2000
+          })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = data?.choices?.[0]?.message?.content;
+          const parsed = cleanAndParseJSON(rawText);
+          if (parsed && Array.isArray(parsed.tokens) && parsed.tokens.length > 0) {
+            return res.status(200).json({
+              success: true,
+              source: `groq (${activeModel})`,
+              data: parsed
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('AI sentence breakdown notice:', err.message);
+      }
+    }
+
+    // Fallback response if API key is not configured or fails
+    return res.status(200).json({
+      success: false,
+      fallback: true,
+      message: 'API key no configurada o respuesta de red demorada.'
+    });
+  } catch (err) {
+    console.error('Server error in /api/sentence-breakdown:', err);
+    res.status(500).json({ error: 'Error en el servidor al generar el desglose gramatical.' });
+  }
+}
+
+
