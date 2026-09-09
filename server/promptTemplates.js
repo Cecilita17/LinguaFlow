@@ -21,6 +21,17 @@ export const GEMINI_MODEL_CONFIG = {
   }
 };
 
+export const GROQ_MODEL_CONFIG = {
+  model: 'llama-3.3-70b-versatile',
+  models: [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant'
+  ],
+  temperature: 0.6,
+  maxTokens: 2500,
+  responseFormat: { type: 'json_object' }
+};
+
 // 2. CORE SYSTEM INSTRUCTION (Persona, Behaviors, Constraints & Pedagogical Schema)
 export function buildSystemInstruction(targetLang, nativeLang, level = 'A2/B1') {
   return `# ROLE & PERSONALITY

@@ -48,7 +48,16 @@ export default function App() {
 
   const [config, setConfig] = useState(() => {
     const saved = localStorage.getItem('linguaflow_config');
-    return saved ? JSON.parse(saved) : { apiKey: '', level: 'A2/B1', speechRate: 0.95 };
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed.provider) {
+          parsed.provider = parsed.apiKey?.startsWith('AIza') ? 'gemini' : 'groq';
+        }
+        return parsed;
+      } catch (e) {}
+    }
+    return { provider: 'groq', apiKey: '', level: 'A2/B1', speechRate: 0.95 };
   });
   const [apiWarning, setApiWarning] = useState(null);
 
@@ -72,6 +81,7 @@ export default function App() {
     targetLang,
     nativeLang,
     apiKey: config?.apiKey || '',
+    provider: config?.provider || 'groq',
     handsFree,
     isProcessing,
     onSpeechResult: (spokenText) => {
@@ -107,7 +117,7 @@ export default function App() {
     try {
       setIsReanalyzingId(msg.id);
       const textToAnalyze = msg.originalText || msg.text;
-      const result = await reanalyzeGrammarStrictly(textToAnalyze, targetLang, nativeLang, config?.apiKey || '');
+      const result = await reanalyzeGrammarStrictly(textToAnalyze, targetLang, nativeLang, config?.apiKey || '', config?.provider || 'groq');
       if (result) {
         setMessages(prev => prev.map(m => {
           if (m.id === msg.id) {
@@ -415,6 +425,7 @@ export default function App() {
         nativeLang,
         level: config.level,
         apiKey: config.apiKey,
+        provider: config.provider || 'groq',
         history: messages.slice(-6)
       });
 
@@ -496,7 +507,7 @@ export default function App() {
     }
 
     try {
-      const lookupResult = await lookupWordApi(word, targetLang, nativeLang, config.apiKey);
+      const lookupResult = await lookupWordApi(word, targetLang, nativeLang, config.apiKey, config.provider || 'groq');
       if (lookupResult) {
         setSelectedWord(lookupResult);
         return;

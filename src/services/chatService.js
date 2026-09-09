@@ -4,12 +4,68 @@ export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.e
 import { processSmartConversation } from '../../server/conversationEngine.js';
 import {
   GEMINI_MODEL_CONFIG,
+  GROQ_MODEL_CONFIG,
   buildSystemInstruction,
   buildDataContextPrompt,
   cleanAndParseJSON
 } from '../../server/promptTemplates.js';
 import { SUPPORTED_LANGUAGES } from '../../server/languageData.js';
 import { performFullGrammarCorrection } from './grammarEngine.js';
+
+export function categorizeClientGroqError(status, message) {
+  const msgLower = (message || '').toLowerCase();
+
+  // 1. Invalid API Key
+  if (status === 401 || status === 403 || msgLower.includes('invalid api key') || msgLower.includes('invalid_api_key') || msgLower.includes('unauthorized')) {
+    return {
+      type: 'invalid API key',
+      code: 'INVALID_API_KEY',
+      userMessage: 'Clave API de Groq inválida o no autorizada. Por favor genera una nueva clave en console.groq.com/keys e ingrésala en Ajustes ⚙️.'
+    };
+  }
+
+  // 2. Model Not Found
+  if (status === 404 || msgLower.includes('not found') || msgLower.includes('does not exist') || msgLower.includes('model_not_found')) {
+    return {
+      type: 'model not found',
+      code: 'MODEL_NOT_FOUND',
+      userMessage: `El modelo de Groq solicitado no fue encontrado (${message}).`
+    };
+  }
+
+  // 3. Quota / Rate limit
+  if (status === 429 || msgLower.includes('rate limit') || msgLower.includes('rate_limit_exceeded') || msgLower.includes('tokens per minute')) {
+    return {
+      type: 'quota/rate limit',
+      code: 'RATE_LIMIT_EXCEEDED',
+      userMessage: 'Límite de solicitudes o tokens por minuto alcanzado en Groq (HTTP 429). Espera unos segundos antes de volver a enviar.'
+    };
+  }
+
+  // 4. Network timeout
+  if (status === 408 || msgLower.includes('timeout') || msgLower.includes('aborted') || msgLower.includes('aborterror')) {
+    return {
+      type: 'network timeout',
+      code: 'NETWORK_TIMEOUT',
+      userMessage: 'Tiempo de espera agotado al conectar con Groq. Revisa tu conexión a internet.'
+    };
+  }
+
+  // 5. Server error
+  if (status >= 500) {
+    return {
+      type: 'server error',
+      code: 'GROQ_SERVER_ERROR',
+      userMessage: `Error del servidor de Groq (HTTP ${status}): ${message}.`
+    };
+  }
+
+  return {
+    type: 'server error',
+    code: 'GROQ_ERROR',
+    userMessage: `Error al conectar con Groq (HTTP ${status || 'N/A'}): ${message || 'Servicio no disponible'}.`
+  };
+}
 
 export function categorizeClientGeminiError(status, message) {
   const msgLower = (message || '').toLowerCase();
@@ -74,7 +130,7 @@ export function categorizeClientGeminiError(status, message) {
 
 /**
  * Robust chat service that communicates with /api/chat on Render/local backend
- * and gracefully falls back to direct client Gemini or the smart multi-turn linguistic engine.
+ * and gracefully falls back to direct client Groq / Gemini or the smart multi-turn linguistic engine.
  */
 export async function sendChatMessage({
   message,
@@ -82,6 +138,7 @@ export async function sendChatMessage({
   nativeLang,
   level = 'A2/B1',
   apiKey,
+  provider: requestedProvider,
   history = []
 }) {
   const cleanMsg = (message || '').trim();
@@ -90,11 +147,19 @@ export async function sendChatMessage({
   }
 
   const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
-  let lastGeminiError = null;
+  let lastAIError = null;
   let serverCorrection = null;
   let serverCode = null;
 
-  // 1. If user entered Gemini API Key in Settings, call Google Gemini AI directly first (instant, 100% generative AI)
+  // Determine provider
+  let provider = requestedProvider;
+  if (!provider) {
+    if (effectiveKey.startsWith('gsk_')) provider = 'groq';
+    else if (effectiveKey.startsWith('AIza')) provider = 'gemini';
+    else provider = 'groq';
+  }
+
+  // 1. Direct Client Call (Groq or Gemini)
   if (effectiveKey) {
     try {
       const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
@@ -110,70 +175,132 @@ export async function sendChatMessage({
         history
       });
 
-      let activeModel = 'gemini-3.6-flash';
-      const viteEnvModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
-      // Protect against obsolete models in env
-      if (viteEnvModel && !viteEnvModel.includes('1.5') && !viteEnvModel.includes('2.0') && !viteEnvModel.includes('2.5') && !viteEnvModel.includes('pro')) {
-        activeModel = viteEnvModel.trim();
-      }
+      if (provider === 'groq') {
+        const activeModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GROQ_MODEL) || GROQ_MODEL_CONFIG?.model || 'llama-3.3-70b-versatile';
+        console.log(`Groq model selected: ${activeModel}`);
 
-      console.log(`Gemini model selected: ${activeModel}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${effectiveKey}`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+        let directHttpStatus = 0;
+        let directGroqMsg = '';
 
-      let directHttpStatus = 0;
-      let directGoogleMsg = '';
+        try {
+          const directRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${effectiveKey}`
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+              model: activeModel,
+              messages: [
+                { role: 'system', content: systemInstruction },
+                { role: 'user', content: dataPrompt }
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0.6,
+              max_tokens: 2500
+            })
+          });
 
-      try {
-        const directRes = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }]
+          clearTimeout(timeoutId);
+          directHttpStatus = directRes.status;
+
+          if (directRes.ok) {
+            const resJson = await directRes.json();
+            const textContent = resJson?.choices?.[0]?.message?.content;
+            if (textContent) {
+              const parsed = cleanAndParseJSON(textContent);
+              if (parsed && parsed.user_correction && parsed.bot_response) {
+                console.log(`✅ Direct client Groq responded using [${activeModel}]`);
+                return {
+                  source: `direct_groq (${activeModel})`,
+                  data: parsed
+                };
               }
-            ],
-            generationConfig: GEMINI_MODEL_CONFIG.generationConfig
-          })
-        });
-
-        clearTimeout(timeoutId);
-        directHttpStatus = directRes.status;
-
-        if (directRes.ok) {
-          const resJson = await directRes.json();
-          const textContent = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (textContent) {
-            const parsed = cleanAndParseJSON(textContent);
-            if (parsed && parsed.user_correction && parsed.bot_response) {
-              console.log(`✅ Direct client Gemini responded using [${activeModel}]`);
-              return {
-                source: `direct_gemini (${activeModel})`,
-                data: parsed
-              };
             }
+          } else {
+            const errData = await directRes.json().catch(() => ({}));
+            directGroqMsg = errData?.error?.message || directRes.statusText;
           }
-        } else {
-          const errData = await directRes.json().catch(() => ({}));
-          directGoogleMsg = errData?.error?.message || directRes.statusText;
+        } catch (candErr) {
+          clearTimeout(timeoutId);
+          directHttpStatus = candErr.name === 'AbortError' ? 408 : 500;
+          directGroqMsg = candErr.name === 'AbortError' ? 'Network timeout: la solicitud a Groq excedió el tiempo límite.' : candErr.message;
         }
-      } catch (candErr) {
-        clearTimeout(timeoutId);
-        directHttpStatus = candErr.name === 'AbortError' ? 408 : 500;
-        directGoogleMsg = candErr.name === 'AbortError' ? 'Network timeout: la solicitud a Google Gemini excedió el tiempo límite.' : candErr.message;
-      }
 
-      console.error(`Gemini request failed:\nmodel: ${activeModel}\nHTTP status: ${directHttpStatus}\nGoogle error message: ${directGoogleMsg}`);
-      const categorized = categorizeClientGeminiError(directHttpStatus, directGoogleMsg);
-      lastGeminiError = categorized.userMessage;
-      serverCode = categorized.code;
-    } catch (geminiErr) {
-      console.warn('Direct Gemini call failed:', geminiErr.message);
+        console.error(`Groq request failed:\nmodel: ${activeModel}\nHTTP status: ${directHttpStatus}\nGroq error message: ${directGroqMsg}`);
+        const categorized = categorizeClientGroqError(directHttpStatus, directGroqMsg);
+        lastAIError = categorized.userMessage;
+        serverCode = categorized.code;
+      } else {
+        // Direct Gemini call
+        let activeModel = 'gemini-3.6-flash';
+        const viteEnvModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
+        if (viteEnvModel && !viteEnvModel.includes('1.5') && !viteEnvModel.includes('2.0') && !viteEnvModel.includes('2.5') && !viteEnvModel.includes('pro')) {
+          activeModel = viteEnvModel.trim();
+        }
+
+        console.log(`Gemini model selected: ${activeModel}`);
+
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${effectiveKey}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+
+        let directHttpStatus = 0;
+        let directGoogleMsg = '';
+
+        try {
+          const directRes = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: 'user',
+                  parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }]
+                }
+              ],
+              generationConfig: GEMINI_MODEL_CONFIG.generationConfig
+            })
+          });
+
+          clearTimeout(timeoutId);
+          directHttpStatus = directRes.status;
+
+          if (directRes.ok) {
+            const resJson = await directRes.json();
+            const textContent = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (textContent) {
+              const parsed = cleanAndParseJSON(textContent);
+              if (parsed && parsed.user_correction && parsed.bot_response) {
+                console.log(`✅ Direct client Gemini responded using [${activeModel}]`);
+                return {
+                  source: `direct_gemini (${activeModel})`,
+                  data: parsed
+                };
+              }
+            }
+          } else {
+            const errData = await directRes.json().catch(() => ({}));
+            directGoogleMsg = errData?.error?.message || directRes.statusText;
+          }
+        } catch (candErr) {
+          clearTimeout(timeoutId);
+          directHttpStatus = candErr.name === 'AbortError' ? 408 : 500;
+          directGoogleMsg = candErr.name === 'AbortError' ? 'Network timeout: la solicitud a Google Gemini excedió el tiempo límite.' : candErr.message;
+        }
+
+        console.error(`Gemini request failed:\nmodel: ${activeModel}\nHTTP status: ${directHttpStatus}\nGoogle error message: ${directGoogleMsg}`);
+        const categorized = categorizeClientGeminiError(directHttpStatus, directGoogleMsg);
+        lastAIError = categorized.userMessage;
+        serverCode = categorized.code;
+      }
+    } catch (clientErr) {
+      console.warn('Direct client AI call failed:', clientErr.message);
     }
   }
 
@@ -192,6 +319,7 @@ export async function sendChatMessage({
         nativeLang,
         level,
         apiKey: effectiveKey,
+        provider,
         history: history.slice(-6)
       })
     });
@@ -213,7 +341,7 @@ export async function sendChatMessage({
       console.warn(`/api/chat responded with status ${response.status}.`);
       const errData = await response.json().catch(() => ({}));
       if (errData?.error) {
-        lastGeminiError = errData.error;
+        lastAIError = errData.error;
       }
       if (errData?.user_correction) {
         serverCorrection = errData.user_correction;
@@ -226,19 +354,19 @@ export async function sendChatMessage({
     console.warn('/api/chat unreachable or timed out:', netErr.message);
   }
 
-  // 3. Gemini is the SOLE generator of conversational responses.
-  // When Gemini cannot be reached or no key is provided, NEVER fabricate a bot response.
+  // 3. AI is the SOLE generator of conversational responses.
+  // When AI cannot be reached or no key is provided, NEVER fabricate a bot response.
   // Instead, compute strict deterministic pedagogical corrections for the student's message,
   // and throw a controlled error informing the user.
-  console.log('Gemini AI unavailable for conversational response. Computing deterministic linguistics...');
-  const deterministicCorrection = serverCorrection || await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);
+  console.log('Conversational AI unavailable. Computing deterministic linguistics...');
+  const deterministicCorrection = serverCorrection || await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey, provider);
   
-  const errorMessage = lastGeminiError || (effectiveKey
-    ? 'El motor de conversación de Google Gemini no pudo generar una respuesta. Verifica tu conexión o clave en Ajustes ⚙️.'
-    : 'Para conversar con LinguaFlow, ingresa tu API Key de Google Gemini en Ajustes ⚙️ (es gratis en Google AI Studio). Gemini es el motor exclusivo de conversación.');
+  const errorMessage = lastAIError || (effectiveKey
+    ? 'El motor de conversación de IA no pudo generar una respuesta. Verifica tu conexión o clave en Ajustes ⚙️.'
+    : 'Para conversar con LinguaFlow, ingresa tu API Key de Groq (Recomendado ⚡ en console.groq.com/keys) o Google Gemini en Ajustes ⚙️.');
 
   const error = new Error(errorMessage);
-  error.code = serverCode || (effectiveKey ? 'GEMINI_FAILED' : 'MISSING_API_KEY');
+  error.code = serverCode || (effectiveKey ? 'AI_FAILED' : 'MISSING_API_KEY');
   error.user_correction = deterministicCorrection;
   throw error;
 }
@@ -246,7 +374,7 @@ export async function sendChatMessage({
 /**
  * Lookup a word definition from the backend API (Render)
  */
-export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '') {
+export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '', provider = 'groq') {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -259,7 +387,8 @@ export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '') {
         word,
         targetLang,
         nativeLang,
-        apiKey: (apiKey || '').trim()
+        apiKey: (apiKey || '').trim(),
+        provider
       })
     });
 
@@ -311,9 +440,9 @@ export async function fetchLanguagesApi() {
 
 /**
  * Transcribe recorded audio using high-precision Multimodal AI (/api/transcribe)
- * Handles strong accents and mixed target + native language speech.
+ * Handles strong accents and mixed target + native language speech via Groq Whisper or Gemini.
  */
-export async function transcribeAudioApi({ audioBlob, targetLang, nativeLang, apiKey }) {
+export async function transcribeAudioApi({ audioBlob, targetLang, nativeLang, apiKey, provider = 'groq' }) {
   if (!audioBlob || audioBlob.size === 0) return null;
 
   try {
@@ -336,7 +465,8 @@ export async function transcribeAudioApi({ audioBlob, targetLang, nativeLang, ap
         mimeType: audioBlob.type || 'audio/webm',
         targetLang,
         nativeLang,
-        apiKey: (apiKey || '').trim()
+        apiKey: (apiKey || '').trim(),
+        provider
       })
     });
 

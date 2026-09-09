@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, Gauge, Volume2, Save, Info, Check } from 'lucide-react';
+import { X, Key, Gauge, Volume2, Save, Info, Check, Zap, Sparkles } from 'lucide-react';
 
 export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
   if (!isOpen) return null;
 
+  const initialProvider = config.provider || (config.apiKey?.startsWith('AIza') ? 'gemini' : 'groq');
+  const [provider, setProvider] = useState(initialProvider);
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [level, setLevel] = useState(config.level || 'A2/B1');
   const [speechRate, setSpeechRate] = useState(config.speechRate || 0.95);
@@ -14,6 +16,8 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
 
   useEffect(() => {
     if (isOpen) {
+      const p = config.provider || (config.apiKey?.startsWith('AIza') ? 'gemini' : 'groq');
+      setProvider(p);
       setApiKey(config.apiKey || '');
       setLevel(config.level || 'A2/B1');
       setSpeechRate(config.speechRate || 0.95);
@@ -21,35 +25,77 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
     }
   }, [isOpen, config]);
 
+  const handleApiKeyChange = (val) => {
+    setApiKey(val);
+    setKeyStatus(null);
+    const trimmed = val.trim();
+    if (trimmed.startsWith('gsk_')) {
+      setProvider('groq');
+    } else if (trimmed.startsWith('AIza')) {
+      setProvider('gemini');
+    }
+  };
+
   const handleTestKey = async () => {
     const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
     if (!cleanKey) {
-      setKeyStatus({ success: false, message: 'Ingresa una clave de Gemini para verificar.' });
+      setKeyStatus({ success: false, message: `Ingresa una clave de ${provider === 'groq' ? 'Groq' : 'Gemini'} para verificar.` });
       return;
     }
     setTestingKey(true);
     setKeyStatus(null);
+
     try {
-      const rawEnv = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
-      const testModel = (rawEnv && !rawEnv.includes('1.5') && !rawEnv.includes('2.0') && !rawEnv.includes('2.5') && !rawEnv.includes('pro'))
-        ? rawEnv.trim()
-        : 'gemini-3.6-flash';
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${cleanKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: 'Ping' }] }]
-        })
-      });
-      if (res.ok) {
-        setKeyStatus({ success: true, message: '✅ ¡Conexión exitosa! Google Gemini está activo y funcionando en vivo.' });
-      } else {
-        const err = await res.json().catch(() => ({}));
-        const msg = err?.error?.message || `Error ${res.status}`;
-        setKeyStatus({
-          success: false,
-          message: `❌ Google rechazó la clave: "${msg}". Genera una nueva gratis en Google AI Studio.`
+      if (provider === 'groq') {
+        const testModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GROQ_MODEL) || 'llama-3.3-70b-versatile';
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cleanKey}`
+          },
+          body: JSON.stringify({
+            model: testModel,
+            messages: [{ role: 'user', content: 'Ping' }],
+            max_tokens: 5
+          })
         });
+
+        if (res.ok) {
+          setKeyStatus({
+            success: true,
+            message: `✅ ¡Conexión exitosa! Groq (${testModel}) está activo y respondiendo a velocidad ultra rápida.`
+          });
+        } else {
+          const err = await res.json().catch(() => ({}));
+          const msg = err?.error?.message || `Error ${res.status}`;
+          setKeyStatus({
+            success: false,
+            message: `❌ Groq rechazó la clave: "${msg}". Genera una nueva gratis en console.groq.com/keys.`
+          });
+        }
+      } else {
+        const rawEnv = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
+        const testModel = (rawEnv && !rawEnv.includes('1.5') && !rawEnv.includes('2.0') && !rawEnv.includes('2.5') && !rawEnv.includes('pro'))
+          ? rawEnv.trim()
+          : 'gemini-3.6-flash';
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${cleanKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'Ping' }] }]
+          })
+        });
+        if (res.ok) {
+          setKeyStatus({ success: true, message: '✅ ¡Conexión exitosa! Google Gemini está activo y funcionando en vivo.' });
+        } else {
+          const err = await res.json().catch(() => ({}));
+          const msg = err?.error?.message || `Error ${res.status}`;
+          setKeyStatus({
+            success: false,
+            message: `❌ Google rechazó la clave: "${msg}". Genera una nueva gratis en Google AI Studio.`
+          });
+        }
       }
     } catch (e) {
       setKeyStatus({
@@ -63,7 +109,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
 
   const handleSave = () => {
     const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
-    onSaveConfig({ apiKey: cleanKey, level, speechRate: parseFloat(speechRate) });
+    onSaveConfig({ provider, apiKey: cleanKey, level, speechRate: parseFloat(speechRate) });
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -77,7 +123,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
       onClick={onClose}
     >
       <div
-        className="bg-[#fffdfc] text-stone-900 w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 p-6 transform transition-all animate-scale-up"
+        className="bg-[#fffdfc] text-stone-900 w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 p-6 transform transition-all animate-scale-up max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
@@ -93,21 +139,62 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
         </div>
 
         <div className="space-y-4 my-4 text-sm">
-          {/* Gemini API Key */}
+          {/* Provider Selection */}
           <div>
-            <label className="block font-semibold text-stone-800 mb-1 flex items-center space-x-1.5">
-              <Key className="w-4 h-4 text-rose-600" />
-              <span>Google Gemini API Key (Opcional)</span>
+            <label className="block font-semibold text-stone-800 mb-1.5 flex items-center space-x-1.5">
+              <Sparkles className="w-4 h-4 text-rose-600" />
+              <span>Motor de Inteligencia Artificial</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setProvider('groq');
+                  setKeyStatus(null);
+                }}
+                className={`flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                  provider === 'groq'
+                    ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-xs ring-1 ring-rose-500'
+                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" />
+                <span>Groq (Llama 3.3)</span>
+                <span className="text-[10px] bg-rose-200 text-rose-800 px-1 py-0.2 rounded font-bold">⚡ Rápido</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setProvider('gemini');
+                  setKeyStatus(null);
+                }}
+                className={`flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                  provider === 'gemini'
+                    ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-xs ring-1 ring-rose-500'
+                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <span>Google Gemini</span>
+              </button>
+            </div>
+          </div>
+
+          {/* API Key Input */}
+          <div>
+            <label className="block font-semibold text-stone-800 mb-1 flex items-center justify-between">
+              <span className="flex items-center space-x-1.5">
+                <Key className="w-4 h-4 text-rose-600" />
+                <span>{provider === 'groq' ? 'Groq API Key' : 'Google Gemini API Key'}</span>
+              </span>
+              <span className="text-[11px] text-stone-400 font-normal">Opcional si usas backend</span>
             </label>
             <div className="flex gap-2">
               <input
                 type="password"
                 value={apiKey}
-                onChange={(e) => {
-                  setApiKey(e.target.value);
-                  setKeyStatus(null);
-                }}
-                placeholder="AIzaSy..."
+                onChange={(e) => handleApiKeyChange(e.target.value)}
+                placeholder={provider === 'groq' ? 'gsk_...' : 'AIzaSy...'}
                 className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 outline-none focus:ring-2 focus:ring-rose-500 font-mono text-xs"
               />
               <button
@@ -134,23 +221,46 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
                 <span className="font-medium leading-relaxed">{keyStatus.message}</span>
               </div>
             )}
+
+            {/* Info Box */}
             <div className="flex items-start space-x-1.5 mt-1.5 text-xs text-stone-600 bg-rose-50/80 p-2.5 rounded-xl border border-rose-100">
               <Info className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p>
-                  <strong>¿Quieres respuestas 100% generadas por IA en vivo?</strong> Obtén tu API Key gratis sin costo ni tarjeta en{' '}
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-rose-600 hover:text-rose-700 underline font-bold"
-                  >
-                    Google AI Studio
-                  </a>.
-                </p>
-                <p className="text-[11px] text-stone-500">
-                  Tip: También puedes configurar <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GEMINI_API_KEY</code> en las Variables de Entorno de tu panel de <strong>Render</strong> para que todos tus celulares y dispositivos tengan IA automática sin tener que pegar la clave.
-                </p>
+                {provider === 'groq' ? (
+                  <>
+                    <p>
+                      <strong>¿Quieres respuestas instantáneas con Llama 3.3 y transcripción Whisper?</strong> Crea tu API Key gratis en segundos sin tarjeta en{' '}
+                      <a
+                        href="https://console.groq.com/keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-rose-600 hover:text-rose-700 underline font-bold"
+                      >
+                        Groq Console
+                      </a>.
+                    </p>
+                    <p className="text-[11px] text-stone-500">
+                      Tip: Puedes configurar <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GROQ_API_KEY</code> en Render o Vercel para activar Groq en todos tus dispositivos automáticamente.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      <strong>Google Gemini 3.6 Flash</strong>: Obtén tu clave gratuita en{' '}
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-rose-600 hover:text-rose-700 underline font-bold"
+                      >
+                        Google AI Studio
+                      </a>.
+                    </p>
+                    <p className="text-[11px] text-stone-500">
+                      Tip: Puedes configurar <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GEMINI_API_KEY</code> en Render o Vercel.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </div>

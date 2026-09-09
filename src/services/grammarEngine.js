@@ -412,8 +412,16 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl', nati
     };
   }
 
-  // 0. If Gemini API key is available, use direct AI for maximum intelligence & code-switching translation
+  // 0. If API key is available, use direct AI (Groq or Gemini) for maximum intelligence & code-switching translation
   if (apiKey && apiKey.trim()) {
+    const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
+    let provider = requestedProvider;
+    if (!provider) {
+      if (cleanKey.startsWith('gsk_')) provider = 'groq';
+      else if (cleanKey.startsWith('AIza')) provider = 'gemini';
+      else provider = 'groq';
+    }
+
     try {
       const prompt = `You are an expert strict multilingual grammar teacher.
 The student is practicing target language: "${targetLang}".
@@ -434,13 +442,45 @@ Return STRICTLY JSON format:
     { "text": "string", "changed": boolean, "original": "string or null" }
   ]
 }`;
-      let model = 'gemini-3.6-flash';
-      const viteEnv = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
-      if (viteEnv && !viteEnv.includes('1.5') && !viteEnv.includes('2.0') && !viteEnv.includes('2.5') && !viteEnv.includes('pro')) {
-        model = viteEnv.trim();
-      }
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
+
+      if (provider === 'groq') {
+        const groqModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GROQ_MODEL) || 'llama-3.3-70b-versatile';
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cleanKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: groqModel,
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+            max_tokens: 1500
+          })
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          const raw = data?.choices?.[0]?.message?.content;
+          if (raw) {
+            const parsed = cleanAndParseJSON(raw);
+            if (parsed && parsed.corrected_text && parsed.diff_tokens) {
+              return parsed;
+            }
+          }
+        }
+      } else {
+        // Gemini
+        let model = 'gemini-3.6-flash';
+        const viteEnv = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
+        if (viteEnv && !viteEnv.includes('1.5') && !viteEnv.includes('2.0') && !viteEnv.includes('2.5') && !viteEnv.includes('pro')) {
+          model = viteEnv.trim();
+        }
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch(geminiUrl, {
@@ -463,11 +503,9 @@ Return STRICTLY JSON format:
             }
           }
         }
-      } catch (mErr) {
-        console.warn('Strict grammar AI check notice:', mErr.message);
       }
-    } catch (err) {
-      console.warn('Gemini re-analysis notice:', err.message);
+    } catch (mErr) {
+      console.warn('Strict grammar AI check notice:', mErr.message);
     }
   }
 
@@ -527,6 +565,6 @@ Return STRICTLY JSON format:
 /**
  * Force strict re-analysis on a message
  */
-export async function reanalyzeGrammarStrictly(text, targetLang = 'pl', nativeLang = 'es', apiKey = '') {
-  return performFullGrammarCorrection(text, targetLang, nativeLang, apiKey);
+export async function reanalyzeGrammarStrictly(text, targetLang = 'pl', nativeLang = 'es', apiKey = '', provider = '') {
+  return performFullGrammarCorrection(text, targetLang, nativeLang, apiKey, provider);
 }

@@ -80,6 +80,7 @@ export function useSpeech({
   targetLang = 'es',
   nativeLang = 'es',
   apiKey = '',
+  provider = 'groq',
   onSpeechResult,
   handsFree = false,
   isProcessing = false
@@ -239,7 +240,8 @@ export function useSpeech({
           audioBlob,
           targetLang,
           nativeLang,
-          apiKey
+          apiKey,
+          provider
         });
 
         if (aiTranscript && aiTranscript.trim()) {
@@ -258,7 +260,7 @@ export function useSpeech({
     if (finalTranscribedText && onSpeechResult) {
       onSpeechResult(finalTranscribedText);
     }
-  }, [interimTranscript, onSpeechResult, targetLang, nativeLang, apiKey]);
+  }, [interimTranscript, onSpeechResult, targetLang, nativeLang, apiKey, provider]);
 
   // Start Push-to-Talk Recording (Called on PointerDown)
   const startRecording = useCallback(async () => {
