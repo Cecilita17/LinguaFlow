@@ -2,7 +2,7 @@
 
 Un chatbot conversacional interactivo diseñado para el aprendizaje y práctica de idiomas en tiempo real.
 
----
+--- 
 
 ## 🌟 Características Principales
 
