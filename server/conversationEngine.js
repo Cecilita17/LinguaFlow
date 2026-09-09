@@ -3,59 +3,120 @@ import { computeWordDiff } from './languageData.js';
 /**
  * Grammar error correction rules per language
  */
+/**
+ * Comprehensive Grammar Error Correction Rules per Language
+ */
 const GRAMMAR_RULES = {
   pl: [
-    { regex: /\bja\s+(mieć|miec)\s+(sen|senność|sennosc)\b/gi, replacement: 'chce mi się spać', orig: 'ja mieć sen', corr: 'chce mi się spać' },
-    { regex: /\bja\s+(być|byc)\s+(senny|senna)\b/gi, replacement: 'jestem senny', orig: 'ja być senny', corr: 'jestem senny' },
-    { regex: /\bja\s+(być|byc)\b/gi, replacement: 'jestem', orig: 'ja być', corr: 'jestem' },
-    { regex: /\bja\s+(chcieć|chciec)\b/gi, replacement: 'chcę', orig: 'ja chcieć', corr: 'chcę' },
-    { regex: /\bja\s+(iść|isc)\b/gi, replacement: 'idę', orig: 'ja iść', corr: 'idę' },
-    { regex: /\bja\s+(mieć|miec)\b/gi, replacement: 'mam', orig: 'ja mieć', corr: 'mam' },
-    { regex: /\bja\s+(pić|pic)\b/gi, replacement: 'piję', orig: 'ja pić', corr: 'piję' },
-    { regex: /\bja\s+(lubić|lubic)\b/gi, replacement: 'lubię', orig: 'ja lubić', corr: 'lubię' },
-    { regex: /\bchce\s+(pić|pic)\s+kawa\b/gi, replacement: 'chcę pić kawę', orig: 'kawa', corr: 'kawę' }
+    // Idioms & Sleep
+    { regex: /\bja\s+(mieć|miec)\s+(sen|senność|sennosc)\b/gi, replacement: 'chce mi się spać' },
+    { regex: /\b(mam|mieć|miec)\s+sen\b/gi, replacement: 'chce mi się spać' },
+    { regex: /\b(jestem|być|byc)\s+sen(ny|na)\b/gi, replacement: 'jestem senny' },
+    // Polish verb forms & pronouns
+    { regex: /\bja\s+(być|byc|jest|są|sa)\b/gi, replacement: 'jestem' },
+    { regex: /\bja\s+(mieć|miec|ma|mają|maja)\b/gi, replacement: 'mam' },
+    { regex: /\bja\s+(chcieć|chciec|chce|chcą|chca)\b/gi, replacement: 'chcę' },
+    { regex: /\bja\s+(iść|isc|idzie|idą|ida)\b/gi, replacement: 'idę' },
+    { regex: /\bja\s+(lubić|lubic|lubi|lubią|lubia)\b/gi, replacement: 'lubię' },
+    { regex: /\bja\s+(pić|pic|pije|piją|pija)\b/gi, replacement: 'piję' },
+    { regex: /\bja\s+(robić|robic|robi|robią|robia)\b/gi, replacement: 'robię' },
+    { regex: /\bja\s+(mówić|mowic|mowi|mówią|mowia)\b/gi, replacement: 'mówię' },
+    { regex: /\bja\s+(wiedzieć|wiedziec|wie|wiedzą|wiedza)\b/gi, replacement: 'wiem' },
+    { regex: /\bja\s+jestem\b/gi, replacement: 'jestem' },
+    { regex: /\bja\s+chcę\b/gi, replacement: 'chcę' },
+    { regex: /\bja\s+lubię\b/gi, replacement: 'lubię' },
+    { regex: /\bja\s+mam\b/gi, replacement: 'mam' },
+    // Accusative object cases
+    { regex: /\b(chcę|chce|piję|pije|pić|pic|lubię|lubie)\s+kawa\b/gi, replacement: '$1 kawę' },
+    { regex: /\b(chcę|chce|piję|pije|pić|pic|lubię|lubie)\s+kawe\b/gi, replacement: '$1 kawę' },
+    { regex: /\b(chcę|chce|piję|pije|pić|pic|lubię|lubie)\s+herbata\b/gi, replacement: '$1 herbatę' },
+    { regex: /\b(chcę|chce|piję|pije|pić|pic|lubię|lubie)\s+woda\b/gi, replacement: '$1 wodę' },
+    { regex: /\b(chcę|chce|piję|pije|pić|pic|lubię|lubie)\s+wode\b/gi, replacement: '$1 wodę' },
+    { regex: /\b(mam|mieć|miec)\s+pies\b/gi, replacement: 'mam psa' },
+    { regex: /\b(mam|mieć|miec)\s+kot\b/gi, replacement: 'mam kota' },
+    // Frequent typos without diacritics
+    { regex: /\bczesc\b/gi, replacement: 'cześć' },
+    { regex: /\bdzien\s+dobry\b/gi, replacement: 'dzień dobry' },
+    { regex: /\bdziekuje\b/gi, replacement: 'dziękuję' },
+    { regex: /\bprosze\b/gi, replacement: 'proszę' },
+    { regex: /\bjak\s+sie\s+masz\b/gi, replacement: 'jak się masz' },
+    // Spanish phrases to Polish
+    { regex: /\b(hola|buenos d[ií]as)\b/gi, replacement: 'Cześć!' },
+    { regex: /\b(tengo sue[nñ]o)\b/gi, replacement: 'Chce mi się spać' },
+    { regex: /\b(quiero caf[eé])\b/gi, replacement: 'Poproszę kawę' },
+    { regex: /\b(gracias)\b/gi, replacement: 'Dziękuję!' }
   ],
   ar: [
-    { regex: /[أا]نا\s+نوم/g, replacement: 'أَنَا أَشْعُرُ بِالنُّعَاسِ', orig: 'نوم', corr: 'أشعر بالنعاس' },
-    { regex: /[أا]نا\s+[يأا]ريد/g, replacement: 'أَنَا أُرِيدُ', orig: 'يريد', corr: 'أريد' },
-    { regex: /[أا]نا\s+[يأا]شرب/g, replacement: 'أَنَا أَشْرَبُ', orig: 'يشرب', corr: 'أشرب' },
-    { regex: /[أا]ريد\s+قهو[ةه]/g, replacement: 'أُرِيدُ أَنْ أَشْرَبَ قَهْوَةً', orig: 'قهوة', corr: 'أن أشرب قهوة' }
+    { regex: /[أا]نا\s+نوم/g, replacement: 'أَنَا نَعْسَانُ' },
+    { regex: /[أا]نا\s+[يأا]ريد/g, replacement: 'أَنَا أُرِيدُ' },
+    { regex: /[أا]نا\s+[يأا]شرب/g, replacement: 'أَنَا أَشْرَبُ' },
+    { regex: /[أا]ريد\s+قهو[ةه]/g, replacement: 'أُرِيدُ قَهْوَةً' },
+    { regex: /[أا]ريد\s+ما[ءء]/g, replacement: 'أُرِيدُ مَاءً' },
+    { regex: /كيف\s+حال/g, replacement: 'كَيْفَ حَالُكَ؟' },
+    { regex: /صباح\s+خير/g, replacement: 'صَبَاحُ الخَيْرِ' },
+    { regex: /مساء\s+خير/g, replacement: 'مَسَاءُ الخَيْرِ' },
+    { regex: /\b(hola)\b/gi, replacement: 'مَرْحَبًا!' }
   ],
   zh: [
-    { regex: /我困/g, replacement: '我很困', orig: '困', corr: '很困' },
-    { regex: /我睡觉/g, replacement: '我想去睡觉', orig: '睡觉', corr: '想去睡觉' },
-    { regex: /我喝咖啡/g, replacement: '我想喝咖啡', orig: '喝', corr: '想喝' },
-    { regex: /你好吗/g, replacement: '你好，最近怎么样？', orig: '吗', corr: '最近怎么样？' }
+    { regex: /我困/g, replacement: '我很困' },
+    { regex: /我睡觉/g, replacement: '我想去睡觉' },
+    { regex: /我喝咖啡/g, replacement: '我想喝杯咖啡' },
+    { regex: /你好吗/g, replacement: '你好，最近怎么样？' },
+    { regex: /\b(hola)\b/gi, replacement: '你好！' }
   ],
   ru: [
-    { regex: /\bя\s+хотеть\s+спать\b/gi, replacement: 'я хочу спать', orig: 'хотеть', corr: 'хочу' },
-    { regex: /\bя\s+иметь\s+спать\b/gi, replacement: 'я очень хочу спать', orig: 'иметь спать', corr: 'очень хочу спать' },
-    { regex: /\bя\s+хотеть\b/gi, replacement: 'я хочу', orig: 'хотеть', corr: 'хочу' },
-    { regex: /\bя\s+идти\b/gi, replacement: 'я иду', orig: 'идти', corr: 'иду' },
-    { regex: /\bя\s+пить\b/gi, replacement: 'я пью', orig: 'пить', corr: 'пью' }
+    { regex: /\bя\s+хотеть\s+спать\b/gi, replacement: 'я хочу спать' },
+    { regex: /\bя\s+иметь\s+спать\b/gi, replacement: 'я хочу спать' },
+    { regex: /\bя\s+хотеть\b/gi, replacement: 'я хочу' },
+    { regex: /\bя\s+идти\b/gi, replacement: 'я иду' },
+    { regex: /\bя\s+пить\b/gi, replacement: 'я пью' },
+    { regex: /\bя\s+любить\b/gi, replacement: 'я люблю' },
+    { regex: /\b(hola)\b/gi, replacement: 'Привет!' }
   ],
   nl: [
-    { regex: /\bik\s+heb\s+moe\b/gi, replacement: 'ik ben moe', orig: 'heb moe', corr: 'ben moe' },
-    { regex: /\bik\s+heb\s+slaap\b/gi, replacement: 'ik heb slaap', orig: 'slaap', corr: 'slaap' },
-    { regex: /\bik\s+willen\b/gi, replacement: 'ik wil', orig: 'willen', corr: 'wil' },
-    { regex: /\bik\s+gaan\b/gi, replacement: 'ik ga', orig: 'gaan', corr: 'ga' }
+    { regex: /\bik\s+heb\s+moe\b/gi, replacement: 'ik ben moe' },
+    { regex: /\bik\s+ben\s+slaap\b/gi, replacement: 'ik ben moe' },
+    { regex: /\bik\s+ben\s+honger\b/gi, replacement: 'ik heb honger' },
+    { regex: /\bik\s+ben\s+dorst\b/gi, replacement: 'ik heb dorst' },
+    { regex: /\bik\s+(zijn|is|bent)\b/gi, replacement: 'ik ben' },
+    { regex: /\bik\s+(hebben|heeft)\b/gi, replacement: 'ik heb' },
+    { regex: /\bik\s+willen\b/gi, replacement: 'ik wil' },
+    { regex: /\bik\s+gaan\b/gi, replacement: 'ik ga' }
   ],
   de: [
-    { regex: /\bich\s+habe\s+schlaf\b/gi, replacement: 'ich bin müde', orig: 'habe schlaf', corr: 'bin müde' },
-    { regex: /\bich\s+bin\s+schlaf\b/gi, replacement: 'ich bin müde', orig: 'bin schlaf', corr: 'bin müde' },
-    { regex: /\bich\s+wollen\b/gi, replacement: 'ich will', orig: 'wollen', corr: 'will' },
-    { regex: /\bich\s+gehen\b/gi, replacement: 'ich gehe', orig: 'gehen', corr: 'gehe' }
+    { regex: /\bich\s+(habe|bin)\s+schlaf\b/gi, replacement: 'ich bin müde' },
+    { regex: /\bich\s+bin\s+durst(ig)?\b/gi, replacement: 'ich habe Durst' },
+    { regex: /\bich\s+bin\s+hunger\b/gi, replacement: 'ich habe Hunger' },
+    { regex: /\bich\s+(sein|bist|ist)\b/gi, replacement: 'ich bin' },
+    { regex: /\bich\s+(haben|hat)\b/gi, replacement: 'ich habe' },
+    { regex: /\bich\s+wollen\b/gi, replacement: 'ich will' },
+    { regex: /\bich\s+gehen\b/gi, replacement: 'ich gehe' },
+    { regex: /\bich\s+trinken\b/gi, replacement: 'ich trinke' },
+    { regex: /\bein\s+kaffee\b/gi, replacement: 'einen Kaffee' }
   ],
   fr: [
-    { regex: /\bje\s+suis\s+faim\b/gi, replacement: "j'ai faim", orig: 'je suis faim', corr: "j'ai faim" },
-    { regex: /\bje\s+suis\s+sommeil\b/gi, replacement: "j'ai sommeil", orig: 'je suis sommeil', corr: "j'ai sommeil" },
-    { regex: /\bje\s+vouloir\b/gi, replacement: 'je veux', orig: 'vouloir', corr: 'veux' },
-    { regex: /\bje\s+aller\b/gi, replacement: 'je vais', orig: 'aller', corr: 'vais' }
+    { regex: /\bje\s+suis\s+faim\b/gi, replacement: "j'ai faim" },
+    { regex: /\bje\s+suis\s+soif\b/gi, replacement: "j'ai soif" },
+    { regex: /\bje\s+suis\s+sommeil\b/gi, replacement: "j'ai sommeil" },
+    { regex: /\bje\s+suis\s+chaud\b/gi, replacement: "j'ai chaud" },
+    { regex: /\bje\s+suis\s+froid\b/gi, replacement: "j'ai froid" },
+    { regex: /\bje\s+(aller|va)\b/gi, replacement: 'je vais' },
+    { regex: /\bje\s+vouloir\b/gi, replacement: 'je veux' },
+    { regex: /\bje\s+avoir\b/gi, replacement: "j'ai" },
+    { regex: /\bje\s+(être|es|est)\b/gi, replacement: 'je suis' },
+    { regex: /\bje\s+faire\b/gi, replacement: 'je fais' },
+    { regex: /\bun\s+cafe\b/gi, replacement: 'un café' },
+    { regex: /\bje\s+veux\s+un\s+cafe\b/gi, replacement: 'je voudrais un café' }
   ],
   it: [
-    { regex: /\bio\s+avere\s+sonno\b/gi, replacement: 'ho sonno', orig: 'io avere sonno', corr: 'ho sonno' },
-    { regex: /\bio\s+volere\b/gi, replacement: 'io voglio', orig: 'volere', corr: 'voglio' },
-    { regex: /\bio\s+andare\b/gi, replacement: 'io vado', orig: 'andare', corr: 'vado' }
+    { regex: /\bio\s+(avere|ho)\s+fame\b/gi, replacement: 'ho fame' },
+    { regex: /\bio\s+(avere|ho)\s+sete\b/gi, replacement: 'ho sete' },
+    { regex: /\bio\s+(avere|ho)\s+sonno\b/gi, replacement: 'ho sonno' },
+    { regex: /\bio\s+(essere|è|sei)\b/gi, replacement: 'sono' },
+    { regex: /\bio\s+(andare|va)\b/gi, replacement: 'vado' },
+    { regex: /\bio\s+(volere|vuole)\b/gi, replacement: 'voglio' },
+    { regex: /\bun\s+caffe\b/gi, replacement: 'un caffè' },
+    { regex: /\bio\s+voglio\s+un\s+caff[eè]\b/gi, replacement: 'vorrei un caffè' }
   ]
 };
 

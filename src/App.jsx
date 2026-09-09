@@ -49,13 +49,15 @@ export default function App() {
   const chatContainerRef = useRef(null);
   const currentLangObj = languages.find(l => l.code === targetLang) || languages[0];
 
-  // Speech Hook
+  // Speech Hook (Push-to-Talk Press & Hold up to 1 min + TTS)
   const {
-    isListening,
+    isRecording,
+    recordingSeconds,
     isSpeaking,
     interimTranscript,
-    startListening,
-    stopListening,
+    startRecording,
+    stopRecording,
+    cancelRecording,
     speakText,
     stopSpeaking
   } = useSpeech({
@@ -411,7 +413,7 @@ export default function App() {
         handsFree={handsFree}
         setHandsFree={setHandsFree}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        isListening={isListening}
+        isListening={isRecording}
         isSpeaking={isSpeaking}
       />
 
@@ -472,11 +474,11 @@ export default function App() {
       <InputBar
         targetLang={targetLang}
         onSendMessage={handleSendMessage}
-        isListening={isListening}
-        isSpeaking={isSpeaking}
-        onStartListening={startListening}
-        onStopListening={stopListening}
-        handsFree={handsFree}
+        isRecording={isRecording}
+        recordingSeconds={recordingSeconds}
+        onStartRecording={startRecording}
+        onStopRecording={stopRecording}
+        onCancelRecording={cancelRecording}
         interimTranscript={interimTranscript}
         isProcessing={isProcessing}
       />

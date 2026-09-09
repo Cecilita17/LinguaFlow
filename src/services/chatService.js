@@ -4,6 +4,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://lingua
 import { processSmartConversation } from '../../server/conversationEngine.js';
 import { getSystemPrompt } from '../../server/promptTemplates.js';
 import { SUPPORTED_LANGUAGES } from '../../server/languageData.js';
+import { performFullGrammarCorrection } from './grammarEngine.js';
 
 /**
  * Robust chat service that communicates with /api/chat on Render/local backend
@@ -48,6 +49,13 @@ export async function sendChatMessage({
       if (contentType.includes('application/json')) {
         const resData = await response.json();
         if (resData && resData.success && resData.data?.user_correction && resData.data?.bot_response) {
+          // If server didn't catch errors, run deep grammar analysis to guarantee detection
+          if (!resData.data.user_correction.has_errors) {
+            const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang);
+            if (deepCorrection && deepCorrection.has_errors) {
+              resData.data.user_correction = deepCorrection;
+            }
+          }
           return {
             source: resData.source || 'server_api',
             data: resData.data
@@ -139,6 +147,10 @@ Return strictly valid JSON.`
   // 3. Resilient smart multi-turn linguistic engine fallback
   console.log('Using resilient smart multi-turn linguistic engine...');
   const fallbackData = processSmartConversation(cleanMsg, targetLang, nativeLang, history);
+  const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang);
+  if (deepCorrection && deepCorrection.has_errors) {
+    fallbackData.user_correction = deepCorrection;
+  }
   return {
     source: 'resilient_linguistic_engine',
     data: fallbackData

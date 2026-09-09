@@ -14,43 +14,60 @@ export const SUPPORTED_LANGUAGES = [
 ];
 
 /**
- * Heuristic diffing algorithm between original string and corrected string
+ * Intelligent LCS (Longest Common Subsequence) diffing algorithm
+ * between original learner text and grammatically corrected text.
  */
 export function computeWordDiff(original, corrected) {
-  const origWords = original.trim().split(/\s+/);
-  const corrWords = corrected.trim().split(/\s+/);
-  const diffTokens = [];
+  const orig = original.trim().split(/\s+/).filter(Boolean);
+  const corr = corrected.trim().split(/\s+/).filter(Boolean);
 
-  let i = 0;
-  let j = 0;
+  const clean = w => (w || '').toLowerCase().replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
 
-  while (i < origWords.length || j < corrWords.length) {
-    const orig = origWords[i] || '';
-    const corr = corrWords[j] || '';
+  const m = orig.length;
+  const n = corr.length;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
 
-    // Normalize for punctuation
-    const cleanOrig = orig.toLowerCase().replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
-    const cleanCorr = corr.toLowerCase().replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
-
-    if (cleanOrig === cleanCorr && cleanOrig.length > 0) {
-      diffTokens.push({
-        text: (diffTokens.length > 0 ? ' ' : '') + corr,
-        changed: false,
-        original: null
-      });
-      i++;
-      j++;
-    } else {
-      // Changed word! Highlight
-      diffTokens.push({
-        text: (diffTokens.length > 0 ? ' ' : '') + (corr || ''),
-        changed: true,
-        original: orig || null
-      });
-      i++;
-      j++;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (clean(orig[i - 1]) === clean(corr[j - 1]) && clean(orig[i - 1]).length > 0) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
     }
   }
 
-  return diffTokens;
+  let i = m;
+  let j = n;
+  const tokens = [];
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && clean(orig[i - 1]) === clean(corr[j - 1]) && clean(orig[i - 1]).length > 0) {
+      tokens.unshift({
+        text: corr[j - 1],
+        changed: false,
+        original: null
+      });
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      tokens.unshift({
+        text: corr[j - 1],
+        changed: true,
+        original: i > 0 && dp[i - 1][j] === dp[i][j] ? orig[i - 1] : null
+      });
+      if (i > 0 && dp[i - 1][j] === dp[i][j]) i--;
+      j--;
+    } else if (i > 0) {
+      if (tokens.length > 0 && tokens[0].changed) {
+        tokens[0].original = (orig[i - 1] + ' ' + (tokens[0].original || '')).trim();
+      } else if (tokens.length > 0) {
+        tokens[0].changed = true;
+        tokens[0].original = orig[i - 1];
+      }
+      i--;
+    }
+  }
+
+  return tokens;
 }

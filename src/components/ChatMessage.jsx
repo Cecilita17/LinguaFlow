@@ -73,7 +73,7 @@ export function ChatMessage({
                 const rawWord = token.text || '';
                 const cleanWord = rawWord.trim();
                 if (!cleanWord) return null;
-                const needsSpace = !isChinese && idx > 0 && !rawWord.startsWith(' ');
+                const needsSpace = !isChinese && idx > 0;
 
                 if (token.changed) {
                   return (

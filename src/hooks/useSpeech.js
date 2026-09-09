@@ -1,24 +1,34 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+/**
+ * Enhanced Speech Hook with Push-to-Talk (Press & Hold up to 1 min),
+ * Live Audio Transcription, and Text-to-Speech (TTS).
+ */
 export function useSpeech({
   targetLangCode = 'es-ES',
   onSpeechResult,
   handsFree = false,
   isProcessing = false
 }) {
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [interimTranscript, setInterimTranscript] = useState('');
 
   const recognitionRef = useRef(null);
+  const fullTranscriptRef = useRef('');
+  const timerIntervalRef = useRef(null);
+  const startTimeRef = useRef(null);
   const isHandsFreeRef = useRef(handsFree);
   const isSpeakingRef = useRef(isSpeaking);
   const isProcessingRef = useRef(isProcessing);
+  const isRecordingRef = useRef(false);
 
   isHandsFreeRef.current = handsFree;
   isSpeakingRef.current = isSpeaking;
   isProcessingRef.current = isProcessing;
+  isRecordingRef.current = isRecording;
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -29,58 +39,48 @@ export function useSpeech({
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = targetLangCode;
+    recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
-      setIsListening(true);
-      setInterimTranscript('');
+      // Speech recognition started
     };
 
     recognition.onresult = (event) => {
-      let finalStr = '';
-      let interimStr = '';
+      let currentInterim = '';
+      let currentFinal = '';
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcriptPart = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalStr += event.results[i][0].transcript;
+          currentFinal += transcriptPart + ' ';
         } else {
-          interimStr += event.results[i][0].transcript;
+          currentInterim += transcriptPart;
         }
       }
 
-      setInterimTranscript(interimStr);
-
-      if (finalStr.trim() && onSpeechResult) {
-        setInterimTranscript('');
-        onSpeechResult(finalStr.trim());
+      if (currentFinal) {
+        fullTranscriptRef.current = (fullTranscriptRef.current + ' ' + currentFinal).trim();
       }
+
+      const displayTranscript = (fullTranscriptRef.current + ' ' + currentInterim).trim();
+      setInterimTranscript(displayTranscript);
     };
 
     recognition.onerror = (event) => {
-      // Ignore routine aborts
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
-        console.warn('Speech recognition error:', event.error);
+        console.warn('Speech recognition warning:', event.error);
       }
-      setIsListening(false);
     };
 
     recognition.onend = () => {
-      setIsListening(false);
-      setInterimTranscript('');
-
-      // If hands-free is enabled and we are not speaking and not processing, resume listening
-      if (isHandsFreeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-        setTimeout(() => {
-          if (isHandsFreeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-            try {
-              recognition.start();
-            } catch (e) {
-              // already started
-            }
-          }
-        }, 600);
+      // If currently recording and recognition stopped unexpectedly, try to restart unless duration reached
+      if (isRecordingRef.current && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {}
       }
     };
 
@@ -91,95 +91,125 @@ export function useSpeech({
         recognition.abort();
       } catch (e) {}
     };
-  }, [targetLangCode, onSpeechResult]);
+  }, [targetLangCode]);
 
-  // Handle Hands-Free loop triggers
+  // Clean up timer on unmount
   useEffect(() => {
-    if (!recognitionRef.current) return;
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, []);
 
-    if (handsFree && !isListening && !isSpeaking && !isProcessing) {
-      const timer = setTimeout(() => {
-        try {
-          recognitionRef.current.start();
-        } catch (e) {}
-      }, 500);
-      return () => clearTimeout(timer);
-    } else if (!handsFree && isListening) {
+  // Stop Recording helper (ends timer and resolves recorded text)
+  const stopRecordingInternal = useCallback((shouldSend = true) => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    setIsRecording(false);
+    isRecordingRef.current = false;
+
+    if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch (e) {}
     }
-  }, [handsFree, isListening, isSpeaking, isProcessing]);
 
-  // Manual start / stop listening
-  const startListening = useCallback(() => {
-    if (!recognitionRef.current) return;
-    try {
+    const recordedText = (fullTranscriptRef.current || interimTranscript || '').trim();
+    fullTranscriptRef.current = '';
+    setInterimTranscript('');
+    setRecordingSeconds(0);
+
+    if (shouldSend && recordedText && onSpeechResult) {
+      onSpeechResult(recordedText);
+    }
+
+    return recordedText;
+  }, [interimTranscript, onSpeechResult]);
+
+  // Start Push-to-Talk Recording (Called on MouseDown / TouchStart)
+  const startRecording = useCallback(() => {
+    if (isProcessing) return;
+
+    // Cancel any active bot speaking
+    if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
-      recognitionRef.current.lang = targetLangCode;
-      recognitionRef.current.start();
-    } catch (e) {
-      console.warn('Error starting speech recognition:', e);
     }
-  }, [targetLangCode]);
 
-  const stopListening = useCallback(() => {
-    if (!recognitionRef.current) return;
-    try {
-      recognitionRef.current.stop();
-    } catch (e) {}
-  }, []);
+    fullTranscriptRef.current = '';
+    setInterimTranscript('');
+    setRecordingSeconds(0);
+    setIsRecording(true);
+    isRecordingRef.current = true;
+    startTimeRef.current = Date.now();
 
-  // Text to Speech
+    // Start 1-minute max countdown / counter
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    timerIntervalRef.current = setInterval(() => {
+      const elapsedSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setRecordingSeconds(elapsedSec);
+
+      // Max 1 minute (60 seconds) reached: auto-send
+      if (elapsedSec >= 60) {
+        stopRecordingInternal(true);
+      }
+    }, 250);
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.lang = targetLangCode;
+        recognitionRef.current.start();
+      } catch (e) {
+        // Recognition might already be active
+      }
+    }
+  }, [isProcessing, targetLangCode, stopRecordingInternal]);
+
+  // Stop Push-to-Talk Recording (Called on MouseUp / TouchEnd)
+  const stopRecording = useCallback(() => {
+    const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) : 0;
+    // If held for less than 300ms, consider it a tap/accidental click
+    if (elapsed < 300 && !fullTranscriptRef.current && !interimTranscript) {
+      stopRecordingInternal(false);
+      return;
+    }
+
+    // Wait a brief 200ms to allow final words from Web Speech engine
+    setTimeout(() => {
+      stopRecordingInternal(true);
+    }, 200);
+  }, [interimTranscript, stopRecordingInternal]);
+
+  // Cancel Recording (Called on mouse leave / drag off)
+  const cancelRecording = useCallback(() => {
+    stopRecordingInternal(false);
+  }, [stopRecordingInternal]);
+
+  // Text to Speech (TTS)
   const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback) => {
     if (!window.speechSynthesis) return;
 
-    // Abort active recognition while bot speaks
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch (e) {}
-    }
-
     window.speechSynthesis.cancel();
 
-    // Clean any markup for TTS
     const cleanText = text.replace(/<[^>]*>/g, '');
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = langCode;
     utterance.rate = rate;
 
-    // Pick best matching voice
     const voices = window.speechSynthesis.getVoices();
-    const matchingVoice = voices.find(v => v.lang.startsWith(langCode.slice(0, 2)));
+    const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(langCode.slice(0, 2).toLowerCase()));
     if (matchingVoice) {
       utterance.voice = matchingVoice;
     }
 
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-    };
-
+    utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => {
       setIsSpeaking(false);
       if (onEndCallback) onEndCallback();
-
-      // Resume hands-free listening if enabled
-      if (isHandsFreeRef.current && recognitionRef.current) {
-        setTimeout(() => {
-          if (isHandsFreeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-            try {
-              recognitionRef.current.start();
-            } catch (e) {}
-          }
-        }, 500);
-      }
     };
-
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-    };
+    utterance.onerror = () => setIsSpeaking(false);
 
     window.speechSynthesis.speak(utterance);
   }, [targetLangCode]);
@@ -192,12 +222,14 @@ export function useSpeech({
   }, []);
 
   return {
-    isListening,
+    isRecording,
+    recordingSeconds,
     isSpeaking,
     speechSupported,
     interimTranscript,
-    startListening,
-    stopListening,
+    startRecording,
+    stopRecording,
+    cancelRecording,
     speakText,
     stopSpeaking
   };
