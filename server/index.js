@@ -105,13 +105,20 @@ function cleanAndParseJSON(rawText) {
   return null;
 }
 
+const router = express.Router();
+
+// Health check
+router.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'LinguaFlow API' });
+});
+
 // List of supported languages
-app.get('/api/languages', (req, res) => {
+router.get('/languages', (req, res) => {
   res.json({ languages: SUPPORTED_LANGUAGES });
 });
 
 // Chat endpoint
-app.post('/api/chat', async (req, res) => {
+router.post('/chat', async (req, res) => {
   try {
     const {
       message,
@@ -241,7 +248,7 @@ Return strictly valid JSON.`
 });
 
 // Word lookup endpoint
-app.post('/api/lookup-word', async (req, res) => {
+router.post('/lookup-word', async (req, res) => {
   try {
     const { word, targetLang, nativeLang, apiKey: clientApiKey } = req.body;
     const effectiveApiKey = (clientApiKey || process.env.GEMINI_API_KEY || '').trim();
@@ -292,6 +299,15 @@ Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeL
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 LinguaFlow Server running on http://localhost:${PORT}`);
-});
+// Mount router on /api and / to handle both direct and rewritten requests
+app.use('/api', router);
+app.use('/', router);
+
+// Only listen locally (Vercel manages the serverless listener automatically)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 LinguaFlow Server running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
