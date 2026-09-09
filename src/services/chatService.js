@@ -110,10 +110,10 @@ export async function sendChatMessage({
         history
       });
 
-      let activeModel = 'gemini-2.5-flash';
+      let activeModel = 'gemini-3.6-flash';
       const viteEnvModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
       // Protect against obsolete models in env
-      if (viteEnvModel && !viteEnvModel.includes('1.5') && !viteEnvModel.includes('2.0') && !viteEnvModel.includes('pro')) {
+      if (viteEnvModel && !viteEnvModel.includes('1.5') && !viteEnvModel.includes('2.0') && !viteEnvModel.includes('2.5') && !viteEnvModel.includes('pro')) {
         activeModel = viteEnvModel.trim();
       }
 

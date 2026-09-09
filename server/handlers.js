@@ -28,13 +28,13 @@ function parseRequestBody(req) {
   return req.body;
 }
 
-// The exclusively supported conversational model is gemini-2.5-flash
-const PRIMARY_MODEL = 'gemini-2.5-flash';
+// The exclusively supported conversational model is gemini-3.6-flash
+const PRIMARY_MODEL = 'gemini-3.6-flash';
 
 function getSanitizedDefaultModel() {
   const envModel = (process.env.GEMINI_MODEL || '').trim();
   // Protect against obsolete/cached environment variables
-  if (envModel && !envModel.includes('1.5') && !envModel.includes('2.0') && !envModel.includes('pro')) {
+  if (envModel && !envModel.includes('1.5') && !envModel.includes('2.0') && !envModel.includes('2.5') && !envModel.includes('pro')) {
     return envModel;
   }
   return PRIMARY_MODEL;
@@ -62,9 +62,9 @@ async function getBestGeminiModel(apiKey) {
         return discoveredModel;
       }
 
-      const flash25 = availableNames.find(m => m.includes('2.5-flash'));
-      if (flash25) {
-        discoveredModel = flash25;
+      const flash36 = availableNames.find(m => m.includes('3.6-flash'));
+      if (flash36) {
+        discoveredModel = flash36;
         return discoveredModel;
       }
     }
@@ -72,7 +72,7 @@ async function getBestGeminiModel(apiKey) {
     console.warn('Error querying ListModels:', e.message);
   }
 
-  // If ListModels fails or key cannot list, strictly default to targetModel (gemini-2.5-flash)
+  // If ListModels fails or key cannot list, strictly default to targetModel (gemini-3.6-flash)
   discoveredModel = targetModel;
   return discoveredModel;
 }

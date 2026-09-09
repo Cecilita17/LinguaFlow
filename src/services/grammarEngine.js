@@ -434,9 +434,9 @@ Return STRICTLY JSON format:
     { "text": "string", "changed": boolean, "original": "string or null" }
   ]
 }`;
-      let model = 'gemini-2.5-flash';
+      let model = 'gemini-3.6-flash';
       const viteEnv = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
-      if (viteEnv && !viteEnv.includes('1.5') && !viteEnv.includes('2.0') && !viteEnv.includes('pro')) {
+      if (viteEnv && !viteEnv.includes('1.5') && !viteEnv.includes('2.0') && !viteEnv.includes('2.5') && !viteEnv.includes('pro')) {
         model = viteEnv.trim();
       }
       try {

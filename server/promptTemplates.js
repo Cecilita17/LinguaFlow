@@ -9,9 +9,9 @@
 
 // 1. MODEL CONFIGURATION (Decoupled from data context)
 export const GEMINI_MODEL_CONFIG = {
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3.6-flash',
   models: [
-    'gemini-2.5-flash'
+    'gemini-3.6-flash'
   ],
   generationConfig: {
     temperature: 0.7,

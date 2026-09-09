@@ -30,7 +30,10 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
     setTestingKey(true);
     setKeyStatus(null);
     try {
-      const testModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || 'gemini-2.5-flash';
+      const rawEnv = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
+      const testModel = (rawEnv && !rawEnv.includes('1.5') && !rawEnv.includes('2.0') && !rawEnv.includes('2.5') && !rawEnv.includes('pro'))
+        ? rawEnv.trim()
+        : 'gemini-3.6-flash';
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${cleanKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
