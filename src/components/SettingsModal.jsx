@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Key, Gauge, Volume2, Save, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Key, Gauge, Volume2, Save, Info, Check } from 'lucide-react';
 
 export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
   if (!isOpen) return null;
@@ -7,10 +7,23 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [level, setLevel] = useState(config.level || 'A2/B1');
   const [speechRate, setSpeechRate] = useState(config.speechRate || 0.95);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setApiKey(config.apiKey || '');
+      setLevel(config.level || 'A2/B1');
+      setSpeechRate(config.speechRate || 0.95);
+    }
+  }, [isOpen, config]);
 
   const handleSave = () => {
-    onSaveConfig({ apiKey, level, speechRate: parseFloat(speechRate) });
-    onClose();
+    onSaveConfig({ apiKey: apiKey.trim(), level, speechRate: parseFloat(speechRate) });
+    setSavedSuccess(true);
+    setTimeout(() => {
+      setSavedSuccess(false);
+      onClose();
+    }, 600);
   };
 
   return (
@@ -122,10 +135,24 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
           </button>
           <button
             onClick={handleSave}
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-semibold text-xs shadow-sm transition-all"
+            disabled={savedSuccess}
+            className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-white font-semibold text-xs shadow-sm transition-all ${
+              savedSuccess
+                ? 'bg-emerald-600'
+                : 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500'
+            }`}
           >
-            <Save className="w-3.5 h-3.5" />
-            <span>Guardar Ajustes</span>
+            {savedSuccess ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>¡Guardado!</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-3.5 h-3.5" />
+                <span>Guardar Ajustes</span>
+              </>
+            )}
           </button>
         </div>
       </div>

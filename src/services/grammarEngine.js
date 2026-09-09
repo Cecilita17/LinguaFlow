@@ -433,27 +433,34 @@ Return STRICTLY JSON format:
     { "text": "string", "changed": boolean, "original": "string or null" }
   ]
 }`;
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
-      const res = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-        })
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const data = await res.json();
-        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (raw) {
-          const parsed = JSON.parse(raw.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim());
-          if (parsed && parsed.corrected_text && parsed.diff_tokens) {
-            return parsed;
+      const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'];
+      for (const model of candidateModels) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 9000);
+          const res = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+            })
+          });
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const data = await res.json();
+            const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (raw) {
+              const parsed = JSON.parse(raw.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim());
+              if (parsed && parsed.corrected_text && parsed.diff_tokens) {
+                return parsed;
+              }
+            }
           }
+        } catch (mErr) {
+          // try next model
         }
       }
     } catch (err) {

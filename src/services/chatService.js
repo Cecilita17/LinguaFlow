@@ -23,6 +23,8 @@ export async function sendChatMessage({
     throw new Error('El mensaje no puede estar vacío.');
   }
 
+  const effectiveKey = (apiKey || '').trim();
+
   // 1. Try Render Backend API first (/api/chat)
   try {
     const controller = new AbortController();
@@ -37,7 +39,7 @@ export async function sendChatMessage({
         targetLang,
         nativeLang,
         level,
-        apiKey: (apiKey || '').trim(),
+        apiKey: effectiveKey,
         history: history.slice(-6)
       })
     });
@@ -49,17 +51,22 @@ export async function sendChatMessage({
       if (contentType.includes('application/json')) {
         const resData = await response.json();
         if (resData && resData.success && resData.data?.user_correction && resData.data?.bot_response) {
-          // If server didn't catch errors, run deep grammar analysis to guarantee detection
-          if (!resData.data.user_correction.has_errors) {
-            const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);
-            if (deepCorrection && deepCorrection.has_errors) {
-              resData.data.user_correction = deepCorrection;
+          // If server fell back to offline engine but client provided an API key, try direct client Gemini
+          if (resData.source === 'smart_linguistic_engine' && effectiveKey) {
+            console.log('Backend fell back to offline engine; activating direct Gemini AI on client...');
+          } else {
+            // If server didn't catch errors, run deep grammar analysis to guarantee detection
+            if (!resData.data.user_correction.has_errors) {
+              const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);
+              if (deepCorrection && deepCorrection.has_errors) {
+                resData.data.user_correction = deepCorrection;
+              }
             }
+            return {
+              source: resData.source || 'server_api',
+              data: resData.data
+            };
           }
-          return {
-            source: resData.source || 'server_api',
-            data: resData.data
-          };
         }
       }
     } else {
@@ -70,7 +77,6 @@ export async function sendChatMessage({
   }
 
   // 2. If user entered Gemini API Key in UI Settings, try direct Gemini API call
-  const effectiveKey = (apiKey || '').trim();
   if (effectiveKey) {
     try {
       const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
@@ -78,33 +84,34 @@ export async function sendChatMessage({
       const targetLanguageName = langObj.englishName || langObj.name;
       const systemPrompt = getSystemPrompt(targetLanguageName, nativeObj.name, level);
 
-      const contents = [
-        { role: 'user', parts: [{ text: systemPrompt }] },
-        { role: 'model', parts: [{ text: '{"status":"ready"}' }] }
-      ];
+      // Build conversation context
+      const historyContext = history.slice(-4).map(h => {
+        const role = h.sender === 'user' ? 'Student' : 'Tutor';
+        const txt = h.sender === 'user' ? (h.correctedText || h.text) : h.text;
+        return `${role}: "${txt}"`;
+      }).join('\n');
 
-      history.slice(-4).forEach(h => {
-        if (h.sender === 'user') {
-          contents.push({ role: 'user', parts: [{ text: h.correctedText || h.text }] });
-        } else if (h.sender === 'bot') {
-          contents.push({ role: 'model', parts: [{ text: h.text }] });
-        }
-      });
+      const fullPrompt = `${systemPrompt}
 
-      contents.push({
-        role: 'user',
-        parts: [{
-          text: `Student message in ${targetLanguageName}: "${cleanMsg}".
-Please:
-1. Correct errors in "user_correction" with "diff_tokens" (words changed have "changed": true and "original": "...").
-2. Give a brief, natural response in ${targetLanguageName} (1-3 sentences) suitable for level ${level}.
-3. Provide translation in ${nativeObj.name}.
-4. Provide tokens (compounds for Chinese) and 2-3 key vocabulary words.
-Return strictly valid JSON.`
-        }]
-      });
+${historyContext ? `Previous conversation:\n${historyContext}\n` : ''}
+Student's latest message to correct and respond to:
+"${cleanMsg}"
 
-      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+INSTRUCTIONS:
+1. In "user_correction":
+   - "original_text": "${cleanMsg}"
+   - "corrected_text": Corrected, natural ${targetLanguageName}. If student wrote any native words (${nativeObj.name}), TRANSLATE them into ${targetLanguageName}.
+   - "has_errors": boolean
+   - "diff_tokens": array of words with "changed": true and "original": "[student's original word]" for corrected/translated words.
+2. In "bot_response":
+   - "text": 1-3 conversational, natural sentences in ${targetLanguageName} directly addressing what the student said.
+   - "translation": Translation of the bot response into ${nativeObj.name}.
+   - "tokens": array of { word, clean_word, translit }.
+   - "vocabulary": object of 2-3 key terms with { meaning, part_of_speech }.
+
+Return strictly JSON matching this structure.`;
+
+      const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
       for (const model of candidateModels) {
         try {
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveKey}`;
@@ -112,7 +119,7 @@ Return strictly valid JSON.`
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents,
+              contents: [{ parts: [{ text: fullPrompt }] }],
               generationConfig: {
                 responseMimeType: 'application/json',
                 temperature: 0.7,
@@ -128,12 +135,16 @@ Return strictly valid JSON.`
               const cleanText = textContent.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
               const parsed = JSON.parse(cleanText);
               if (parsed && parsed.user_correction && parsed.bot_response) {
+                console.log(`✅ Direct client Gemini responded using [${model}]`);
                 return {
                   source: `direct_gemini (${model})`,
                   data: parsed
                 };
               }
             }
+          } else {
+            const errData = await directRes.json().catch(() => ({}));
+            console.warn(`Direct Gemini ${model} error (${directRes.status}):`, errData?.error?.message);
           }
         } catch (candErr) {
           // Continue to next model candidate

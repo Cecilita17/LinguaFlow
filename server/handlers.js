@@ -25,11 +25,10 @@ function parseRequestBody(req) {
 
 // Priority list of Gemini models to try (Google Generative AI v1beta)
 const MODEL_CANDIDATES = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
   'gemini-1.5-flash',
-  'gemini-1.5-pro',
-  'gemini-2.0-flash-lite'
+  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-1.5-pro'
 ];
 
 let discoveredModel = null;
@@ -64,7 +63,7 @@ async function getBestGeminiModel(apiKey) {
     console.warn('Error fetching model list:', e.message);
   }
 
-  return 'gemini-2.5-flash';
+  return 'gemini-1.5-flash';
 }
 
 /**
@@ -158,32 +157,32 @@ export async function handleChat(req, res) {
 
         const activeModel = await getBestGeminiModel(effectiveApiKey);
 
-        // Build conversational history
-        const contents = [
-          { role: 'user', parts: [{ text: systemPrompt }] },
-          { role: 'model', parts: [{ text: '{"status":"ready"}' }] }
-        ];
+        // Build conversational history context
+        const historyContext = history.slice(-4).map(h => {
+          const role = h.sender === 'user' ? 'Student' : 'Tutor';
+          const txt = h.sender === 'user' ? (h.correctedText || h.text) : h.text;
+          return `${role}: "${txt}"`;
+        }).join('\n');
 
-        history.slice(-4).forEach(h => {
-          if (h.sender === 'user') {
-            contents.push({ role: 'user', parts: [{ text: h.correctedText || h.text }] });
-          } else if (h.sender === 'bot') {
-            contents.push({ role: 'model', parts: [{ text: h.text }] });
-          }
-        });
+        const fullPrompt = `${systemPrompt}
 
-        contents.push({
-          role: 'user',
-          parts: [{
-            text: `Student message in ${targetLanguageName}: "${message.trim()}".
-Please:
-1. Correct errors in "user_correction" with "diff_tokens" (words changed have "changed": true and "original": "...").
-2. Give a brief, natural response in ${targetLanguageName} (1-3 sentences) suitable for level ${level}.
-3. Provide translation in ${nativeObj.name}.
-4. Provide tokens (compounds for Chinese) and 2-3 key vocabulary words.
-Return strictly valid JSON.`
-          }]
-        });
+${historyContext ? `Previous conversation:\n${historyContext}\n` : ''}
+Student's latest message to correct and respond to:
+"${message.trim()}"
+
+INSTRUCTIONS:
+1. In "user_correction":
+   - "original_text": "${message.trim()}"
+   - "corrected_text": Corrected, natural ${targetLanguageName}. If student wrote any native words (${nativeObj.name}), TRANSLATE them into ${targetLanguageName}.
+   - "has_errors": boolean
+   - "diff_tokens": array of words with "changed": true and "original": "[student's original word]" for corrected/translated words.
+2. In "bot_response":
+   - "text": 1-3 conversational, natural sentences in ${targetLanguageName} directly addressing what the student said.
+   - "translation": Translation of the bot response into ${nativeObj.name}.
+   - "tokens": array of { word, clean_word, translit }.
+   - "vocabulary": object of 2-3 key terms with { meaning, part_of_speech }.
+
+Return strictly JSON matching this structure.`;
 
         // Try active model first, then fallback models if 503/404 occurs
         const tryList = [activeModel, ...MODEL_CANDIDATES.filter(m => m !== activeModel)];
@@ -204,7 +203,7 @@ Return strictly valid JSON.`
               headers: { 'Content-Type': 'application/json' },
               signal: controller.signal,
               body: JSON.stringify({
-                contents,
+                contents: [{ parts: [{ text: fullPrompt }] }],
                 generationConfig: {
                   responseMimeType: 'application/json',
                   temperature: 0.7,
