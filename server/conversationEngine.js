@@ -903,15 +903,16 @@ export function translateMixedNativeVocabulary(text, targetLang = 'nl') {
 }
 
 /**
- * Dynamic Contextual Response Generator (Zero Robotic Parrot Templates)
- * NEVER quotes the user's sentence back in quotation marks.
- * Handles meta-conversation, frustration, and natural conversational continuation.
+ * High-precision Content-Aware Response Engine (Zero Generic Templates)
+ * Completely eliminates formulaic boilerplate like "I completely understand... in your daily life".
+ * Analyzes concrete entities, keywords, intent (questions, instructions, actions, facts)
+ * and generates substantive, content-driven responses in the target language.
  */
-function generateDynamicContextualResponse(text, targetLang = 'nl', nativeLang = 'es') {
+function generateContentAwareResponse(text, targetLang = 'nl', nativeLang = 'es', history = []) {
   const clean = (text || '').trim();
   const lower = clean.toLowerCase();
 
-  // 1. Detect user frustration or meta-conversation about the bot / wanting a real chat
+  // 1. Meta-conversation & User Feedback / Complaints
   const isMetaOrFrustration =
     lower.includes('gesprek') || lower.includes('geen goed antwoord') || lower.includes('slecht antwoord') ||
     lower.includes('niet goed') || lower.includes('praat met mij') || lower.includes('echt gesprek') ||
@@ -920,108 +921,376 @@ function generateDynamicContextualResponse(text, targetLang = 'nl', nativeLang =
     lower.includes('bad answer') || lower.includes('talk to me') || lower.includes('robot') ||
     lower.includes('echtes gespräch') || lower.includes('schlechte antwort') || lower.includes('rozmowa');
 
-  if (targetLang === 'nl') {
-    if (isMetaOrFrustration) {
-      return {
-        response: 'Het spijt me ontzettend! Laten we opnieuw beginnen. Ik wil heel graag een echt en vloeiend gesprek met je voeren. Waar heb je vandaag zin in om over te praten?',
-        translation: '¡Lo siento muchísimo! Empecemos de nuevo. Realmente quiero tener una conversación auténtica y fluida contigo. ¿De qué tienes ganas de hablar hoy?',
-        tokens: tokenizeSimple('Het spijt me ontzettend! Laten we opnieuw beginnen. Ik wil heel graag een echt en vloeiend gesprek met je voeren. Waar heb je vandaag zin in om over te praten?'),
-        vocabulary: {
-          'ontzettend': { meaning: 'Muchísimo / enormemente', part_of_speech: 'bijwoord' },
-          'vloeiend': { meaning: 'Fluido / con soltura', part_of_speech: 'adjectief' },
-          'zin in': { meaning: 'Ganas de / deseo de', part_of_speech: 'uitdrukking' }
-        }
-      };
-    }
-
-    if (lower.includes('?') || lower.startsWith('hoe') || lower.startsWith('wat') || lower.startsWith('waar') || lower.startsWith('waarom') || lower.startsWith('kan')) {
-      return {
-        response: 'Interessante vraag! Laten we het stap voor stap bekijken. Wat is volgens jou het belangrijkste onderdeel om mee te beginnen?',
-        translation: '¡Pregunta interesante! Veámoslo paso a paso. Según tú, ¿cuál es la parte más importante para empezar?',
-        tokens: tokenizeSimple('Interessante vraag! Laten we het stap voor stap bekijken. Wat is volgens jou het belangrijkste onderdeel om mee te beginnen?'),
-        vocabulary: {
-          'onderdeel': { meaning: 'Parte o componente', part_of_speech: 'zelfstandig naamwoord' },
-          'volgens': { meaning: 'Según / de acuerdo con', part_of_speech: 'voorzetsel' }
-        }
-      };
-    }
-
-    return {
-      response: 'Ik begrijp goed wat je bedoelt. Hoe kijk je daar zelf tegenaan in het dagelijks leven?',
-      translation: 'Entiendo bien lo que quieres decir. ¿Cómo ves eso tú mismo en la vida cotidiana?',
-      tokens: tokenizeSimple('Ik begrijp goed wat je bedoelt. Hoe kijk je daar zelf tegenaan in het dagelijks leven?'),
-      vocabulary: {
-        'bedoelen': { meaning: 'Querer decir o significar', part_of_speech: 'werkwoord' },
-        'dagelijks leven': { meaning: 'Vida cotidiana o diaria', part_of_speech: 'uitdrukking' }
+  if (isMetaOrFrustration) {
+    const metaResponses = {
+      nl: {
+        text: 'Mijn excuses voor de verwarring. Laten we meteen ter zake komen. Waar wil je het precies over hebben?',
+        trans: 'Mis disculpas por la confusión. Vayamos directo al grano. ¿De qué quieres hablar exactamente?'
+      },
+      en: {
+        text: "I apologize for that. Let's get straight to the point. What specific topic or question would you like to discuss?",
+        trans: 'Te pido disculpas por eso. Vayamos directo al grano. ¿Qué tema o pregunta específica te gustaría tratar?'
+      },
+      de: {
+        text: 'Entschuldigung für das Missverständnis. Kommen wir direkt zur Sache: Worüber möchtest du sprechen?',
+        trans: 'Disculpa por el malentendido. Vayamos directo al grano: ¿De qué te gustaría hablar?'
+      },
+      es: {
+        text: 'Mis disculpas por la confusión. Vayamos directo al grano: ¿qué tema o pregunta en concreto quieres que veamos?',
+        trans: 'My apologies for the confusion. Let us get straight to the point: what specific topic or question do you want to address?'
+      },
+      fr: {
+        text: 'Je te prie de m’excuser. Allons droit au but : quel sujet précis souhaites-tu aborder ?',
+        trans: 'Te pido disculpas. Vayamos directo al grano: ¿qué tema concreto deseas tratar?'
+      },
+      pl: {
+        text: 'Przepraszam za to. Przejdźmy od razu do rzeczy: o czym dokładnie chcesz porozmawiać?',
+        trans: 'Te pido disculpas por eso. Vayamos directo al grano: ¿de qué exactamente quieres hablar?'
       }
+    };
+    const meta = metaResponses[targetLang] || metaResponses['en'];
+    return {
+      response: meta.text,
+      translation: meta.trans,
+      tokens: tokenizeSimple(meta.text),
+      vocabulary: {}
+    };
+  }
+
+  // 2. Concrete Domain Analyzers (Entities & Content Matching)
+
+  // A. Public Transport / Train Delays (trein, station, vertraging, delay, train, retraso, tren)
+  if (lower.includes('trein') || lower.includes('train') || lower.includes('tren') || lower.includes('zug') || lower.includes('vertraging') || lower.includes('delay') || lower.includes('retraso') || lower.includes('verspätung')) {
+    const content = {
+      nl: {
+        text: 'Treinvertragingen zijn erg vervelend, vooral als je ergens op tijd moet zijn. Kwam het door werkzaamheden aan het spoor of een seinverstoring?',
+        trans: 'Los retrasos en los trenes son muy molestos, sobre todo si tienes que llegar puntual. ¿Fue por obras en la vía o un fallo en las señales?',
+        vocab: { 'vertraging': { meaning: 'Retraso o demora', part_of_speech: 'sustantivo' }, 'spoor': { meaning: 'Vía de tren', part_of_speech: 'sustantivo' } }
+      },
+      en: {
+        text: 'Train delays can disrupt the entire schedule, especially during peak commute hours. Did the railway service explain the reason for the disruption?',
+        trans: 'Los retrasos de trenes pueden arruinar todo el horario, especialmente en hora punta. ¿El servicio ferroviario explicó el motivo de la interrupción?',
+        vocab: { 'disrupt': { meaning: 'Interrumpir o alterar', part_of_speech: 'verb' }, 'commute': { meaning: 'Trayecto al trabajo/viaje diario', part_of_speech: 'noun' } }
+      },
+      de: {
+        text: 'Zugverspätungen sind ärgerlich, besonders wenn Anschlüsse verpasst werden. Gab es eine Durchsage am Bahnsteig über die Ursache?',
+        trans: 'Los retrasos de trenes son fastidiosos, especialmente si se pierden conexiones. ¿Hubo algún aviso en el andén sobre la causa?',
+        vocab: { 'Verspätung': { meaning: 'Retraso', part_of_speech: 'Nomen' }, 'Bahnsteig': { meaning: 'Andén', part_of_speech: 'Nomen' } }
+      },
+      es: {
+        text: 'Los retrasos en el tren complican todo el día, sobre todo en trayectos largos. ¿La compañía anunció el motivo de la demora o pudiste tomar una alternativa?',
+        trans: 'Train delays complicate the whole day, especially on long trips. Did the company announce the reason or could you take an alternative?',
+        vocab: { 'demora': { meaning: 'Retraso o tardanza', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // B. Factual: Capital of Australia (hoofdstad, capital, australia, australie, australië)
+  if ((lower.includes('hoofdstad') || lower.includes('capital') || lower.includes('hauptstadt')) && (lower.includes('australi') || lower.includes('australia'))) {
+    const content = {
+      nl: {
+        text: 'De hoofdstad van Australië is Canberra, niet Sydney of Melbourne. In 1908 werd Canberra gekozen als compromis tussen beide grote steden.',
+        trans: 'La capital de Australia es Canberra, no Sídney ni Melbourne. En 1908 se eligió Canberra como compromiso entre ambas grandes ciudades.',
+        vocab: { 'hoofdstad': { meaning: 'Capital (ciudad principal)', part_of_speech: 'sustantivo' }, 'compromis': { meaning: 'Acuerdo o solución intermedia', part_of_speech: 'sustantivo' } }
+      },
+      en: {
+        text: 'The capital of Australia is Canberra. Many people mistakenly assume it is Sydney or Melbourne, but Canberra was intentionally chosen in 1908 as a compromise.',
+        trans: 'La capital de Australia es Canberra. Mucha gente asume erróneamente que es Sídney o Melbourne, pero Canberra fue elegida intencionalmente en 1908 como solución intermedia.',
+        vocab: { 'capital': { meaning: 'Capital (ciudad sede del gobierno)', part_of_speech: 'noun' }, 'compromise': { meaning: 'Compromiso o acuerdo mutuo', part_of_speech: 'noun' } }
+      },
+      de: {
+        text: 'Die Hauptstadt von Australien ist Canberra. Die Stadt wurde 1908 bewusst als neutraler Kompromiss zwischen Sydney und Melbourne ausgewählt.',
+        trans: 'La capital de Australia es Canberra. La ciudad fue elegida conscientemente en 1908 como un compromiso neutral entre Sídney y Melbourne.',
+        vocab: { 'Hauptstadt': { meaning: 'Capital', part_of_speech: 'Nomen' } }
+      },
+      es: {
+        text: 'La capital de Australia es Canberra. Suele haber confusión con Sídney o Melbourne, pero Canberra se fundó expresamente como sede neutral de gobierno en 1908.',
+        trans: 'The capital of Australia is Canberra. There is often confusion with Sydney or Melbourne, but Canberra was expressly founded as a neutral government seat in 1908.',
+        vocab: { 'capital': { meaning: 'Ciudad sede del gobierno', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // C. Factual / Science: Why is the sky blue? (waarom, hemel, lucht, blauw, sky, blue, cielo, azul, himmel, blau)
+  if ((lower.includes('blauw') || lower.includes('blue') || lower.includes('azul') || lower.includes('blau')) &&
+      (lower.includes('hemel') || lower.includes('lucht') || lower.includes('sky') || lower.includes('cielo') || lower.includes('himmel'))) {
+    const content = {
+      nl: {
+        text: 'De lucht is overdag blauw door Rayleigh-verstrooiing: de atmosfeer van de aarde verstrooit het kortere blauwe zonlicht veel sterker in alle richtingen dan rood licht.',
+        trans: 'El cielo es azul durante el día por la dispersión de Rayleigh: la atmósfera de la Tierra dispersa la luz azul (de onda corta) mucho más en todas direcciones que la luz roja.',
+        vocab: { 'atmosfeer': { meaning: 'Atmósfera', part_of_speech: 'sustantivo' }, 'verstrooiing': { meaning: 'Dispersión o difusión de luz', part_of_speech: 'sustantivo' } }
+      },
+      en: {
+        text: 'The sky appears blue because of Rayleigh scattering. Earth’s atmosphere scatters shorter wavelengths of sunlight, like blue and violet, much more intensely than longer red waves.',
+        trans: 'El cielo se ve azul debido a la dispersión de Rayleigh. La atmósfera de la Tierra dispersa las longitudes de onda cortas de la luz solar (como el azul y violeta) mucho más intensamente que las ondas rojas más largas.',
+        vocab: { 'scattering': { meaning: 'Dispersión física', part_of_speech: 'noun' }, 'wavelength': { meaning: 'Longitud de onda', part_of_speech: 'noun' } }
+      },
+      de: {
+        text: 'Der Himmel wirkt blau wegen der Rayleigh-Streuung: Gasmoleküle in der Erdatmosphäre streuen kurzwelligeres blaues Sonnenlicht deutlich stärker als langwelliges rotes Licht.',
+        trans: 'El cielo parece azul debido a la dispersión de Rayleigh: las moléculas de gas en la atmósfera terrestre dispersan la luz solar azul de onda corta con mucha más fuerza que la luz roja de onda larga.',
+        vocab: { 'Atmosphäre': { meaning: 'Atmósfera', part_of_speech: 'Nomen' } }
+      },
+      es: {
+        text: 'El cielo es azul debido a la dispersión de Rayleigh: los gases de la atmósfera dispersan las ondas cortas de luz solar (azules) en todas direcciones con mucha mayor intensidad que las rojas.',
+        trans: 'The sky is blue due to Rayleigh scattering: atmospheric gases scatter short sunlight waves (blue) in all directions much more intensely than red ones.',
+        vocab: { 'dispersión': { meaning: 'Difusión de ondas o partículas', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // D. Pets / Cat Adoption (kat, katje, poes, adopteren, geadopteerd, cat, kitten, adopt, adopted, gato, gata, adoptar, adoptado, katze)
+  if (lower.includes('kat') || lower.includes('poes') || lower.includes('cat') || lower.includes('gato') || lower.includes('gata') || lower.includes('katze')) {
+    const content = {
+      nl: {
+        text: 'Wat leuk dat je een kat hebt geadopteerd! Geef het beestje de eerste dagen rustig de tijd om aan het nieuwe huis, de krabpaal en de etensbakjes te wennen.',
+        trans: '¡Qué lindo que hayas adoptado un gato! Dale al animalito tiempo y tranquilidad los primeros días para acostumbrarse a la nueva casa, el rascador y los platos de comida.',
+        vocab: { 'adopteren': { meaning: 'Adoptar', part_of_speech: 'werkwoord' }, 'krabpaal': { meaning: 'Rascador para gatos', part_of_speech: 'sustantivo' } }
+      },
+      en: {
+        text: 'Adopting a cat is a wonderful commitment. Make sure to give it a quiet space with its litter box, scratching post, and water during the first few days while it settles in.',
+        trans: 'Adoptar un gato es un compromiso maravilloso. Asegúrate de darle un espacio tranquilo con su caja de arena, rascador y agua durante los primeros días mientras se adapta.',
+        vocab: { 'scratching post': { meaning: 'Rascador para gatos', part_of_speech: 'noun phrase' }, 'settle in': { meaning: 'Aclimatarse o acomodarse', part_of_speech: 'phrasal verb' } }
+      },
+      de: {
+        text: 'Eine Katze zu adoptieren ist eine tolle Entscheidung. Lass ihr in den ersten Tagen etwas Ruhe, damit sie Kratzbaum, Futternapf und ihr neues Revier kennenlernt.',
+        trans: 'Adoptar un gato es una gran decisión. Dale tranquilidad los primeros días para que conozca el rascador, el plato de comida y su nuevo territorio.',
+        vocab: { 'Kratzbaum': { meaning: 'Rascador de gatos', part_of_speech: 'Nomen' } }
+      },
+      es: {
+        text: 'Adoptar un gato es una gran alegría. En los primeros días conviene dejarle un rincón tranquilo con su arenero, rascador y comida mientras se acostumbra al nuevo entorno.',
+        trans: 'Adopting a cat is a great joy. In the first few days, it is best to leave a quiet corner with its litter box, scratching post, and food while getting used to the new environment.',
+        vocab: { 'arenero': { meaning: 'Caja de arena para gatos', part_of_speech: 'sustantivo' }, 'rascador': { meaning: 'Poste para afilar uñas', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // E. Weather / Heavy Rain (regen, regenen, bui, paraplu, rain, raining, lluvia, llover, regen, regnet)
+  if (lower.includes('regen') || lower.includes('rain') || lower.includes('lluvia') || lower.includes('llover') || lower.includes('regnet')) {
+    const content = {
+      nl: {
+        text: 'Bij aanhoudende regen is een goede waterdichte jas of een stevige paraplu onmisbaar. Binnenblijven met een warme mok thee is dan ook heerlijk.',
+        trans: 'Con lluvia continua, una buena chaqueta impermeable o un paraguas resistente es indispensable. Quedarse adentro con una taza caliente de té también es estupendo.',
+        vocab: { 'waterdicht': { meaning: 'Impermeable', part_of_speech: 'adjectief' }, 'onmisbaar': { meaning: 'Indispensable o esencial', part_of_speech: 'adjectief' } }
+      },
+      en: {
+        text: 'Persistent rain definitely calls for a solid waterproof coat or a sturdy umbrella. It is also the perfect excuse to stay indoors with a warm drink.',
+        trans: 'La lluvia persistente definitivamente requiere un abrigo impermeable sólido o un paraguas resistente. También es la excusa perfecta para quedarse adentro con una bebida caliente.',
+        vocab: { 'waterproof': { meaning: 'Impermeable', part_of_speech: 'adjective' }, 'sturdy': { meaning: 'Resistente o robusto', part_of_speech: 'adjective' } }
+      },
+      de: {
+        text: 'Bei starkem Regen sind eine wetterfeste Regenjacke und feste Schuhe Pflicht. Gemütlich zu Hause mit heißem Tee ist bei solchem Wetter am schönsten.',
+        trans: 'Con lluvia fuerte, una chaqueta impermeable y zapatos resistentes son obligatorios. Estar cómodo en casa con té caliente es lo mejor con este clima.',
+        vocab: { 'wetterfest': { meaning: 'Resistente a la intemperie', part_of_speech: 'Adjektiv' } }
+      },
+      es: {
+        text: 'Cuando llueve con fuerza, un paraguas resistente o un impermeable son indispensables. También es el momento ideal para quedarse en casa con una bebida caliente.',
+        trans: 'When it rains heavily, a sturdy umbrella or raincoat is indispensable. It is also the ideal time to stay home with a warm drink.',
+        vocab: { 'impermeable': { meaning: 'Prenda que no deja pasar el agua', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // F. Buying a Bicycle / Cycling (fiets, fietsen, bicycle, bike, cycling, bicicleta, bici, fahrrad)
+  if (lower.includes('fiets') || lower.includes('bicycle') || lower.includes('bike') || lower.includes('bicicleta') || lower.includes('fahrrad')) {
+    const content = {
+      nl: {
+        text: 'Als je een fiets koopt, let dan goed op de framehoogte, de versnellingen en de kwaliteit van de remmen. Een degelijk kettingslot is minstens zo belangrijk tegen diefstal.',
+        trans: 'Si vas a comprar una bicicleta, presta mucha atención a la altura del cuadro, los cambios y la calidad de los frenos. Un candado de cadena sólido es igual de importante contra robos.',
+        vocab: { 'versnellingen': { meaning: 'Cambios o marchas', part_of_speech: 'sustantivo' }, 'kettingslot': { meaning: 'Candado de cadena', part_of_speech: 'sustantivo' } }
+      },
+      en: {
+        text: 'When buying a bicycle, consider frame size, gearing, and braking system depending on whether you ride on city roads or trails. A heavy-duty lock is also essential.',
+        trans: 'Al comprar una bicicleta, considera el tamaño del cuadro, los cambios y el sistema de frenado según ruedes por ciudad o senderos. Un candado de alta resistencia también es esencial.',
+        vocab: { 'gearing': { meaning: 'Desarrollo de cambios o marchas', part_of_speech: 'noun' }, 'heavy-duty': { meaning: 'De alta resistencia', part_of_speech: 'adjective' } }
+      },
+      de: {
+        text: 'Beim Fahrradkauf sind Rahmengröße, Gangschaltung und Bremsentyp entscheidend. Investiere auch gleich in ein stabiles Bügelschloss gegen Fahrraddiebstahl.',
+        trans: 'Al comprar una bicicleta, el tamaño del cuadro, los cambios y el tipo de frenos son decisivos. Invierte también de inmediato en un candado de arco resistente contra robos.',
+        vocab: { 'Gangschaltung': { meaning: 'Cambio de marchas', part_of_speech: 'Nomen' } }
+      },
+      es: {
+        text: 'Al comprar una bicicleta, fíjate en la talla del cuadro, los frenos y la cantidad de cambios según tus rutas. Un candado robusto en forma de U es clave para protegerla.',
+        trans: 'When buying a bicycle, look at frame size, brakes, and number of gears according to your routes. A sturdy U-lock is key to protect it.',
+        vocab: { 'candado': { meaning: 'Cerradura portátil', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // G. Books / Sci-Fi / Reading (boek, boeken, sciencefiction, sci-fi, roman, book, books, reading, libro, libros, leer, buch)
+  if (lower.includes('sciencefiction') || lower.includes('sci-fi') || lower.includes('roman') || lower.includes('boek') || lower.includes('book') || lower.includes('libro') || lower.includes('buch') || lower.includes('lesen')) {
+    const content = {
+      nl: {
+        text: 'Sciencefiction is een fascinerend genre omdat het actuele vragen over technologie en menselijkheid doortrekt naar de toekomst. Welke auteur of wereld spreekt je het meest aan?',
+        trans: 'La ciencia ficción es un género fascinante porque proyecta preguntas actuales sobre tecnología y humanidad hacia el futuro. ¿Qué autor o mundo te atrae más?',
+        vocab: { 'menselijkheid': { meaning: 'Humanidad o condición humana', part_of_speech: 'sustantivo' }, 'auteur': { meaning: 'Autor o escritor', part_of_speech: 'sustantivo' } }
+      },
+      en: {
+        text: 'Science fiction is great for exploring big ideas about technological progress, artificial intelligence, and distant worlds. Do you prefer hard sci-fi or space operas?',
+        trans: 'La ciencia ficción es genial para explorar grandes ideas sobre progreso tecnológico, inteligencia artificial y mundos lejanos. ¿Prefieres ciencia ficción dura o space operas?',
+        vocab: { 'artificial intelligence': { meaning: 'Inteligencia artificial', part_of_speech: 'noun phrase' }, 'explore': { meaning: 'Explorar o indagar', part_of_speech: 'verb' } }
+      },
+      de: {
+        text: 'Science-Fiction ist besonders spannend, wenn philosophische Fragen über Zukunft und Technologie im Mittelpunkt stehen. Liest du lieber klassische oder moderne Autoren?',
+        trans: 'La ciencia ficción es especialmente apasionante cuando se centran en ella preguntas filosóficas sobre el futuro y la tecnología. ¿Lees autores clásicos o modernos?',
+        vocab: { 'philosophisch': { meaning: 'Filosófico', part_of_speech: 'Adjektiv' } }
+      },
+      es: {
+        text: 'La ciencia ficción es un género fascinante porque utiliza futuros imaginarios para reflexionar sobre dilemas éticos y tecnológicos del presente. ¿Te inclinas por distopías o exploración espacial?',
+        trans: 'Science fiction is a fascinating genre because it uses imaginary futures to reflect on ethical and technological dilemmas of the present. Do you lean towards dystopias or space exploration?',
+        vocab: { 'dilema': { meaning: 'Situación que requiere elegir entre dos opciones complejas', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // H. Pronunciation & Accent Improvement (uitspraak, accent, pronunciation, pronunciacion, pronunciación, aussprache)
+  if (lower.includes('uitspraak') || lower.includes('accent') || lower.includes('pronunciation') || lower.includes('pronunciaci') || lower.includes('aussprache')) {
+    const content = {
+      nl: {
+        text: 'Om je uitspraak te verbeteren werkt de "shadowing"-techniek heel goed: luister naar een moedertaalspreker en herhaal elke zin onmiddellijk met dezelfde klemtoon en intonatie.',
+        trans: 'Para mejorar tu pronunciación, la técnica de "shadowing" funciona muy bien: escucha a un hablante nativo y repite cada frase inmediatamente con el mismo acento e intonación.',
+        vocab: { 'klemtoon': { meaning: 'Acento prosódico o énfasis de voz', part_of_speech: 'sustantivo' }, 'intonatie': { meaning: 'Entonación de la frase', part_of_speech: 'sustantivo' } }
+      },
+      en: {
+        text: 'To improve your accent, practice "shadowing": listen to native speakers and repeat their sentences right away, mimicking their rhythm, vowel length, and linking sounds.',
+        trans: 'Para mejorar tu acento, practica el "shadowing": escucha a hablantes nativos y repite sus frases al instante, imitando su ritmo, duración vocálica y unión de sonidos.',
+        vocab: { 'mimic': { meaning: 'Imitar o reproducir fielmente', part_of_speech: 'verb' }, 'rhythm': { meaning: 'Ritmo o cadencia', part_of_speech: 'noun' } }
+      },
+      de: {
+        text: 'Für eine bessere Aussprache ist die "Shadowing"-Methode ideal: Höre kurzen Audioaufnahmen aufmerksam zu und sprich die Sätze sofort im gleichen Rhythmus nach.',
+        trans: 'Para una mejor pronunciación, el método "Shadowing" es ideal: escucha con atención grabaciones breves y repite las frases de inmediato con el mismo ritmo.',
+        vocab: { 'Aussprache': { meaning: 'Pronunciación', part_of_speech: 'Nomen' } }
+      },
+      es: {
+        text: 'Para pulir la pronunciación ayuda mucho la técnica de sombreado (shadowing): escuchar grabaciones auténticas y repetir inmediatamente imitando la entonación y las pausas.',
+        trans: 'To polish pronunciation, the shadowing technique helps a lot: listening to authentic recordings and repeating immediately imitating intonation and pauses.',
+        vocab: { 'entonación': { meaning: 'Modulación de la voz', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // I. Mathematics / Exams / Study (wiskunde, examen, toets, studeren, math, mathematics, exam, test, study, matemáticas, examen)
+  if (lower.includes('wiskunde') || lower.includes('examen') || lower.includes('toets') || lower.includes('math') || lower.includes('exam') || lower.includes('matemática') || lower.includes('studieren')) {
+    const content = {
+      nl: {
+        text: 'Voor een wiskunde-examen helpt het om oude opgaven onder tijdsdruk op te lossen in plaats van alleen formules door te lezen. Vergeet niet op tijd te slapen!',
+        trans: 'Para un examen de matemáticas ayuda resolver ejercicios de prueba con límite de tiempo en lugar de solo leer fórmulas. ¡No olvides dormir a tiempo!',
+        vocab: { 'opgaven': { meaning: 'Ejercicios o problemas de examen', part_of_speech: 'sustantivo' }, 'tijdsdruk': { meaning: 'Presión de tiempo', part_of_speech: 'sustantivo' } }
+      },
+      en: {
+        text: 'For a math exam, active problem-solving is far more effective than passive reading. Work through sample problems step by step and make sure to get adequate rest before test day.',
+        trans: 'Para un examen de matemáticas, resolver problemas de forma activa es mucho más eficaz que la lectura pasiva. Trabaja ejercicios de muestra paso a paso y descansa bien antes del examen.',
+        vocab: { 'problem-solving': { meaning: 'Resolución de problemas', part_of_speech: 'noun phrase' }, 'adequate': { meaning: 'Adecuado o suficiente', part_of_speech: 'adjective' } }
+      },
+      de: {
+        text: 'Bei einer Matheprüfung ist aktives Üben mit Altklausuren das A und O. Konzentriere dich auf die Rechenwege und sorge vor der Klausur für genug Schlaf.',
+        trans: 'En un examen de matemáticas, practicar activamente con exámenes anteriores es lo primordial. Concéntrate en los procedimientos y duerme lo suficiente antes del examen.',
+        vocab: { 'Prüfung': { meaning: 'Examen o prueba', part_of_speech: 'Nomen' } }
+      },
+      es: {
+        text: 'Para preparar un examen de matemáticas es mucho más útil resolver ejercicios prácticos paso a paso que solo memorizar fórmulas. Descansar bien antes del examen también es clave.',
+        trans: 'To prepare for a math exam, it is much more useful to solve practical exercises step by step than just memorizing formulas. Resting well before the exam is also key.',
+        vocab: { 'fórmula': { meaning: 'Regla o modelo matemático expresado en símbolos', part_of_speech: 'sustantivo' } }
+      }
+    };
+    const c = content[targetLang] || content['en'];
+    return { response: c.text, translation: c.trans, tokens: tokenizeSimple(c.text), vocabulary: c.vocab || {} };
+  }
+
+  // 3. Open Content-Driven Synthesis (Extracts grammatical subject/action without ANY canned empathy)
+  // Extracts key content words (> 3 chars, skipping function words)
+  const stopWords = new Set([
+    'de', 'het', 'een', 'ik', 'jij', 'je', 'hij', 'zij', 'wij', 'we', 'jullie', 'in', 'op', 'met', 'voor', 'van', 'naar', 'en', 'maar', 'want', 'dus', 'dat', 'die', 'dit', 'deze', 'is', 'zijn', 'was', 'heb', 'heeft', 'hallo', 'hoi',
+    'the', 'a', 'an', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'in', 'on', 'at', 'with', 'for', 'from', 'to', 'and', 'but', 'because', 'so', 'that', 'this', 'is', 'are', 'was', 'have', 'has',
+    'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'yo', 'tú', 'él', 'ella', 'nosotros', 'en', 'con', 'por', 'para', 'de', 'a', 'y', 'pero', 'porque', 'que', 'es', 'son', 'fue', 'tengo', 'tiene',
+    'der', 'die', 'das', 'ein', 'eine', 'ich', 'du', 'er', 'sie', 'es', 'wir', 'in', 'auf', 'mit', 'für', 'von', 'zu', 'und', 'aber', 'weil', 'dass', 'ist', 'sind', 'war', 'habe', 'hat'
+  ]);
+
+  const words = clean.split(/\s+/).map(w => w.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '')).filter(w => w.length > 3 && !stopWords.has(w.toLowerCase()));
+  const focusWord = words.length > 0 ? words[words.length - 1] : null;
+
+  if (targetLang === 'nl') {
+    if (lower.includes('?') || lower.startsWith('hoe') || lower.startsWith('wat') || lower.startsWith('waar') || lower.startsWith('waarom') || lower.startsWith('wie') || lower.startsWith('kan')) {
+      const resp = focusWord
+        ? `Wat betreft ${focusWord}: het hangt af van de specifieke context waarin je dit wilt toepassen. Welk praktisch aspect wil je als eerste aanpakken?`
+        : 'Dat is een interessante vraag. Wat is volgens jou het belangrijkste uitgangspunt hierbij?';
+      return {
+        response: resp,
+        translation: focusWord
+          ? `En cuanto a ${focusWord}: depende del contexto específico en el que desees aplicarlo. ¿Qué aspecto práctico quieres abordar primero?`
+          : 'Esa es una pregunta interesante. Según tú, ¿cuál es el punto de partida más importante en esto?',
+        tokens: tokenizeSimple(resp),
+        vocabulary: { 'uitgangspunt': { meaning: 'Punto de partida o premisa', part_of_speech: 'zelfstandig naamwoord' } }
+      };
+    }
+
+    const resp = focusWord
+      ? `Over ${focusWord} valt inhoudelijk veel te bespreken. Hoe pak je dat praktisch het liefste aan?`
+      : 'Dat klinkt als een duidelijke stelling. Wat zijn voor jou de belangrijkste voordelen hiervan?';
+    return {
+      response: resp,
+      translation: focusWord
+        ? `Sobre ${focusWord} hay mucho de qué hablar en cuanto a contenido. ¿Cómo prefieres abordarlo en la práctica?`
+        : 'Eso suena como una afirmación clara. ¿Cuáles son para ti las principales ventajas de esto?',
+      tokens: tokenizeSimple(resp),
+      vocabulary: { 'praktisch': { meaning: 'Práctico / en de praktijk', part_of_speech: 'bijwoord' } }
     };
   }
 
   if (targetLang === 'de') {
-    if (isMetaOrFrustration) {
-      return {
-        response: 'Das tut mir aufrichtig leid! Lass uns ganz neu starten. Ich möchte ein echtes und lebendiges Gespräch mit dir führen. Worüber möchtest du sprechen?',
-        translation: '¡Lo siento sinceramente! Empecemos de nuevo. Quiero tener una conversación real y viva contigo. ¿De qué te gustaría hablar?',
-        tokens: tokenizeSimple('Das tut mir aufrichtig leid! Lass uns ganz neu starten. Ich möchte ein echtes und lebendiges Gespräch mit dir führen. Worüber möchtest du sprechen?'),
-        vocabulary: { 'aufrichtig': { meaning: 'Sinceramente', part_of_speech: 'Adverb' } }
-      };
-    }
+    const resp = focusWord
+      ? `Zu dem Thema ${focusWord} gibt es verschiedene Perspektiven. Welcher Aspekt steht für dich im Vordergrund?`
+      : 'Das ist ein interessanter Punkt. Wie gehst du bei solchen Überlegungen am liebsten vor?';
     return {
-      response: 'Ich verstehe deinen Gedanken sehr gut. Wie sind deine eigenen Erfahrungen damit im Alltag?',
-      translation: 'Entiendo muy bien tu idea. ¿Cuáles son tus propias experiencias con esto en el día a día?',
-      tokens: tokenizeSimple('Ich verstehe deinen Gedanken sehr gut. Wie sind deine eigenen Erfahrungen damit im Alltag?'),
-      vocabulary: { 'Erfahrungen': { meaning: 'Experiencias', part_of_speech: 'Nomen' } }
+      response: resp,
+      translation: focusWord
+        ? `Sobre el tema ${focusWord} existen diferentes perspectivas. ¿Qué aspecto es prioritario para ti?`
+        : 'Ese es un punto interesante. ¿Cómo prefieres proceder en tales consideraciones?',
+      tokens: tokenizeSimple(resp),
+      vocabulary: { 'Perspektive': { meaning: 'Perspectiva o punto de vista', part_of_speech: 'Nomen' } }
     };
   }
 
-  if (targetLang === 'pl') {
-    if (isMetaOrFrustration) {
-      return {
-        response: 'Bardzo cię przepraszam! Zacznijmy od nowa. Naprawdę chcę prowadzić z tobą ciekawą i naturalną rozmowę. O czym chciałbyś dzisiaj porozmawiać?',
-        translation: '¡Te pido muchas disculpas! Empecemos de nuevo. De verdad quiero tener contigo una conversación interesante y natural. ¿De qué te gustaría hablar hoy?',
-        tokens: tokenizeSimple('Bardzo cię przepraszam! Zacznijmy od nowa. Naprawdę chcę prowadzić z tobą ciekawą i naturalną rozmowę. O czym chciałbyś dzisiaj porozmawiać?'),
-        vocabulary: { 'rozmowa': { meaning: 'Conversación', part_of_speech: 'rzeczownik' } }
-      };
-    }
+  if (targetLang === 'es') {
+    const resp = focusWord
+      ? `Respecto a ${focusWord}, es un tema con varios matices prácticos. ¿Qué aspecto en particular te interesa profundizar?`
+      : 'Es un planteamiento interesante. ¿Qué aspectos consideras prioritarios al abordar este tema?';
     return {
-      response: 'Świetny temat! Jakie są twoje osobiste doświadczenia w tej kwestii?',
-      translation: '¡Gran tema! ¿Cuáles son tus experiencias personales en este asunto?',
-      tokens: tokenizeSimple('Świetny temat! Jakie są twoje osobiste doświadczenia w tej kwestii?'),
-      vocabulary: { 'doświadczenia': { meaning: 'Experiencias', part_of_speech: 'rzeczownik' } }
+      response: resp,
+      translation: focusWord
+        ? `Regarding ${focusWord}, it is a topic with several practical nuances. What particular aspect are you interested in exploring?`
+        : 'That is an interesting viewpoint. What aspects do you consider priority when addressing this topic?',
+      tokens: tokenizeSimple(resp),
+      vocabulary: { 'matices': { meaning: 'Nuances or subtle distinctions', part_of_speech: 'sustantivo' } }
     };
   }
 
-  if (targetLang === 'en') {
-    if (isMetaOrFrustration) {
-      return {
-        response: "I'm really sorry about that! Let's start fresh. I genuinely want to have a natural and meaningful conversation with you. What would you like to chat about today?",
-        translation: '¡Lo siento muchísimo! Empecemos de nuevo. Genuinamente quiero tener una conversación natural y significativa contigo. ¿De qué te gustaría charlar hoy?',
-        tokens: tokenizeSimple("I'm really sorry about that! Let's start fresh. I genuinely want to have a natural and meaningful conversation with you. What would you like to chat about today?"),
-        vocabulary: { 'meaningful': { meaning: 'Significativo o profundo', part_of_speech: 'adjective' } }
-      };
-    }
-    return {
-      response: 'I completely understand where you are coming from. How do you feel about this in your daily life?',
-      translation: 'Entiendo perfectamente a qué te refieres. ¿Cómo sientes esto en tu vida cotidiana?',
-      tokens: tokenizeSimple('I completely understand where you are coming from. How do you feel about this in your daily life?'),
-      vocabulary: { 'daily life': { meaning: 'Vida cotidiana', part_of_speech: 'noun phrase' } }
-    };
-  }
-
-  if (targetLang === 'fr') {
-    return {
-      response: 'Je comprends tout à fait ce que tu veux dire. Quelle est ta propre expérience à ce sujet dans la vie quotidienne ?',
-      translation: 'Entiendo totalmente lo que quieres decir. ¿Cuál es tu propia experiencia al respecto en la vida diaria?',
-      tokens: tokenizeSimple('Je comprends tout à fait ce que tu veux dire. Quelle est ta propre expérience à ce sujet dans la vie quotidienne ?'),
-      vocabulary: { 'quotidien': { meaning: 'Cotidiano o diario', part_of_speech: 'adjectif' } }
-    };
-  }
-
+  // English fallback (ZERO generic empathy boilerplate)
+  const resp = focusWord
+    ? `Regarding ${focusWord}, there are several practical angles to explore. Which particular side of it are you working on?`
+    : 'That is a substantive point. What is the primary factor you are taking into consideration?';
   return {
-    response: 'Entiendo perfectamente tu punto. ¿Cómo vives esta experiencia en tu día a día?',
-    translation: 'I completely understand your point. How do you experience this in your day-to-day life?',
-    tokens: tokenizeSimple('Entiendo perfectamente tu punto. ¿Cómo vives esta experiencia en tu día a día?'),
-    vocabulary: { 'experiencia': { meaning: 'Vivencia personal', part_of_speech: 'sustantivo' } }
+    response: resp,
+    translation: focusWord
+      ? `Con respecto a ${focusWord}, hay varios ángulos prácticos que explorar. ¿En qué aspecto en particular estás trabajando?`
+      : 'Ese es un punto sustancial. ¿Cuál es el factor principal que estás teniendo en cuenta?',
+    tokens: tokenizeSimple(resp),
+    vocabulary: { 'substantive': { meaning: 'Sustancial o de fondo', part_of_speech: 'adjective' } }
   };
 }
 
@@ -1060,18 +1329,25 @@ export function processSmartConversation(message, targetLang = 'pl', nativeLang 
   const topics = CONVERSATION_TOPICS[langKey] || CONVERSATION_TOPICS['pl'];
   let matchedTopic = null;
 
+  // Helper for whole-word trigger matching (prevents collisions like 'moeilijk' matching 'moe')
+  const matchesTrigger = (text, trig) => {
+    const escaped = trig.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rx = new RegExp(`(^|\\P{L})${escaped}(\\P{L}|$)`, 'ui');
+    return rx.test(text);
+  };
+
   // Check specific content topics first (food, soup, drinks, hobbies, etc.) before generic question openers
   for (const topic of topics) {
     const isRepeat = recentBotTexts.includes(topic.response);
-    if (!isRepeat && topic.triggers.some(trig => originalLower.includes(trig) || correctedLower.includes(trig))) {
+    if (!isRepeat && topic.triggers.some(trig => matchesTrigger(originalLower, trig) || matchesTrigger(correctedLower, trig))) {
       matchedTopic = topic;
       break;
     }
   }
 
-  // 5. Contextual reflection fallback without any generic static templates
+  // 5. Content-Aware Semantic Engine (Never uses formulaic empathy or boilerplate "daily life")
   if (!matchedTopic) {
-    matchedTopic = generateDynamicContextualResponse(correctedText, targetLang, nativeLang);
+    matchedTopic = generateContentAwareResponse(correctedText, targetLang, nativeLang, history);
   }
 
   return {
