@@ -6,7 +6,7 @@ import { InputBar } from './components/InputBar';
 import { SettingsModal } from './components/SettingsModal';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
-import { sendChatMessage } from './services/chatService';
+import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'ar', name: 'Árabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
@@ -20,8 +20,19 @@ const SUPPORTED_LANGUAGES = [
 ];
 
 export default function App() {
-  const [languages] = useState(SUPPORTED_LANGUAGES);
+  const [languages, setLanguages] = useState(SUPPORTED_LANGUAGES);
   const [targetLang, setTargetLang] = useState('pl'); // Default to Polish as requested
+
+  // Fetch supported languages dynamically from Render backend
+  useEffect(() => {
+    async function loadLanguages() {
+      const remoteLangs = await fetchLanguagesApi();
+      if (remoteLangs && Array.isArray(remoteLangs) && remoteLangs.length > 0) {
+        setLanguages(remoteLangs);
+      }
+    }
+    loadLanguages();
+  }, []);
   const [nativeLang, setNativeLang] = useState('es');
   const [showTransliteration, setShowTransliteration] = useState(true);
   const [handsFree, setHandsFree] = useState(false);
@@ -351,26 +362,10 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/lookup-word', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          word,
-          targetLang,
-          nativeLang,
-          apiKey: config.apiKey
-        })
-      });
-
-      if (res.ok) {
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data && data.success && data.data) {
-            setSelectedWord(data.data);
-            return;
-          }
-        }
+      const lookupResult = await lookupWordApi(word, targetLang, nativeLang, config.apiKey);
+      if (lookupResult) {
+        setSelectedWord(lookupResult);
+        return;
       }
     } catch (err) {
       console.warn('Word lookup fallback:', err);

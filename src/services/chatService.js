@@ -1,9 +1,12 @@
+// Base URL for the backend API deployed on Render
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://linguaflow-fef0.onrender.com';
+
 import { processSmartConversation } from '../../server/conversationEngine.js';
 import { getSystemPrompt } from '../../server/promptTemplates.js';
 import { SUPPORTED_LANGUAGES } from '../../server/languageData.js';
 
 /**
- * Robust chat service that communicates with /api/chat on Vercel/localhost
+ * Robust chat service that communicates with /api/chat on Render/local backend
  * and gracefully falls back to direct client Gemini or the smart multi-turn linguistic engine.
  */
 export async function sendChatMessage({
@@ -19,12 +22,12 @@ export async function sendChatMessage({
     throw new Error('El mensaje no puede estar vacío.');
   }
 
-  // 1. Try Vercel / Local Backend API first (/api/chat)
+  // 1. Try Render Backend API first (/api/chat)
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
 
-    const response = await fetch('/api/chat', {
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
@@ -140,4 +143,70 @@ Return strictly valid JSON.`
     source: 'resilient_linguistic_engine',
     data: fallbackData
   };
+}
+
+/**
+ * Lookup a word definition from the backend API (Render)
+ */
+export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '') {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(`${API_BASE_URL}/api/lookup-word`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        word,
+        targetLang,
+        nativeLang,
+        apiKey: (apiKey || '').trim()
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.success && data.data) {
+          return data.data;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Word lookup API error, using fallback:', err.message);
+  }
+  return null;
+}
+
+/**
+ * Fetch supported languages from the backend API (Render)
+ */
+export async function fetchLanguagesApi() {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(`${API_BASE_URL}/api/languages`, {
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.languages && Array.isArray(data.languages)) {
+          return data.languages;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Fetch languages API error, using default list:', err.message);
+  }
+  return null;
 }
