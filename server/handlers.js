@@ -29,13 +29,18 @@ function parseRequestBody(req) {
 }
 
 // Priority list of Gemini models to try (Google Generative AI v1beta)
-const MODEL_CANDIDATES = GEMINI_MODEL_CONFIG.models;
-
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const MODEL_CANDIDATES = [
+  DEFAULT_MODEL,
+  ...GEMINI_MODEL_CONFIG.models.filter(m => m !== DEFAULT_MODEL)
+];
 
 let discoveredModel = null;
 
 async function getBestGeminiModel(apiKey) {
   if (discoveredModel) return discoveredModel;
+
+  const defaultModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
   try {
     const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -64,7 +69,7 @@ async function getBestGeminiModel(apiKey) {
     console.warn('Error fetching model list:', e.message);
   }
 
-  return 'gemini-1.5-flash';
+  return defaultModel;
 }
 
 
@@ -225,7 +230,7 @@ export async function handleLookupWord(req, res) {
 
     if (effectiveApiKey && word) {
       try {
-        const modelName = discoveredModel || 'gemini-3.8-flash';
+        const modelName = discoveredModel || DEFAULT_MODEL;
         const prompt = `Give definition for "${word}" in language "${targetLang}" translated to "${nativeLang}".
 Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeLang}", "part_of_speech": "noun/verb/adj", "translit": null}`;
 

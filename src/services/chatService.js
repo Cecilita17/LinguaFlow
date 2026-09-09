@@ -49,7 +49,11 @@ export async function sendChatMessage({
         history
       });
 
-      const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+      const defaultModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || 'gemini-2.5-flash';
+      const candidateModels = [
+        defaultModel,
+        ...GEMINI_MODEL_CONFIG.models.filter(m => m !== defaultModel)
+      ];
 
       for (const model of candidateModels) {
         try {
