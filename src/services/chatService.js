@@ -11,6 +11,67 @@ import {
 import { SUPPORTED_LANGUAGES } from '../../server/languageData.js';
 import { performFullGrammarCorrection } from './grammarEngine.js';
 
+export function categorizeClientGeminiError(status, message) {
+  const msgLower = (message || '').toLowerCase();
+
+  // 1. Invalid API Key
+  if (status === 400 && (
+    msgLower.includes('api key not valid') ||
+    msgLower.includes('api_key_invalid') ||
+    msgLower.includes('key not valid') ||
+    msgLower.includes('invalid api key') ||
+    msgLower.includes('api key expired')
+  )) {
+    return {
+      type: 'invalid API key',
+      code: 'INVALID_API_KEY',
+      userMessage: 'Clave API de Gemini inválida. Por favor genera una nueva clave en Google AI Studio (aistudio.google.com) e ingrésala en Ajustes ⚙️.'
+    };
+  }
+
+  // 2. Model Not Found
+  if (status === 404 || msgLower.includes('not found') || msgLower.includes('not supported for generatecontent')) {
+    return {
+      type: 'model not found',
+      code: 'MODEL_NOT_FOUND',
+      userMessage: `El modelo de Gemini solicitado no fue encontrado o no está disponible para esta clave (${message}).`
+    };
+  }
+
+  // 3. Quota / Rate limit
+  if (status === 429 || msgLower.includes('quota') || msgLower.includes('resource_exhausted') || msgLower.includes('rate limit')) {
+    return {
+      type: 'quota/rate limit',
+      code: 'RATE_LIMIT_EXCEEDED',
+      userMessage: 'Límite de cuota o peticiones excedido en Google Gemini (HTTP 429 Resource Exhausted). Espera unos segundos antes de volver a enviar.'
+    };
+  }
+
+  // 4. Network timeout
+  if (status === 408 || msgLower.includes('timeout') || msgLower.includes('aborted') || msgLower.includes('aborterror')) {
+    return {
+      type: 'network timeout',
+      code: 'NETWORK_TIMEOUT',
+      userMessage: 'Tiempo de espera agotado al conectar con Google Gemini. Revisa tu conexión a internet.'
+    };
+  }
+
+  // 5. Server error (500, 502, 503, etc.)
+  if (status >= 500) {
+    return {
+      type: 'server error',
+      code: 'GEMINI_SERVER_ERROR',
+      userMessage: `Error del servidor de Google Gemini (HTTP ${status}): ${message}.`
+    };
+  }
+
+  return {
+    type: 'server error',
+    code: 'GEMINI_ERROR',
+    userMessage: `Error de Google Gemini (HTTP ${status || 'N/A'}): ${message || 'Servicio no disponible'}.`
+  };
+}
+
 /**
  * Robust chat service that communicates with /api/chat on Render/local backend
  * and gracefully falls back to direct client Gemini or the smart multi-turn linguistic engine.
@@ -49,63 +110,69 @@ export async function sendChatMessage({
         history
       });
 
-      const defaultModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || 'gemini-2.5-flash';
-      const candidateModels = [
-        defaultModel,
-        ...GEMINI_MODEL_CONFIG.models.filter(m => m !== defaultModel)
-      ];
+      let activeModel = 'gemini-2.5-flash';
+      const viteEnvModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
+      // Protect against obsolete models in env
+      if (viteEnvModel && !viteEnvModel.includes('1.5') && !viteEnvModel.includes('2.0') && !viteEnvModel.includes('pro')) {
+        activeModel = viteEnvModel.trim();
+      }
 
-      for (const model of candidateModels) {
-        try {
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveKey}`;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 9000);
+      console.log(`Gemini model selected: ${activeModel}`);
 
-          const directRes = await fetch(geminiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: 'user',
-                  parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }]
-                }
-              ],
-              generationConfig: GEMINI_MODEL_CONFIG.generationConfig
-            })
-          });
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${effectiveKey}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
 
-          clearTimeout(timeoutId);
+      let directHttpStatus = 0;
+      let directGoogleMsg = '';
 
-          if (directRes.ok) {
-            const resJson = await directRes.json();
-            const textContent = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (textContent) {
-              const parsed = cleanAndParseJSON(textContent);
-              if (parsed && parsed.user_correction && parsed.bot_response) {
-                console.log(`✅ Direct client Gemini responded using [${model}]`);
-                return {
-                  source: `direct_gemini (${model})`,
-                  data: parsed
-                };
+      try {
+        const directRes = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }]
               }
+            ],
+            generationConfig: GEMINI_MODEL_CONFIG.generationConfig
+          })
+        });
+
+        clearTimeout(timeoutId);
+        directHttpStatus = directRes.status;
+
+        if (directRes.ok) {
+          const resJson = await directRes.json();
+          const textContent = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (textContent) {
+            const parsed = cleanAndParseJSON(textContent);
+            if (parsed && parsed.user_correction && parsed.bot_response) {
+              console.log(`✅ Direct client Gemini responded using [${activeModel}]`);
+              return {
+                source: `direct_gemini (${activeModel})`,
+                data: parsed
+              };
             }
-          } else {
-            const errData = await directRes.json().catch(() => ({}));
-            lastGeminiError = errData?.error?.message || `HTTP ${directRes.status}`;
-            console.warn(`Direct Gemini ${model} error (${directRes.status}):`, lastGeminiError);
           }
-        } catch (candErr) {
-          lastGeminiError = candErr.message;
+        } else {
+          const errData = await directRes.json().catch(() => ({}));
+          directGoogleMsg = errData?.error?.message || directRes.statusText;
         }
+      } catch (candErr) {
+        clearTimeout(timeoutId);
+        directHttpStatus = candErr.name === 'AbortError' ? 408 : 500;
+        directGoogleMsg = candErr.name === 'AbortError' ? 'Network timeout: la solicitud a Google Gemini excedió el tiempo límite.' : candErr.message;
       }
 
-      if (lastGeminiError) {
-        console.warn('Direct Gemini attempts failed, checking backend /api/chat:', lastGeminiError);
-      }
+      console.error(`Gemini request failed:\nmodel: ${activeModel}\nHTTP status: ${directHttpStatus}\nGoogle error message: ${directGoogleMsg}`);
+      const categorized = categorizeClientGeminiError(directHttpStatus, directGoogleMsg);
+      lastGeminiError = categorized.userMessage;
+      serverCode = categorized.code;
     } catch (geminiErr) {
-      lastGeminiError = geminiErr.message;
       console.warn('Direct Gemini call failed:', geminiErr.message);
     }
   }

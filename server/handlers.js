@@ -28,19 +28,24 @@ function parseRequestBody(req) {
   return req.body;
 }
 
-// Priority list of Gemini models to try (Google Generative AI v1beta)
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const MODEL_CANDIDATES = [
-  DEFAULT_MODEL,
-  ...GEMINI_MODEL_CONFIG.models.filter(m => m !== DEFAULT_MODEL)
-];
+// The exclusively supported conversational model is gemini-2.5-flash
+const PRIMARY_MODEL = 'gemini-2.5-flash';
+
+function getSanitizedDefaultModel() {
+  const envModel = (process.env.GEMINI_MODEL || '').trim();
+  // Protect against obsolete/cached environment variables
+  if (envModel && !envModel.includes('1.5') && !envModel.includes('2.0') && !envModel.includes('pro')) {
+    return envModel;
+  }
+  return PRIMARY_MODEL;
+}
 
 let discoveredModel = null;
 
 async function getBestGeminiModel(apiKey) {
   if (discoveredModel) return discoveredModel;
 
-  const defaultModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const targetModel = getSanitizedDefaultModel();
 
   try {
     const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -52,24 +57,85 @@ async function getBestGeminiModel(apiKey) {
 
       console.log('Available models for this key:', availableNames);
 
-      for (const cand of MODEL_CANDIDATES) {
-        if (availableNames.includes(cand)) {
-          discoveredModel = cand;
-          console.log(`Auto-selected Gemini model: ${discoveredModel}`);
-          return discoveredModel;
-        }
+      if (availableNames.includes(targetModel)) {
+        discoveredModel = targetModel;
+        return discoveredModel;
       }
 
-      if (availableNames.length > 0) {
-        discoveredModel = availableNames[0];
+      const flash25 = availableNames.find(m => m.includes('2.5-flash'));
+      if (flash25) {
+        discoveredModel = flash25;
         return discoveredModel;
       }
     }
   } catch (e) {
-    console.warn('Error fetching model list:', e.message);
+    console.warn('Error querying ListModels:', e.message);
   }
 
-  return defaultModel;
+  // If ListModels fails or key cannot list, strictly default to targetModel (gemini-2.5-flash)
+  discoveredModel = targetModel;
+  return discoveredModel;
+}
+
+export function categorizeGeminiError(status, message) {
+  const msgLower = (message || '').toLowerCase();
+
+  // 1. Invalid API Key
+  if (status === 400 && (
+    msgLower.includes('api key not valid') ||
+    msgLower.includes('api_key_invalid') ||
+    msgLower.includes('key not valid') ||
+    msgLower.includes('invalid api key') ||
+    msgLower.includes('api key expired')
+  )) {
+    return {
+      type: 'invalid API key',
+      code: 'INVALID_API_KEY',
+      userMessage: 'Clave API de Gemini inválida. Por favor genera una nueva clave en Google AI Studio (aistudio.google.com) e ingrésala en Ajustes ⚙️.'
+    };
+  }
+
+  // 2. Model Not Found
+  if (status === 404 || msgLower.includes('not found') || msgLower.includes('not supported for generatecontent')) {
+    return {
+      type: 'model not found',
+      code: 'MODEL_NOT_FOUND',
+      userMessage: `El modelo de Gemini solicitado no fue encontrado o no está habilitado para esta clave (${message}).`
+    };
+  }
+
+  // 3. Quota / Rate limit
+  if (status === 429 || msgLower.includes('quota') || msgLower.includes('resource_exhausted') || msgLower.includes('rate limit')) {
+    return {
+      type: 'quota/rate limit',
+      code: 'RATE_LIMIT_EXCEEDED',
+      userMessage: 'Límite de cuota o peticiones excedido en Google Gemini (HTTP 429 Resource Exhausted). Espera unos segundos antes de volver a enviar.'
+    };
+  }
+
+  // 4. Network timeout
+  if (status === 408 || msgLower.includes('timeout') || msgLower.includes('aborted') || msgLower.includes('aborterror')) {
+    return {
+      type: 'network timeout',
+      code: 'NETWORK_TIMEOUT',
+      userMessage: 'Tiempo de espera agotado al conectar con Google Gemini. Revisa tu conexión a internet.'
+    };
+  }
+
+  // 5. Server error (500, 502, 503, etc.)
+  if (status >= 500) {
+    return {
+      type: 'server error',
+      code: 'GEMINI_SERVER_ERROR',
+      userMessage: `Error interno de los servidores de Google Gemini (HTTP ${status}): ${message}.`
+    };
+  }
+
+  return {
+    type: 'server error',
+    code: 'GEMINI_ERROR',
+    userMessage: `Error al conectar con Google Gemini (HTTP ${status || 'N/A'}): ${message || 'Servicio no disponible'}.`
+  };
 }
 
 
@@ -128,76 +194,84 @@ export async function handleChat(req, res) {
         });
 
         const activeModel = await getBestGeminiModel(effectiveApiKey);
+        console.log(`Gemini model selected: ${activeModel}`);
 
-        // Try active model first, then fallback models if 503/404 occurs
-        const tryList = [activeModel, ...MODEL_CANDIDATES.filter(m => m !== activeModel)];
-        const tried = new Set();
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${effectiveApiKey}`;
 
-        let lastGeminiError = null;
-        for (const model of tryList) {
-          if (tried.has(model)) continue;
-          tried.add(model);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
 
-          try {
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveApiKey}`;
+        let response;
+        let httpStatus = 0;
+        let googleErrorMessage = '';
+        let parsedData = null;
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 9000); // 9s timeout per model
+        try {
+          response = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }] }],
+              generationConfig: GEMINI_MODEL_CONFIG.generationConfig
+            })
+          });
 
-            let response = await fetch(geminiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              signal: controller.signal,
-              body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }] }],
-                generationConfig: GEMINI_MODEL_CONFIG.generationConfig
-              })
-            });
+          clearTimeout(timeoutId);
+          httpStatus = response.status;
 
-            clearTimeout(timeoutId);
+          if (response.ok) {
+            const data = await response.json();
+            const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            parsedData = cleanAndParseJSON(rawText);
 
-            if (response.ok) {
-              const data = await response.json();
-              const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              const parsed = cleanAndParseJSON(rawText);
-
-              if (parsed && parsed.user_correction && parsed.bot_response) {
-                discoveredModel = model; // Remember the fast working model
-                console.log(`✅ Gemini AI answered using [${model}]`);
-                return res.status(200).json({
-                  success: true,
-                  source: `gemini (${model})`,
-                  data: parsed
-                });
-              } else {
-                console.warn(`Could not parse JSON from ${model}:`, rawText.slice(0, 100));
-              }
+            if (parsedData && parsedData.user_correction && parsedData.bot_response) {
+              console.log(`✅ Gemini AI answered using [${activeModel}]`);
+              return res.status(200).json({
+                success: true,
+                source: `gemini (${activeModel})`,
+                data: parsedData
+              });
             } else {
-              const err = await response.json().catch(() => ({}));
-              lastGeminiError = err?.error?.message || response.statusText;
-              console.warn(`Model ${model} error (${response.status}):`, lastGeminiError);
+              googleErrorMessage = `La respuesta de ${activeModel} no tuvo el formato JSON esperado: ${rawText.slice(0, 120)}`;
             }
-          } catch (fetchErr) {
-            lastGeminiError = fetchErr.message;
-            console.warn(`Call to ${model} threw:`, fetchErr.message);
+          } else {
+            const err = await response.json().catch(() => ({}));
+            googleErrorMessage = err?.error?.message || response.statusText;
           }
+        } catch (fetchErr) {
+          clearTimeout(timeoutId);
+          httpStatus = fetchErr.name === 'AbortError' ? 408 : 500;
+          googleErrorMessage = fetchErr.name === 'AbortError' ? 'Network timeout: la solicitud a Google Gemini excedió el tiempo límite.' : fetchErr.message;
         }
 
-        // Gemini key was provided, but all candidate models failed
+        // Required error logging format:
+        console.error(`Gemini request failed:\nmodel: ${activeModel}\nHTTP status: ${httpStatus}\nGoogle error message: ${googleErrorMessage}`);
+
         const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
-        return res.status(503).json({
+        const errorInfo = categorizeGeminiError(httpStatus, googleErrorMessage);
+
+        return res.status(httpStatus >= 400 && httpStatus < 600 ? httpStatus : 503).json({
           success: false,
-          error: `El motor de IA de Google Gemini no pudo generar una respuesta: ${lastGeminiError || 'Servicio no disponible'}. Por favor verifica tu clave o intenta más tarde.`,
-          code: 'GEMINI_FAILED',
+          error: errorInfo.userMessage,
+          error_type: errorInfo.type,
+          code: errorInfo.code,
+          details: {
+            model: activeModel,
+            status: httpStatus,
+            google_error: googleErrorMessage
+          },
           user_correction: deterministicCorrection
         });
       } catch (geminiErr) {
-        console.warn('Gemini AI workflow failed:', geminiErr.message);
+        console.warn('Gemini AI workflow threw:', geminiErr.message);
         const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
-        return res.status(503).json({
+        const errorInfo = categorizeGeminiError(500, geminiErr.message);
+        return res.status(500).json({
           success: false,
-          error: `Error al conectar con Google Gemini: ${geminiErr.message}.`,
-          code: 'GEMINI_ERROR',
+          error: errorInfo.userMessage,
+          error_type: errorInfo.type,
+          code: errorInfo.code,
           user_correction: deterministicCorrection
         });
       }
@@ -208,6 +282,7 @@ export async function handleChat(req, res) {
     return res.status(400).json({
       success: false,
       error: 'Para conversar con LinguaFlow, ingresa tu API Key de Google Gemini en Ajustes ⚙️ (es gratis en Google AI Studio). Gemini es el motor exclusivo de conversación.',
+      error_type: 'invalid API key',
       code: 'MISSING_API_KEY',
       user_correction: deterministicCorrection
     });
@@ -230,7 +305,7 @@ export async function handleLookupWord(req, res) {
 
     if (effectiveApiKey && word) {
       try {
-        const modelName = discoveredModel || DEFAULT_MODEL;
+        const modelName = discoveredModel || getSanitizedDefaultModel();
         const prompt = `Give definition for "${word}" in language "${targetLang}" translated to "${nativeLang}".
 Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeLang}", "part_of_speech": "noun/verb/adj", "translit": null}`;
 
@@ -299,6 +374,7 @@ export async function handleTranscribe(req, res) {
     const nativeName = nativeObj.englishName || nativeObj.name;
 
     const activeModel = await getBestGeminiModel(effectiveApiKey);
+    console.log(`Gemini model selected: ${activeModel}`);
 
     const prompt = `You are an expert multilingual audio transcriber specialized in language learners.
 The speaker is practicing target language: "${targetName}", and their native language is "${nativeName}".
@@ -313,68 +389,71 @@ CRITICAL INSTRUCTIONS:
     let cleanMime = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
     if (!cleanMime || cleanMime === 'audio/x-m4a') cleanMime = 'audio/mp4';
 
-    const tryList = [activeModel, ...MODEL_CANDIDATES.filter(m => m !== activeModel)];
-    const tried = new Set();
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${effectiveApiKey}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 14000);
 
-    for (const model of tryList) {
-      if (tried.has(model)) continue;
-      tried.add(model);
+    let httpStatus = 0;
+    let googleErrorMessage = '';
 
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveApiKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-        const response = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: cleanMime,
-                      data: cleanBase64
-                    }
-                  },
-                  {
-                    text: prompt
+    try {
+      const response = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: cleanMime,
+                    data: cleanBase64
                   }
-                ]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 1000
+                },
+                {
+                  text: prompt
+                }
+              ]
             }
-          })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const data = await response.json();
-          const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-          if (transcript) {
-            console.log(`✅ Audio transcribed via Gemini [${model}]: "${transcript}"`);
-            return res.status(200).json({
-              success: true,
-              source: `gemini (${model})`,
-              transcript
-            });
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 1000
           }
-        } else {
-          const err = await response.json().catch(() => ({}));
-          console.warn(`Audio transcription model ${model} error (${response.status}):`, err?.error?.message || response.statusText);
+        })
+      });
+
+      clearTimeout(timeoutId);
+      httpStatus = response.status;
+
+      if (response.ok) {
+        const data = await response.json();
+        const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (transcript) {
+          console.log(`✅ Audio transcribed via Gemini [${activeModel}]: "${transcript}"`);
+          return res.status(200).json({
+            success: true,
+            source: `gemini (${activeModel})`,
+            transcript
+          });
         }
-      } catch (err) {
-        console.warn(`Audio transcription call to ${model} threw:`, err.message);
+      } else {
+        const err = await response.json().catch(() => ({}));
+        googleErrorMessage = err?.error?.message || response.statusText;
       }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      httpStatus = err.name === 'AbortError' ? 408 : 500;
+      googleErrorMessage = err.name === 'AbortError' ? 'Network timeout: la transcripción excedió el tiempo límite.' : err.message;
     }
 
-    return res.status(500).json({ error: 'No se pudo transcribir el audio con los modelos disponibles.' });
+    console.error(`Gemini request failed:\nmodel: ${activeModel}\nHTTP status: ${httpStatus}\nGoogle error message: ${googleErrorMessage}`);
+    const errorInfo = categorizeGeminiError(httpStatus, googleErrorMessage);
+    return res.status(httpStatus >= 400 && httpStatus < 600 ? httpStatus : 500).json({
+      error: errorInfo.userMessage,
+      error_type: errorInfo.type
+    });
   } catch (err) {
     console.error('Server error in /api/transcribe:', err);
     res.status(500).json({ error: 'Error en el servidor durante la transcripción de audio.' });
