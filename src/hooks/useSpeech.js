@@ -106,6 +106,7 @@ export function useSpeech({
   const audioChunksRef = useRef([]);
   const audioStreamRef = useRef(null);
   const mimeTypeRef = useRef('audio/webm');
+  const mediaStreamPromiseRef = useRef(null);
 
   isHandsFreeRef.current = handsFree;
   isSpeakingRef.current = isSpeaking;
@@ -195,6 +196,14 @@ export function useSpeech({
       } catch (e) {}
     }
 
+    // Await any in-flight media stream initialization
+    if (mediaStreamPromiseRef.current) {
+      try {
+        await mediaStreamPromiseRef.current;
+      } catch (e) {}
+      mediaStreamPromiseRef.current = null;
+    }
+
     // Stop MediaRecorder and get audio blob
     let audioBlob = null;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -230,10 +239,10 @@ export function useSpeech({
       return;
     }
 
-    // High-precision AI Multimodal Audio Transcription (for strong accents & mixed language)
+    // High-precision Groq Whisper Multilingual Transcription (for code-switching & accents)
     let finalTranscribedText = localTranscript;
 
-    if (audioBlob && audioBlob.size > 1500) {
+    if (audioBlob && audioBlob.size > 400) {
       try {
         setIsTranscribingAudio(true);
         const aiTranscript = await transcribeAudioApi({
@@ -303,18 +312,14 @@ export function useSpeech({
       }
     }
 
-    // 2. Non-blocking audio capture via MediaRecorder (for multimodal AI transcription when apiKey is present)
-    // CRITICAL: On mobile devices (Android / iOS), concurrent getUserMedia steals exclusive AudioRecord
-    // focus away from Web Speech recognition. Therefore, on mobile or when no apiKey is supplied,
-    // Web Speech recognition runs with exclusive access for maximum accuracy and speed.
-    const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    if (!isMobileDevice && (apiKey || '').trim() && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ audio: true })
+    // 2. Universal audio capture via MediaRecorder (for Groq Whisper multilingual code-switching transcription)
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      mediaStreamPromiseRef.current = navigator.mediaDevices.getUserMedia({ audio: true })
         .then((stream) => {
           // If recording already stopped before mic initialized, release tracks immediately
           if (!isRecordingRef.current) {
             stream.getTracks().forEach(t => t.stop());
-            return;
+            return null;
           }
 
           audioStreamRef.current = stream;
@@ -339,11 +344,14 @@ export function useSpeech({
             };
 
             mediaRecorderRef.current = recorder;
-            recorder.start(250);
+            recorder.start(100);
+            return recorder;
           }
+          return null;
         })
         .catch((audioErr) => {
           console.warn('MediaRecorder audio capture notice:', audioErr.message);
+          return null;
         });
     }
   }, [isProcessing, targetLangCode, stopRecordingInternal]);

@@ -366,7 +366,8 @@ export async function handleTranscribe(req, res) {
       formData.append('model', 'whisper-large-v3');
       formData.append('temperature', '0');
       formData.append('response_format', 'json');
-      formData.append('prompt', `Multilingual learner practicing ${targetName} and ${nativeName}. Foreign accent or code-switching.`);
+      const whisperPrompt = `Multilingual speech with natural code-switching: ${targetName}, ${nativeName}, English, Polski (ą, ć, ę, ł, ń, ó, ś, ź, ż), Deutsch (ä, ö, ü, ß), Español (ñ, á, é, í, ó, ú), Français, 中文, Русский, العربية. Transcribe every spoken word in its original language in UTF-8 without translating or omitting words.`;
+      formData.append('prompt', whisperPrompt);
 
       const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
