@@ -24,9 +24,44 @@ const SUPPORTED_LANGUAGES = [
   { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: true, translitName: 'Romanización' }
 ];
 
+const STORAGE_PREFIX = 'linguaflow_chat_';
+const TARGET_LANG_KEY = 'linguaflow_target_lang';
+const NATIVE_LANG_KEY = 'linguaflow_native_lang';
+
+function getSavedChat(lang) {
+  try {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}${lang}`);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn(`Failed to parse saved chat for ${lang}:`, e);
+  }
+  return null;
+}
+
+function saveChatToStorage(lang, messagesList) {
+  try {
+    if (Array.isArray(messagesList) && messagesList.length > 0) {
+      localStorage.setItem(`${STORAGE_PREFIX}${lang}`, JSON.stringify(messagesList));
+    }
+  } catch (e) {
+    console.warn(`Failed to save chat for ${lang}:`, e);
+  }
+}
+
 export default function App() {
   const [languages, setLanguages] = useState(SUPPORTED_LANGUAGES);
-  const [targetLang, setTargetLang] = useState('pl'); // Default to Polish as requested
+  const [targetLang, setTargetLang] = useState(() => {
+    try {
+      return localStorage.getItem(TARGET_LANG_KEY) || 'pl';
+    } catch (e) {
+      return 'pl';
+    }
+  });
 
   // Fetch supported languages dynamically from Render backend
   useEffect(() => {
@@ -38,13 +73,70 @@ export default function App() {
     }
     loadLanguages();
   }, []);
-  const [nativeLang, setNativeLang] = useState('es');
+
+  const [nativeLang, setNativeLang] = useState(() => {
+    try {
+      return localStorage.getItem(NATIVE_LANG_KEY) || 'es';
+    } catch (e) {
+      return 'es';
+    }
+  });
   const [showTransliteration, setShowTransliteration] = useState(true);
   const [handsFree, setHandsFree] = useState(false);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    const initialLang = (() => {
+      try {
+        return localStorage.getItem(TARGET_LANG_KEY) || 'pl';
+      } catch (e) {
+        return 'pl';
+      }
+    })();
+    const saved = getSavedChat(initialLang);
+    if (saved) return saved;
+    const initialGreeting = getInitialBotMsg(initialLang);
+    saveChatToStorage(initialLang, [initialGreeting]);
+    return [initialGreeting];
+  });
   const [selectedWord, setSelectedWord] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const activeLangRef = useRef(targetLang);
+
+  // Switch target language and persist chat state per language
+  const handleTargetLangChange = (newLang) => {
+    if (newLang === targetLang) return;
+
+    // 1. Save current messages to active language before switching
+    if (messages && messages.length > 0) {
+      saveChatToStorage(activeLangRef.current, messages);
+    }
+
+    // 2. Load saved chat for newLang or initialize greeting
+    const savedForNewLang = getSavedChat(newLang);
+    const nextMessages = savedForNewLang || [getInitialBotMsg(newLang)];
+
+    // 3. Update state & active reference
+    activeLangRef.current = newLang;
+    setTargetLang(newLang);
+    setMessages(nextMessages);
+
+    try {
+      localStorage.setItem(TARGET_LANG_KEY, newLang);
+      if (!savedForNewLang) {
+        saveChatToStorage(newLang, nextMessages);
+      }
+    } catch (e) {}
+
+    stopSpeaking();
+  };
+
+  const handleNativeLangChange = (newLang) => {
+    setNativeLang(newLang);
+    try {
+      localStorage.setItem(NATIVE_LANG_KEY, newLang);
+    } catch (e) {}
+  };
 
   const [config, setConfig] = useState(() => {
     const saved = localStorage.getItem('linguaflow_config');
@@ -137,8 +229,8 @@ export default function App() {
     }
   };
 
-  // Set initial greeting when target language changes
-  useEffect(() => {
+  // Initial greeting helper per target language
+  function getInitialBotMsg(targetLang) {
     let initialBotMsg;
     if (targetLang === 'pl') {
       initialBotMsg = {
@@ -384,9 +476,15 @@ export default function App() {
         }
       };
     }
+    return JSON.parse(JSON.stringify(initialBotMsg));
+  }
 
-    setMessages([initialBotMsg]);
-  }, [targetLang]);
+  // Persist messages whenever conversation changes for current language
+  useEffect(() => {
+    if (activeLangRef.current === targetLang && messages && messages.length > 0) {
+      saveChatToStorage(targetLang, messages);
+    }
+  }, [messages, targetLang]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -532,12 +630,12 @@ export default function App() {
     speakText(word, currentLangObj.speechCode, rate);
   };
 
-  // Reset conversation
+  // Reset conversation for CURRENT language only
   const handleResetChat = () => {
-    setMessages([]);
+    const initialMsg = getInitialBotMsg(targetLang);
+    setMessages([initialMsg]);
+    saveChatToStorage(targetLang, [initialMsg]);
     stopSpeaking();
-    stopListening();
-    setTargetLang(prev => prev);
   };
 
   return (
@@ -546,14 +644,15 @@ export default function App() {
       <Header
         languages={languages}
         targetLang={targetLang}
-        setTargetLang={setTargetLang}
+        setTargetLang={handleTargetLangChange}
         nativeLang={nativeLang}
-        setNativeLang={setNativeLang}
+        setNativeLang={handleNativeLangChange}
         showTransliteration={showTransliteration}
         setShowTransliteration={setShowTransliteration}
         handsFree={handsFree}
         setHandsFree={setHandsFree}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onResetChat={handleResetChat}
         isListening={isRecording}
         isSpeaking={isSpeaking}
         hasApiKey={Boolean(config?.apiKey)}

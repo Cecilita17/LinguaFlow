@@ -1,5 +1,5 @@
 import React from 'react';
-import { Languages, Mic, MicOff, Type, Settings, Volume2, Sparkles } from 'lucide-react';
+import { Languages, Mic, MicOff, Type, Settings, Volume2, Sparkles, RotateCcw } from 'lucide-react';
 
 export function Header({
   languages,
@@ -12,6 +12,7 @@ export function Header({
   handsFree,
   setHandsFree,
   onOpenSettings,
+  onResetChat,
   isListening,
   isSpeaking,
   hasApiKey = false,
@@ -150,6 +151,18 @@ export function Header({
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <span className="hidden sm:inline">⚡ Groq IA Activa</span>
               <span className="sm:hidden">IA</span>
+            </button>
+          )}
+
+          {/* Reset Chat Button */}
+          {onResetChat && (
+            <button
+              type="button"
+              onClick={onResetChat}
+              title="Reiniciar chat en este idioma"
+              className="p-2 rounded-xl bg-[#3b1e15] border border-[#5a2e20] text-rose-200 hover:text-white hover:bg-[#482519] shadow-xs transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
             </button>
           )}
 
