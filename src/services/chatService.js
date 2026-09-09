@@ -1,15 +1,7 @@
-// Base URL for the backend API deployed on Render
-export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'https://linguaflow-fef0.onrender.com';
+export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL)
+  || (typeof process !== 'undefined' && process.env && process.env.API_BASE_URL)
+  || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : (typeof window === 'undefined' ? 'http://localhost:3001' : 'https://linguaflow-fef0.onrender.com'));
 
-import { processSmartConversation } from '../../server/conversationEngine.js';
-import {
-  GEMINI_MODEL_CONFIG,
-  GROQ_MODEL_CONFIG,
-  buildSystemInstruction,
-  buildDataContextPrompt,
-  cleanAndParseJSON
-} from '../../server/promptTemplates.js';
-import { SUPPORTED_LANGUAGES } from '../../server/languageData.js';
 import { performFullGrammarCorrection } from './grammarEngine.js';
 
 export function categorizeClientGroqError(status, message) {
@@ -20,7 +12,7 @@ export function categorizeClientGroqError(status, message) {
     return {
       type: 'invalid API key',
       code: 'INVALID_API_KEY',
-      userMessage: 'Clave API de Groq inválida o no autorizada. Por favor genera una nueva clave en console.groq.com/keys e ingrésala en Ajustes ⚙️.'
+      userMessage: 'Clave API de Groq inválida o no autorizada. Por favor verifica la variable GROQ_API_KEY en el backend.'
     };
   }
 
@@ -47,7 +39,7 @@ export function categorizeClientGroqError(status, message) {
     return {
       type: 'network timeout',
       code: 'NETWORK_TIMEOUT',
-      userMessage: 'Tiempo de espera agotado al conectar con Groq. Revisa tu conexión a internet.'
+      userMessage: 'Tiempo de espera agotado al conectar con el servidor. Revisa tu conexión a internet.'
     };
   }
 
@@ -67,70 +59,9 @@ export function categorizeClientGroqError(status, message) {
   };
 }
 
-export function categorizeClientGeminiError(status, message) {
-  const msgLower = (message || '').toLowerCase();
-
-  // 1. Invalid API Key
-  if (status === 400 && (
-    msgLower.includes('api key not valid') ||
-    msgLower.includes('api_key_invalid') ||
-    msgLower.includes('key not valid') ||
-    msgLower.includes('invalid api key') ||
-    msgLower.includes('api key expired')
-  )) {
-    return {
-      type: 'invalid API key',
-      code: 'INVALID_API_KEY',
-      userMessage: 'Clave API de Gemini inválida. Por favor genera una nueva clave en Google AI Studio (aistudio.google.com) e ingrésala en Ajustes ⚙️.'
-    };
-  }
-
-  // 2. Model Not Found
-  if (status === 404 || msgLower.includes('not found') || msgLower.includes('not supported for generatecontent')) {
-    return {
-      type: 'model not found',
-      code: 'MODEL_NOT_FOUND',
-      userMessage: `El modelo de Gemini solicitado no fue encontrado o no está disponible para esta clave (${message}).`
-    };
-  }
-
-  // 3. Quota / Rate limit
-  if (status === 429 || msgLower.includes('quota') || msgLower.includes('resource_exhausted') || msgLower.includes('rate limit')) {
-    return {
-      type: 'quota/rate limit',
-      code: 'RATE_LIMIT_EXCEEDED',
-      userMessage: 'Límite de cuota o peticiones excedido en Google Gemini (HTTP 429 Resource Exhausted). Espera unos segundos antes de volver a enviar.'
-    };
-  }
-
-  // 4. Network timeout
-  if (status === 408 || msgLower.includes('timeout') || msgLower.includes('aborted') || msgLower.includes('aborterror')) {
-    return {
-      type: 'network timeout',
-      code: 'NETWORK_TIMEOUT',
-      userMessage: 'Tiempo de espera agotado al conectar con Google Gemini. Revisa tu conexión a internet.'
-    };
-  }
-
-  // 5. Server error (500, 502, 503, etc.)
-  if (status >= 500) {
-    return {
-      type: 'server error',
-      code: 'GEMINI_SERVER_ERROR',
-      userMessage: `Error del servidor de Google Gemini (HTTP ${status}): ${message}.`
-    };
-  }
-
-  return {
-    type: 'server error',
-    code: 'GEMINI_ERROR',
-    userMessage: `Error de Google Gemini (HTTP ${status || 'N/A'}): ${message || 'Servicio no disponible'}.`
-  };
-}
-
 /**
- * Robust chat service that communicates with /api/chat on Render/local backend
- * and gracefully falls back to direct client Groq / Gemini or the smart multi-turn linguistic engine.
+ * Robust chat service that communicates with /api/chat backend API.
+ * GROQ_API_KEY is securely kept strictly on the backend/server and never exposed to the frontend.
  */
 export async function sendChatMessage({
   message,
@@ -138,7 +69,6 @@ export async function sendChatMessage({
   nativeLang,
   level = 'A2/B1',
   apiKey,
-  provider: requestedProvider,
   history = []
 }) {
   const cleanMsg = (message || '').trim();
@@ -151,167 +81,19 @@ export async function sendChatMessage({
   let serverCorrection = null;
   let serverCode = null;
 
-  // Determine provider
-  let provider = requestedProvider;
-  if (!provider) {
-    if (effectiveKey.startsWith('gsk_')) provider = 'groq';
-    else if (effectiveKey.startsWith('AIza')) provider = 'gemini';
-    else provider = 'groq';
-  }
-
-  // 1. Direct Client Call (Groq or Gemini)
-  if (effectiveKey) {
-    try {
-      const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
-      const nativeObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
-      const targetLanguageName = langObj.englishName || langObj.name;
-
-      const systemInstruction = buildSystemInstruction(targetLanguageName, nativeObj.name, level);
-      const dataPrompt = buildDataContextPrompt({
-        message: cleanMsg,
-        targetLang: targetLanguageName,
-        nativeLang: nativeObj.name,
-        level,
-        history
-      });
-
-      if (provider === 'groq') {
-        const activeModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GROQ_MODEL) || GROQ_MODEL_CONFIG?.model || 'llama-3.3-70b-versatile';
-        console.log(`Groq model selected: ${activeModel}`);
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-        let directHttpStatus = 0;
-        let directGroqMsg = '';
-
-        try {
-          const directRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${effectiveKey}`
-            },
-            signal: controller.signal,
-            body: JSON.stringify({
-              model: activeModel,
-              messages: [
-                { role: 'system', content: systemInstruction },
-                { role: 'user', content: dataPrompt }
-              ],
-              response_format: { type: 'json_object' },
-              temperature: 0.6,
-              max_tokens: 2500
-            })
-          });
-
-          clearTimeout(timeoutId);
-          directHttpStatus = directRes.status;
-
-          if (directRes.ok) {
-            const resJson = await directRes.json();
-            const textContent = resJson?.choices?.[0]?.message?.content;
-            if (textContent) {
-              const parsed = cleanAndParseJSON(textContent);
-              if (parsed && parsed.user_correction && parsed.bot_response) {
-                console.log(`✅ Direct client Groq responded using [${activeModel}]`);
-                return {
-                  source: `direct_groq (${activeModel})`,
-                  data: parsed
-                };
-              }
-            }
-          } else {
-            const errData = await directRes.json().catch(() => ({}));
-            directGroqMsg = errData?.error?.message || directRes.statusText;
-          }
-        } catch (candErr) {
-          clearTimeout(timeoutId);
-          directHttpStatus = candErr.name === 'AbortError' ? 408 : 500;
-          directGroqMsg = candErr.name === 'AbortError' ? 'Network timeout: la solicitud a Groq excedió el tiempo límite.' : candErr.message;
-        }
-
-        console.error(`Groq request failed:\nmodel: ${activeModel}\nHTTP status: ${directHttpStatus}\nGroq error message: ${directGroqMsg}`);
-        const categorized = categorizeClientGroqError(directHttpStatus, directGroqMsg);
-        lastAIError = categorized.userMessage;
-        serverCode = categorized.code;
-      } else {
-        // Direct Gemini call
-        let activeModel = 'gemini-3.6-flash';
-        const viteEnvModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
-        if (viteEnvModel && !viteEnvModel.includes('1.5') && !viteEnvModel.includes('2.0') && !viteEnvModel.includes('2.5') && !viteEnvModel.includes('pro')) {
-          activeModel = viteEnvModel.trim();
-        }
-
-        console.log(`Gemini model selected: ${activeModel}`);
-
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${effectiveKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
-
-        let directHttpStatus = 0;
-        let directGoogleMsg = '';
-
-        try {
-          const directRes = await fetch(geminiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: 'user',
-                  parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }]
-                }
-              ],
-              generationConfig: GEMINI_MODEL_CONFIG.generationConfig
-            })
-          });
-
-          clearTimeout(timeoutId);
-          directHttpStatus = directRes.status;
-
-          if (directRes.ok) {
-            const resJson = await directRes.json();
-            const textContent = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (textContent) {
-              const parsed = cleanAndParseJSON(textContent);
-              if (parsed && parsed.user_correction && parsed.bot_response) {
-                console.log(`✅ Direct client Gemini responded using [${activeModel}]`);
-                return {
-                  source: `direct_gemini (${activeModel})`,
-                  data: parsed
-                };
-              }
-            }
-          } else {
-            const errData = await directRes.json().catch(() => ({}));
-            directGoogleMsg = errData?.error?.message || directRes.statusText;
-          }
-        } catch (candErr) {
-          clearTimeout(timeoutId);
-          directHttpStatus = candErr.name === 'AbortError' ? 408 : 500;
-          directGoogleMsg = candErr.name === 'AbortError' ? 'Network timeout: la solicitud a Google Gemini excedió el tiempo límite.' : candErr.message;
-        }
-
-        console.error(`Gemini request failed:\nmodel: ${activeModel}\nHTTP status: ${directHttpStatus}\nGoogle error message: ${directGoogleMsg}`);
-        const categorized = categorizeClientGeminiError(directHttpStatus, directGoogleMsg);
-        lastAIError = categorized.userMessage;
-        serverCode = categorized.code;
-      }
-    } catch (clientErr) {
-      console.warn('Direct client AI call failed:', clientErr.message);
-    }
-  }
-
-  // 2. Try Render Backend API (/api/chat)
+  // 1. Communicate with Backend API (/api/chat)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (effectiveKey) {
+      headers['x-api-key'] = effectiveKey;
+    }
 
     const response = await fetch(`${API_BASE_URL}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal: controller.signal,
       body: JSON.stringify({
         message: cleanMsg,
@@ -319,7 +101,6 @@ export async function sendChatMessage({
         nativeLang,
         level,
         apiKey: effectiveKey,
-        provider,
         history: history.slice(-6)
       })
     });
@@ -332,7 +113,7 @@ export async function sendChatMessage({
         const resData = await response.json();
         if (resData && resData.success && resData.data?.user_correction && resData.data?.bot_response) {
           return {
-            source: resData.source || 'server_api',
+            source: resData.source || 'groq (openai/gpt-oss-120b)',
             data: resData.data
           };
         }
@@ -352,43 +133,48 @@ export async function sendChatMessage({
     }
   } catch (netErr) {
     console.warn('/api/chat unreachable or timed out:', netErr.message);
+    lastAIError = netErr.name === 'AbortError'
+      ? 'Network timeout: el servidor de LinguaFlow tardó demasiado en responder.'
+      : 'No se pudo conectar con el servidor de LinguaFlow.';
+    serverCode = netErr.name === 'AbortError' ? 'NETWORK_TIMEOUT' : 'SERVER_UNREACHABLE';
   }
 
-  // 3. AI is the SOLE generator of conversational responses.
-  // When AI cannot be reached or no key is provided, NEVER fabricate a bot response.
+  // 2. AI is the SOLE generator of conversational responses.
+  // When AI cannot be reached or backend reports error, NEVER fabricate a bot response.
   // Instead, compute strict deterministic pedagogical corrections for the student's message,
   // and throw a controlled error informing the user.
   console.log('Conversational AI unavailable. Computing deterministic linguistics...');
-  const deterministicCorrection = serverCorrection || await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey, provider);
-  
-  const errorMessage = lastAIError || (effectiveKey
-    ? 'El motor de conversación de IA no pudo generar una respuesta. Verifica tu conexión o clave en Ajustes ⚙️.'
-    : 'Para conversar con LinguaFlow, ingresa tu API Key de Groq (Recomendado ⚡ en console.groq.com/keys) o Google Gemini en Ajustes ⚙️.');
+  const deterministicCorrection = serverCorrection || await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang);
+
+  const errorMessage = lastAIError || 'Para conversar con LinguaFlow, configura la variable GROQ_API_KEY en el servidor.';
 
   const error = new Error(errorMessage);
-  error.code = serverCode || (effectiveKey ? 'AI_FAILED' : 'MISSING_API_KEY');
+  error.code = serverCode || 'AI_FAILED';
   error.user_correction = deterministicCorrection;
   throw error;
 }
 
 /**
- * Lookup a word definition from the backend API (Render)
+ * Lookup a word definition from the backend API
  */
-export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '', provider = 'groq') {
+export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '') {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
+    const headers = { 'Content-Type': 'application/json' };
+    const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
+    if (effectiveKey) headers['x-api-key'] = effectiveKey;
+
     const res = await fetch(`${API_BASE_URL}/api/lookup-word`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal: controller.signal,
       body: JSON.stringify({
         word,
         targetLang,
         nativeLang,
-        apiKey: (apiKey || '').trim(),
-        provider
+        apiKey: effectiveKey
       })
     });
 
@@ -410,7 +196,7 @@ export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '', p
 }
 
 /**
- * Fetch supported languages from the backend API (Render)
+ * Fetch supported languages from the backend API
  */
 export async function fetchLanguagesApi() {
   try {
@@ -439,10 +225,9 @@ export async function fetchLanguagesApi() {
 }
 
 /**
- * Transcribe recorded audio using high-precision Multimodal AI (/api/transcribe)
- * Handles strong accents and mixed target + native language speech via Groq Whisper or Gemini.
+ * Transcribe recorded audio using Groq Whisper (/api/transcribe) on the backend
  */
-export async function transcribeAudioApi({ audioBlob, targetLang, nativeLang, apiKey, provider = 'groq' }) {
+export async function transcribeAudioApi({ audioBlob, targetLang, nativeLang, apiKey }) {
   if (!audioBlob || audioBlob.size === 0) return null;
 
   try {
@@ -456,17 +241,20 @@ export async function transcribeAudioApi({ audioBlob, targetLang, nativeLang, ap
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 14000);
 
+    const headers = { 'Content-Type': 'application/json' };
+    const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
+    if (effectiveKey) headers['x-api-key'] = effectiveKey;
+
     const res = await fetch(`${API_BASE_URL}/api/transcribe`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal: controller.signal,
       body: JSON.stringify({
         audioBase64: base64Data,
         mimeType: audioBlob.type || 'audio/webm',
         targetLang,
         nativeLang,
-        apiKey: (apiKey || '').trim(),
-        provider
+        apiKey: effectiveKey
       })
     });
 

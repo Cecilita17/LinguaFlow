@@ -71,7 +71,7 @@ export function cleanDuplicatePhrases(text) {
  * Enhanced Speech Hook with:
  * 1. Push-to-Talk Pointer Events (instant stop & send on release, no 1-min hang)
  * 2. Deduplicated real-time speech preview (fixes mobile phrase repetition)
- * 3. MediaRecorder raw audio capture + Gemini Multimodal Audio transcription
+ * 3. MediaRecorder raw audio capture + Groq Whisper Audio transcription
  *    (exceptional accuracy for strong foreign accents & mixed language code-switching)
  * 4. Text-to-Speech (TTS)
  */

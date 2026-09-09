@@ -310,7 +310,7 @@ export function translateMixedNativeVocabulary(text, targetLang = 'nl') {
 
 /**
  * Deterministic Linguistic Processing (Grammar corrections, code-switching & word-diff)
- * Does NOT generate conversational bot responses. Conversational generation belongs exclusively to Gemini AI.
+ * Does NOT generate conversational bot responses. Conversational generation belongs exclusively to Groq AI (openai/gpt-oss-120b).
  */
 export function processDeterministicLinguistics(message, targetLang = 'pl', nativeLang = 'es') {
   const langKey = GRAMMAR_RULES[targetLang] ? targetLang : 'pl';

@@ -133,33 +133,22 @@ export function Header({
             <button
               type="button"
               onClick={onOpenSettings}
-              title="Aviso de Gemini AI: Clic para revisar tu clave"
+              title="Aviso de Groq AI: Clic para revisar el backend"
               className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-semibold shadow-xs hover:bg-amber-900/90 transition-all animate-pulse"
             >
               <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span className="hidden sm:inline">⚠️ Error API Key</span>
+              <span className="hidden sm:inline">⚠️ Aviso Groq AI</span>
               <span className="sm:hidden">⚠️ IA</span>
-            </button>
-          ) : hasApiKey ? (
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              title="IA Gemini Activa - Clic para ver configuración"
-              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-950/85 border border-emerald-600/70 text-emerald-200 text-xs font-semibold shadow-xs hover:bg-emerald-900/80 transition-all"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="hidden sm:inline">✨ Gemini IA Activa</span>
-              <span className="sm:hidden">IA</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={onOpenSettings}
-              title="Conectar Gemini AI para respuestas 100% generativas en vivo"
-              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-950/90 to-pink-950/90 border border-rose-600/60 text-rose-200 hover:text-white text-xs font-semibold shadow-xs hover:border-rose-400 transition-all group"
+              title="Groq AI Activa (openai/gpt-oss-120b)"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-950/85 border border-emerald-600/70 text-emerald-200 text-xs font-semibold shadow-xs hover:bg-emerald-900/80 transition-all"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-12 transition-transform" />
-              <span className="hidden sm:inline">Conectar Gemini IA</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="hidden sm:inline">⚡ Groq IA Activa</span>
               <span className="sm:hidden">IA</span>
             </button>
           )}

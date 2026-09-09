@@ -1,115 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, Gauge, Volume2, Save, Info, Check, Zap, Sparkles } from 'lucide-react';
+import { X, Key, Gauge, Volume2, Save, Info, Check, Zap, Sparkles, Server } from 'lucide-react';
+import { API_BASE_URL } from '../services/chatService.js';
 
 export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
   if (!isOpen) return null;
 
-  const initialProvider = config.provider || (config.apiKey?.startsWith('AIza') ? 'gemini' : 'groq');
-  const [provider, setProvider] = useState(initialProvider);
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [level, setLevel] = useState(config.level || 'A2/B1');
   const [speechRate, setSpeechRate] = useState(config.speechRate || 0.95);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const [testingKey, setTestingKey] = useState(false);
-  const [keyStatus, setKeyStatus] = useState(null);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
-      const p = config.provider || (config.apiKey?.startsWith('AIza') ? 'gemini' : 'groq');
-      setProvider(p);
       setApiKey(config.apiKey || '');
       setLevel(config.level || 'A2/B1');
       setSpeechRate(config.speechRate || 0.95);
-      setKeyStatus(null);
+      setConnectionStatus(null);
     }
   }, [isOpen, config]);
 
-  const handleApiKeyChange = (val) => {
-    setApiKey(val);
-    setKeyStatus(null);
-    const trimmed = val.trim();
-    if (trimmed.startsWith('gsk_')) {
-      setProvider('groq');
-    } else if (trimmed.startsWith('AIza')) {
-      setProvider('gemini');
-    }
-  };
-
-  const handleTestKey = async () => {
-    const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
-    if (!cleanKey) {
-      setKeyStatus({ success: false, message: `Ingresa una clave de ${provider === 'groq' ? 'Groq' : 'Gemini'} para verificar.` });
-      return;
-    }
-    setTestingKey(true);
-    setKeyStatus(null);
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setConnectionStatus(null);
 
     try {
-      if (provider === 'groq') {
-        const testModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GROQ_MODEL) || 'llama-3.3-70b-versatile';
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${cleanKey}`
-          },
-          body: JSON.stringify({
-            model: testModel,
-            messages: [{ role: 'user', content: 'Ping' }],
-            max_tokens: 5
-          })
+      const res = await fetch(`${API_BASE_URL}/api/health`);
+      if (res.ok) {
+        const data = await res.json();
+        setConnectionStatus({
+          success: true,
+          message: `✅ ¡Conexión exitosa con el backend de LinguaFlow! Modelo activo: ${data.model || 'openai/gpt-oss-120b'}.`
         });
-
-        if (res.ok) {
-          setKeyStatus({
-            success: true,
-            message: `✅ ¡Conexión exitosa! Groq (${testModel}) está activo y respondiendo a velocidad ultra rápida.`
-          });
-        } else {
-          const err = await res.json().catch(() => ({}));
-          const msg = err?.error?.message || `Error ${res.status}`;
-          setKeyStatus({
-            success: false,
-            message: `❌ Groq rechazó la clave: "${msg}". Genera una nueva gratis en console.groq.com/keys.`
-          });
-        }
       } else {
-        const rawEnv = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
-        const testModel = (rawEnv && !rawEnv.includes('1.5') && !rawEnv.includes('2.0') && !rawEnv.includes('2.5') && !rawEnv.includes('pro'))
-          ? rawEnv.trim()
-          : 'gemini-3.6-flash';
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${cleanKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: 'Ping' }] }]
-          })
+        setConnectionStatus({
+          success: false,
+          message: `❌ El servidor respondió con estado HTTP ${res.status}.`
         });
-        if (res.ok) {
-          setKeyStatus({ success: true, message: '✅ ¡Conexión exitosa! Google Gemini está activo y funcionando en vivo.' });
-        } else {
-          const err = await res.json().catch(() => ({}));
-          const msg = err?.error?.message || `Error ${res.status}`;
-          setKeyStatus({
-            success: false,
-            message: `❌ Google rechazó la clave: "${msg}". Genera una nueva gratis en Google AI Studio.`
-          });
-        }
       }
     } catch (e) {
-      setKeyStatus({
+      setConnectionStatus({
         success: false,
-        message: `❌ Error de red: ${e.message}`
+        message: `❌ Error de conexión con el backend: ${e.message}. Asegúrate de que el servidor esté en ejecución.`
       });
     } finally {
-      setTestingKey(false);
+      setTestingConnection(false);
     }
   };
 
   const handleSave = () => {
     const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
-    onSaveConfig({ provider, apiKey: cleanKey, level, speechRate: parseFloat(speechRate) });
+    onSaveConfig({ provider: 'groq', apiKey: cleanKey, level, speechRate: parseFloat(speechRate) });
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -139,128 +82,61 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
         </div>
 
         <div className="space-y-4 my-4 text-sm">
-          {/* Provider Selection */}
+          {/* Active AI Provider (Groq openai/gpt-oss-120b) */}
           <div>
             <label className="block font-semibold text-stone-800 mb-1.5 flex items-center space-x-1.5">
               <Sparkles className="w-4 h-4 text-rose-600" />
               <span>Motor de Inteligencia Artificial</span>
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setProvider('groq');
-                  setKeyStatus(null);
-                }}
-                className={`flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
-                  provider === 'groq'
-                    ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-xs ring-1 ring-rose-500'
-                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" />
-                <span>Groq (Llama 3.3)</span>
-                <span className="text-[10px] bg-rose-200 text-rose-800 px-1 py-0.2 rounded font-bold">⚡ Rápido</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setProvider('gemini');
-                  setKeyStatus(null);
-                }}
-                className={`flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
-                  provider === 'gemini'
-                    ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-xs ring-1 ring-rose-500'
-                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
-                }`}
-              >
-                <span>Google Gemini</span>
-              </button>
+            <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-xl flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Zap className="w-4 h-4 text-amber-500 fill-amber-500 flex-shrink-0" />
+                <div>
+                  <div className="text-xs font-bold text-stone-900">Groq Cloud AI</div>
+                  <div className="text-[11px] text-rose-700 font-mono font-medium">openai/gpt-oss-120b</div>
+                </div>
+              </div>
+              <span className="text-[10px] bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full font-bold">⚡ Ultra Rápido</span>
             </div>
           </div>
 
-          {/* API Key Input */}
+          {/* Backend Status Check */}
           <div>
             <label className="block font-semibold text-stone-800 mb-1 flex items-center justify-between">
               <span className="flex items-center space-x-1.5">
-                <Key className="w-4 h-4 text-rose-600" />
-                <span>{provider === 'groq' ? 'Groq API Key' : 'Google Gemini API Key'}</span>
+                <Server className="w-4 h-4 text-rose-600" />
+                <span>Estado del Backend</span>
               </span>
-              <span className="text-[11px] text-stone-400 font-normal">Opcional si usas backend</span>
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder={provider === 'groq' ? 'gsk_...' : 'AIzaSy...'}
-                className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 outline-none focus:ring-2 focus:ring-rose-500 font-mono text-xs"
-              />
               <button
                 type="button"
-                onClick={handleTestKey}
-                disabled={testingKey || !apiKey.trim()}
-                className="px-3 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center space-x-1 flex-shrink-0"
+                onClick={handleTestConnection}
+                disabled={testingConnection}
+                className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold underline disabled:opacity-50"
               >
-                {testingKey ? (
-                  <span>Probando...</span>
-                ) : (
-                  <span>Verificar</span>
-                )}
+                {testingConnection ? 'Comprobando...' : 'Verificar conexión'}
               </button>
-            </div>
+            </label>
 
-            {keyStatus && (
+            {connectionStatus && (
               <div className={`mt-2 p-2.5 rounded-xl text-xs flex items-start space-x-2 border ${
-                keyStatus.success
+                connectionStatus.success
                   ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
                   : 'bg-rose-50 text-rose-900 border-rose-200'
               }`}>
-                <span className="mt-0.5">{keyStatus.success ? '✅' : '⚠️'}</span>
-                <span className="font-medium leading-relaxed">{keyStatus.message}</span>
+                <span className="mt-0.5">{connectionStatus.success ? '✅' : '⚠️'}</span>
+                <span className="font-medium leading-relaxed">{connectionStatus.message}</span>
               </div>
             )}
 
-            {/* Info Box */}
-            <div className="flex items-start space-x-1.5 mt-1.5 text-xs text-stone-600 bg-rose-50/80 p-2.5 rounded-xl border border-rose-100">
+            <div className="flex items-start space-x-1.5 mt-2 text-xs text-stone-600 bg-stone-50 p-2.5 rounded-xl border border-stone-200">
               <Info className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
-                {provider === 'groq' ? (
-                  <>
-                    <p>
-                      <strong>¿Quieres respuestas instantáneas con Llama 3.3 y transcripción Whisper?</strong> Crea tu API Key gratis en segundos sin tarjeta en{' '}
-                      <a
-                        href="https://console.groq.com/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-rose-600 hover:text-rose-700 underline font-bold"
-                      >
-                        Groq Console
-                      </a>.
-                    </p>
-                    <p className="text-[11px] text-stone-500">
-                      Tip: Puedes configurar <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GROQ_API_KEY</code> en Render o Vercel para activar Groq en todos tus dispositivos automáticamente.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p>
-                      <strong>Google Gemini 3.6 Flash</strong>: Obtén tu clave gratuita en{' '}
-                      <a
-                        href="https://aistudio.google.com/app/apikey"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-rose-600 hover:text-rose-700 underline font-bold"
-                      >
-                        Google AI Studio
-                      </a>.
-                    </p>
-                    <p className="text-[11px] text-stone-500">
-                      Tip: Puedes configurar <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GEMINI_API_KEY</code> en Render o Vercel.
-                    </p>
-                  </>
-                )}
+                <p>
+                  <strong>Seguridad:</strong> La clave <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GROQ_API_KEY</code> se administra exclusivamente en el servidor backend para proteger tus credenciales.
+                </p>
+                <p className="text-[11px] text-stone-500">
+                  Modelo asignado: <code className="font-mono text-rose-700 font-semibold">openai/gpt-oss-120b</code> con transcripción multilingüe Whisper V3.
+                </p>
               </div>
             </div>
           </div>

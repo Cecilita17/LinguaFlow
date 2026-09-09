@@ -8,24 +8,10 @@
  */
 
 // 1. MODEL CONFIGURATION (Decoupled from data context)
-export const GEMINI_MODEL_CONFIG = {
-  model: 'gemini-3.6-flash',
-  models: [
-    'gemini-3.6-flash'
-  ],
-  generationConfig: {
-    temperature: 0.7,
-    topP: 0.95,
-    maxOutputTokens: 2500,
-    responseMimeType: 'application/json'
-  }
-};
-
 export const GROQ_MODEL_CONFIG = {
-  model: 'llama-3.3-70b-versatile',
+  model: 'openai/gpt-oss-120b',
   models: [
-    'llama-3.3-70b-versatile',
-    'llama-3.1-8b-instant'
+    'openai/gpt-oss-120b'
   ],
   temperature: 0.6,
   maxTokens: 2500,

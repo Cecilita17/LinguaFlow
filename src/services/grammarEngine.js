@@ -1,5 +1,4 @@
 import { computeWordDiff } from '../../server/languageData.js';
-import { cleanAndParseJSON } from '../../server/promptTemplates.js';
 
 const LT_LANG_MAP = {
   es: 'es',
@@ -410,103 +409,6 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl', nati
       has_errors: false,
       diff_tokens: []
     };
-  }
-
-  // 0. If API key is available, use direct AI (Groq or Gemini) for maximum intelligence & code-switching translation
-  if (apiKey && apiKey.trim()) {
-    const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
-    let provider = requestedProvider;
-    if (!provider) {
-      if (cleanKey.startsWith('gsk_')) provider = 'groq';
-      else if (cleanKey.startsWith('AIza')) provider = 'gemini';
-      else provider = 'groq';
-    }
-
-    try {
-      const prompt = `You are an expert strict multilingual grammar teacher.
-The student is practicing target language: "${targetLang}".
-Student's native language is: "${nativeLang}".
-Student wrote: "${original}".
-
-CRITICAL INSTRUCTIONS:
-1. If the student wrote any words, vocabulary, or phrases in their native language (${nativeLang}) or mixed languages (code-switching), you MUST translate and convert those native words into natural, proper ${targetLang} in "corrected_text".
-2. Strictly correct all spelling, conjugation, diacritics, agreement, and grammar mistakes in ${targetLang}.
-3. In "diff_tokens", divide the corrected sentence into words. For every word that was corrected or translated from ${nativeLang}, set "changed": true and "original": "[the exact word or phrase from the student's original input]". For untouched correct words, set "changed": false and "original": null.
-
-Return STRICTLY JSON format:
-{
-  "original_text": "${original}",
-  "corrected_text": "string",
-  "has_errors": boolean,
-  "diff_tokens": [
-    { "text": "string", "changed": boolean, "original": "string or null" }
-  ]
-}`;
-
-      if (provider === 'groq') {
-        const groqModel = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GROQ_MODEL) || 'llama-3.3-70b-versatile';
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${cleanKey}`
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            model: groqModel,
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: 'json_object' },
-            temperature: 0.1,
-            max_tokens: 1500
-          })
-        });
-        clearTimeout(timeoutId);
-        if (res.ok) {
-          const data = await res.json();
-          const raw = data?.choices?.[0]?.message?.content;
-          if (raw) {
-            const parsed = cleanAndParseJSON(raw);
-            if (parsed && parsed.corrected_text && parsed.diff_tokens) {
-              return parsed;
-            }
-          }
-        }
-      } else {
-        // Gemini
-        let model = 'gemini-3.6-flash';
-        const viteEnv = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_MODEL) || '';
-        if (viteEnv && !viteEnv.includes('1.5') && !viteEnv.includes('2.0') && !viteEnv.includes('2.5') && !viteEnv.includes('pro')) {
-          model = viteEnv.trim();
-        }
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-        const res = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-          })
-        });
-        clearTimeout(timeoutId);
-        if (res.ok) {
-          const data = await res.json();
-          const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (raw) {
-            const parsed = cleanAndParseJSON(raw);
-            if (parsed && parsed.corrected_text && parsed.diff_tokens) {
-              return parsed;
-            }
-          }
-        }
-      }
-    } catch (mErr) {
-      console.warn('Strict grammar AI check notice:', mErr.message);
-    }
   }
 
   let corrected = original;

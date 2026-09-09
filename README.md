@@ -46,6 +46,7 @@ npm run dev
 Esto iniciará tanto el servidor backend (puerto 3001) como la interfaz de usuario en:
 👉 **`http://localhost:5173`**
 
-### Configuración de la API (Opcional)
-La app cuenta con un **motor inteligente de demostración integrado** para que funcione inmediatamente sin necesidad de configurar nada. Si deseas conectar el modelo de IA en vivo con Google Gemini:
-- Abre la ventana de **Ajustes (icono de engranaje ⚙️)** en la app e introduce tu `GEMINI_API_KEY`, o colócala en un archivo `.env`.
+### Configuración de la API
+Para activar las respuestas generativas y la transcripción con Groq (`openai/gpt-oss-120b`):
+- Configura `GROQ_API_KEY` en tu archivo `.env` en el backend/servidor.
+- La variable `GROQ_MODEL` está predeterminada a `openai/gpt-oss-120b`.

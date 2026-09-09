@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 import {
-  GEMINI_MODEL_CONFIG,
   GROQ_MODEL_CONFIG,
   buildSystemInstruction,
   buildDataContextPrompt,
@@ -14,7 +13,7 @@ dotenv.config();
 export function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key');
 }
 
 function parseRequestBody(req) {
@@ -29,18 +28,16 @@ function parseRequestBody(req) {
   return req.body;
 }
 
-// Supported conversational models
-const PRIMARY_GEMINI_MODEL = 'gemini-3.6-flash';
-const PRIMARY_GROQ_MODEL = (process.env.GROQ_MODEL || GROQ_MODEL_CONFIG?.model || 'llama-3.3-70b-versatile').trim();
+// Exclusively supported conversational model is openai/gpt-oss-120b on Groq
+const PRIMARY_GROQ_MODEL = 'openai/gpt-oss-120b';
 
-export function detectProvider({ apiKey = '', requestedProvider = '' }) {
-  const cleanKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
-  if (cleanKey.startsWith('gsk_')) return 'groq';
-  if (cleanKey.startsWith('AIza')) return 'gemini';
-  if (requestedProvider === 'groq' || requestedProvider === 'gemini') return requestedProvider;
-  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim()) return 'groq';
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) return 'gemini';
-  return 'groq';
+function getSanitizedGroqModel() {
+  const envModel = (process.env.GROQ_MODEL || '').trim();
+  // Protect against obsolete/cached environment variables (e.g. old llama or gemini)
+  if (envModel && !envModel.includes('llama') && !envModel.includes('gemini') && !envModel.includes('3.3') && !envModel.includes('3.1') && !envModel.includes('8b') && !envModel.includes('70b')) {
+    return envModel;
+  }
+  return PRIMARY_GROQ_MODEL;
 }
 
 export function categorizeGroqError(status, message) {
@@ -51,7 +48,7 @@ export function categorizeGroqError(status, message) {
     return {
       type: 'invalid API key',
       code: 'INVALID_API_KEY',
-      userMessage: 'Clave API de Groq inválida o no autorizada. Por favor genera una nueva clave gratis en console.groq.com/keys e ingrésala en Ajustes ⚙️.'
+      userMessage: 'Clave API de Groq inválida o no autorizada. Por favor verifica tu GROQ_API_KEY en el backend/servidor.'
     };
   }
 
@@ -60,7 +57,7 @@ export function categorizeGroqError(status, message) {
     return {
       type: 'model not found',
       code: 'MODEL_NOT_FOUND',
-      userMessage: `El modelo de Groq solicitado no fue encontrado o no está habilitado (${message}).`
+      userMessage: `El modelo de Groq solicitado no fue encontrado (${message}).`
     };
   }
 
@@ -98,119 +95,10 @@ export function categorizeGroqError(status, message) {
   };
 }
 
-function getSanitizedDefaultModel() {
-  const envModel = (process.env.GEMINI_MODEL || '').trim();
-  // Protect against obsolete/cached environment variables
-  if (envModel && !envModel.includes('1.5') && !envModel.includes('2.0') && !envModel.includes('2.5') && !envModel.includes('pro')) {
-    return envModel;
-  }
-  return PRIMARY_GEMINI_MODEL;
-}
-
-let discoveredModel = null;
-
-async function getBestGeminiModel(apiKey) {
-  if (discoveredModel) return discoveredModel;
-
-  const targetModel = getSanitizedDefaultModel();
-
-  try {
-    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    if (listRes.ok) {
-      const data = await listRes.json();
-      const availableNames = (data.models || [])
-        .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-        .map(m => m.name.replace(/^models\//, ''));
-
-      console.log('Available models for this key:', availableNames);
-
-      if (availableNames.includes(targetModel)) {
-        discoveredModel = targetModel;
-        return discoveredModel;
-      }
-
-      const flash36 = availableNames.find(m => m.includes('3.6-flash'));
-      if (flash36) {
-        discoveredModel = flash36;
-        return discoveredModel;
-      }
-    }
-  } catch (e) {
-    console.warn('Error querying ListModels:', e.message);
-  }
-
-  // If ListModels fails or key cannot list, strictly default to targetModel (gemini-3.6-flash)
-  discoveredModel = targetModel;
-  return discoveredModel;
-}
-
-export function categorizeGeminiError(status, message) {
-  const msgLower = (message || '').toLowerCase();
-
-  // 1. Invalid API Key
-  if (status === 400 && (
-    msgLower.includes('api key not valid') ||
-    msgLower.includes('api_key_invalid') ||
-    msgLower.includes('key not valid') ||
-    msgLower.includes('invalid api key') ||
-    msgLower.includes('api key expired')
-  )) {
-    return {
-      type: 'invalid API key',
-      code: 'INVALID_API_KEY',
-      userMessage: 'Clave API de Gemini inválida. Por favor genera una nueva clave en Google AI Studio (aistudio.google.com) e ingrésala en Ajustes ⚙️.'
-    };
-  }
-
-  // 2. Model Not Found
-  if (status === 404 || msgLower.includes('not found') || msgLower.includes('not supported for generatecontent')) {
-    return {
-      type: 'model not found',
-      code: 'MODEL_NOT_FOUND',
-      userMessage: `El modelo de Gemini solicitado no fue encontrado o no está habilitado para esta clave (${message}).`
-    };
-  }
-
-  // 3. Quota / Rate limit
-  if (status === 429 || msgLower.includes('quota') || msgLower.includes('resource_exhausted') || msgLower.includes('rate limit')) {
-    return {
-      type: 'quota/rate limit',
-      code: 'RATE_LIMIT_EXCEEDED',
-      userMessage: 'Límite de cuota o peticiones excedido en Google Gemini (HTTP 429 Resource Exhausted). Espera unos segundos antes de volver a enviar.'
-    };
-  }
-
-  // 4. Network timeout
-  if (status === 408 || msgLower.includes('timeout') || msgLower.includes('aborted') || msgLower.includes('aborterror')) {
-    return {
-      type: 'network timeout',
-      code: 'NETWORK_TIMEOUT',
-      userMessage: 'Tiempo de espera agotado al conectar con Google Gemini. Revisa tu conexión a internet.'
-    };
-  }
-
-  // 5. Server error (500, 502, 503, etc.)
-  if (status >= 500) {
-    return {
-      type: 'server error',
-      code: 'GEMINI_SERVER_ERROR',
-      userMessage: `Error interno de los servidores de Google Gemini (HTTP ${status}): ${message}.`
-    };
-  }
-
-  return {
-    type: 'server error',
-    code: 'GEMINI_ERROR',
-    userMessage: `Error al conectar con Google Gemini (HTTP ${status || 'N/A'}): ${message || 'Servicio no disponible'}.`
-  };
-}
-
-
-
 // Health check
 export function handleHealth(req, res) {
   setCorsHeaders(res);
-  res.status(200).json({ status: 'ok', service: 'LinguaFlow API' });
+  res.status(200).json({ status: 'ok', service: 'LinguaFlow API', model: getSanitizedGroqModel() });
 }
 
 // List of supported languages
@@ -219,7 +107,7 @@ export function handleLanguages(req, res) {
   res.status(200).json({ languages: SUPPORTED_LANGUAGES });
 }
 
-// Chat endpoint
+// Chat endpoint (Groq openai/gpt-oss-120b)
 export async function handleChat(req, res) {
   setCorsHeaders(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -232,15 +120,12 @@ export async function handleChat(req, res) {
       nativeLang = 'es',
       level = 'A2/B1',
       apiKey: clientApiKey,
-      provider: clientProvider,
       history = []
     } = body;
 
     if (!message || !message.trim()) {
       return res.status(400).json({ error: 'El mensaje no puede estar vacío.' });
     }
-
-    const provider = detectProvider({ apiKey: clientApiKey, requestedProvider: clientProvider });
 
     const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
     const nativeObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
@@ -258,188 +143,98 @@ export async function handleChat(req, res) {
       history
     });
 
-    // ----------------------------------------------------
-    // Provider: Groq (Ultra-fast Llama 3.3)
-    // ----------------------------------------------------
-    if (provider === 'groq') {
-      const effectiveApiKey = (clientApiKey?.startsWith('gsk_') ? clientApiKey : (process.env.GROQ_API_KEY || clientApiKey || '')).trim().replace(/^["']|["']$/g, '');
-      const activeModel = (process.env.GROQ_MODEL || GROQ_MODEL_CONFIG?.model || 'llama-3.3-70b-versatile').trim();
+    // Effective API Key is kept in backend/server environment (GROQ_API_KEY)
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
 
-      if (effectiveApiKey) {
-        console.log(`Groq model selected: ${activeModel}`);
+    const activeModel = getSanitizedGroqModel();
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+    if (effectiveApiKey) {
+      console.log(`Groq model selected: ${activeModel}`);
 
-        let httpStatus = 0;
-        let groqErrorMessage = '';
-        let parsedData = null;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-        try {
-          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${effectiveApiKey}`
-            },
-            signal: controller.signal,
-            body: JSON.stringify({
-              model: activeModel,
-              messages: [
-                { role: 'system', content: systemInstruction },
-                { role: 'user', content: dataPrompt }
-              ],
-              response_format: { type: 'json_object' },
-              temperature: 0.6,
-              max_tokens: 2500
-            })
-          });
+      let httpStatus = 0;
+      let groqErrorMessage = '';
+      let parsedData = null;
 
-          clearTimeout(timeoutId);
-          httpStatus = response.status;
-
-          if (response.ok) {
-            const data = await response.json();
-            const rawText = data?.choices?.[0]?.message?.content || '';
-            parsedData = cleanAndParseJSON(rawText);
-
-            if (parsedData && parsedData.user_correction && parsedData.bot_response) {
-              console.log(`✅ Groq AI answered using [${activeModel}]`);
-              return res.status(200).json({
-                success: true,
-                source: `groq (${activeModel})`,
-                data: parsedData
-              });
-            } else {
-              groqErrorMessage = `La respuesta de Groq no tuvo el formato JSON esperado: ${rawText.slice(0, 120)}`;
-            }
-          } else {
-            const err = await response.json().catch(() => ({}));
-            groqErrorMessage = err?.error?.message || response.statusText;
-          }
-        } catch (fetchErr) {
-          clearTimeout(timeoutId);
-          httpStatus = fetchErr.name === 'AbortError' ? 408 : 500;
-          groqErrorMessage = fetchErr.name === 'AbortError' ? 'Network timeout: la solicitud a Groq excedió el tiempo límite.' : fetchErr.message;
-        }
-
-        console.error(`Groq request failed:\nmodel: ${activeModel}\nHTTP status: ${httpStatus}\nGroq error message: ${groqErrorMessage}`);
-
-        const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
-        const errorInfo = categorizeGroqError(httpStatus, groqErrorMessage);
-
-        return res.status(httpStatus >= 400 && httpStatus < 600 ? httpStatus : 503).json({
-          success: false,
-          error: errorInfo.userMessage,
-          error_type: errorInfo.type,
-          code: errorInfo.code,
-          details: {
-            provider: 'groq',
-            model: activeModel,
-            status: httpStatus,
-            error: groqErrorMessage
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
           },
-          user_correction: deterministicCorrection
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: dataPrompt }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.6,
+            max_tokens: 2500
+          })
         });
-      }
-    } else {
-      // ----------------------------------------------------
-      // Provider: Google Gemini
-      // ----------------------------------------------------
-      const effectiveApiKey = (clientApiKey || process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
 
-      if (effectiveApiKey) {
-        try {
-          const activeModel = await getBestGeminiModel(effectiveApiKey);
-          console.log(`Gemini model selected: ${activeModel}`);
+        clearTimeout(timeoutId);
+        httpStatus = response.status;
 
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${effectiveApiKey}`;
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = data?.choices?.[0]?.message?.content || '';
+          parsedData = cleanAndParseJSON(rawText);
 
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
-
-          let response;
-          let httpStatus = 0;
-          let googleErrorMessage = '';
-          let parsedData = null;
-
-          try {
-            response = await fetch(geminiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              signal: controller.signal,
-              body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }] }],
-                generationConfig: GEMINI_MODEL_CONFIG.generationConfig
-              })
+          if (parsedData && parsedData.user_correction && parsedData.bot_response) {
+            console.log(`✅ Groq AI answered using [${activeModel}]`);
+            return res.status(200).json({
+              success: true,
+              source: `groq (${activeModel})`,
+              data: parsedData
             });
-
-            clearTimeout(timeoutId);
-            httpStatus = response.status;
-
-            if (response.ok) {
-              const data = await response.json();
-              const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              parsedData = cleanAndParseJSON(rawText);
-
-              if (parsedData && parsedData.user_correction && parsedData.bot_response) {
-                console.log(`✅ Gemini AI answered using [${activeModel}]`);
-                return res.status(200).json({
-                  success: true,
-                  source: `gemini (${activeModel})`,
-                  data: parsedData
-                });
-              } else {
-                googleErrorMessage = `La respuesta de ${activeModel} no tuvo el formato JSON esperado: ${rawText.slice(0, 120)}`;
-              }
-            } else {
-              const err = await response.json().catch(() => ({}));
-              googleErrorMessage = err?.error?.message || response.statusText;
-            }
-          } catch (fetchErr) {
-            clearTimeout(timeoutId);
-            httpStatus = fetchErr.name === 'AbortError' ? 408 : 500;
-            googleErrorMessage = fetchErr.name === 'AbortError' ? 'Network timeout: la solicitud a Google Gemini excedió el tiempo límite.' : fetchErr.message;
+          } else {
+            groqErrorMessage = `La respuesta de Groq no tuvo el formato JSON esperado: ${rawText.slice(0, 120)}`;
           }
-
-          console.error(`Gemini request failed:\nmodel: ${activeModel}\nHTTP status: ${httpStatus}\nGoogle error message: ${googleErrorMessage}`);
-
-          const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
-          const errorInfo = categorizeGeminiError(httpStatus, googleErrorMessage);
-
-          return res.status(httpStatus >= 400 && httpStatus < 600 ? httpStatus : 503).json({
-            success: false,
-            error: errorInfo.userMessage,
-            error_type: errorInfo.type,
-            code: errorInfo.code,
-            details: {
-              provider: 'gemini',
-              model: activeModel,
-              status: httpStatus,
-              google_error: googleErrorMessage
-            },
-            user_correction: deterministicCorrection
-          });
-        } catch (geminiErr) {
-          console.warn('Gemini AI workflow threw:', geminiErr.message);
-          const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
-          const errorInfo = categorizeGeminiError(500, geminiErr.message);
-          return res.status(500).json({
-            success: false,
-            error: errorInfo.userMessage,
-            error_type: errorInfo.type,
-            code: errorInfo.code,
-            user_correction: deterministicCorrection
-          });
+        } else {
+          const err = await response.json().catch(() => ({}));
+          groqErrorMessage = err?.error?.message || response.statusText;
         }
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        httpStatus = fetchErr.name === 'AbortError' ? 408 : 500;
+        groqErrorMessage = fetchErr.name === 'AbortError' ? 'Network timeout: la solicitud a Groq excedió el tiempo límite.' : fetchErr.message;
       }
+
+      console.error(`Groq request failed:\nmodel: ${activeModel}\nHTTP status: ${httpStatus}\nGroq error message: ${groqErrorMessage}`);
+
+      const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
+      const errorInfo = categorizeGroqError(httpStatus, groqErrorMessage);
+
+      return res.status(httpStatus >= 400 && httpStatus < 600 ? httpStatus : 503).json({
+        success: false,
+        error: errorInfo.userMessage,
+        error_type: errorInfo.type,
+        code: errorInfo.code,
+        details: {
+          provider: 'groq',
+          model: activeModel,
+          status: httpStatus,
+          error: groqErrorMessage
+        },
+        user_correction: deterministicCorrection
+      });
     }
 
-    // No API key provided: Return controlled error without fake/canned bot responses
+    // No API key provided in backend/server
     const deterministicCorrection = processDeterministicLinguistics(message.trim(), targetLang, nativeLang);
     return res.status(400).json({
       success: false,
-      error: 'Para conversar con LinguaFlow, ingresa tu API Key de Groq (Recomendado ⚡ en console.groq.com/keys) o Google Gemini en Ajustes ⚙️.',
+      error: 'Para conversar con LinguaFlow, configura la variable GROQ_API_KEY en el backend/servidor.',
       error_type: 'invalid API key',
       code: 'MISSING_API_KEY',
       user_correction: deterministicCorrection
@@ -451,84 +246,53 @@ export async function handleChat(req, res) {
   }
 }
 
-// Word lookup endpoint
+// Word lookup endpoint (Groq openai/gpt-oss-120b)
 export async function handleLookupWord(req, res) {
   setCorsHeaders(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
     const body = parseRequestBody(req);
-    const { word, targetLang, nativeLang, apiKey: clientApiKey, provider: clientProvider } = body;
-    const provider = detectProvider({ apiKey: clientApiKey, requestedProvider: clientProvider });
+    const { word, targetLang, nativeLang, apiKey: clientApiKey } = body;
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
 
-    if (word) {
-      if (provider === 'groq') {
-        const effectiveApiKey = (clientApiKey?.startsWith('gsk_') ? clientApiKey : (process.env.GROQ_API_KEY || clientApiKey || '')).trim().replace(/^["']|["']$/g, '');
-        if (effectiveApiKey) {
-          try {
-            const prompt = `Give definition for "${word}" in language "${targetLang}" translated to "${nativeLang}".
+    const activeModel = getSanitizedGroqModel();
+
+    if (word && effectiveApiKey) {
+      try {
+        const prompt = `Give definition for "${word}" in language "${targetLang}" translated to "${nativeLang}".
 Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeLang}", "part_of_speech": "noun/verb/adj", "translit": null}`;
-            const controller = new AbortController();
-            setTimeout(() => controller.abort(), 4000);
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), 4000);
 
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${effectiveApiKey}`
-              },
-              signal: controller.signal,
-              body: JSON.stringify({
-                model: (process.env.GROQ_MODEL || GROQ_MODEL_CONFIG?.model || 'llama-3.3-70b-versatile').trim(),
-                messages: [{ role: 'user', content: prompt }],
-                response_format: { type: 'json_object' },
-                temperature: 0.2,
-                max_tokens: 300
-              })
-            });
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' },
+            temperature: 0.2,
+            max_tokens: 300
+          })
+        });
 
-            if (response.ok) {
-              const data = await response.json();
-              const rawText = data?.choices?.[0]?.message?.content;
-              const parsed = cleanAndParseJSON(rawText);
-              if (parsed) return res.status(200).json({ success: true, data: parsed });
-            }
-          } catch (err) {
-            console.warn('Groq word lookup notice:', err.message);
-          }
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = data?.choices?.[0]?.message?.content;
+          const parsed = cleanAndParseJSON(rawText);
+          if (parsed) return res.status(200).json({ success: true, data: parsed });
         }
-      } else {
-        const effectiveApiKey = (clientApiKey || process.env.GEMINI_API_KEY || '').trim();
-        if (effectiveApiKey) {
-          try {
-            const modelName = discoveredModel || getSanitizedDefaultModel();
-            const prompt = `Give definition for "${word}" in language "${targetLang}" translated to "${nativeLang}".
-Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeLang}", "part_of_speech": "noun/verb/adj", "translit": null}`;
-
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${effectiveApiKey}`;
-            const controller = new AbortController();
-            setTimeout(() => controller.abort(), 4000);
-
-            const response = await fetch(geminiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              signal: controller.signal,
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: 'application/json' }
-              })
-            });
-
-            if (response.ok) {
-              const data = await response.json();
-              const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-              const parsed = cleanAndParseJSON(rawText);
-              if (parsed) return res.status(200).json({ success: true, data: parsed });
-            }
-          } catch (err) {
-            console.warn('Gemini word lookup error:', err.message);
-          }
-        }
+      } catch (err) {
+        console.warn('Groq word lookup notice:', err.message);
       }
     }
 
@@ -547,7 +311,7 @@ Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeL
   }
 }
 
-// Transcribe audio endpoint (Groq Whisper-large-v3 & Gemini Multimodal Audio)
+// Transcribe audio endpoint (Groq Whisper-large-v3)
 export async function handleTranscribe(req, res) {
   setCorsHeaders(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -559,15 +323,23 @@ export async function handleTranscribe(req, res) {
       mimeType = 'audio/webm',
       targetLang = 'es',
       nativeLang = 'es',
-      apiKey: clientApiKey,
-      provider: clientProvider
+      apiKey: clientApiKey
     } = body;
 
     if (!audioBase64) {
       return res.status(400).json({ error: 'No se recibió archivo de audio.' });
     }
 
-    const provider = detectProvider({ apiKey: clientApiKey, requestedProvider: clientProvider });
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
+
+    if (!effectiveApiKey) {
+      return res.status(400).json({ error: 'No hay GROQ_API_KEY configurada en el servidor para transcripción de audio.' });
+    }
+
     const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
     let cleanMime = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
     if (!cleanMime || cleanMime === 'audio/x-m4a') cleanMime = 'audio/mp4';
@@ -577,155 +349,59 @@ export async function handleTranscribe(req, res) {
     const targetName = langObj.englishName || langObj.name;
     const nativeName = nativeObj.englishName || nativeObj.name;
 
-    // ----------------------------------------------------
-    // Provider: Groq Whisper Large V3 (State of the art speech-to-text)
-    // ----------------------------------------------------
-    if (provider === 'groq') {
-      const effectiveApiKey = (clientApiKey?.startsWith('gsk_') ? clientApiKey : (process.env.GROQ_API_KEY || clientApiKey || '')).trim().replace(/^["']|["']$/g, '');
-      if (!effectiveApiKey) {
-        return res.status(400).json({ error: 'No hay API key disponible para transcripción con Groq Whisper.' });
-      }
-
-      console.log('Audio transcription requested with Groq Whisper [whisper-large-v3]');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      let httpStatus = 0;
-      let groqErrorMessage = '';
-
-      try {
-        const audioBuffer = Buffer.from(cleanBase64, 'base64');
-        const fileExt = cleanMime.includes('mp4') ? 'mp4' : (cleanMime.includes('wav') ? 'wav' : 'webm');
-        const audioBlob = new Blob([audioBuffer], { type: cleanMime });
-
-        const formData = new FormData();
-        formData.append('file', audioBlob, `speech.${fileExt}`);
-        formData.append('model', 'whisper-large-v3');
-        formData.append('temperature', '0');
-        formData.append('response_format', 'json');
-        formData.append('prompt', `Multilingual learner practicing ${targetName} and ${nativeName}. Foreign accent or code-switching.`);
-
-        const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${effectiveApiKey}`
-          },
-          signal: controller.signal,
-          body: formData
-        });
-
-        clearTimeout(timeoutId);
-        httpStatus = groqRes.status;
-
-        if (groqRes.ok) {
-          const groqData = await groqRes.json();
-          const transcript = groqData?.text?.trim();
-          if (transcript) {
-            console.log(`✅ Audio transcribed via Groq Whisper: "${transcript}"`);
-            return res.status(200).json({
-              success: true,
-              source: 'groq (whisper-large-v3)',
-              transcript
-            });
-          }
-        } else {
-          const err = await groqRes.json().catch(() => ({}));
-          groqErrorMessage = err?.error?.message || groqRes.statusText;
-        }
-      } catch (err) {
-        clearTimeout(timeoutId);
-        httpStatus = err.name === 'AbortError' ? 408 : 500;
-        groqErrorMessage = err.name === 'AbortError' ? 'Network timeout: la transcripción con Groq excedió el tiempo límite.' : err.message;
-      }
-
-      console.error(`Groq Whisper request failed:\nHTTP status: ${httpStatus}\nGroq error message: ${groqErrorMessage}`);
-      const errorInfo = categorizeGroqError(httpStatus, groqErrorMessage);
-      return res.status(httpStatus >= 400 && httpStatus < 600 ? httpStatus : 500).json({
-        error: errorInfo.userMessage,
-        error_type: errorInfo.type
-      });
-    }
-
-    // ----------------------------------------------------
-    // Provider: Gemini Multimodal Audio
-    // ----------------------------------------------------
-    const effectiveApiKey = (clientApiKey || process.env.GEMINI_API_KEY || '').trim();
-    if (!effectiveApiKey) {
-      return res.status(400).json({ error: 'No hay API key disponible para transcripción multimodal con Gemini.' });
-    }
-
-    const activeModel = await getBestGeminiModel(effectiveApiKey);
-    console.log(`Gemini model selected: ${activeModel}`);
-
-    const prompt = `You are an expert multilingual audio transcriber specialized in language learners.
-The speaker is practicing target language: "${targetName}", and their native language is "${nativeName}".
-
-CRITICAL INSTRUCTIONS:
-1. The speaker may have a strong foreign accent (for example, native ${nativeName} accent while speaking ${targetName}). Transcribe the intended words accurately through the accent.
-2. The speaker may mix words or whole sentences in BOTH "${targetName}" and "${nativeName}" (code-switching, e.g. mixing Polish and Spanish, Arabic and Spanish, German and Spanish, etc.). Transcribe EXACTLY what was said in the original languages.
-3. Do NOT translate. Keep the original words in the languages spoken.
-4. Output ONLY the raw transcribed text. Do NOT add quotes, markdown formatting, explanations, or timestamps.`;
-
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${effectiveApiKey}`;
+    console.log('Audio transcription requested with Groq Whisper [whisper-large-v3]');
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 14000);
-
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     let httpStatus = 0;
-    let googleErrorMessage = '';
+    let groqErrorMessage = '';
 
     try {
-      const response = await fetch(geminiUrl, {
+      const audioBuffer = Buffer.from(cleanBase64, 'base64');
+      const fileExt = cleanMime.includes('mp4') ? 'mp4' : (cleanMime.includes('wav') ? 'wav' : 'webm');
+      const audioBlob = new Blob([audioBuffer], { type: cleanMime });
+
+      const formData = new FormData();
+      formData.append('file', audioBlob, `speech.${fileExt}`);
+      formData.append('model', 'whisper-large-v3');
+      formData.append('temperature', '0');
+      formData.append('response_format', 'json');
+      formData.append('prompt', `Multilingual learner practicing ${targetName} and ${nativeName}. Foreign accent or code-switching.`);
+
+      const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${effectiveApiKey}`
+        },
         signal: controller.signal,
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: cleanMime,
-                    data: cleanBase64
-                  }
-                },
-                {
-                  text: prompt
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 1000
-          }
-        })
+        body: formData
       });
 
       clearTimeout(timeoutId);
-      httpStatus = response.status;
+      httpStatus = groqRes.status;
 
-      if (response.ok) {
-        const data = await response.json();
-        const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (groqRes.ok) {
+        const groqData = await groqRes.json();
+        const transcript = groqData?.text?.trim();
         if (transcript) {
-          console.log(`✅ Audio transcribed via Gemini [${activeModel}]: "${transcript}"`);
+          console.log(`✅ Audio transcribed via Groq Whisper: "${transcript}"`);
           return res.status(200).json({
             success: true,
-            source: `gemini (${activeModel})`,
+            source: 'groq (whisper-large-v3)',
             transcript
           });
         }
       } else {
-        const err = await response.json().catch(() => ({}));
-        googleErrorMessage = err?.error?.message || response.statusText;
+        const err = await groqRes.json().catch(() => ({}));
+        groqErrorMessage = err?.error?.message || groqRes.statusText;
       }
     } catch (err) {
       clearTimeout(timeoutId);
       httpStatus = err.name === 'AbortError' ? 408 : 500;
-      googleErrorMessage = err.name === 'AbortError' ? 'Network timeout: la transcripción excedió el tiempo límite.' : err.message;
+      groqErrorMessage = err.name === 'AbortError' ? 'Network timeout: la transcripción con Groq excedió el tiempo límite.' : err.message;
     }
 
-    console.error(`Gemini request failed:\nmodel: ${activeModel}\nHTTP status: ${httpStatus}\nGoogle error message: ${googleErrorMessage}`);
-    const errorInfo = categorizeGeminiError(httpStatus, googleErrorMessage);
+    console.error(`Groq Whisper request failed:\nHTTP status: ${httpStatus}\nGroq error message: ${groqErrorMessage}`);
+    const errorInfo = categorizeGroqError(httpStatus, groqErrorMessage);
     return res.status(httpStatus >= 400 && httpStatus < 600 ? httpStatus : 500).json({
       error: errorInfo.userMessage,
       error_type: errorInfo.type
