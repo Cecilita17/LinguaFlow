@@ -358,7 +358,7 @@ const CONVERSATION_TOPICS = {
   nl: [
     {
       id: 'nl_hoe_gaat_het',
-      triggers: ['hoe gaat', 'hoe is het', 'alles goed', 'hoe maak je'],
+      triggers: ['hoe gaat het', 'hoe is het', 'alles goed'],
       response: 'Met mij gaat het heel goed, dank je wel! En hoe is jouw dag tot nu toe?',
       translation: '¡Conmigo va muy bien, muchas gracias! ¿Y cómo ha estado tu día hasta ahora?',
       tokens: [
@@ -486,20 +486,6 @@ const CONVERSATION_TOPICS = {
       vocabulary: {
         'klaarmaken': { meaning: 'Preparar o elaborar', part_of_speech: 'verbo' },
         'recept': { meaning: 'Receta de cocina', part_of_speech: 'sustantivo' }
-      }
-    },
-    {
-      id: 'nl_hoe_kan_ik',
-      triggers: ['hoe kan ik', 'hoe doe je', 'hoe maak je', 'hoe moet ik'],
-      response: 'Een handige manier is om het stap voor stap aan te pakken. Zorg dat je alle spullen klaarzet en neem rustig de tijd. Welk onderdeel wil je als eerste proberen?',
-      translation: 'Una manera práctica es abordarlo paso a paso. Asegúrate de tener todas las cosas listas y tómate tu tiempo. ¿Qué parte quieres intentar primero?',
-      tokens: [
-        { word: 'Stap', clean_word: 'stap', translit: null },
-        { word: 'voor', clean_word: 'voor', translit: null },
-        { word: 'stap!', clean_word: 'stap', translit: null }
-      ],
-      vocabulary: {
-        'stap voor stap': { meaning: 'Paso a paso', part_of_speech: 'expresión adverbial' }
       }
     },
     {
@@ -927,33 +913,33 @@ function generateDynamicContextualResponse(text, targetLang = 'nl', nativeLang =
   if (targetLang === 'nl') {
     if (lower.includes('?') || lower.startsWith('hoe') || lower.startsWith('wat') || lower.startsWith('waar') || lower.startsWith('waarom') || lower.startsWith('kan')) {
       return {
-        response: `Goede vraag over ${clean.replace(/[?]/g, '')}! Om hiermee verder te gaan, wat is het belangrijkste punt waar je je nu op richt?`,
-        translation: `¡Buena pregunta sobre ${clean.replace(/[?]/g, '')}! Para avanzar con esto, ¿cuál es el punto principal en el que te enfocas ahora?`,
-        tokens: tokenizeSimple(`Goede vraag over ${clean.replace(/[?]/g, '')}! Om hiermee verder te gaan, wat is het belangrijkste punt waar je je nu op richt?`),
-        vocabulary: { 'belangrijkste': { meaning: 'Más importante o principal', part_of_speech: 'adjetief' } }
+        response: `Wat betreft ${clean.replace(/[?]/g, '')}: wat is het belangrijkste aspect dat je wilt verduidelijken of proberen?`,
+        translation: `En cuanto a ${clean.replace(/[?]/g, '')}: ¿cuál es el aspecto principal que deseas aclarar o probar?`,
+        tokens: tokenizeSimple(`Wat betreft ${clean.replace(/[?]/g, '')}: wat is het belangrijkste aspect dat je wilt verduidelijken of proberen?`),
+        vocabulary: { 'verduidelijken': { meaning: 'Aclarar o explicar', part_of_speech: 'werkwoord' } }
       };
     }
     return {
-      response: `Over "${clean}" gesproken: wat zou je hier nog meer over willen toevoegen of oefenen?`,
-      translation: `Hablando de "${clean}": ¿qué más te gustaría agregar o practicar sobre esto?`,
-      tokens: tokenizeSimple(`Over "${clean}" gesproken: wat zou je hier nog meer over willen toevoegen of oefenen?`),
-      vocabulary: { 'toevoegen': { meaning: 'Añadir o agregar', part_of_speech: 'werkwoord' } }
+      response: `Over "${clean}": hoe wil je dit onderwerp verder uitwerken in het Nederlands?`,
+      translation: `Sobre "${clean}": ¿cómo te gustaría desarrollar este tema en holandés?`,
+      tokens: tokenizeSimple(`Over "${clean}": hoe wil je dit onderwerp verder uitwerken in het Nederlands?`),
+      vocabulary: { 'uitwerken': { meaning: 'Desarrollar o elaborar', part_of_speech: 'werkwoord' } }
     };
   }
 
   if (targetLang === 'de') {
     if (lower.includes('?') || lower.startsWith('wie') || lower.startsWith('was') || lower.startsWith('wo') || lower.startsWith('warum')) {
       return {
-        response: `Gute Frage zu "${clean.replace(/[?]/g, '')}"! Worauf kommt es dir dabei am meisten an?`,
-        translation: `¡Buena pregunta sobre "${clean.replace(/[?]/g, '')}"! ¿Qué es lo que más te importa en esto?`,
-        tokens: tokenizeSimple(`Gute Frage zu "${clean.replace(/[?]/g, '')}"! Worauf kommt es dir dabei am meisten an?`),
-        vocabulary: { 'meisten': { meaning: 'Mayoría / más', part_of_speech: 'adverb' } }
+        response: `Zu "${clean.replace(/[?]/g, '')}": Welchen Aspekt möchtest du dazu genauer besprechen?`,
+        translation: `Sobre "${clean.replace(/[?]/g, '')}": ¿Qué aspecto te gustaría conversar más a fondo?`,
+        tokens: tokenizeSimple(`Zu "${clean.replace(/[?]/g, '')}": Welchen Aspekt möchtest du dazu genauer besprechen?`),
+        vocabulary: { 'Aspekt': { meaning: 'Aspecto o punto', part_of_speech: 'Nomen' } }
       };
     }
     return {
-      response: `Zu "${clean}": Was möchtest du dazu noch genauer besprechen oder üben?`,
-      translation: `Sobre "${clean}": ¿Qué te gustaría conversar o practicar con más detalle al respecto?`,
-      tokens: tokenizeSimple(`Zu "${clean}": Was möchtest du dazu noch genauer besprechen oder üben?`),
+      response: `Zum Thema "${clean}": Was möchtest du dazu noch genauer besprechen oder üben?`,
+      translation: `Sobre el tema "${clean}": ¿Qué te gustaría conversar o practicar con más detalle al respecto?`,
+      tokens: tokenizeSimple(`Zum Thema "${clean}": Was möchtest du dazu noch genauer besprechen oder üben?`),
       vocabulary: { 'besprechen': { meaning: 'Discutir o conversar', part_of_speech: 'verb' } }
     };
   }

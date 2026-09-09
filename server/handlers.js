@@ -1,5 +1,10 @@
 import dotenv from 'dotenv';
-import { getSystemPrompt } from './promptTemplates.js';
+import {
+  GEMINI_MODEL_CONFIG,
+  buildSystemInstruction,
+  buildDataContextPrompt,
+  cleanAndParseJSON
+} from './promptTemplates.js';
 import { SUPPORTED_LANGUAGES } from './languageData.js';
 import { processSmartConversation } from './conversationEngine.js';
 
@@ -24,12 +29,8 @@ function parseRequestBody(req) {
 }
 
 // Priority list of Gemini models to try (Google Generative AI v1beta)
-const MODEL_CANDIDATES = [
-  'gemini-1.5-flash',
-  'gemini-2.0-flash',
-  'gemini-2.5-flash',
-  'gemini-1.5-pro'
-];
+const MODEL_CANDIDATES = GEMINI_MODEL_CONFIG.models;
+
 
 let discoveredModel = null;
 
@@ -66,52 +67,7 @@ async function getBestGeminiModel(apiKey) {
   return 'gemini-1.5-flash';
 }
 
-/**
- * Robust JSON extractor from model text
- */
-function cleanAndParseJSON(rawText) {
-  if (!rawText) return null;
 
-  // 1. Direct parse attempt
-  try {
-    return JSON.parse(rawText);
-  } catch (e) {}
-
-  // 2. Remove markdown code blocks if any
-  let cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch (e) {}
-
-  // 3. Extract JSON object with regex
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  if (match) {
-    try {
-      return JSON.parse(match[0]);
-    } catch (e) {}
-  }
-
-  // 4. Try basic truncation recovery
-  if (cleaned.startsWith('{')) {
-    let repaired = cleaned;
-    // Close missing string
-    const quoteCount = (repaired.match(/"/g) || []).length;
-    if (quoteCount % 2 !== 0) repaired += '"';
-
-    // Count open braces
-    const openBraces = (repaired.match(/\{/g) || []).length;
-    const closeBraces = (repaired.match(/\}/g) || []).length;
-    for (let i = 0; i < openBraces - closeBraces; i++) {
-      repaired += '}';
-    }
-
-    try {
-      return JSON.parse(repaired);
-    } catch (e) {}
-  }
-
-  return null;
-}
 
 // Health check
 export function handleHealth(req, res) {
@@ -153,36 +109,20 @@ export async function handleChat(req, res) {
         const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
         const nativeObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
         const targetLanguageName = langObj.englishName || langObj.name;
-        const systemPrompt = getSystemPrompt(targetLanguageName, nativeObj.name, level);
+
+        // 1. Clean Separation: System Instruction (Role, Personality, Rules)
+        const systemInstruction = buildSystemInstruction(targetLanguageName, nativeObj.name, level);
+
+        // 2. Clean Separation: Raw Data Context (Prompt Window injection)
+        const dataPrompt = buildDataContextPrompt({
+          message: message.trim(),
+          targetLang: targetLanguageName,
+          nativeLang: nativeObj.name,
+          level,
+          history
+        });
 
         const activeModel = await getBestGeminiModel(effectiveApiKey);
-
-        // Build conversational history context
-        const historyContext = history.slice(-4).map(h => {
-          const role = h.sender === 'user' ? 'Student' : 'Tutor';
-          const txt = h.sender === 'user' ? (h.correctedText || h.text) : h.text;
-          return `${role}: "${txt}"`;
-        }).join('\n');
-
-        const fullPrompt = `${systemPrompt}
-
-${historyContext ? `Previous conversation:\n${historyContext}\n` : ''}
-Student's latest message to correct and respond to:
-"${message.trim()}"
-
-INSTRUCTIONS:
-1. In "user_correction":
-   - "original_text": "${message.trim()}"
-   - "corrected_text": Corrected, natural ${targetLanguageName}. If student wrote any native words (${nativeObj.name}), TRANSLATE them into ${targetLanguageName}.
-   - "has_errors": boolean
-   - "diff_tokens": array of words with "changed": true and "original": "[student's original word]" for corrected/translated words.
-2. In "bot_response":
-   - "text": 1-3 conversational, natural sentences in ${targetLanguageName} directly addressing what the student said.
-   - "translation": Translation of the bot response into ${nativeObj.name}.
-   - "tokens": array of { word, clean_word, translit }.
-   - "vocabulary": object of 2-3 key terms with { meaning, part_of_speech }.
-
-Return strictly JSON matching this structure.`;
 
         // Try active model first, then fallback models if 503/404 occurs
         const tryList = [activeModel, ...MODEL_CANDIDATES.filter(m => m !== activeModel)];
@@ -198,19 +138,32 @@ Return strictly JSON matching this structure.`;
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 9000); // 9s timeout per model
 
-            const response = await fetch(geminiUrl, {
+            let response = await fetch(geminiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               signal: controller.signal,
               body: JSON.stringify({
-                contents: [{ parts: [{ text: fullPrompt }] }],
-                generationConfig: {
-                  responseMimeType: 'application/json',
-                  temperature: 0.7,
-                  maxOutputTokens: 3000
-                }
+                system_instruction: { parts: [{ text: systemInstruction }] },
+                contents: [{ role: 'user', parts: [{ text: dataPrompt }] }],
+                generationConfig: GEMINI_MODEL_CONFIG.generationConfig
               })
             });
+
+            // If system_instruction is not supported (HTTP 400), fall back to combined prompt
+            if (response.status === 400) {
+              const retryController = new AbortController();
+              const retryTimeout = setTimeout(() => retryController.abort(), 9000);
+              response = await fetch(geminiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: retryController.signal,
+                body: JSON.stringify({
+                  contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }] }],
+                  generationConfig: GEMINI_MODEL_CONFIG.generationConfig
+                })
+              });
+              clearTimeout(retryTimeout);
+            }
 
             clearTimeout(timeoutId);
 

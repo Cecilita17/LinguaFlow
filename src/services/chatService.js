@@ -2,7 +2,12 @@
 export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'https://linguaflow-fef0.onrender.com';
 
 import { processSmartConversation } from '../../server/conversationEngine.js';
-import { getSystemPrompt } from '../../server/promptTemplates.js';
+import {
+  GEMINI_MODEL_CONFIG,
+  buildSystemInstruction,
+  buildDataContextPrompt,
+  cleanAndParseJSON
+} from '../../server/promptTemplates.js';
 import { SUPPORTED_LANGUAGES } from '../../server/languageData.js';
 import { performFullGrammarCorrection } from './grammarEngine.js';
 
@@ -31,60 +36,59 @@ export async function sendChatMessage({
       const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
       const nativeObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
       const targetLanguageName = langObj.englishName || langObj.name;
-      const systemPrompt = getSystemPrompt(targetLanguageName, nativeObj.name, level);
 
-      // Build conversation context
-      const historyContext = history.slice(-4).map(h => {
-        const role = h.sender === 'user' ? 'Student' : 'Tutor';
-        const txt = h.sender === 'user' ? (h.correctedText || h.text) : h.text;
-        return `${role}: "${txt}"`;
-      }).join('\n');
+      const systemInstruction = buildSystemInstruction(targetLanguageName, nativeObj.name, level);
+      const dataPrompt = buildDataContextPrompt({
+        message: cleanMsg,
+        targetLang: targetLanguageName,
+        nativeLang: nativeObj.name,
+        level,
+        history
+      });
 
-      const fullPrompt = `${systemPrompt}
-
-${historyContext ? `Previous conversation:\n${historyContext}\n` : ''}
-Student's latest message to correct and respond to:
-"${cleanMsg}"
-
-INSTRUCTIONS:
-1. In "user_correction":
-   - "original_text": "${cleanMsg}"
-   - "corrected_text": Corrected, natural ${targetLanguageName}. If student wrote any native words (${nativeObj.name}), TRANSLATE them into ${targetLanguageName}.
-   - "has_errors": boolean
-   - "diff_tokens": array of words with "changed": true and "original": "[student's original word]" for corrected/translated words.
-2. In "bot_response":
-   - "text": 1-3 conversational, natural sentences in ${targetLanguageName} directly addressing what the student said.
-   - "translation": Translation of the bot response into ${nativeObj.name}.
-   - "tokens": array of { word, clean_word, translit }.
-   - "vocabulary": object of 2-3 key terms with { meaning, part_of_speech }.
-
-Return strictly JSON matching this structure.`;
-
-      const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
+      const candidateModels = GEMINI_MODEL_CONFIG.models;
       let lastErrMessage = null;
 
       for (const model of candidateModels) {
         try {
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveKey}`;
-          const directRes = await fetch(geminiUrl, {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+          let directRes = await fetch(geminiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
             body: JSON.stringify({
-              contents: [{ parts: [{ text: fullPrompt }] }],
-              generationConfig: {
-                responseMimeType: 'application/json',
-                temperature: 0.7,
-                maxOutputTokens: 2500
-              }
+              system_instruction: { parts: [{ text: systemInstruction }] },
+              contents: [{ role: 'user', parts: [{ text: dataPrompt }] }],
+              generationConfig: GEMINI_MODEL_CONFIG.generationConfig
             })
           });
+
+          // Fallback if system_instruction rejected with 400
+          if (directRes.status === 400) {
+            const retryController = new AbortController();
+            const retryTimeout = setTimeout(() => retryController.abort(), 9000);
+            directRes = await fetch(geminiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: retryController.signal,
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }] }],
+                generationConfig: GEMINI_MODEL_CONFIG.generationConfig
+              })
+            });
+            clearTimeout(retryTimeout);
+          }
+
+          clearTimeout(timeoutId);
 
           if (directRes.ok) {
             const resJson = await directRes.json();
             const textContent = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (textContent) {
-              const cleanText = textContent.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
-              const parsed = JSON.parse(cleanText);
+              const parsed = cleanAndParseJSON(textContent);
               if (parsed && parsed.user_correction && parsed.bot_response) {
                 console.log(`✅ Direct client Gemini responded using [${model}]`);
                 return {

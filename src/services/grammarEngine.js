@@ -1,4 +1,5 @@
 import { computeWordDiff } from '../../server/languageData.js';
+import { cleanAndParseJSON } from '../../server/promptTemplates.js';
 
 const LT_LANG_MAP = {
   es: 'es',
@@ -453,7 +454,7 @@ Return STRICTLY JSON format:
             const data = await res.json();
             const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (raw) {
-              const parsed = JSON.parse(raw.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim());
+              const parsed = cleanAndParseJSON(raw);
               if (parsed && parsed.corrected_text && parsed.diff_tokens) {
                 return parsed;
               }
