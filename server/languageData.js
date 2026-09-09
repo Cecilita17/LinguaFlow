@@ -3,14 +3,16 @@
  */
 
 export const SUPPORTED_LANGUAGES = [
-  { code: 'ar', name: 'Árabe', englishName: 'Arabic', native: 'العربية', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
-  { code: 'zh', name: 'Chino Mandarín', englishName: 'Mandarin Chinese', native: '中文 (普通话)', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
-  { code: 'pl', name: 'Polaco', englishName: 'Polish', native: 'Polski', speechCode: 'pl-PL', hasTranslit: false },
-  { code: 'ru', name: 'Ruso', englishName: 'Russian', native: 'Русский', speechCode: 'ru-RU', hasTranslit: true, translitName: 'Romanización' },
+  { code: 'es', name: 'Español', englishName: 'Spanish', native: 'Español', speechCode: 'es-ES', hasTranslit: false },
+  { code: 'en', name: 'Inglés', englishName: 'English', native: 'English', speechCode: 'en-US', hasTranslit: false },
   { code: 'nl', name: 'Nederlands', englishName: 'Dutch', native: 'Nederlands', speechCode: 'nl-NL', hasTranslit: false },
+  { code: 'pl', name: 'Polaco', englishName: 'Polish', native: 'Polski', speechCode: 'pl-PL', hasTranslit: false },
   { code: 'de', name: 'Alemán', englishName: 'German', native: 'Deutsch', speechCode: 'de-DE', hasTranslit: false },
   { code: 'fr', name: 'Francés', englishName: 'French', native: 'Français', speechCode: 'fr-FR', hasTranslit: false },
-  { code: 'it', name: 'Italiano', englishName: 'Italian', native: 'Italiano', speechCode: 'it-IT', hasTranslit: false }
+  { code: 'it', name: 'Italiano', englishName: 'Italian', native: 'Italiano', speechCode: 'it-IT', hasTranslit: false },
+  { code: 'ar', name: 'Árabe', englishName: 'Arabic', native: 'العربية', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
+  { code: 'zh', name: 'Chino Mandarín', englishName: 'Mandarin Chinese', native: '中文 (普通话)', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
+  { code: 'ru', name: 'Ruso', englishName: 'Russian', native: 'Русский', speechCode: 'ru-RU', hasTranslit: true, translitName: 'Romanización' }
 ];
 
 /**

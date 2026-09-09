@@ -4,19 +4,24 @@ import { ChatMessage } from './components/ChatMessage';
 import { WordModal } from './components/WordModal';
 import { InputBar } from './components/InputBar';
 import { SettingsModal } from './components/SettingsModal';
+import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
+import { generateSentenceBreakdown } from './services/sentenceBreakdownEngine';
+import { reanalyzeGrammarStrictly } from './services/grammarEngine';
 
 const SUPPORTED_LANGUAGES = [
-  { code: 'ar', name: 'Árabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
-  { code: 'zh', name: 'Chino Mandarín', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
-  { code: 'pl', name: 'Polaco', speechCode: 'pl-PL', hasTranslit: false },
-  { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: true, translitName: 'Romanización' },
+  { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
+  { code: 'en', name: 'Inglés', speechCode: 'en-US', hasTranslit: false },
   { code: 'nl', name: 'Nederlands', speechCode: 'nl-NL', hasTranslit: false },
+  { code: 'pl', name: 'Polaco', speechCode: 'pl-PL', hasTranslit: false },
   { code: 'de', name: 'Alemán', speechCode: 'de-DE', hasTranslit: false },
   { code: 'fr', name: 'Francés', speechCode: 'fr-FR', hasTranslit: false },
-  { code: 'it', name: 'Italiano', speechCode: 'it-IT', hasTranslit: false }
+  { code: 'it', name: 'Italiano', speechCode: 'it-IT', hasTranslit: false },
+  { code: 'ar', name: 'Árabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
+  { code: 'zh', name: 'Chino Mandarín', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
+  { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: true, translitName: 'Romanización' }
 ];
 
 export default function App() {
@@ -77,6 +82,48 @@ export default function App() {
   const handleSaveConfig = (newConfig) => {
     setConfig(newConfig);
     localStorage.setItem('linguaflow_config', JSON.stringify(newConfig));
+  };
+
+  // State for Sentence Grammar Breakdown modal and Re-analysis
+  const [breakdownData, setBreakdownData] = useState(null);
+  const [isReanalyzingId, setIsReanalyzingId] = useState(null);
+
+  // Open Grammar Breakdown modal
+  const handleOpenGrammarBreakdown = (msg) => {
+    const correctedText = msg.correctedText || msg.text;
+    const originalText = msg.originalText || msg.text;
+    const breakdown = generateSentenceBreakdown(correctedText, originalText, targetLang, nativeLang);
+    setBreakdownData({
+      breakdown,
+      originalText,
+      correctedText
+    });
+  };
+
+  // Re-analyze message with strict grammar engine
+  const handleReanalyzeMessage = async (msg) => {
+    try {
+      setIsReanalyzingId(msg.id);
+      const textToAnalyze = msg.originalText || msg.text;
+      const result = await reanalyzeGrammarStrictly(textToAnalyze, targetLang);
+      if (result) {
+        setMessages(prev => prev.map(m => {
+          if (m.id === msg.id) {
+            return {
+              ...m,
+              correctedText: result.corrected_text,
+              hasCorrection: result.has_errors || result.diff_tokens?.some(t => t.changed),
+              diffTokens: result.diff_tokens
+            };
+          }
+          return m;
+        }));
+      }
+    } catch (err) {
+      console.warn('Reanalyze grammar error:', err);
+    } finally {
+      setIsReanalyzingId(null);
+    }
   };
 
   // Set initial greeting when target language changes
@@ -259,6 +306,70 @@ export default function App() {
         vocabulary: {
           'felice': { meaning: 'Feliz o contento', part_of_speech: 'aggettivo' },
           'conversazione': { meaning: 'Plática o conversación', part_of_speech: 'sostantivo' }
+        }
+      };
+    } else if (targetLang === 'es') {
+      initialBotMsg = {
+        id: 'msg-init',
+        sender: 'bot',
+        text: '¡Hola! Qué alegría poder conversar contigo en español. ¿De qué te gustaría hablar hoy?',
+        translation: 'Hello! What a joy to practice Spanish together. What would you like to talk about today?',
+        tokens: [
+          { word: '¡Hola!', translit: null, clean_word: 'hola' },
+          { word: 'Qué', translit: null, clean_word: 'qué' },
+          { word: 'alegría', translit: null, clean_word: 'alegría' },
+          { word: 'conversar', translit: null, clean_word: 'conversar' }
+        ],
+        vocabulary: {
+          'alegría': { meaning: 'Gozo o placer', part_of_speech: 'sustantivo' },
+          'conversar': { meaning: 'Platicar o hablar mutuamente', part_of_speech: 'verbo' }
+        }
+      };
+    } else if (targetLang === 'en') {
+      initialBotMsg = {
+        id: 'msg-init',
+        sender: 'bot',
+        text: "Hello! I'm really excited to practice English with you today. What would you like to talk about?",
+        translation: '¡Hola! Estoy muy emocionado de practicar inglés contigo hoy. ¿De qué te gustaría hablar?',
+        tokens: [
+          { word: 'Hello!', translit: null, clean_word: 'hello' },
+          { word: 'excited', translit: null, clean_word: 'excited' },
+          { word: 'practice', translit: null, clean_word: 'practice' }
+        ],
+        vocabulary: {
+          'excited': { meaning: 'Emocionado / entusiasmado', part_of_speech: 'adjective' },
+          'practice': { meaning: 'Practicar o ejercitar', part_of_speech: 'verb' }
+        }
+      };
+    } else if (targetLang === 'nl') {
+      initialBotMsg = {
+        id: 'msg-init',
+        sender: 'bot',
+        text: 'Hallo! Wat leuk om samen Nederlands te oefenen. Hoe gaat het met jou vandaag?',
+        translation: '¡Hola! Qué lindo practicar holandés juntos. ¿Cómo estás hoy?',
+        tokens: [
+          { word: 'Hallo!', translit: null, clean_word: 'hallo' },
+          { word: 'Wat', translit: null, clean_word: 'wat' },
+          { word: 'leuk', translit: null, clean_word: 'leuk' },
+          { word: 'oefenen', translit: null, clean_word: 'oefenen' }
+        ],
+        vocabulary: {
+          'oefenen': { meaning: 'Practicar o ejercitar', part_of_speech: 'werkwoord' },
+          'leuk': { meaning: 'Lindo o agradable', part_of_speech: 'adjectief' }
+        }
+      };
+    } else {
+      initialBotMsg = {
+        id: 'msg-init',
+        sender: 'bot',
+        text: 'Hello! I am ready to practice conversation with you. What would you like to chat about?',
+        translation: '¡Hola! Estoy listo para practicar conversación contigo. ¿De qué te gustaría hablar?',
+        tokens: [
+          { word: 'Hello!', clean_word: 'hello', translit: null },
+          { word: 'ready', clean_word: 'ready', translit: null }
+        ],
+        vocabulary: {
+          'ready': { meaning: 'Listo o preparado', part_of_speech: 'adjective' }
         }
       };
     }
@@ -456,10 +567,14 @@ export default function App() {
             key={msg.id}
             message={msg}
             targetLang={targetLang}
+            nativeLang={nativeLang}
             showTransliteration={showTransliteration}
             onWordClick={handleWordClick}
             onPlayAudio={handlePlayAudio}
             isAudioPlaying={isSpeaking}
+            onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
+            onReanalyzeMessage={handleReanalyzeMessage}
+            isReanalyzing={isReanalyzingId}
           />
         ))}
 
@@ -494,6 +609,17 @@ export default function App() {
         wordData={selectedWord}
         onClose={() => setSelectedWord(null)}
         onPronounceWord={handlePronounceWord}
+      />
+
+      {/* Sentence Grammar Breakdown Modal */}
+      <GrammarBreakdownModal
+        isOpen={Boolean(breakdownData)}
+        onClose={() => setBreakdownData(null)}
+        sentenceBreakdown={breakdownData?.breakdown || []}
+        originalText={breakdownData?.originalText || ''}
+        correctedText={breakdownData?.correctedText || ''}
+        targetLang={targetLang}
+        onPronounceWord={(word) => speakText(word, currentLangObj.speechCode, config.speechRate)}
       />
 
       {/* Settings Modal */}

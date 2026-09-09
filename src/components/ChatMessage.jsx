@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen } from 'lucide-react';
+import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, RotateCcw } from 'lucide-react';
 
 export function ChatMessage({
   message,
@@ -7,7 +7,10 @@ export function ChatMessage({
   showTransliteration,
   onWordClick,
   onPlayAudio,
-  isAudioPlaying
+  isAudioPlaying,
+  onOpenGrammarBreakdown,
+  onReanalyzeMessage,
+  isReanalyzing
 }) {
   const [showTranslation, setShowTranslation] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -116,23 +119,50 @@ export function ChatMessage({
             )}
           </div>
 
-          {/* Quick Audio & Copy action */}
-          <div className="mt-2.5 pt-1.5 border-t border-white/20 flex items-center justify-end space-x-2 text-rose-100 text-xs">
-            <button
-              onClick={() => onPlayAudio(message.correctedText || message.text)}
-              className="p-1 hover:text-white hover:bg-white/20 rounded-md transition-colors flex items-center space-x-1"
-              title="Escuchar pronunciación correcta"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-medium">Escuchar</span>
-            </button>
-            <button
-              onClick={handleCopy}
-              className="p-1 hover:text-white hover:bg-white/20 rounded-md transition-colors"
-              title="Copiar texto"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-amber-200" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
+          {/* Action buttons on user message */}
+          <div className="mt-2.5 pt-1.5 border-t border-white/20 flex flex-wrap items-center justify-between gap-1.5 text-rose-100 text-xs">
+            <div className="flex items-center space-x-1.5">
+              {/* Sentence Grammar Breakdown button */}
+              <button
+                type="button"
+                onClick={() => onOpenGrammarBreakdown && onOpenGrammarBreakdown(message)}
+                className="px-2 py-1 bg-white/15 hover:bg-white/25 active:scale-95 rounded-lg transition-all flex items-center space-x-1 text-white text-[11px] font-semibold shadow-xs"
+                title="Ver desglose gramatical detallado de cada palabra"
+              >
+                <BookOpen className="w-3 h-3 text-amber-200" />
+                <span>Desglose</span>
+              </button>
+
+              {/* Re-analyze grammar button */}
+              <button
+                type="button"
+                onClick={() => onReanalyzeMessage && onReanalyzeMessage(message)}
+                disabled={isReanalyzing === message.id}
+                className="px-2 py-1 bg-white/15 hover:bg-white/25 active:scale-95 rounded-lg transition-all flex items-center space-x-1 text-white text-[11px] font-semibold shadow-xs disabled:opacity-50"
+                title="Volver a analizar corrección estricta"
+              >
+                <RotateCcw className={`w-3 h-3 text-rose-200 ${isReanalyzing === message.id ? 'animate-spin text-amber-300' : ''}`} />
+                <span>{isReanalyzing === message.id ? 'Analizando...' : 'Re-analizar'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => onPlayAudio(message.correctedText || message.text)}
+                className="p-1 hover:text-white hover:bg-white/20 rounded-md transition-colors flex items-center space-x-1"
+                title="Escuchar pronunciación correcta"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+                <span className="text-[11px] font-medium">Escuchar</span>
+              </button>
+              <button
+                onClick={handleCopy}
+                className="p-1 hover:text-white hover:bg-white/20 rounded-md transition-colors"
+                title="Copiar texto"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-amber-200" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
         </div>
       </div>

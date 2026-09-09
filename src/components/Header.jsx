@@ -48,7 +48,7 @@ export function Header({
           >
             {languages.map((l) => (
               <option key={l.code} value={l.code} className="bg-[#2b160f] text-white">
-                {l.name} {l.hasTranslit ? '★' : ''}
+                {l.name}
               </option>
             ))}
           </select>

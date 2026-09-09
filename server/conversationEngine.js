@@ -117,6 +117,46 @@ const GRAMMAR_RULES = {
     { regex: /\bio\s+(volere|vuole)\b/gi, replacement: 'voglio' },
     { regex: /\bun\s+caffe\b/gi, replacement: 'un caffè' },
     { regex: /\bio\s+voglio\s+un\s+caff[eè]\b/gi, replacement: 'vorrei un caffè' }
+  ],
+  es: [
+    { regex: /\byo\s+(tener|tengo)\s+sue[nñ]o\b/gi, replacement: 'tengo sueño' },
+    { regex: /\byo\s+(tener)\s+hambre\b/gi, replacement: 'tengo hambre' },
+    { regex: /\byo\s+(ser|es)\s+cansad[oa]\b/gi, replacement: 'estoy cansado' },
+    { regex: /\byo\s+(ser)\s+estudiante\b/gi, replacement: 'soy estudiante' },
+    { regex: /\byo\s+(tener)\s+(\d+)\s+a[nñ]os\b/gi, replacement: 'tengo $2 años' },
+    { regex: /\byo\s+(ir)\s+a\b/gi, replacement: 'voy a' },
+    { regex: /\byo\s+(querer)\b/gi, replacement: 'quiero' },
+    { regex: /\b(tambien)\b/gi, replacement: 'también' },
+    { regex: /\b(ingles)\b/gi, replacement: 'inglés' },
+    { regex: /\b(frances)\b/gi, replacement: 'francés' },
+    { regex: /\b(cafe)\b/gi, replacement: 'café' },
+    { regex: /\b(cancion)\b/gi, replacement: 'canción' },
+    { regex: /\b(facil)\b/gi, replacement: 'fácil' },
+    { regex: /\b(dificil)\b/gi, replacement: 'difícil' },
+    { regex: /\b(adios)\b/gi, replacement: 'adiós' },
+    { regex: /\b(como\s+estas)\b/gi, replacement: '¿cómo estás?' },
+    { regex: /\b(que\s+tal)\b/gi, replacement: '¿qué tal?' },
+    { regex: /\blas\s+casa\b/gi, replacement: 'las casas' },
+    { regex: /\blos\s+amigo\b/gi, replacement: 'los amigos' }
+  ],
+  en: [
+    { regex: /\b(he|she|it)\s+(have)\b/gi, replacement: '$1 has' },
+    { regex: /\b(he|she|it)\s+(do)\b/gi, replacement: '$1 does' },
+    { regex: /\b(he|she|it)\s+(go)\b/gi, replacement: '$1 goes' },
+    { regex: /\b(he|she|it)\s+(want)\b/gi, replacement: '$1 wants' },
+    { regex: /\b(he|she|it)\s+(like)\b/gi, replacement: '$1 likes' },
+    { regex: /\b(they|we|you)\s+(is)\b/gi, replacement: '$1 are' },
+    { regex: /\b(they|we|you)\s+(was)\b/gi, replacement: '$1 were' },
+    { regex: /\bi\s+(is|are)\b/gi, replacement: 'I am' },
+    { regex: /\bi\s+(has)\b/gi, replacement: 'I have' },
+    { regex: /\bi\b/g, replacement: 'I' },
+    { regex: /\ba\s+([aeiou]\w+)\b/gi, replacement: 'an $1' },
+    { regex: /\b(dont)\b/gi, replacement: "don't" },
+    { regex: /\b(doesnt)\b/gi, replacement: "doesn't" },
+    { regex: /\b(cant)\b/gi, replacement: "can't" },
+    { regex: /\b(im)\b/gi, replacement: "I'm" },
+    { regex: /\b(goed)\b/gi, replacement: 'went' },
+    { regex: /\b(buyed)\b/gi, replacement: 'bought' }
   ]
 };
 
@@ -306,6 +346,65 @@ const CONVERSATION_TOPICS = {
 
   nl: [
     {
+      id: 'nl_hoe_gaat_het',
+      triggers: ['hoe gaat', 'hoe is het', 'alles goed', 'hoe maak je'],
+      response: 'Met mij gaat het heel goed, dank je wel! En hoe is jouw dag tot nu toe?',
+      translation: '¡Conmigo va muy bien, muchas gracias! ¿Y cómo ha estado tu día hasta ahora?',
+      tokens: [
+        { word: 'Met', clean_word: 'met', translit: null },
+        { word: 'mij', clean_word: 'mij', translit: null },
+        { word: 'gaat', clean_word: 'gaat', translit: null },
+        { word: 'het', clean_word: 'het', translit: null },
+        { word: 'goed!', clean_word: 'goed', translit: null }
+      ],
+      vocabulary: {
+        'heel goed': { meaning: 'Muy bien', part_of_speech: 'adverbio' },
+        'dag': { meaning: 'Día', part_of_speech: 'sustantivo' }
+      }
+    },
+    {
+      id: 'nl_hallo',
+      triggers: ['hallo', 'hoi', 'goedemorgen', 'goedemiddag', 'goedenavond'],
+      response: 'Hallo! Wat leuk om je te spreken. Waar wil je vandaag over praten in het Nederlands?',
+      translation: '¡Hola! Qué gusto hablar contigo. ¿De qué te gustaría hablar hoy en holandés?',
+      tokens: [
+        { word: 'Hallo!', clean_word: 'hallo', translit: null },
+        { word: 'Wat', clean_word: 'wat', translit: null },
+        { word: 'leuk', clean_word: 'leuk', translit: null }
+      ],
+      vocabulary: {
+        'leuk': { meaning: 'Agradable, bonito o divertido', part_of_speech: 'adjetivo' }
+      }
+    },
+    {
+      id: 'nl_naam',
+      triggers: ['ik heet', 'mijn naam is', 'ik ben'],
+      response: 'Aangenaam kennis te maken! Heel fijn om samen te oefenen. Uit welk land of welke stad kom je?',
+      translation: '¡Encantado de conocerte! Es muy grato practicar juntos. ¿De qué país o ciudad vienes?',
+      tokens: [
+        { word: 'Aangenaam', clean_word: 'aangenaam', translit: null },
+        { word: 'kennis', clean_word: 'kennis', translit: null },
+        { word: 'te', clean_word: 'te', translit: null },
+        { word: 'maken!', clean_word: 'maken', translit: null }
+      ],
+      vocabulary: {
+        'aangenaam': { meaning: 'Encantado / un placer', part_of_speech: 'adjetivo' }
+      }
+    },
+    {
+      id: 'nl_bedankt',
+      triggers: ['bedankt', 'dank je', 'dank u', 'dankjewel'],
+      response: 'Graag gedaan! Het is een waar genoegen om je te helpen. Wat wil je nog meer oefenen?',
+      translation: '¡De nada! Es un verdadero placer ayudarte. ¿Qué más te gustaría practicar?',
+      tokens: [
+        { word: 'Graag', clean_word: 'graag', translit: null },
+        { word: 'gedaan!', clean_word: 'gedaan', translit: null }
+      ],
+      vocabulary: {
+        'graag gedaan': { meaning: 'De nada / con gusto', part_of_speech: 'expresión de cortesía' }
+      }
+    },
+    {
       id: 'nl_slaap',
       triggers: ['moe', 'slaap', 'slapen', 'moeheid'],
       response: 'Wat vervelend dat je moe bent! Neem even een pauze en ga lekker vroeg slapen.',
@@ -425,6 +524,175 @@ const CONVERSATION_TOPICS = {
         'espresso': { meaning: 'Café expreso', part_of_speech: 'sustantivo' }
       }
     }
+  ],
+
+  es: [
+    {
+      id: 'es_como_estas',
+      triggers: ['cómo estás', 'como estas', 'qué tal', 'que tal', 'cómo te va', 'como te va'],
+      response: '¡Estoy genial, muchas gracias por preguntar! ¿Y tú, qué tal ha estado tu día?',
+      translation: 'I am great, thank you so much for asking! And you, how has your day been?',
+      tokens: [
+        { word: '¡Estoy', clean_word: 'estoy', translit: null },
+        { word: 'genial!', clean_word: 'genial', translit: null }
+      ],
+      vocabulary: {
+        'genial': { meaning: 'Estupendo / excelente', part_of_speech: 'adjetivo' }
+      }
+    },
+    {
+      id: 'es_hola',
+      triggers: ['hola', 'buenos días', 'buenos dias', 'buenas tardes', 'buenas'],
+      response: '¡Hola! Qué gusto saludarte. ¿De qué te gustaría charlar hoy en español?',
+      translation: 'Hello! Nice to greet you. What would you like to chat about today in Spanish?',
+      tokens: [
+        { word: '¡Hola!', clean_word: 'hola', translit: null },
+        { word: 'Qué', clean_word: 'qué', translit: null },
+        { word: 'gusto!', clean_word: 'gusto', translit: null }
+      ],
+      vocabulary: {
+        'gusto': { meaning: 'Placer o agrado', part_of_speech: 'sustantivo' }
+      }
+    },
+    {
+      id: 'es_nombre',
+      triggers: ['me llamo', 'mi nombre es', 'soy '],
+      response: '¡Mucho gusto en conocerte! Es un placer practicar juntos. ¿De qué país o ciudad eres?',
+      translation: 'Pleased to meet you! It is a pleasure to practice together. What country or city are you from?',
+      tokens: [
+        { word: '¡Mucho', clean_word: 'mucho', translit: null },
+        { word: 'gusto!', clean_word: 'gusto', translit: null }
+      ],
+      vocabulary: {
+        'conocerte': { meaning: 'Saber quién eres / saludarte', part_of_speech: 'verbo' }
+      }
+    },
+    {
+      id: 'es_sueno',
+      triggers: ['sueño', 'sueno', 'cansado', 'cansada', 'dormir', 'agotado'],
+      response: '¡Te comprendo totalmente! Descansa un poco y acuéstate temprano hoy. ¿Tuviste un día muy ocupado?',
+      translation: 'I completely understand! Rest a bit and go to bed early today. Did you have a busy day?',
+      tokens: [
+        { word: 'Descansa', clean_word: 'descansa', translit: null },
+        { word: 'un', clean_word: 'un', translit: null },
+        { word: 'poco.', clean_word: 'poco', translit: null }
+      ],
+      vocabulary: {
+        'descansa': { meaning: 'Toma reposo', part_of_speech: 'verbo (imperativo)' }
+      }
+    },
+    {
+      id: 'es_cafe',
+      triggers: ['café', 'cafe', 'tomar', 'té', 'te', 'comer', 'comida'],
+      response: '¡Un café recién preparado siempre viene de maravilla! ¿Lo prefieres solo o con leche?',
+      translation: 'A freshly brewed coffee is always wonderful! Do you prefer it black or with milk?',
+      tokens: [
+        { word: '¡Un', clean_word: 'un', translit: null },
+        { word: 'café!', clean_word: 'café', translit: null }
+      ],
+      vocabulary: {
+        'maravilla': { meaning: 'Cosa extraordinaria o muy buena', part_of_speech: 'sustantivo' }
+      }
+    },
+    {
+      id: 'es_gracias',
+      triggers: ['gracias', 'muchas gracias', 'agradezco'],
+      response: '¡De nada! Es un placer ayudarte a practicar. ¿Qué otra cosa te gustaría aprender hoy?',
+      translation: "You're welcome! It's a pleasure to help you practice. What else would you like to learn today?",
+      tokens: [
+        { word: '¡De', clean_word: 'de', translit: null },
+        { word: 'nada!', clean_word: 'nada', translit: null }
+      ],
+      vocabulary: {
+        'de nada': { meaning: 'Respuesta cortés a gracias', part_of_speech: 'expresión' }
+      }
+    }
+  ],
+
+  en: [
+    {
+      id: 'en_how_are_you',
+      triggers: ['how are you', 'how is it going', 'how do you do', "what's up", 'whats up'],
+      response: "I'm doing fantastic, thank you for asking! How has your day been so far?",
+      translation: '¡Me va fantástico, gracias por preguntar! ¿Cómo ha estado tu día hasta ahora?',
+      tokens: [
+        { word: "I'm", clean_word: 'im', translit: null },
+        { word: 'doing', clean_word: 'doing', translit: null },
+        { word: 'fantastic!', clean_word: 'fantastic', translit: null }
+      ],
+      vocabulary: {
+        'fantastic': { meaning: 'Fantástico o excelente', part_of_speech: 'adjective' }
+      }
+    },
+    {
+      id: 'en_hello',
+      triggers: ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'],
+      response: "Hello there! It's great to talk to you. What would you like to discuss today?",
+      translation: '¡Hola! Es genial hablar contigo. ¿De qué te gustaría hablar hoy?',
+      tokens: [
+        { word: 'Hello', clean_word: 'hello', translit: null },
+        { word: 'there!', clean_word: 'there', translit: null }
+      ],
+      vocabulary: {
+        'discuss': { meaning: 'Debatir, hablar o charlar', part_of_speech: 'verb' }
+      }
+    },
+    {
+      id: 'en_name',
+      triggers: ['my name is', "i'm ", 'i am '],
+      response: "It's wonderful to meet you! What city or country are you from?",
+      translation: '¡Es maravilloso conocerte! ¿De qué ciudad o país eres?',
+      tokens: [
+        { word: 'Wonderful', clean_word: 'wonderful', translit: null },
+        { word: 'to', clean_word: 'to', translit: null },
+        { word: 'meet', clean_word: 'meet', translit: null },
+        { word: 'you!', clean_word: 'you', translit: null }
+      ],
+      vocabulary: {
+        'wonderful': { meaning: 'Maravilloso', part_of_speech: 'adjective' }
+      }
+    },
+    {
+      id: 'en_tired',
+      triggers: ['tired', 'sleep', 'sleepy', 'exhausted'],
+      response: "I totally get that! Make sure to take a break and get some good rest tonight. Did you work hard today?",
+      translation: '¡Te comprendo totalmente! Asegúrate de descansar bien esta noche. ¿Trabajaste mucho hoy?',
+      tokens: [
+        { word: 'Take', clean_word: 'take', translit: null },
+        { word: 'a', clean_word: 'a', translit: null },
+        { word: 'break!', clean_word: 'break', translit: null }
+      ],
+      vocabulary: {
+        'rest': { meaning: 'Descanso o reposo', part_of_speech: 'noun' }
+      }
+    },
+    {
+      id: 'en_coffee',
+      triggers: ['coffee', 'tea', 'drink', 'food', 'eating'],
+      response: "A cup of fresh coffee always hits the spot! Do you like yours black or with milk and sugar?",
+      translation: '¡Una taza de café fresco siempre viene genial! ¿Te gusta solo o con leche y azúcar?',
+      tokens: [
+        { word: 'Fresh', clean_word: 'fresh', translit: null },
+        { word: 'coffee!', clean_word: 'coffee', translit: null }
+      ],
+      vocabulary: {
+        'fresh': { meaning: 'Fresco o recién hecho', part_of_speech: 'adjective' }
+      }
+    },
+    {
+      id: 'en_thanks',
+      triggers: ['thank you', 'thanks', 'appreciate'],
+      response: "You are very welcome! It's my pleasure to help you practice English. What topic should we try next?",
+      translation: '¡De nada! Es mi placer ayudarte a practicar inglés. ¿Qué tema probamos ahora?',
+      tokens: [
+        { word: 'You', clean_word: 'you', translit: null },
+        { word: 'are', clean_word: 'are', translit: null },
+        { word: 'welcome!', clean_word: 'welcome', translit: null }
+      ],
+      vocabulary: {
+        'welcome': { meaning: 'De nada / bienvenido', part_of_speech: 'phrase' }
+      }
+    }
   ]
 };
 
@@ -432,6 +700,30 @@ const CONVERSATION_TOPICS = {
  * Adaptive responses for non-matched turns
  */
 const ADAPTIVE_POOLS = {
+  es: [
+    {
+      response: '¡Muy bien expresado! ¿Cuánto tiempo llevas aprendiendo español?',
+      translation: 'Very well said! How long have you been learning Spanish?',
+      vocabulary: { 'expresado': { meaning: 'Dicho o formulado', part_of_speech: 'adjetivo' } }
+    },
+    {
+      response: '¡Eso suena muy interesante! ¿Qué cosas te gusta hacer en tu tiempo libre?',
+      translation: 'That sounds very interesting! What things do you like doing in your free time?',
+      vocabulary: { 'interesante': { meaning: 'Que capta la atención', part_of_speech: 'adjetivo' } }
+    }
+  ],
+  en: [
+    {
+      response: 'That was very well expressed! How long have you been learning English?',
+      translation: '¡Muy bien expresado! ¿Cuánto tiempo llevas aprendiendo inglés?',
+      vocabulary: { 'expressed': { meaning: 'Expresado o comunicado', part_of_speech: 'adjective' } }
+    },
+    {
+      response: 'That sounds really interesting! What do you enjoy doing on weekends?',
+      translation: '¡Eso suena muy interesante! ¿Qué disfrutas hacer los fines de semana?',
+      vocabulary: { 'enjoy': { meaning: 'Disfrutar', part_of_speech: 'verb' } }
+    }
+  ],
   pl: [
     {
       response: 'Bardzo dobrze to ująłeś! Jak długo już uczysz się polskiego?',

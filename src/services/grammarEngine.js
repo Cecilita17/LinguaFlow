@@ -1,6 +1,8 @@
 import { computeWordDiff } from '../../server/languageData.js';
 
 const LT_LANG_MAP = {
+  es: 'es',
+  en: 'en-US',
   pl: 'pl-PL',
   de: 'de-DE',
   fr: 'fr',
@@ -208,7 +210,8 @@ export async function checkLanguageTool(text, targetLang) {
       signal: controller.signal,
       body: new URLSearchParams({
         text: text.trim(),
-        language: ltLang
+        language: ltLang,
+        level: 'picky'
       })
     });
 
@@ -303,4 +306,11 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl') {
     has_errors: hasErrors || diffTokens.some(t => t.changed),
     diff_tokens: diffTokens
   };
+}
+
+/**
+ * Force strict re-analysis on a message
+ */
+export async function reanalyzeGrammarStrictly(text, targetLang = 'pl') {
+  return performFullGrammarCorrection(text, targetLang);
 }

@@ -294,47 +294,55 @@ export function useSpeech({
       }
     }, 250);
 
-    // 1. Start raw audio recording via MediaRecorder (for high accuracy AI transcription)
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioStreamRef.current = stream;
-
-        let selectedMime = 'audio/webm;codecs=opus';
-        if (typeof MediaRecorder !== 'undefined') {
-          if (!MediaRecorder.isTypeSupported(selectedMime)) {
-            if (MediaRecorder.isTypeSupported('audio/webm')) selectedMime = 'audio/webm';
-            else if (MediaRecorder.isTypeSupported('audio/mp4')) selectedMime = 'audio/mp4';
-            else if (MediaRecorder.isTypeSupported('audio/aac')) selectedMime = 'audio/aac';
-            else selectedMime = '';
-          }
-
-          mimeTypeRef.current = selectedMime || 'audio/webm';
-          const options = selectedMime ? { mimeType: selectedMime } : {};
-          const recorder = new MediaRecorder(stream, options);
-
-          recorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) {
-              audioChunksRef.current.push(e.data);
-            }
-          };
-
-          mediaRecorderRef.current = recorder;
-          recorder.start(250);
-        }
-      } catch (audioErr) {
-        console.warn('MediaRecorder audio capture unavailable, using Web Speech:', audioErr.message);
-      }
-    }
-
-    // 2. Start Web Speech recognition for live preview
+    // 1. Immediately and synchronously start Web Speech recognition
+    // (CRITICAL: Mobile Chrome requires recognition.start() to execute synchronously inside the user-gesture event loop)
     if (recognitionRef.current) {
       try {
         recognitionRef.current.lang = targetLangCode;
         recognitionRef.current.start();
       } catch (e) {
-        // Recognition might already be active
+        console.warn('Speech recognition start notice:', e.message);
       }
+    }
+
+    // 2. Non-blocking audio capture via MediaRecorder (for multimodal AI transcription when apiKey is present)
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          // If recording already stopped before mic initialized, release tracks immediately
+          if (!isRecordingRef.current) {
+            stream.getTracks().forEach(t => t.stop());
+            return;
+          }
+
+          audioStreamRef.current = stream;
+
+          let selectedMime = 'audio/webm;codecs=opus';
+          if (typeof MediaRecorder !== 'undefined') {
+            if (!MediaRecorder.isTypeSupported(selectedMime)) {
+              if (MediaRecorder.isTypeSupported('audio/webm')) selectedMime = 'audio/webm';
+              else if (MediaRecorder.isTypeSupported('audio/mp4')) selectedMime = 'audio/mp4';
+              else if (MediaRecorder.isTypeSupported('audio/aac')) selectedMime = 'audio/aac';
+              else selectedMime = '';
+            }
+
+            mimeTypeRef.current = selectedMime || 'audio/webm';
+            const options = selectedMime ? { mimeType: selectedMime } : {};
+            const recorder = new MediaRecorder(stream, options);
+
+            recorder.ondataavailable = (e) => {
+              if (e.data && e.data.size > 0) {
+                audioChunksRef.current.push(e.data);
+              }
+            };
+
+            mediaRecorderRef.current = recorder;
+            recorder.start(250);
+          }
+        })
+        .catch((audioErr) => {
+          console.warn('MediaRecorder audio capture notice:', audioErr.message);
+        });
     }
   }, [isProcessing, targetLangCode, stopRecordingInternal]);
 
