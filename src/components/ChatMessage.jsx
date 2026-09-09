@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, RotateCcw } from 'lucide-react';
+import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 
 export function ChatMessage({
   message,
@@ -15,7 +16,14 @@ export function ChatMessage({
   const [showTranslation, setShowTranslation] = useState(false);
   const [copied, setCopied] = useState(false);
   const [justReanalyzed, setJustReanalyzed] = useState(false);
+  const [writingPracticeOpen, setWritingPracticeOpen] = useState(false);
+  const [writingPracticeMode, setWritingPracticeMode] = useState('words'); // 'words' | 'sentence'
   const isUser = message.sender === 'user';
+
+  const handleOpenWritingPractice = (mode) => {
+    setWritingPracticeMode(mode);
+    setWritingPracticeOpen(true);
+  };
 
   const handleReanalyzeClick = async () => {
     if (onReanalyzeMessage) {
@@ -211,6 +219,42 @@ export function ChatMessage({
             </div>
           </div>
         </div>
+
+        {/* Chinese Writing Practice Buttons (ONLY when targetLang === 'zh' and message has correctedText) */}
+        {isChinese && (message.correctedText || hasCorrection) && (
+          <div className="flex flex-wrap items-center justify-end gap-2 mt-2 px-1 animate-fade-in">
+            <button
+              type="button"
+              onClick={() => handleOpenWritingPractice('words')}
+              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border border-amber-500/40 text-amber-200 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 backdrop-blur-xs"
+              title="Practicar orden de trazos de caracteres corregidos con Hanzi Writer"
+            >
+              <span>✍️</span>
+              <span>Practicar escritura</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenWritingPractice('sentence')}
+              className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 active:scale-95 border border-rose-500/40 text-rose-200 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 backdrop-blur-xs"
+              title="Practicar la oración corregida completa carácter por carácter"
+            >
+              <span>📝</span>
+              <span>Practicar oración</span>
+            </button>
+          </div>
+        )}
+
+        {/* Chinese Writing Practice Modal */}
+        {writingPracticeOpen && (
+          <ChineseWritingPractice
+            isOpen={writingPracticeOpen}
+            onClose={() => setWritingPracticeOpen(false)}
+            initialMode={writingPracticeMode}
+            correctedText={message.correctedText || message.text}
+            diffTokens={message.diffTokens || []}
+            showTransliteration={showTransliteration}
+          />
+        )}
       </div>
     );
   }
