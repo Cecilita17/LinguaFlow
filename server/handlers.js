@@ -101,7 +101,7 @@ export async function handleChat(req, res) {
       return res.status(400).json({ error: 'El mensaje no puede estar vacío.' });
     }
 
-    const effectiveApiKey = (clientApiKey || process.env.GEMINI_API_KEY || '').trim();
+    const effectiveApiKey = (clientApiKey || process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
 
     // 1. Call Google Gemini AI
     if (effectiveApiKey) {
@@ -143,27 +143,10 @@ export async function handleChat(req, res) {
               headers: { 'Content-Type': 'application/json' },
               signal: controller.signal,
               body: JSON.stringify({
-                system_instruction: { parts: [{ text: systemInstruction }] },
-                contents: [{ role: 'user', parts: [{ text: dataPrompt }] }],
+                contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }] }],
                 generationConfig: GEMINI_MODEL_CONFIG.generationConfig
               })
             });
-
-            // If system_instruction is not supported (HTTP 400), fall back to combined prompt
-            if (response.status === 400) {
-              const retryController = new AbortController();
-              const retryTimeout = setTimeout(() => retryController.abort(), 9000);
-              response = await fetch(geminiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal: retryController.signal,
-                body: JSON.stringify({
-                  contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }] }],
-                  generationConfig: GEMINI_MODEL_CONFIG.generationConfig
-                })
-              });
-              clearTimeout(retryTimeout);
-            }
 
             clearTimeout(timeoutId);
 

@@ -50,6 +50,7 @@ export default function App() {
     const saved = localStorage.getItem('linguaflow_config');
     return saved ? JSON.parse(saved) : { apiKey: '', level: 'A2/B1', speechRate: 0.95 };
   });
+  const [apiWarning, setApiWarning] = useState(null);
 
   const chatContainerRef = useRef(null);
   const currentLangObj = languages.find(l => l.code === targetLang) || languages[0];
@@ -81,6 +82,7 @@ export default function App() {
   // Save config
   const handleSaveConfig = (newConfig) => {
     setConfig(newConfig);
+    setApiWarning(null);
     localStorage.setItem('linguaflow_config', JSON.stringify(newConfig));
   };
 
@@ -416,6 +418,14 @@ export default function App() {
         history: messages.slice(-6)
       });
 
+      if (result) {
+        if (result.geminiError) {
+          setApiWarning(result.geminiError);
+        } else if (result.source?.includes('gemini')) {
+          setApiWarning(null);
+        }
+      }
+
       if (result && result.data) {
         const { user_correction, bot_response } = result.data;
 
@@ -534,6 +544,7 @@ export default function App() {
         isListening={isRecording}
         isSpeaking={isSpeaking}
         hasApiKey={Boolean(config?.apiKey)}
+        apiWarning={apiWarning}
       />
 
       {/* Main Chat Scroll Area */}
@@ -541,6 +552,37 @@ export default function App() {
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
       >
+        {/* API Error Warning Banner */}
+        {apiWarning && (
+          <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in">
+            <div className="flex items-start space-x-2.5">
+              <span className="text-base leading-none mt-0.5">⚠️</span>
+              <div>
+                <p className="font-bold text-amber-100">
+                  Aviso de Google Gemini: {apiWarning}
+                </p>
+                <p className="text-[11px] text-amber-200/80 mt-0.5">
+                  La IA no pudo procesar tu clave. Haz clic en{' '}
+                  <button
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="underline font-bold text-white hover:text-amber-300"
+                  >
+                    Ajustes ⚙️
+                  </button>{' '}
+                  para probar o actualizar tu clave, o genera una nueva gratis en Google AI Studio.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setApiWarning(null)}
+              className="p-1 text-amber-300/70 hover:text-white rounded-lg transition-colors flex-shrink-0 ml-2"
+              title="Cerrar aviso"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Helper Banner on top in Chocolate & Rose theme */}
         <div className="mb-6 p-4 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-md shadow-black/30 flex items-start justify-between">
           <div className="flex items-start space-x-3">

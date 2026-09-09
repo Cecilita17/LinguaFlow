@@ -14,7 +14,8 @@ export function Header({
   onOpenSettings,
   isListening,
   isSpeaking,
-  hasApiKey = false
+  hasApiKey = false,
+  apiWarning = null
 }) {
   return (
     <header className="sticky top-0 z-30 bg-[#2b160f]/95 backdrop-blur-md border-b border-[#482519] px-4 py-3 shadow-lg shadow-black/20 text-white transition-colors">
@@ -128,7 +129,18 @@ export function Header({
           </button>
 
           {/* AI Connection Status Badge */}
-          {hasApiKey ? (
+          {apiWarning ? (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              title="Aviso de Gemini AI: Clic para revisar tu clave"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-semibold shadow-xs hover:bg-amber-900/90 transition-all animate-pulse"
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span className="hidden sm:inline">⚠️ Error API Key</span>
+              <span className="sm:hidden">⚠️ IA</span>
+            </button>
+          ) : hasApiKey ? (
             <button
               type="button"
               onClick={onOpenSettings}

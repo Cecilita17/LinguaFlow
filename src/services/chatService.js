@@ -28,7 +28,8 @@ export async function sendChatMessage({
     throw new Error('El mensaje no puede estar vacío.');
   }
 
-  const effectiveKey = (apiKey || '').trim();
+  const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
+  let lastGeminiError = null;
 
   // 1. If user entered Gemini API Key in Settings, call Google Gemini AI directly first (instant, 100% generative AI)
   if (effectiveKey) {
@@ -46,8 +47,7 @@ export async function sendChatMessage({
         history
       });
 
-      const candidateModels = GEMINI_MODEL_CONFIG.models;
-      let lastErrMessage = null;
+      const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
 
       for (const model of candidateModels) {
         try {
@@ -55,32 +55,20 @@ export async function sendChatMessage({
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 9000);
 
-          let directRes = await fetch(geminiUrl, {
+          const directRes = await fetch(geminiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
             body: JSON.stringify({
-              system_instruction: { parts: [{ text: systemInstruction }] },
-              contents: [{ role: 'user', parts: [{ text: dataPrompt }] }],
+              contents: [
+                {
+                  role: 'user',
+                  parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }]
+                }
+              ],
               generationConfig: GEMINI_MODEL_CONFIG.generationConfig
             })
           });
-
-          // Fallback if system_instruction rejected with 400
-          if (directRes.status === 400) {
-            const retryController = new AbortController();
-            const retryTimeout = setTimeout(() => retryController.abort(), 9000);
-            directRes = await fetch(geminiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              signal: retryController.signal,
-              body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${dataPrompt}` }] }],
-                generationConfig: GEMINI_MODEL_CONFIG.generationConfig
-              })
-            });
-            clearTimeout(retryTimeout);
-          }
 
           clearTimeout(timeoutId);
 
@@ -99,18 +87,19 @@ export async function sendChatMessage({
             }
           } else {
             const errData = await directRes.json().catch(() => ({}));
-            lastErrMessage = errData?.error?.message || `HTTP ${directRes.status}`;
-            console.warn(`Direct Gemini ${model} error (${directRes.status}):`, lastErrMessage);
+            lastGeminiError = errData?.error?.message || `HTTP ${directRes.status}`;
+            console.warn(`Direct Gemini ${model} error (${directRes.status}):`, lastGeminiError);
           }
         } catch (candErr) {
-          lastErrMessage = candErr.message;
+          lastGeminiError = candErr.message;
         }
       }
 
-      if (lastErrMessage) {
-        console.warn('Direct Gemini attempts failed, checking backend /api/chat:', lastErrMessage);
+      if (lastGeminiError) {
+        console.warn('Direct Gemini attempts failed, checking backend /api/chat:', lastGeminiError);
       }
     } catch (geminiErr) {
+      lastGeminiError = geminiErr.message;
       console.warn('Direct Gemini call failed:', geminiErr.message);
     }
   }
@@ -163,6 +152,7 @@ export async function sendChatMessage({
   }
   return {
     source: 'resilient_linguistic_engine',
+    geminiError: lastGeminiError,
     data: fallbackData
   };
 }

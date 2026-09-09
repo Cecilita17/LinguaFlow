@@ -9,16 +9,57 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
   const [speechRate, setSpeechRate] = useState(config.speechRate || 0.95);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  const [testingKey, setTestingKey] = useState(false);
+  const [keyStatus, setKeyStatus] = useState(null);
+
   useEffect(() => {
     if (isOpen) {
       setApiKey(config.apiKey || '');
       setLevel(config.level || 'A2/B1');
       setSpeechRate(config.speechRate || 0.95);
+      setKeyStatus(null);
     }
   }, [isOpen, config]);
 
+  const handleTestKey = async () => {
+    const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
+    if (!cleanKey) {
+      setKeyStatus({ success: false, message: 'Ingresa una clave de Gemini para verificar.' });
+      return;
+    }
+    setTestingKey(true);
+    setKeyStatus(null);
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'Ping' }] }]
+        })
+      });
+      if (res.ok) {
+        setKeyStatus({ success: true, message: '✅ ¡Conexión exitosa! Google Gemini está activo y funcionando en vivo.' });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const msg = err?.error?.message || `Error ${res.status}`;
+        setKeyStatus({
+          success: false,
+          message: `❌ Google rechazó la clave: "${msg}". Genera una nueva gratis en Google AI Studio.`
+        });
+      }
+    } catch (e) {
+      setKeyStatus({
+        success: false,
+        message: `❌ Error de red: ${e.message}`
+      });
+    } finally {
+      setTestingKey(false);
+    }
+  };
+
   const handleSave = () => {
-    onSaveConfig({ apiKey: apiKey.trim(), level, speechRate: parseFloat(speechRate) });
+    const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
+    onSaveConfig({ apiKey: cleanKey, level, speechRate: parseFloat(speechRate) });
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -54,13 +95,41 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
               <Key className="w-4 h-4 text-rose-600" />
               <span>Google Gemini API Key (Opcional)</span>
             </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="AIzaSy..."
-              className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 outline-none focus:ring-2 focus:ring-rose-500 font-mono text-xs"
-            />
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  setKeyStatus(null);
+                }}
+                placeholder="AIzaSy..."
+                className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 outline-none focus:ring-2 focus:ring-rose-500 font-mono text-xs"
+              />
+              <button
+                type="button"
+                onClick={handleTestKey}
+                disabled={testingKey || !apiKey.trim()}
+                className="px-3 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center space-x-1 flex-shrink-0"
+              >
+                {testingKey ? (
+                  <span>Probando...</span>
+                ) : (
+                  <span>Verificar</span>
+                )}
+              </button>
+            </div>
+
+            {keyStatus && (
+              <div className={`mt-2 p-2.5 rounded-xl text-xs flex items-start space-x-2 border ${
+                keyStatus.success
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                  : 'bg-rose-50 text-rose-900 border-rose-200'
+              }`}>
+                <span className="mt-0.5">{keyStatus.success ? '✅' : '⚠️'}</span>
+                <span className="font-medium leading-relaxed">{keyStatus.message}</span>
+              </div>
+            )}
             <div className="flex items-start space-x-1.5 mt-1.5 text-xs text-stone-600 bg-rose-50/80 p-2.5 rounded-xl border border-rose-100">
               <Info className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">

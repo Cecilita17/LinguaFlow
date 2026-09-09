@@ -903,88 +903,125 @@ export function translateMixedNativeVocabulary(text, targetLang = 'nl') {
 }
 
 /**
- * Dynamic Contextual Response Generator (Zero Static/Generic Praise Templates)
- * Directly incorporates the student's exact phrase and mirrors their topic.
+ * Dynamic Contextual Response Generator (Zero Robotic Parrot Templates)
+ * NEVER quotes the user's sentence back in quotation marks.
+ * Handles meta-conversation, frustration, and natural conversational continuation.
  */
 function generateDynamicContextualResponse(text, targetLang = 'nl', nativeLang = 'es') {
   const clean = (text || '').trim();
   const lower = clean.toLowerCase();
 
+  // 1. Detect user frustration or meta-conversation about the bot / wanting a real chat
+  const isMetaOrFrustration =
+    lower.includes('gesprek') || lower.includes('geen goed antwoord') || lower.includes('slecht antwoord') ||
+    lower.includes('niet goed') || lower.includes('praat met mij') || lower.includes('echt gesprek') ||
+    lower.includes('conversacion') || lower.includes('conversación') || lower.includes('mala respuesta') ||
+    lower.includes('no me respondes') || lower.includes('habla conmigo') || lower.includes('real conversation') ||
+    lower.includes('bad answer') || lower.includes('talk to me') || lower.includes('robot') ||
+    lower.includes('echtes gespräch') || lower.includes('schlechte antwort') || lower.includes('rozmowa');
+
   if (targetLang === 'nl') {
-    if (lower.includes('?') || lower.startsWith('hoe') || lower.startsWith('wat') || lower.startsWith('waar') || lower.startsWith('waarom') || lower.startsWith('kan')) {
+    if (isMetaOrFrustration) {
       return {
-        response: `Wat betreft ${clean.replace(/[?]/g, '')}: wat is het belangrijkste aspect dat je wilt verduidelijken of proberen?`,
-        translation: `En cuanto a ${clean.replace(/[?]/g, '')}: ¿cuál es el aspecto principal que deseas aclarar o probar?`,
-        tokens: tokenizeSimple(`Wat betreft ${clean.replace(/[?]/g, '')}: wat is het belangrijkste aspect dat je wilt verduidelijken of proberen?`),
-        vocabulary: { 'verduidelijken': { meaning: 'Aclarar o explicar', part_of_speech: 'werkwoord' } }
+        response: 'Het spijt me ontzettend! Laten we opnieuw beginnen. Ik wil heel graag een echt en vloeiend gesprek met je voeren. Waar heb je vandaag zin in om over te praten?',
+        translation: '¡Lo siento muchísimo! Empecemos de nuevo. Realmente quiero tener una conversación auténtica y fluida contigo. ¿De qué tienes ganas de hablar hoy?',
+        tokens: tokenizeSimple('Het spijt me ontzettend! Laten we opnieuw beginnen. Ik wil heel graag een echt en vloeiend gesprek met je voeren. Waar heb je vandaag zin in om over te praten?'),
+        vocabulary: {
+          'ontzettend': { meaning: 'Muchísimo / enormemente', part_of_speech: 'bijwoord' },
+          'vloeiend': { meaning: 'Fluido / con soltura', part_of_speech: 'adjectief' },
+          'zin in': { meaning: 'Ganas de / deseo de', part_of_speech: 'uitdrukking' }
+        }
       };
     }
+
+    if (lower.includes('?') || lower.startsWith('hoe') || lower.startsWith('wat') || lower.startsWith('waar') || lower.startsWith('waarom') || lower.startsWith('kan')) {
+      return {
+        response: 'Interessante vraag! Laten we het stap voor stap bekijken. Wat is volgens jou het belangrijkste onderdeel om mee te beginnen?',
+        translation: '¡Pregunta interesante! Veámoslo paso a paso. Según tú, ¿cuál es la parte más importante para empezar?',
+        tokens: tokenizeSimple('Interessante vraag! Laten we het stap voor stap bekijken. Wat is volgens jou het belangrijkste onderdeel om mee te beginnen?'),
+        vocabulary: {
+          'onderdeel': { meaning: 'Parte o componente', part_of_speech: 'zelfstandig naamwoord' },
+          'volgens': { meaning: 'Según / de acuerdo con', part_of_speech: 'voorzetsel' }
+        }
+      };
+    }
+
     return {
-      response: `Over "${clean}": hoe wil je dit onderwerp verder uitwerken in het Nederlands?`,
-      translation: `Sobre "${clean}": ¿cómo te gustaría desarrollar este tema en holandés?`,
-      tokens: tokenizeSimple(`Over "${clean}": hoe wil je dit onderwerp verder uitwerken in het Nederlands?`),
-      vocabulary: { 'uitwerken': { meaning: 'Desarrollar o elaborar', part_of_speech: 'werkwoord' } }
+      response: 'Ik begrijp goed wat je bedoelt. Hoe kijk je daar zelf tegenaan in het dagelijks leven?',
+      translation: 'Entiendo bien lo que quieres decir. ¿Cómo ves eso tú mismo en la vida cotidiana?',
+      tokens: tokenizeSimple('Ik begrijp goed wat je bedoelt. Hoe kijk je daar zelf tegenaan in het dagelijks leven?'),
+      vocabulary: {
+        'bedoelen': { meaning: 'Querer decir o significar', part_of_speech: 'werkwoord' },
+        'dagelijks leven': { meaning: 'Vida cotidiana o diaria', part_of_speech: 'uitdrukking' }
+      }
     };
   }
 
   if (targetLang === 'de') {
-    if (lower.includes('?') || lower.startsWith('wie') || lower.startsWith('was') || lower.startsWith('wo') || lower.startsWith('warum')) {
+    if (isMetaOrFrustration) {
       return {
-        response: `Zu "${clean.replace(/[?]/g, '')}": Welchen Aspekt möchtest du dazu genauer besprechen?`,
-        translation: `Sobre "${clean.replace(/[?]/g, '')}": ¿Qué aspecto te gustaría conversar más a fondo?`,
-        tokens: tokenizeSimple(`Zu "${clean.replace(/[?]/g, '')}": Welchen Aspekt möchtest du dazu genauer besprechen?`),
-        vocabulary: { 'Aspekt': { meaning: 'Aspecto o punto', part_of_speech: 'Nomen' } }
+        response: 'Das tut mir aufrichtig leid! Lass uns ganz neu starten. Ich möchte ein echtes und lebendiges Gespräch mit dir führen. Worüber möchtest du sprechen?',
+        translation: '¡Lo siento sinceramente! Empecemos de nuevo. Quiero tener una conversación real y viva contigo. ¿De qué te gustaría hablar?',
+        tokens: tokenizeSimple('Das tut mir aufrichtig leid! Lass uns ganz neu starten. Ich möchte ein echtes und lebendiges Gespräch mit dir führen. Worüber möchtest du sprechen?'),
+        vocabulary: { 'aufrichtig': { meaning: 'Sinceramente', part_of_speech: 'Adverb' } }
       };
     }
     return {
-      response: `Zum Thema "${clean}": Was möchtest du dazu noch genauer besprechen oder üben?`,
-      translation: `Sobre el tema "${clean}": ¿Qué te gustaría conversar o practicar con más detalle al respecto?`,
-      tokens: tokenizeSimple(`Zum Thema "${clean}": Was möchtest du dazu noch genauer besprechen oder üben?`),
-      vocabulary: { 'besprechen': { meaning: 'Discutir o conversar', part_of_speech: 'verb' } }
+      response: 'Ich verstehe deinen Gedanken sehr gut. Wie sind deine eigenen Erfahrungen damit im Alltag?',
+      translation: 'Entiendo muy bien tu idea. ¿Cuáles son tus propias experiencias con esto en el día a día?',
+      tokens: tokenizeSimple('Ich verstehe deinen Gedanken sehr gut. Wie sind deine eigenen Erfahrungen damit im Alltag?'),
+      vocabulary: { 'Erfahrungen': { meaning: 'Experiencias', part_of_speech: 'Nomen' } }
     };
   }
 
   if (targetLang === 'pl') {
+    if (isMetaOrFrustration) {
+      return {
+        response: 'Bardzo cię przepraszam! Zacznijmy od nowa. Naprawdę chcę prowadzić z tobą ciekawą i naturalną rozmowę. O czym chciałbyś dzisiaj porozmawiać?',
+        translation: '¡Te pido muchas disculpas! Empecemos de nuevo. De verdad quiero tener contigo una conversación interesante y natural. ¿De qué te gustaría hablar hoy?',
+        tokens: tokenizeSimple('Bardzo cię przepraszam! Zacznijmy od nowa. Naprawdę chcę prowadzić z tobą ciekawą i naturalną rozmowę. O czym chciałbyś dzisiaj porozmawiać?'),
+        vocabulary: { 'rozmowa': { meaning: 'Conversación', part_of_speech: 'rzeczownik' } }
+      };
+    }
     return {
-      response: `Jeśli chodzi o "${clean}": o czym konkretnie chciałbyś jeszcze powiedzieć w tym temacie?`,
-      translation: `En cuanto a "${clean}": ¿de qué específicamente te gustaría hablar todavía en este tema?`,
-      tokens: tokenizeSimple(`Jeśli chodzi o "${clean}": o czym konkretnie chciałbyś jeszcze powiedzieć w tym temacie?`),
-      vocabulary: { 'kwestia': { meaning: 'Cuestión o asunto', part_of_speech: 'rzeczownik' } }
+      response: 'Świetny temat! Jakie są twoje osobiste doświadczenia w tej kwestii?',
+      translation: '¡Gran tema! ¿Cuáles son tus experiencias personales en este asunto?',
+      tokens: tokenizeSimple('Świetny temat! Jakie są twoje osobiste doświadczenia w tej kwestii?'),
+      vocabulary: { 'doświadczenia': { meaning: 'Experiencias', part_of_speech: 'rzeczownik' } }
+    };
+  }
+
+  if (targetLang === 'en') {
+    if (isMetaOrFrustration) {
+      return {
+        response: "I'm really sorry about that! Let's start fresh. I genuinely want to have a natural and meaningful conversation with you. What would you like to chat about today?",
+        translation: '¡Lo siento muchísimo! Empecemos de nuevo. Genuinamente quiero tener una conversación natural y significativa contigo. ¿De qué te gustaría charlar hoy?',
+        tokens: tokenizeSimple("I'm really sorry about that! Let's start fresh. I genuinely want to have a natural and meaningful conversation with you. What would you like to chat about today?"),
+        vocabulary: { 'meaningful': { meaning: 'Significativo o profundo', part_of_speech: 'adjective' } }
+      };
+    }
+    return {
+      response: 'I completely understand where you are coming from. How do you feel about this in your daily life?',
+      translation: 'Entiendo perfectamente a qué te refieres. ¿Cómo sientes esto en tu vida cotidiana?',
+      tokens: tokenizeSimple('I completely understand where you are coming from. How do you feel about this in your daily life?'),
+      vocabulary: { 'daily life': { meaning: 'Vida cotidiana', part_of_speech: 'noun phrase' } }
     };
   }
 
   if (targetLang === 'fr') {
     return {
-      response: `À propos de "${clean}" : qu'aimerais-tu préciser ou pratiquer d'autre à ce sujet ?`,
-      translation: `A propósito de "${clean}": ¿qué te gustaría precisar o practicar sobre este tema?`,
-      tokens: tokenizeSimple(`À propos de "${clean}" : qu'aimerais-tu préciser ou pratiquer d'autre à ce sujet ?`),
-      vocabulary: { 'préciser': { meaning: 'Aclarar o detallar', part_of_speech: 'verbe' } }
-    };
-  }
-
-  if (targetLang === 'it') {
-    return {
-      response: `Riguardo a "${clean}": cosa vorresti approfondire esattamente a riguardo?`,
-      translation: `Respecto a "${clean}": ¿qué te gustaría profundizar exactamente al respecto?`,
-      tokens: tokenizeSimple(`Riguardo a "${clean}": cosa vorresti approfondire esattamente a riguardo?`),
-      vocabulary: { 'approfondire': { meaning: 'Profundizar', part_of_speech: 'verbo' } }
-    };
-  }
-
-  if (targetLang === 'en') {
-    return {
-      response: `Regarding "${clean}": what specific detail would you like to explore next?`,
-      translation: `Respecto a "${clean}": ¿qué detalle específico te gustaría explorar a continuación?`,
-      tokens: tokenizeSimple(`Regarding "${clean}": what specific detail would you like to explore next?`),
-      vocabulary: { 'explore': { meaning: 'Explorar o indagar', part_of_speech: 'verb' } }
+      response: 'Je comprends tout à fait ce que tu veux dire. Quelle est ta propre expérience à ce sujet dans la vie quotidienne ?',
+      translation: 'Entiendo totalmente lo que quieres decir. ¿Cuál es tu propia experiencia al respecto en la vida diaria?',
+      tokens: tokenizeSimple('Je comprends tout à fait ce que tu veux dire. Quelle est ta propre expérience à ce sujet dans la vie quotidienne ?'),
+      vocabulary: { 'quotidien': { meaning: 'Cotidiano o diario', part_of_speech: 'adjectif' } }
     };
   }
 
   return {
-    response: `Sobre "${clean}": ¿qué detalle específico te gustaría practicar ahora?`,
-    translation: `About "${clean}": what specific detail would you like to practice now?`,
-    tokens: tokenizeSimple(`Sobre "${clean}": ¿qué detalle específico te gustaría practicar ahora?`),
-    vocabulary: { 'detalle': { meaning: 'Punto concreto o detalle', part_of_speech: 'sustantivo' } }
+    response: 'Entiendo perfectamente tu punto. ¿Cómo vives esta experiencia en tu día a día?',
+    translation: 'I completely understand your point. How do you experience this in your day-to-day life?',
+    tokens: tokenizeSimple('Entiendo perfectamente tu punto. ¿Cómo vives esta experiencia en tu día a día?'),
+    vocabulary: { 'experiencia': { meaning: 'Vivencia personal', part_of_speech: 'sustantivo' } }
   };
 }
 
