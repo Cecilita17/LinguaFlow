@@ -85,6 +85,143 @@ const SPANISH_CROSS_CORRECTIONS = {
 };
 
 /**
+ * High-frequency code-switching vocabulary lexicon
+ * Translates native language (Spanish / English) words mixed into target languages
+ */
+export const CODE_SWITCHING_LEXICON = {
+  nl: {
+    'sopa': 'soep', 'sopas': 'soepen', 'soup': 'soep',
+    'verdura': 'groente', 'verduras': 'groenten', 'vegetales': 'groenten', 'vegetable': 'groente', 'vegetables': 'groenten',
+    'comida': 'eten', 'food': 'eten',
+    'carne': 'vlees', 'meat': 'vlees',
+    'pollo': 'kip', 'chicken': 'kip',
+    'pescado': 'vis', 'fish': 'vis',
+    'arroz': 'rijst', 'rice': 'rijst',
+    'pan': 'brood', 'bread': 'brood',
+    'queso': 'kaas', 'cheese': 'kaas',
+    'huevo': 'ei', 'huevos': 'eieren', 'egg': 'ei', 'eggs': 'eieren',
+    'leche': 'melk', 'milk': 'melk',
+    'agua': 'water', 'water': 'water',
+    'café': 'koffie', 'cafe': 'koffie', 'coffee': 'koffie',
+    'té': 'thee', 'te': 'thee', 'tea': 'thee',
+    'azúcar': 'suiker', 'azucar': 'suiker', 'sugar': 'suiker',
+    'sal': 'zout', 'salt': 'zout',
+    'pimienta': 'peper', 'pepper': 'peper',
+    'aceite': 'olie', 'oil': 'olie',
+    'mantequilla': 'boter', 'butter': 'boter',
+    'fruta': 'fruit', 'frutas': 'fruit', 'fruit': 'fruit',
+    'manzana': 'appel', 'manzanas': 'appels', 'apple': 'appel', 'apples': 'appels',
+    'papa': 'aardappel', 'papas': 'aardappels', 'patata': 'aardappel', 'patatas': 'aardappels', 'potato': 'aardappel', 'potatoes': 'aardappels',
+    'cebolla': 'ui', 'cebollas': 'uien', 'onion': 'ui', 'onions': 'uien',
+    'tomate': 'tomaat', 'tomates': 'tomaten', 'tomato': 'tomaat', 'tomatoes': 'tomaten',
+    'ajo': 'knoflook', 'garlic': 'knoflook',
+    'zanahoria': 'wortel', 'zanahorias': 'wortelen', 'carrot': 'wortel', 'carrots': 'wortels',
+    'con': 'met', 'with': 'met',
+    'sin': 'zonder', 'without': 'zonder',
+    'para': 'voor', 'for': 'voor',
+    'de': 'van', 'from': 'van',
+    'y': 'en', 'and': 'en',
+    'o': 'of', 'or': 'of',
+    'pero': 'maar', 'but': 'maar',
+    'porque': 'omdat', 'because': 'omdat',
+    'hacer': 'maken', 'make': 'maken',
+    'cocinar': 'koken', 'cook': 'koken',
+    'comer': 'eten', 'eat': 'eten',
+    'beber': 'drinken', 'tomar': 'drinken', 'drink': 'drinken',
+    'casa': 'huis', 'house': 'huis',
+    'amigo': 'vriend', 'amiga': 'vriendin', 'amigos': 'vrienden', 'friend': 'vriend',
+    'libro': 'boek', 'libros': 'boeken', 'book': 'boek',
+    'ciudad': 'stad', 'city': 'stad',
+    'país': 'land', 'pais': 'land', 'country': 'land',
+    'tiempo': 'tijd', 'time': 'tijd',
+    'hoy': 'vandaag', 'today': 'vandaag',
+    'mañana': 'morgen', 'tomorrow': 'morgen',
+    'ayer': 'gisteren', 'yesterday': 'gisteren'
+  },
+  pl: {
+    'sopa': 'zupę', 'verduras': 'warzywa', 'vegetales': 'warzywa', 'carne': 'mięso', 'pollo': 'kurczaka',
+    'pescado': 'rybę', 'arroz': 'ryż', 'pan': 'chleb', 'queso': 'ser', 'huevo': 'jajko', 'leche': 'mleko',
+    'agua': 'wodę', 'café': 'kawę', 'cafe': 'kawę', 'té': 'herbatę', 'te': 'herbatę', 'azúcar': 'cukier',
+    'con': 'z', 'sin': 'bez', 'para': 'dla', 'y': 'i', 'pero': 'ale',
+    'hacer': 'robić', 'cocinar': 'gotować', 'comer': 'jeść', 'beber': 'pić', 'tomar': 'pić',
+    'casa': 'dom', 'amigo': 'przyjaciel', 'libro': 'książkę'
+  },
+  de: {
+    'sopa': 'Suppe', 'verduras': 'Gemüse', 'vegetales': 'Gemüse', 'carne': 'Fleisch', 'pollo': 'Hähnchen',
+    'pescado': 'Fisch', 'arroz': 'Reis', 'pan': 'Brot', 'queso': 'Käse', 'huevo': 'Ei', 'leche': 'Milch',
+    'agua': 'Wasser', 'café': 'Kaffee', 'cafe': 'Kaffee', 'té': 'Tee', 'te': 'Tee', 'azúcar': 'Zucker',
+    'con': 'mit', 'sin': 'ohne', 'para': 'für', 'y': 'und', 'pero': 'aber',
+    'hacer': 'machen', 'cocinar': 'kochen', 'comer': 'essen', 'beber': 'trinken', 'tomar': 'trinken',
+    'casa': 'Haus', 'amigo': 'Freund', 'libro': 'Buch'
+  },
+  fr: {
+    'sopa': 'soupe', 'verduras': 'légumes', 'vegetales': 'légumes', 'carne': 'viande', 'pollo': 'poulet',
+    'pescado': 'poisson', 'arroz': 'riz', 'pan': 'pain', 'queso': 'fromage', 'huevo': 'œuf', 'leche': 'lait',
+    'agua': 'eau', 'café': 'café', 'cafe': 'café', 'té': 'thé', 'te': 'thé', 'azúcar': 'sucre',
+    'con': 'avec', 'sin': 'sans', 'para': 'pour', 'y': 'et', 'pero': 'mais',
+    'hacer': 'faire', 'cocinar': 'cuisiner', 'comer': 'manger', 'beber': 'boire', 'tomar': 'prendre',
+    'casa': 'maison', 'amigo': 'ami', 'libro': 'livre'
+  },
+  it: {
+    'sopa': 'zuppa', 'verduras': 'verdure', 'vegetales': 'verdure', 'carne': 'carne', 'pollo': 'pollo',
+    'pescado': 'pesce', 'arroz': 'riso', 'pan': 'pane', 'queso': 'formaggio', 'huevo': 'uovo', 'leche': 'latte',
+    'agua': 'acqua', 'café': 'caffè', 'cafe': 'caffè', 'té': 'tè', 'te': 'tè', 'azúcar': 'zucchero',
+    'con': 'con', 'sin': 'senza', 'para': 'per', 'y': 'e', 'pero': 'ma',
+    'hacer': 'fare', 'cocinar': 'cucinare', 'comer': 'mangiare', 'beber': 'bere',
+    'casa': 'casa', 'amigo': 'amico', 'libro': 'libro'
+  },
+  ru: {
+    'sopa': 'суп', 'verduras': 'овощи', 'carne': 'мясо', 'agua': 'воду', 'café': 'кофе', 'leche': 'молоко',
+    'con': 'с', 'sin': 'без', 'hacer': 'делать', 'cocinar': 'готовить', 'comer': 'есть', 'beber': 'пить',
+    'casa': 'дом', 'amigo': 'друг', 'libro': 'книгу'
+  },
+  ar: {
+    'sopa': 'حَسَاء', 'verduras': 'خُضْرَاوَات', 'agua': 'مَاء', 'café': 'قَهْوَة', 'leche': 'حَلِيب',
+    'con': 'مَعَ', 'sin': 'بِدُونِ', 'hacer': 'أَفْعَل', 'cocinar': 'أَطْبُخ', 'comer': 'آكُل', 'beber': 'أَشْرَب',
+    'casa': 'بَيْت'
+  },
+  zh: {
+    'sopa': '汤', 'verduras': '蔬菜', 'agua': '水', 'café': '咖啡', 'leche': '牛奶',
+    'con': '和', 'hacer': '做', 'cocinar': '做饭', 'comer': '吃', 'beber': '喝',
+    'casa': '家'
+  },
+  en: {
+    'sopa': 'soup', 'verduras': 'vegetables', 'vegetales': 'vegetables', 'carne': 'meat', 'pollo': 'chicken',
+    'pescado': 'fish', 'arroz': 'rice', 'pan': 'bread', 'queso': 'cheese', 'huevo': 'egg', 'leche': 'milk',
+    'agua': 'water', 'café': 'coffee', 'cafe': 'coffee', 'té': 'tea', 'te': 'tea', 'azúcar': 'sugar',
+    'con': 'with', 'sin': 'without', 'para': 'for', 'y': 'and', 'pero': 'but',
+    'hacer': 'make', 'cocinar': 'cook', 'comer': 'eat', 'beber': 'drink', 'tomar': 'drink',
+    'casa': 'house', 'amigo': 'friend', 'libro': 'book'
+  },
+  es: {
+    'soup': 'sopa', 'vegetables': 'verduras', 'meat': 'carne', 'chicken': 'pollo',
+    'water': 'agua', 'coffee': 'café', 'tea': 'té', 'milk': 'leche',
+    'with': 'con', 'without': 'sin', 'make': 'hacer', 'cook': 'cocinar', 'eat': 'comer'
+  }
+};
+
+/**
+ * Translate native vocabulary words mixed inside the sentence (Code-Switching)
+ */
+export function translateMixedNativeVocabulary(text, targetLang = 'nl') {
+  if (!text) return text;
+  const langLex = CODE_SWITCHING_LEXICON[targetLang];
+  if (!langLex) return text;
+
+  return text.replace(/[\p{L}]+/gu, (match) => {
+    const lower = match.toLowerCase();
+    if (langLex[lower]) {
+      const translated = langLex[lower];
+      if (match[0] === match[0].toUpperCase() && match[0] !== match[0].toLowerCase()) {
+        return translated.charAt(0).toUpperCase() + translated.slice(1);
+      }
+      return translated;
+    }
+    return match;
+  });
+}
+
+/**
  * Deep Target Language Grammatical Rules (conjugation, case, pronouns, diacritics)
  */
 const DEEP_LANGUAGE_RULES = {
@@ -263,7 +400,7 @@ export async function checkLanguageTool(text, targetLang) {
  * Master Grammar Correction Function
  * Combines LanguageTool + Deep Conjugation/Case Rules + Cross-Language Translations
  */
-export async function performFullGrammarCorrection(text, targetLang = 'pl') {
+export async function performFullGrammarCorrection(text, targetLang = 'pl', nativeLang = 'es', apiKey = '') {
   const original = (text || '').trim();
   if (!original) {
     return {
@@ -274,10 +411,67 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl') {
     };
   }
 
+  // 0. If Gemini API key is available, use direct AI for maximum intelligence & code-switching translation
+  if (apiKey && apiKey.trim()) {
+    try {
+      const prompt = `You are an expert strict multilingual grammar teacher.
+The student is practicing target language: "${targetLang}".
+Student's native language is: "${nativeLang}".
+Student wrote: "${original}".
+
+CRITICAL INSTRUCTIONS:
+1. If the student wrote any words, vocabulary, or phrases in their native language (${nativeLang}) or mixed languages (code-switching), you MUST translate and convert those native words into natural, proper ${targetLang} in "corrected_text".
+2. Strictly correct all spelling, conjugation, diacritics, agreement, and grammar mistakes in ${targetLang}.
+3. In "diff_tokens", divide the corrected sentence into words. For every word that was corrected or translated from ${nativeLang}, set "changed": true and "original": "[the exact word or phrase from the student's original input]". For untouched correct words, set "changed": false and "original": null.
+
+Return STRICTLY JSON format:
+{
+  "original_text": "${original}",
+  "corrected_text": "string",
+  "has_errors": boolean,
+  "diff_tokens": [
+    { "text": "string", "changed": boolean, "original": "string or null" }
+  ]
+}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      const res = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+        })
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (raw) {
+          const parsed = JSON.parse(raw.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim());
+          if (parsed && parsed.corrected_text && parsed.diff_tokens) {
+            return parsed;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Gemini re-analysis notice:', err.message);
+    }
+  }
+
   let corrected = original;
   let hasErrors = false;
 
-  // 1. Check Spanish/English cross-corrections if user wrote in native language
+  // 1. Translate mixed native vocabulary words (Code-Switching, e.g. sopa -> soep, verduras -> groenten)
+  const translatedVocab = translateMixedNativeVocabulary(corrected, targetLang);
+  if (translatedVocab !== corrected) {
+    corrected = translatedVocab;
+    hasErrors = true;
+  }
+
+  // 2. Check Spanish/English cross-corrections if user wrote in native language
   const crossRules = SPANISH_CROSS_CORRECTIONS[targetLang] || [];
   for (const rule of crossRules) {
     if (rule.regex.test(corrected)) {
@@ -286,7 +480,7 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl') {
     }
   }
 
-  // 2. Check Deep Grammatical Rules (conjugation, case, diacritics, idioms)
+  // 3. Check Deep Grammatical Rules (conjugation, case, diacritics, idioms)
   const rules = DEEP_LANGUAGE_RULES[targetLang] || [];
   for (const rule of rules) {
     if (rule.regex.test(corrected)) {
@@ -295,7 +489,7 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl') {
     }
   }
 
-  // 3. Asynchronously call LanguageTool for typo/spelling/advanced grammar
+  // 4. Asynchronously call LanguageTool for typo/spelling/advanced grammar
   try {
     const ltResult = await checkLanguageTool(corrected, targetLang);
     if (ltResult && ltResult !== corrected) {
@@ -304,12 +498,12 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl') {
     }
   } catch (e) {}
 
-  // 4. If corrected differs from original, errors occurred
+  // 5. If corrected differs from original, errors occurred
   if (corrected.toLowerCase().trim() !== original.toLowerCase().trim()) {
     hasErrors = true;
   }
 
-  // 5. Compute fine-grained diff tokens with golden highlighting
+  // 6. Compute fine-grained diff tokens with golden highlighting
   const diffTokens = computeWordDiff(original, corrected);
 
   return {
@@ -323,6 +517,6 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl') {
 /**
  * Force strict re-analysis on a message
  */
-export async function reanalyzeGrammarStrictly(text, targetLang = 'pl') {
-  return performFullGrammarCorrection(text, targetLang);
+export async function reanalyzeGrammarStrictly(text, targetLang = 'pl', nativeLang = 'es', apiKey = '') {
+  return performFullGrammarCorrection(text, targetLang, nativeLang, apiKey);
 }

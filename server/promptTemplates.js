@@ -11,6 +11,7 @@ INSTRUCTIONS:
 5. For Arabic or Russian, provide phonetic romanization in "tokens".
 6. Provide a natural translation of your bot response in ${nativeLang}.
 7. Select 2-4 key vocabulary words from your response and provide brief meanings in ${nativeLang}.
+8. CODE-SWITCHING & MIXED NATIVE VOCABULARY: If the student includes any words, phrases, or expressions in their native language (${nativeLang}) or mixes languages, you MUST translate and replace all native words into natural, idiomatic ${targetLang} in "corrected_text". In "diff_tokens", mark each translated word with "changed": true and "original": "[the exact native word the student used]".
 
 Output STRICTLY valid JSON with this structure:
 {

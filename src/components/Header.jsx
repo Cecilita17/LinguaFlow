@@ -13,7 +13,8 @@ export function Header({
   setHandsFree,
   onOpenSettings,
   isListening,
-  isSpeaking
+  isSpeaking,
+  hasApiKey = false
 }) {
   return (
     <header className="sticky top-0 z-30 bg-[#2b160f]/95 backdrop-blur-md border-b border-[#482519] px-4 py-3 shadow-lg shadow-black/20 text-white transition-colors">
@@ -125,6 +126,31 @@ export function Header({
               </>
             )}
           </button>
+
+          {/* AI Connection Status Badge */}
+          {hasApiKey ? (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              title="IA Gemini Activa - Clic para ver configuración"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-950/85 border border-emerald-600/70 text-emerald-200 text-xs font-semibold shadow-xs hover:bg-emerald-900/80 transition-all"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="hidden sm:inline">✨ Gemini IA Activa</span>
+              <span className="sm:hidden">IA</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              title="Conectar Gemini AI para respuestas 100% generativas en vivo"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-950/90 to-pink-950/90 border border-rose-600/60 text-rose-200 hover:text-white text-xs font-semibold shadow-xs hover:border-rose-400 transition-all group"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-12 transition-transform" />
+              <span className="hidden sm:inline">Conectar Gemini IA</span>
+              <span className="sm:hidden">IA</span>
+            </button>
+          )}
 
           {/* Settings Button */}
           <button

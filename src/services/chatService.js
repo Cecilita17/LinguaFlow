@@ -51,7 +51,7 @@ export async function sendChatMessage({
         if (resData && resData.success && resData.data?.user_correction && resData.data?.bot_response) {
           // If server didn't catch errors, run deep grammar analysis to guarantee detection
           if (!resData.data.user_correction.has_errors) {
-            const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang);
+            const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);
             if (deepCorrection && deepCorrection.has_errors) {
               resData.data.user_correction = deepCorrection;
             }
@@ -104,7 +104,7 @@ Return strictly valid JSON.`
         }]
       });
 
-      const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
       for (const model of candidateModels) {
         try {
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveKey}`;
@@ -147,7 +147,7 @@ Return strictly valid JSON.`
   // 3. Resilient smart multi-turn linguistic engine fallback
   console.log('Using resilient smart multi-turn linguistic engine...');
   const fallbackData = processSmartConversation(cleanMsg, targetLang, nativeLang, history);
-  const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang);
+  const deepCorrection = await performFullGrammarCorrection(cleanMsg, targetLang, nativeLang, effectiveKey);
   if (deepCorrection && deepCorrection.has_errors) {
     fallbackData.user_correction = deepCorrection;
   }

@@ -105,12 +105,13 @@ export default function App() {
     try {
       setIsReanalyzingId(msg.id);
       const textToAnalyze = msg.originalText || msg.text;
-      const result = await reanalyzeGrammarStrictly(textToAnalyze, targetLang);
+      const result = await reanalyzeGrammarStrictly(textToAnalyze, targetLang, nativeLang, config?.apiKey || '');
       if (result) {
         setMessages(prev => prev.map(m => {
           if (m.id === msg.id) {
             return {
               ...m,
+              originalText: textToAnalyze,
               correctedText: result.corrected_text,
               hasCorrection: result.has_errors || result.diff_tokens?.some(t => t.changed),
               diffTokens: result.diff_tokens
@@ -532,6 +533,7 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         isListening={isRecording}
         isSpeaking={isSpeaking}
+        hasApiKey={Boolean(config?.apiKey)}
       />
 
       {/* Main Chat Scroll Area */}

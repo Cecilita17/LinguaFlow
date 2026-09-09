@@ -912,16 +912,159 @@ const ADAPTIVE_POOLS = {
 };
 
 /**
+ * High-frequency code-switching vocabulary lexicon
+ * Translates native language (Spanish / English) words mixed into target languages
+ */
+export const CODE_SWITCHING_LEXICON = {
+  nl: {
+    'sopa': 'soep', 'sopas': 'soepen', 'soup': 'soep',
+    'verdura': 'groente', 'verduras': 'groenten', 'vegetales': 'groenten', 'vegetable': 'groente', 'vegetables': 'groenten',
+    'comida': 'eten', 'food': 'eten',
+    'carne': 'vlees', 'meat': 'vlees',
+    'pollo': 'kip', 'chicken': 'kip',
+    'pescado': 'vis', 'fish': 'vis',
+    'arroz': 'rijst', 'rice': 'rijst',
+    'pan': 'brood', 'bread': 'brood',
+    'queso': 'kaas', 'cheese': 'kaas',
+    'huevo': 'ei', 'huevos': 'eieren', 'egg': 'ei', 'eggs': 'eieren',
+    'leche': 'melk', 'milk': 'melk',
+    'agua': 'water', 'water': 'water',
+    'café': 'koffie', 'cafe': 'koffie', 'coffee': 'koffie',
+    'té': 'thee', 'te': 'thee', 'tea': 'thee',
+    'azúcar': 'suiker', 'azucar': 'suiker', 'sugar': 'suiker',
+    'sal': 'zout', 'salt': 'zout',
+    'pimienta': 'peper', 'pepper': 'peper',
+    'aceite': 'olie', 'oil': 'olie',
+    'mantequilla': 'boter', 'butter': 'boter',
+    'fruta': 'fruit', 'frutas': 'fruit', 'fruit': 'fruit',
+    'manzana': 'appel', 'manzanas': 'appels', 'apple': 'appel', 'apples': 'appels',
+    'papa': 'aardappel', 'papas': 'aardappels', 'patata': 'aardappel', 'patatas': 'aardappels', 'potato': 'aardappel', 'potatoes': 'aardappels',
+    'cebolla': 'ui', 'cebollas': 'uien', 'onion': 'ui', 'onions': 'uien',
+    'tomate': 'tomaat', 'tomates': 'tomaten', 'tomato': 'tomaat', 'tomatoes': 'tomaten',
+    'ajo': 'knoflook', 'garlic': 'knoflook',
+    'zanahoria': 'wortel', 'zanahorias': 'wortelen', 'carrot': 'wortel', 'carrots': 'wortels',
+    'con': 'met', 'with': 'met',
+    'sin': 'zonder', 'without': 'zonder',
+    'para': 'voor', 'for': 'voor',
+    'de': 'van', 'from': 'van',
+    'y': 'en', 'and': 'en',
+    'o': 'of', 'or': 'of',
+    'pero': 'maar', 'but': 'maar',
+    'porque': 'omdat', 'because': 'omdat',
+    'hacer': 'maken', 'make': 'maken',
+    'cocinar': 'koken', 'cook': 'koken',
+    'comer': 'eten', 'eat': 'eten',
+    'beber': 'drinken', 'tomar': 'drinken', 'drink': 'drinken',
+    'casa': 'huis', 'house': 'huis',
+    'amigo': 'vriend', 'amiga': 'vriendin', 'amigos': 'vrienden', 'friend': 'vriend',
+    'libro': 'boek', 'libros': 'boeken', 'book': 'boek',
+    'ciudad': 'stad', 'city': 'stad',
+    'país': 'land', 'pais': 'land', 'country': 'land',
+    'tiempo': 'tijd', 'time': 'tijd',
+    'hoy': 'vandaag', 'today': 'vandaag',
+    'mañana': 'morgen', 'tomorrow': 'morgen',
+    'ayer': 'gisteren', 'yesterday': 'gisteren'
+  },
+  pl: {
+    'sopa': 'zupę', 'verduras': 'warzywa', 'vegetales': 'warzywa', 'carne': 'mięso', 'pollo': 'kurczaka',
+    'pescado': 'rybę', 'arroz': 'ryż', 'pan': 'chleb', 'queso': 'ser', 'huevo': 'jajko', 'leche': 'mleko',
+    'agua': 'wodę', 'café': 'kawę', 'cafe': 'kawę', 'té': 'herbatę', 'te': 'herbatę', 'azúcar': 'cukier',
+    'con': 'z', 'sin': 'bez', 'para': 'dla', 'y': 'i', 'pero': 'ale',
+    'hacer': 'robić', 'cocinar': 'gotować', 'comer': 'jeść', 'beber': 'pić', 'tomar': 'pić',
+    'casa': 'dom', 'amigo': 'przyjaciel', 'libro': 'książkę'
+  },
+  de: {
+    'sopa': 'Suppe', 'verduras': 'Gemüse', 'vegetales': 'Gemüse', 'carne': 'Fleisch', 'pollo': 'Hähnchen',
+    'pescado': 'Fisch', 'arroz': 'Reis', 'pan': 'Brot', 'queso': 'Käse', 'huevo': 'Ei', 'leche': 'Milch',
+    'agua': 'Wasser', 'café': 'Kaffee', 'cafe': 'Kaffee', 'té': 'Tee', 'te': 'Tee', 'azúcar': 'Zucker',
+    'con': 'mit', 'sin': 'ohne', 'para': 'für', 'y': 'und', 'pero': 'aber',
+    'hacer': 'machen', 'cocinar': 'kochen', 'comer': 'essen', 'beber': 'trinken', 'tomar': 'trinken',
+    'casa': 'Haus', 'amigo': 'Freund', 'libro': 'Buch'
+  },
+  fr: {
+    'sopa': 'soupe', 'verduras': 'légumes', 'vegetales': 'légumes', 'carne': 'viande', 'pollo': 'poulet',
+    'pescado': 'poisson', 'arroz': 'riz', 'pan': 'pain', 'queso': 'fromage', 'huevo': 'œuf', 'leche': 'lait',
+    'agua': 'eau', 'café': 'café', 'cafe': 'café', 'té': 'thé', 'te': 'thé', 'azúcar': 'sucre',
+    'con': 'avec', 'sin': 'sans', 'para': 'pour', 'y': 'et', 'pero': 'mais',
+    'hacer': 'faire', 'cocinar': 'cuisiner', 'comer': 'manger', 'beber': 'boire', 'tomar': 'prendre',
+    'casa': 'maison', 'amigo': 'ami', 'libro': 'livre'
+  },
+  it: {
+    'sopa': 'zuppa', 'verduras': 'verdure', 'vegetales': 'verdure', 'carne': 'carne', 'pollo': 'pollo',
+    'pescado': 'pesce', 'arroz': 'riso', 'pan': 'pane', 'queso': 'formaggio', 'huevo': 'uovo', 'leche': 'latte',
+    'agua': 'acqua', 'café': 'caffè', 'cafe': 'caffè', 'té': 'tè', 'te': 'tè', 'azúcar': 'zucchero',
+    'con': 'con', 'sin': 'senza', 'para': 'per', 'y': 'e', 'pero': 'ma',
+    'hacer': 'fare', 'cocinar': 'cucinare', 'comer': 'mangiare', 'beber': 'bere',
+    'casa': 'casa', 'amigo': 'amico', 'libro': 'libro'
+  },
+  ru: {
+    'sopa': 'суп', 'verduras': 'овощи', 'carne': 'мясо', 'agua': 'воду', 'café': 'кофе', 'leche': 'молоко',
+    'con': 'с', 'sin': 'без', 'hacer': 'делать', 'cocinar': 'готовить', 'comer': 'есть', 'beber': 'пить',
+    'casa': 'дом', 'amigo': 'друг', 'libro': 'книгу'
+  },
+  ar: {
+    'sopa': 'حَسَاء', 'verduras': 'خُضْرَاوَات', 'agua': 'مَاء', 'café': 'قَهْوَة', 'leche': 'حَلِيب',
+    'con': 'مَعَ', 'sin': 'بِدُونِ', 'hacer': 'أَفْعَل', 'cocinar': 'أَطْبُخ', 'comer': 'آكُل', 'beber': 'أَشْرَب',
+    'casa': 'بَيْت'
+  },
+  zh: {
+    'sopa': '汤', 'verduras': '蔬菜', 'agua': '水', 'café': '咖啡', 'leche': '牛奶',
+    'con': '和', 'hacer': '做', 'cocinar': '做饭', 'comer': '吃', 'beber': '喝',
+    'casa': '家'
+  },
+  en: {
+    'sopa': 'soup', 'verduras': 'vegetables', 'vegetales': 'vegetables', 'carne': 'meat', 'pollo': 'chicken',
+    'pescado': 'fish', 'arroz': 'rice', 'pan': 'bread', 'queso': 'cheese', 'huevo': 'egg', 'leche': 'milk',
+    'agua': 'water', 'café': 'coffee', 'cafe': 'coffee', 'té': 'tea', 'te': 'tea', 'azúcar': 'sugar',
+    'con': 'with', 'sin': 'without', 'para': 'for', 'y': 'and', 'pero': 'but',
+    'hacer': 'make', 'cocinar': 'cook', 'comer': 'eat', 'beber': 'drink', 'tomar': 'drink',
+    'casa': 'house', 'amigo': 'friend', 'libro': 'book'
+  },
+  es: {
+    'soup': 'sopa', 'vegetables': 'verduras', 'meat': 'carne', 'chicken': 'pollo',
+    'water': 'agua', 'coffee': 'café', 'tea': 'té', 'milk': 'leche',
+    'with': 'con', 'without': 'sin', 'make': 'hacer', 'cook': 'cocinar', 'eat': 'comer'
+  }
+};
+
+/**
+ * Translate native vocabulary words mixed inside the sentence (Code-Switching)
+ */
+export function translateMixedNativeVocabulary(text, targetLang = 'nl') {
+  if (!text) return text;
+  const langLex = CODE_SWITCHING_LEXICON[targetLang];
+  if (!langLex) return text;
+
+  return text.replace(/[\p{L}]+/gu, (match) => {
+    const lower = match.toLowerCase();
+    if (langLex[lower]) {
+      const translated = langLex[lower];
+      if (match[0] === match[0].toUpperCase() && match[0] !== match[0].toLowerCase()) {
+        return translated.charAt(0).toUpperCase() + translated.slice(1);
+      }
+      return translated;
+    }
+    return match;
+  });
+}
+
+/**
  * Main engine processing function
  */
 export function processSmartConversation(message, targetLang = 'pl', nativeLang = 'es', history = []) {
   const langKey = GRAMMAR_RULES[targetLang] ? targetLang : 'pl';
   const rules = GRAMMAR_RULES[langKey] || [];
-  let correctedText = message;
+  let correctedText = (message || '').trim();
   let hasErrors = false;
-  const originalLower = message.toLowerCase();
 
-  // 1. Check grammar rules for the specific target language
+  // 1. Translate mixed native vocabulary words (Code-Switching, e.g. sopa -> soep, verduras -> groenten)
+  const translatedVocab = translateMixedNativeVocabulary(correctedText, targetLang);
+  if (translatedVocab !== correctedText) {
+    correctedText = translatedVocab;
+    hasErrors = true;
+  }
+
+  // 2. Check grammar rules for the specific target language
   for (const rule of rules) {
     if (rule.regex.test(correctedText)) {
       correctedText = correctedText.replace(rule.regex, rule.replacement);
@@ -929,19 +1072,21 @@ export function processSmartConversation(message, targetLang = 'pl', nativeLang 
     }
   }
 
-  // 2. Compute fine-grained diff tokens
+  // 3. Compute fine-grained diff tokens
   const diffTokens = computeWordDiff(message, correctedText);
 
-  // 3. Prevent repeating recent bot messages
-  const recentBotTexts = history.filter(h => h.sender === 'bot').slice(-2).map(h => h.text);
+  // 4. Topic matching across both original and translated text
+  const originalLower = (message || '').toLowerCase();
+  const correctedLower = correctedText.toLowerCase();
 
-  // 4. Find topic match
+  const recentBotTexts = history.filter(h => h.sender === 'bot').slice(-2).map(h => h.text);
   const topics = CONVERSATION_TOPICS[langKey] || CONVERSATION_TOPICS['pl'];
   let matchedTopic = null;
 
+  // Check specific content topics first (food, soup, drinks, hobbies, etc.) before generic question openers
   for (const topic of topics) {
     const isRepeat = recentBotTexts.includes(topic.response);
-    if (!isRepeat && topic.triggers.some(trig => originalLower.includes(trig))) {
+    if (!isRepeat && topic.triggers.some(trig => originalLower.includes(trig) || correctedLower.includes(trig))) {
       matchedTopic = topic;
       break;
     }
@@ -967,7 +1112,7 @@ export function processSmartConversation(message, targetLang = 'pl', nativeLang 
     user_correction: {
       original_text: message,
       corrected_text: correctedText,
-      has_errors: hasErrors,
+      has_errors: hasErrors || diffTokens.some(t => t.changed),
       diff_tokens: diffTokens
     },
     bot_response: {

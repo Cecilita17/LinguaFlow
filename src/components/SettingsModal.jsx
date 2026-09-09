@@ -48,19 +48,24 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
               placeholder="AIzaSy..."
               className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 outline-none focus:ring-2 focus:ring-rose-500 font-mono text-xs"
             />
-            <div className="flex items-start space-x-1.5 mt-1.5 text-xs text-stone-500">
-              <Info className="w-3.5 h-3.5 text-stone-400 flex-shrink-0 mt-0.5" />
-              <span>
-                El chatbot incluye un motor conversacional inteligente y contextual. Para respuestas con IA generativa completa en la nube, puedes obtener una clave gratis en{' '}
-                <a
-                  href="https://aistudio.google.com/app/apikey"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-rose-600 hover:text-rose-700 underline font-semibold"
-                >
-                  Google AI Studio
-                </a>.
-              </span>
+            <div className="flex items-start space-x-1.5 mt-1.5 text-xs text-stone-600 bg-rose-50/80 p-2.5 rounded-xl border border-rose-100">
+              <Info className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p>
+                  <strong>¿Quieres respuestas 100% generadas por IA en vivo?</strong> Obtén tu API Key gratis sin costo ni tarjeta en{' '}
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-rose-600 hover:text-rose-700 underline font-bold"
+                  >
+                    Google AI Studio
+                  </a>.
+                </p>
+                <p className="text-[11px] text-stone-500">
+                  Tip: También puedes configurar <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GEMINI_API_KEY</code> en las Variables de Entorno de tu panel de <strong>Render</strong> para que todos tus celulares y dispositivos tengan IA automática sin tener que pegar la clave.
+                </p>
+              </div>
             </div>
           </div>
 

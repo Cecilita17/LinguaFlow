@@ -23,14 +23,13 @@ function parseRequestBody(req) {
   return req.body;
 }
 
-// Priority list of Gemini models to try
+// Priority list of Gemini models to try (Google Generative AI v1beta)
 const MODEL_CANDIDATES = [
-  'gemini-3.8-flash',
-  'gemini-3.7-flash',
-  'gemini-3.6-flash',
-  'gemini-3.5-flash',
-  'gemini-flash-latest',
-  'gemini-3.1-pro-preview'
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-2.0-flash-lite'
 ];
 
 let discoveredModel = null;
@@ -65,7 +64,7 @@ async function getBestGeminiModel(apiKey) {
     console.warn('Error fetching model list:', e.message);
   }
 
-  return 'gemini-3.8-flash';
+  return 'gemini-2.5-flash';
 }
 
 /**
