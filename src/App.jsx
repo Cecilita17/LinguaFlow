@@ -5,6 +5,7 @@ import { WordModal } from './components/WordModal';
 import { InputBar } from './components/InputBar';
 import { SettingsModal } from './components/SettingsModal';
 import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
+import { YouTubeReaderPage } from './pages/YouTubeReaderPage';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
@@ -100,6 +101,7 @@ export default function App() {
   const [selectedWord, setSelectedWord] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'youtube'
 
   const activeLangRef = useRef(targetLang);
 
@@ -683,110 +685,120 @@ export default function App() {
         isSpeaking={isSpeaking}
         hasApiKey={Boolean(config?.apiKey)}
         apiWarning={apiWarning}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
       />
 
-      {/* Main Chat Scroll Area */}
-      <main
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
-      >
-        {/* API Error Warning Banner */}
-        {apiWarning && (
-          <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in">
-            <div className="flex items-start space-x-2.5">
-              <span className="text-base leading-none mt-0.5">⚠️</span>
-              <div>
-                <p className="font-bold text-amber-100">
-                  Aviso de Groq AI: {apiWarning}
-                </p>
-                <p className="text-[11px] text-amber-200/80 mt-0.5">
-                  Haz clic en{' '}
-                  <button
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="underline font-bold text-white hover:text-amber-300"
-                  >
-                    Ajustes ⚙️
-                  </button>{' '}
-                  para verificar el estado del backend y la configuración de GROQ_API_KEY.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setApiWarning(null)}
-              className="p-1 text-amber-300/70 hover:text-white rounded-lg transition-colors flex-shrink-0 ml-2"
-              title="Cerrar aviso"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* Helper Banner on top in Chocolate & Rose theme */}
-        <div className="mb-6 p-4 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-md shadow-black/30 flex items-start justify-between">
-          <div className="flex items-start space-x-3">
-            <div className="p-2 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-md shadow-rose-950 mt-0.5">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-rose-200">
-                Practicando {currentLangObj.name} con LinguaFlow
-              </h2>
-              <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
-                Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinámicamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">dorado</span>.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleResetChat}
-            title="Reiniciar chat"
-            className="p-1.5 text-rose-300/50 hover:text-rose-200 hover:bg-[#482216] rounded-lg transition-colors flex-shrink-0"
+      {activeTab === 'youtube' ? (
+        <main className="flex-1 overflow-y-auto w-full">
+          <YouTubeReaderPage />
+        </main>
+      ) : (
+        <>
+          {/* Main Chat Scroll Area */}
+          <main
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
           >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        </div>
+            {/* API Error Warning Banner */}
+            {apiWarning && (
+              <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in">
+                <div className="flex items-start space-x-2.5">
+                  <span className="text-base leading-none mt-0.5">⚠️</span>
+                  <div>
+                    <p className="font-bold text-amber-100">
+                      Aviso de Groq AI: {apiWarning}
+                    </p>
+                    <p className="text-[11px] text-amber-200/80 mt-0.5">
+                      Haz clic en{' '}
+                      <button
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="underline font-bold text-white hover:text-amber-300"
+                      >
+                        Ajustes ⚙️
+                      </button>{' '}
+                      para verificar el estado del backend y la configuración de GROQ_API_KEY.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setApiWarning(null)}
+                  className="p-1 text-amber-300/70 hover:text-white rounded-lg transition-colors flex-shrink-0 ml-2"
+                  title="Cerrar aviso"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
-        {/* Message Bubbles */}
-        {messages.map((msg) => (
-          <ChatMessage
-            key={msg.id}
-            message={msg}
+            {/* Helper Banner on top in Chocolate & Rose theme */}
+            <div className="mb-6 p-4 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-md shadow-black/30 flex items-start justify-between">
+              <div className="flex items-start space-x-3">
+                <div className="p-2 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-md shadow-rose-950 mt-0.5">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-rose-200">
+                    Practicando {currentLangObj.name} con LinguaFlow
+                  </h2>
+                  <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
+                    Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinámicamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">dorado</span>.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleResetChat}
+                title="Reiniciar chat"
+                className="p-1.5 text-rose-300/50 hover:text-rose-200 hover:bg-[#482216] rounded-lg transition-colors flex-shrink-0"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Message Bubbles */}
+            {messages.map((msg) => (
+              <ChatMessage
+                key={msg.id}
+                message={msg}
+                targetLang={targetLang}
+                nativeLang={nativeLang}
+                showTransliteration={showTransliteration}
+                onWordClick={handleWordClick}
+                onPlayAudio={handlePlayAudio}
+                isAudioPlaying={isSpeaking}
+                onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
+                onReanalyzeMessage={handleReanalyzeMessage}
+                isReanalyzing={isReanalyzingId}
+              />
+            ))}
+
+            {/* Processing indicator */}
+            {isProcessing && (
+              <div className="flex items-center space-x-2 my-4 px-2 animate-fade-in text-xs text-rose-300/60">
+                <div className="w-4 h-4 rounded-full bg-rose-500 animate-pulse flex items-center justify-center text-[9px] text-white font-bold shadow-xs">
+                  L
+                </div>
+                <span className="font-medium">LinguaBot está analizando y respondiendo...</span>
+              </div>
+            )}
+          </main>
+
+          {/* Input Bar */}
+          <InputBar
             targetLang={targetLang}
             nativeLang={nativeLang}
-            showTransliteration={showTransliteration}
-            onWordClick={handleWordClick}
-            onPlayAudio={handlePlayAudio}
-            isAudioPlaying={isSpeaking}
-            onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
-            onReanalyzeMessage={handleReanalyzeMessage}
-            isReanalyzing={isReanalyzingId}
+            onSendMessage={handleSendMessage}
+            isRecording={isRecording}
+            recordingSeconds={recordingSeconds}
+            isTranscribingAudio={isTranscribingAudio}
+            onStartRecording={startRecording}
+            onStopRecording={stopRecording}
+            onCancelRecording={cancelRecording}
+            interimTranscript={interimTranscript}
+            isProcessing={isProcessing}
           />
-        ))}
-
-        {/* Processing indicator */}
-        {isProcessing && (
-          <div className="flex items-center space-x-2 my-4 px-2 animate-fade-in text-xs text-rose-300/60">
-            <div className="w-4 h-4 rounded-full bg-rose-500 animate-pulse flex items-center justify-center text-[9px] text-white font-bold shadow-xs">
-              L
-            </div>
-            <span className="font-medium">LinguaBot está analizando y respondiendo...</span>
-          </div>
-        )}
-      </main>
-
-      {/* Input Bar */}
-      <InputBar
-        targetLang={targetLang}
-        nativeLang={nativeLang}
-        onSendMessage={handleSendMessage}
-        isRecording={isRecording}
-        recordingSeconds={recordingSeconds}
-        isTranscribingAudio={isTranscribingAudio}
-        onStartRecording={startRecording}
-        onStopRecording={stopRecording}
-        onCancelRecording={cancelRecording}
-        interimTranscript={interimTranscript}
-        isProcessing={isProcessing}
-      />
+        </>
+      )}
 
       {/* Word Definition Modal */}
       <WordModal

@@ -16,7 +16,9 @@ export function Header({
   isListening,
   isSpeaking,
   hasApiKey = false,
-  apiWarning = null
+  apiWarning = null,
+  activeTab = 'chat',
+  setActiveTab
 }) {
   return (
     <header className="sticky top-0 z-30 bg-[#2b160f]/95 backdrop-blur-md border-b border-[#482519] px-4 py-3 shadow-lg shadow-black/20 text-white transition-colors">
@@ -35,6 +37,34 @@ export function Header({
             </div>
             <p className="text-xs text-rose-200/70">Práctica conversacional interactiva</p>
           </div>
+        </div>
+
+        {/* Navigation Tabs (Chat vs YouTube Reader) */}
+        <div className="flex items-center p-1 bg-[#1e0f0a]/90 rounded-xl border border-[#482519] text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setActiveTab && setActiveTab('chat')}
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+              activeTab === 'chat'
+                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
+                : 'text-rose-200/70 hover:text-white'
+            }`}
+          >
+            <span>💬</span>
+            <span>Chat</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab && setActiveTab('youtube')}
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+              activeTab === 'youtube'
+                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
+                : 'text-rose-200/70 hover:text-white'
+            }`}
+          >
+            <span>🎥</span>
+            <span>YouTube Reader</span>
+          </button>
         </div>
 
         {/* Language Selectors */}
