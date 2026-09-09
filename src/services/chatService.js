@@ -1,6 +1,6 @@
 export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL)
   || (typeof process !== 'undefined' && process.env && process.env.API_BASE_URL)
-  || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : (typeof window === 'undefined' ? 'http://localhost:3001' : 'https://linguaflow-fef0.onrender.com'));
+  || (typeof window !== 'undefined' ? '' : 'http://localhost:3001');
 
 import { performFullGrammarCorrection } from './grammarEngine.js';
 

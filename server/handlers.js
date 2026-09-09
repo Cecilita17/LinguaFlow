@@ -263,6 +263,7 @@ export async function handleLookupWord(req, res) {
     const activeModel = getSanitizedGroqModel();
 
     if (word && effectiveApiKey) {
+      console.log(`Groq model selected: ${activeModel}`);
       try {
         const prompt = `Give definition for "${word}" in language "${targetLang}" translated to "${nativeLang}".
 Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeLang}", "part_of_speech": "noun/verb/adj", "translit": null}`;
