@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { handleHealth, handleLanguages, handleChat, handleLookupWord, handleTranscribe, handleSentenceBreakdown } from './handlers.js';
+import { handleHealth, handleLanguages, handleChat, handleLookupWord, handleTranscribe, handleSentenceBreakdown, handleBatchGloss } from './handlers.js';
 
 dotenv.config();
 
@@ -29,6 +29,9 @@ app.post('/transcribe', handleTranscribe);
 
 app.post('/api/sentence-breakdown', handleSentenceBreakdown);
 app.post('/sentence-breakdown', handleSentenceBreakdown);
+
+app.post('/api/batch-gloss', handleBatchGloss);
+app.post('/batch-gloss', handleBatchGloss);
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {

@@ -539,4 +539,122 @@ Return STRICTLY valid JSON with no markdown formatting:
   }
 }
 
+// Batch Subtitle Gloss endpoint (Groq AI-powered multi-line interlinear word glossing)
+export async function handleBatchGloss(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  try {
+    const body = parseRequestBody(req);
+    const {
+      lines = [],
+      targetLang = 'zh',
+      nativeLang = 'es',
+      apiKey: clientApiKey
+    } = body;
+
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return res.status(400).json({ error: 'Se requiere una lista de líneas para glosar.' });
+    }
+
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
+
+    const activeModel = getSanitizedGroqModel();
+
+    if (effectiveApiKey) {
+      console.log(`Analyzing batch gloss with Groq (${activeModel}) for ${lines.length} lines (lang: ${targetLang} -> ${nativeLang})`);
+      const linesFormatted = lines
+        .map((l, i) => `[ID: ${l.id || `line_${i + 1}`}]: "${(l.text || '').trim()}"`)
+        .join('\n');
+
+      const prompt = `You are a master linguistic professor and vocabulary glossing engine.
+Analyze each subtitle line in language "${targetLang}" and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLang}".
+
+CRITICAL REQUIREMENTS:
+- Segment multi-character words/compounds as single units (e.g. for Chinese: "欢迎", "收听", "今天", "这", "封", "写给", "自己", "的", "信"). DO NOT break multi-character words into individual characters!
+- For each token provide:
+  * "word": the exact word/compound in "${targetLang}"
+  * "pinyin": Pinyin with tone marks for Chinese (e.g. "huānyíng", "jīntiān", "zìjǐ", "de"), or romanization for Arabic/Russian, or null for Latin scripts.
+  * "gloss": accurate, direct, concise definition/translation of this specific word in "${nativeLang}" (e.g. "bienvenido", "hoy", "uno mismo", "de", "carta"). DO NOT output the whole sentence as the gloss!
+- Omit isolated punctuation from glosses or give them null gloss.
+
+Subtitle lines to process:
+${linesFormatted}
+
+Return STRICTLY valid JSON with no markdown formatting:
+{
+  "lines": [
+    {
+      "id": "line ID matching the input",
+      "tokens": [
+        {
+          "word": "string",
+          "pinyin": "string or null",
+          "gloss": "string"
+        }
+      ]
+    }
+  ]
+}`;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are an expert multilingual linguistic parser and vocabulary glossing engine. You always return strictly valid JSON matching the schema with 100% accurate per-word glosses and zero generic placeholder templates.'
+              },
+              { role: 'user', content: prompt }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+            max_tokens: 3500
+          })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = data?.choices?.[0]?.message?.content;
+          const parsed = cleanAndParseJSON(rawText);
+          if (parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0) {
+            return res.status(200).json({
+              success: true,
+              source: `groq (${activeModel})`,
+              lines: parsed.lines
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Batch gloss API notice:', err.message);
+      }
+    }
+
+    return res.status(200).json({
+      success: false,
+      fallback: true,
+      message: 'API key no configurada o respuesta demorada.'
+    });
+  } catch (err) {
+    console.error('Server error in /api/batch-gloss:', err);
+    res.status(500).json({ error: 'Error en el servidor al generar las glosas de subtítulos.' });
+  }
+}
+
 

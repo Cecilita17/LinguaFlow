@@ -48,15 +48,24 @@ export function Transcript({
     return subtitles.filter((sub) => (sub.text || '').toLowerCase().includes(query));
   }, [subtitles, searchQuery]);
 
-  // 3. Smooth auto-scroll to active line
+  // 3. Smooth auto-scroll strictly within the transcript container (no page scrolling)
   useEffect(() => {
     if (!autoScroll || activeIndex === -1 || userInteractingRef.current) return;
 
     if (activeLineRef.current && containerRef.current) {
-      activeLineRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
-      });
+      const container = containerRef.current;
+      const element = activeLineRef.current;
+      const elemTop = element.offsetTop - container.offsetTop;
+      const elemBottom = elemTop + element.clientHeight;
+      const containerScrollTop = container.scrollTop;
+      const containerHeight = container.clientHeight;
+
+      if (elemTop < containerScrollTop || elemBottom > containerScrollTop + containerHeight) {
+        container.scrollTo({
+          top: Math.max(0, elemTop - containerHeight / 3),
+          behavior: 'smooth'
+        });
+      }
     }
   }, [activeIndex, autoScroll]);
 
@@ -66,12 +75,12 @@ export function Transcript({
     if (window._userScrollTimeout) clearTimeout(window._userScrollTimeout);
     window._userScrollTimeout = setTimeout(() => {
       userInteractingRef.current = false;
-    }, 2000);
+    }, 2500);
   };
 
   if (!subtitles || subtitles.length === 0) {
     return (
-      <div className="p-8 rounded-2xl bg-[#2b160f]/60 border border-[#482519] text-center flex flex-col items-center justify-center text-rose-300/60">
+      <div className="p-8 rounded-2xl bg-[#2b160f]/60 border border-[#482519] text-center flex flex-col items-center justify-center text-rose-300/60 my-auto">
         <FileText className="w-10 h-10 text-rose-400/50 mb-2" />
         <h4 className="text-sm font-bold text-rose-200 mb-1">Sin subtítulos cargados</h4>
         <p className="text-xs text-rose-300/70 max-w-sm">
@@ -83,7 +92,7 @@ export function Transcript({
 
   if (filteredSubtitles.length === 0) {
     return (
-      <div className="p-8 rounded-2xl bg-[#2b160f]/60 border border-[#482519] text-center flex flex-col items-center justify-center text-rose-300/60">
+      <div className="p-8 rounded-2xl bg-[#2b160f]/60 border border-[#482519] text-center flex flex-col items-center justify-center text-rose-300/60 my-auto">
         <SearchX className="w-8 h-8 text-rose-400 mb-2" />
         <h4 className="text-sm font-bold text-rose-200 mb-1">Sin coincidencias</h4>
         <p className="text-xs text-rose-300/70">
@@ -97,7 +106,7 @@ export function Transcript({
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="max-h-[500px] overflow-y-auto pr-1.5 space-y-2 rounded-2xl custom-scrollbar"
+      className="flex-1 h-full min-h-0 overflow-y-auto pr-1 sm:pr-2 space-y-2 rounded-2xl custom-scrollbar touch-pan-y select-text pb-16"
     >
       {filteredSubtitles.map((line, idx) => {
         const isCurrentActive = subtitles[activeIndex]?.id === line.id;

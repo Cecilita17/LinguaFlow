@@ -4,11 +4,12 @@ import { YouTubeImporter } from '../components/youtube/YouTubeImporter.jsx';
 import { SubtitleImporter } from '../components/youtube/SubtitleImporter.jsx';
 import { Transcript } from '../components/youtube/Transcript.jsx';
 import { TranscriptControls } from '../components/youtube/TranscriptControls.jsx';
-import { Youtube, Sparkles, FileText, CheckCircle2, RotateCcw } from 'lucide-react';
+import { enrichSubtitlesWithGlosses } from '../services/subtitleGlossService.js';
+import { Youtube, Sparkles, FileText, CheckCircle2, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 
 const SESSION_STORAGE_KEY = 'linguaflow_youtube_reader_session';
 
-export function YouTubeReaderPage() {
+export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
   // Session state with localStorage persistence
   const [videoId, setVideoId] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
@@ -26,6 +27,7 @@ export function YouTubeReaderPage() {
   const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl'
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
 
   // 1. Restore previous session on initial mount
   useEffect(() => {
@@ -37,7 +39,14 @@ export function YouTubeReaderPage() {
         if (parsed.videoUrl) setVideoUrl(parsed.videoUrl);
         if (parsed.videoLanguage) setVideoLanguage(parsed.videoLanguage);
         if (Array.isArray(parsed.subtitles) && parsed.subtitles.length > 0) {
-          setSubtitles(parsed.subtitles);
+          const enriched = enrichSubtitlesWithGlosses({
+            subtitles: parsed.subtitles,
+            targetLang,
+            nativeLang,
+            videoId: parsed.videoId,
+            onUpdate: (updated) => setSubtitles(updated)
+          });
+          setSubtitles(enriched);
         }
         if (parsed.subtitleFormat) setSubtitleFormat(parsed.subtitleFormat);
         if (parsed.subtitleSource) setSubtitleSource(parsed.subtitleSource);
@@ -56,7 +65,7 @@ export function YouTubeReaderPage() {
     } catch (e) {
       console.warn('Failed to load YouTube Reader session from storage:', e);
     }
-  }, []);
+  }, [targetLang, nativeLang]);
 
   // 2. Persist session when critical state changes
   useEffect(() => {
@@ -85,12 +94,20 @@ export function YouTubeReaderPage() {
     setVideoId(newVideoId);
     setVideoUrl(newUrl);
     setCurrentTime(0);
+    setIsUrlImporterOpen(false);
   };
 
   const handleSubtitlesLoaded = (newSubtitles, format, sourceName) => {
-    setSubtitles(newSubtitles);
     setSubtitleFormat(format);
     setSubtitleSource(sourceName);
+    const enriched = enrichSubtitlesWithGlosses({
+      subtitles: newSubtitles,
+      targetLang,
+      nativeLang,
+      videoId,
+      onUpdate: (updated) => setSubtitles(updated)
+    });
+    setSubtitles(enriched);
   };
 
   const handleClearSubtitles = () => {
@@ -121,69 +138,96 @@ export function YouTubeReaderPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 animate-fade-in text-white">
-      {/* Top Banner */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-lg shadow-black/30 flex items-start justify-between">
-        <div className="flex items-start space-x-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-tr from-rose-600 to-pink-500 text-white shadow-md shadow-rose-950 mt-0.5">
-            <Youtube className="w-5 h-5" />
+    <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-white">
+      {/* Top Fixed Section (Miraa style: Video stays fixed on top) */}
+      <div className="flex-shrink-0 space-y-2 pb-1">
+        {/* Banner / Header */}
+        {!videoId ? (
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-lg shadow-black/30 flex items-start justify-between">
+            <div className="flex items-start space-x-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-tr from-rose-600 to-pink-500 text-white shadow-md shadow-rose-950 mt-0.5">
+                <Youtube className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-base sm:text-lg font-bold text-white tracking-wide">
+                    YouTube Reader
+                  </h2>
+                  <span className="text-[10px] uppercase font-bold bg-rose-950 text-rose-300 px-2 py-0.5 rounded-full border border-rose-800">
+                    Inmersión
+                  </span>
+                </div>
+                <p className="text-xs text-rose-200/70 mt-0.5 leading-relaxed max-w-xl">
+                  Pega cualquier vídeo de YouTube e importa sus subtítulos en <span className="font-semibold text-rose-300">SRT</span>, <span className="font-semibold text-rose-300">VTT</span> o <span className="font-semibold text-rose-300">TXT</span>. Lee la transcripción sincronizada con glosas interlineales por palabra.
+                </p>
+              </div>
+            </div>
           </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-wide">
+        ) : (
+          /* Slim compact top toolbar when video is loaded */
+          <div className="flex items-center justify-between px-2 py-1 text-xs">
+            <div className="flex items-center space-x-2 truncate">
+              <Youtube className="w-4 h-4 text-rose-400 shrink-0" />
+              <span className="font-bold text-white tracking-wide truncate">
                 YouTube Reader
-              </h2>
-              <span className="text-[10px] uppercase font-bold bg-rose-950 text-rose-300 px-2 py-0.5 rounded-full border border-rose-800">
-                Inmersión
+              </span>
+              <span className="text-[10px] bg-rose-950/80 text-rose-300 px-1.5 py-0.5 rounded-md border border-rose-800/80 shrink-0">
+                {targetLang === 'zh' ? '🇨🇳 Chino' : targetLang.toUpperCase()}
               </span>
             </div>
-            <p className="text-xs text-rose-200/70 mt-0.5 leading-relaxed max-w-xl">
-              Pega cualquier vídeo de YouTube e importa sus subtítulos en <span className="font-semibold text-rose-300">SRT</span>, <span className="font-semibold text-rose-300">VTT</span> o <span className="font-semibold text-rose-300">TXT</span>. Lee la transcripción sincronizada y haz clic en cualquier línea para saltar a ese instante del vídeo.
-            </p>
+
+            <div className="flex items-center space-x-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsUrlImporterOpen(!isUrlImporterOpen)}
+                className="px-2 py-1 rounded-lg bg-[#2b160f] hover:bg-[#3b1e15] border border-[#482519] text-rose-200 text-[11px] font-medium transition-colors"
+              >
+                {isUrlImporterOpen ? 'Ocultar link' : 'Cambiar vídeo'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetSession}
+                title="Reiniciar lector"
+                className="p-1.5 text-rose-300/60 hover:text-white hover:bg-[#3b1e15] rounded-lg transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
-
-        {(videoId || subtitles.length > 0) && (
-          <button
-            type="button"
-            onClick={handleResetSession}
-            title="Limpiar lector y empezar de nuevo"
-            className="p-2 text-rose-300/60 hover:text-white hover:bg-[#482519] rounded-xl transition-colors flex-shrink-0"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
         )}
-      </div>
 
-      {/* 1. YouTube Importer Input */}
-      <YouTubeImporter
-        onImportVideo={handleImportVideo}
-        initialUrl={videoUrl}
-        selectedLanguage={videoLanguage}
-        onLanguageChange={setVideoLanguage}
-      />
+        {/* 1. YouTube Importer Input (shown when no video or when 'Cambiar vídeo' clicked) */}
+        {(!videoId || isUrlImporterOpen) && (
+          <YouTubeImporter
+            onImportVideo={handleImportVideo}
+            initialUrl={videoUrl}
+            selectedLanguage={videoLanguage}
+            onLanguageChange={setVideoLanguage}
+          />
+        )}
 
-      {/* 2. Video Player Section */}
-      <div className="space-y-2">
-        <YouTubePlayer
-          videoId={videoId}
-          onTimeUpdate={setCurrentTime}
-          seekToTime={seekToTime}
+        {/* 2. YouTube Video Player (Fixed aspect-video at top) */}
+        {videoId && (
+          <div className="w-full max-w-2xl mx-auto rounded-2xl overflow-hidden shadow-xl shadow-black/40 border border-[#3d190f]">
+            <YouTubePlayer
+              videoId={videoId}
+              onTimeUpdate={setCurrentTime}
+              seekToTime={seekToTime}
+            />
+          </div>
+        )}
+
+        {/* 3. Subtitles Importer (compact bar when loaded, full when empty) */}
+        <SubtitleImporter
+          onSubtitlesLoaded={handleSubtitlesLoaded}
+          subtitlesCount={subtitles.length}
+          currentFormat={subtitleFormat}
+          onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
         />
-      </div>
 
-      {/* 3. Subtitles Importer Section */}
-      <SubtitleImporter
-        onSubtitlesLoaded={handleSubtitlesLoaded}
-        subtitlesCount={subtitles.length}
-        currentFormat={subtitleFormat}
-        onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
-      />
-
-      {/* 4. Transcript & Synchronized Reader Section */}
-      {subtitles.length > 0 && (
-        <div className="space-y-3 pt-2">
-          {/* Controls Bar */}
+        {/* 4. Controls Bar (compact) */}
+        {subtitles.length > 0 && (
           <TranscriptControls
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -195,8 +239,12 @@ export function YouTubeReaderPage() {
             showTimestamps={showTimestamps}
             onToggleTimestamps={() => setShowTimestamps(!showTimestamps)}
           />
+        )}
+      </div>
 
-          {/* Transcript Lines View */}
+      {/* Reader Section with Independent Vertical Scroll (Miraa style) */}
+      {subtitles.length > 0 && (
+        <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden pt-1">
           <Transcript
             subtitles={subtitles}
             currentTime={currentTime}
@@ -213,3 +261,4 @@ export function YouTubeReaderPage() {
 }
 
 export default YouTubeReaderPage;
+

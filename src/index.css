@@ -81,6 +81,32 @@ rt {
   background: #6b3a2a;
 }
 
+/* Transcript Specific Scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #6a3424 #1e0f0a;
+  -webkit-overflow-scrolling: touch;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #180c07;
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #5d2a1b;
+  border-radius: 8px;
+  border: 1px solid #180c07;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #e11d48;
+}
+
 /* Wave animation */
 @keyframes wavePulse {
   0%, 100% {

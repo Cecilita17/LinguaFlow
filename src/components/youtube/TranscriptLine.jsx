@@ -77,32 +77,64 @@ export function TranscriptLine({
 
       {/* Main Text Content */}
       <div className="flex-1 min-w-0">
-        {/*
-          EXTENSIBILITY HOOK FOR FUTURE INTERLINEAR GLOSSES:
-          If tokens and glosses exist, this block will render the stacked word + gloss pairs.
-          Currently falls back cleanly to the line text.
-        */}
-        {tokens && tokens.length > 0 && glosses && glosses.length > 0 ? (
-          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
-            {tokens.map((tok, idx) => (
-              <div
-                key={idx}
-                onClick={(e) => {
-                  if (onWordClick) {
-                    e.stopPropagation();
-                    onWordClick(tok, glosses[idx]);
-                  }
-                }}
-                className="inline-flex flex-col items-center hover:bg-white/10 px-1 py-0.5 rounded cursor-pointer transition-colors"
-              >
-                <span className={`font-semibold ${isActive ? 'text-white font-bold' : 'text-rose-100'} ${fontClass}`}>
-                  {tok}
-                </span>
-                <span className="text-[11px] text-rose-300/80 font-normal">
-                  {glosses[idx] || ''}
-                </span>
-              </div>
-            ))}
+        {tokens && tokens.length > 0 ? (
+          <div className="flex flex-wrap items-end gap-x-2 sm:gap-x-3 gap-y-2 leading-tight">
+            {tokens.map((tokenObj, idx) => {
+              const word = typeof tokenObj === 'string' ? tokenObj : tokenObj.word;
+              const pinyin = typeof tokenObj === 'object' ? tokenObj.pinyin : null;
+              const gloss = typeof tokenObj === 'object' ? tokenObj.gloss : (glosses && glosses[idx]);
+              const isPunctuation = typeof tokenObj === 'object' ? tokenObj.isPunctuation : /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()\-]+$/.test(word);
+
+              if (isPunctuation) {
+                return (
+                  <span
+                    key={idx}
+                    className="text-stone-400 font-medium px-0.5 select-text self-center"
+                  >
+                    {word}
+                  </span>
+                );
+              }
+
+              return (
+                <div
+                  key={idx}
+                  onClick={(e) => {
+                    if (onWordClick) {
+                      e.stopPropagation();
+                      onWordClick(word, { word, pinyin, gloss });
+                    }
+                  }}
+                  className="inline-flex flex-col items-center justify-end px-1 py-0.5 rounded-lg hover:bg-white/10 transition-colors group/token"
+                >
+                  {/* 1. Character / Word */}
+                  <span
+                    className={`font-semibold tracking-wide ${
+                      isActive ? 'text-white font-bold drop-shadow-xs' : 'text-stone-100'
+                    } ${fontClass}`}
+                  >
+                    {renderHighlightedText(word)}
+                  </span>
+
+                  {/* 2. Pinyin / Romanization (Interlinear Tier 2) */}
+                  {pinyin && (
+                    <span className="text-[11px] sm:text-xs text-rose-300 font-mono tracking-tight leading-none mt-0.5">
+                      {pinyin}
+                    </span>
+                  )}
+
+                  {/* 3. Word Gloss / Meaning (Interlinear Tier 3) */}
+                  {gloss && (
+                    <span
+                      title={gloss}
+                      className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/line:text-stone-200 font-normal leading-tight mt-0.5 max-w-[90px] truncate text-center"
+                    >
+                      {gloss}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p

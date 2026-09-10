@@ -8,6 +8,7 @@ export function SubtitleImporter({
   currentFormat = null,
   onClearSubtitles
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [tab, setTab] = useState('paste'); // 'paste' | 'file'
   const [pastedText, setPastedText] = useState('');
   const [error, setError] = useState(null);
@@ -35,6 +36,7 @@ export function SubtitleImporter({
         onSubtitlesLoaded(subtitles, format, 'Texto pegado');
       }
       setPastedText('');
+      setIsExpanded(false);
     } catch (err) {
       setError('Error al procesar el texto: ' + err.message);
     } finally {
@@ -69,6 +71,7 @@ export function SubtitleImporter({
         if (onSubtitlesLoaded) {
           onSubtitlesLoaded(subtitles, format, file.name);
         }
+        setIsExpanded(false);
       } catch (err) {
         setError('Error al parsear el archivo: ' + err.message);
       } finally {
@@ -86,6 +89,45 @@ export function SubtitleImporter({
     reader.readAsText(file, 'UTF-8');
   };
 
+  // If subtitles are loaded and not manually expanded, show a slim, non-intrusive compact bar
+  if (subtitlesCount > 0 && !isExpanded) {
+    return (
+      <div className="px-3.5 py-2 rounded-xl bg-[#26120b]/90 border border-[#482015] shadow-xs flex items-center justify-between text-xs transition-all">
+        <div className="flex items-center space-x-2 text-stone-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="font-semibold text-emerald-300">
+            {subtitlesCount} líneas cargadas
+          </span>
+          <span className="text-stone-400 text-[11px] hidden sm:inline">
+            ({currentFormat?.toUpperCase() || 'SRT'})
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            className="px-2.5 py-1 rounded-lg bg-[#381a11] hover:bg-[#482216] border border-[#5a2e20] text-rose-200 hover:text-white font-medium text-[11px] transition-colors flex items-center gap-1.5 shadow-xs"
+          >
+            <FileCode className="w-3.5 h-3.5 text-rose-400" />
+            <span>Cambiar subtítulos</span>
+          </button>
+
+          {onClearSubtitles && (
+            <button
+              type="button"
+              onClick={onClearSubtitles}
+              title="Borrar subtítulos"
+              className="p-1 rounded-lg text-rose-300/50 hover:text-rose-200 hover:bg-[#381a11] transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 sm:p-5 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-lg shadow-black/30">
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -100,16 +142,13 @@ export function SubtitleImporter({
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>{subtitlesCount} líneas ({currentFormat?.toUpperCase() || 'OK'})</span>
             </span>
-            {onClearSubtitles && (
-              <button
-                type="button"
-                onClick={onClearSubtitles}
-                title="Cambiar o borrar subtítulos"
-                className="p-1 rounded-lg text-rose-300/60 hover:text-white hover:bg-[#482519] transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsExpanded(false)}
+              className="px-2 py-0.5 rounded-lg text-[11px] text-stone-400 hover:text-white bg-[#220f09] border border-[#482015]"
+            >
+              Cerrar
+            </button>
           </div>
         )}
       </div>
