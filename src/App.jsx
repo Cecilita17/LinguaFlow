@@ -36,7 +36,8 @@ function getSavedChat(lang) {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        const valid = parsed.filter(m => m && typeof m === 'object' && (m.text || m.tokens || m.sender));
+        if (valid.length > 0) return valid;
       }
     }
   } catch (e) {
@@ -47,8 +48,12 @@ function getSavedChat(lang) {
 
 function saveChatToStorage(lang, messagesList) {
   try {
-    if (Array.isArray(messagesList) && messagesList.length > 0) {
-      localStorage.setItem(`${STORAGE_PREFIX}${lang}`, JSON.stringify(messagesList));
+    if (Array.isArray(messagesList)) {
+      if (messagesList.length > 0) {
+        localStorage.setItem(`${STORAGE_PREFIX}${lang}`, JSON.stringify(messagesList));
+      } else {
+        localStorage.removeItem(`${STORAGE_PREFIX}${lang}`);
+      }
     }
   } catch (e) {
     console.warn(`Failed to save chat for ${lang}:`, e);
@@ -108,8 +113,9 @@ export default function App() {
   const activeLangRef = useRef(targetLang);
 
   // Switch target language and persist chat state per language
-  const handleTargetLangChange = (newLang) => {
-    if (newLang === targetLang) return;
+  const handleTargetLangChange = (newLangInput) => {
+    const newLang = typeof newLangInput === 'string' ? newLangInput : (newLangInput?.code || newLangInput?.target?.value || 'pl');
+    if (!newLang || newLang === targetLang) return;
 
     // 1. Save current messages to active language before switching
     if (messages && messages.length > 0) {
@@ -135,11 +141,23 @@ export default function App() {
     stopSpeaking();
   };
 
-  const handleNativeLangChange = (newLang) => {
+  const handleNativeLangChange = (newLangInput) => {
+    const newLang = typeof newLangInput === 'string' ? newLangInput : (newLangInput?.code || newLangInput?.target?.value || 'es');
+    if (!newLang) return;
     setNativeLang(newLang);
     try {
       localStorage.setItem(NATIVE_LANG_KEY, newLang);
     } catch (e) {}
+  };
+
+  // Delete message handler
+  const handleDeleteMessage = (messageId) => {
+    if (!messageId) return;
+    setMessages((prev) => {
+      const updated = prev.filter((m) => m && m.id !== messageId);
+      saveChatToStorage(targetLang, updated);
+      return updated;
+    });
   };
 
   const [config, setConfig] = useState(() => {
@@ -156,7 +174,7 @@ export default function App() {
   const [apiWarning, setApiWarning] = useState(null);
 
   const chatContainerRef = useRef(null);
-  const currentLangObj = languages.find(l => l.code === targetLang) || languages[0];
+  const currentLangObj = (languages && languages.find((l) => l && l.code === targetLang)) || (languages && languages[0]) || SUPPORTED_LANGUAGES[0] || { name: 'Español', speechCode: 'es-ES' };
 
   // Speech Hook (Push-to-Talk Press & Hold up to 1 min + TTS)
   const {
@@ -746,9 +764,9 @@ export default function App() {
             </div>
 
             {/* Message Bubbles */}
-            {messages.map((msg) => (
+            {messages.filter(Boolean).map((msg) => (
               <ChatMessage
-                key={msg.id}
+                key={msg.id || `msg-${Math.random()}`}
                 message={msg}
                 targetLang={targetLang}
                 nativeLang={nativeLang}
@@ -757,6 +775,7 @@ export default function App() {
                 onPlayAudio={handlePlayAudio}
                 isAudioPlaying={isSpeaking}
                 onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
+                onDeleteMessage={handleDeleteMessage}
               />
             ))}
 

@@ -26,11 +26,11 @@ export default function HomePage({
   const { t } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
   const currentNativeMeta = getLanguageMeta(nativeLang);
-  const currentTargetName = currentTargetMeta.name || languages.find((l) => l.code === targetLang)?.name || targetLang;
+  const currentTargetName = currentTargetMeta.name || (Array.isArray(languages) && languages.find((l) => l && l.code === targetLang)?.name) || targetLang;
   const currentNativeName =
     currentNativeMeta.name ||
-    NATIVE_LANG_OPTIONS.find((l) => l.code === nativeLang)?.name ||
-    languages.find((l) => l.code === nativeLang)?.name ||
+    NATIVE_LANG_OPTIONS.find((l) => l && l.code === nativeLang)?.name ||
+    (Array.isArray(languages) && languages.find((l) => l && l.code === nativeLang)?.name) ||
     nativeLang;
 
   return (

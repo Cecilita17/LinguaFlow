@@ -44,11 +44,31 @@ export function LanguageSelectDropdown({
   }, [isOpen]);
 
   const currentMeta = getLanguageMeta(value);
-  const currentFlag = currentMeta.flag || LANGUAGE_FLAGS[value] || '🌐';
-  const currentName = currentMeta.name || value;
+  const currentFlag = currentMeta.flag || LANGUAGE_FLAGS[typeof value === 'string' ? value : ''] || '🌐';
+  const currentName = currentMeta.name || (typeof value === 'string' ? value : '');
+
+  // Normalize options to ensure every item has { code, name, flag, nativeName }
+  const normalizedOptions = (options || []).map((opt) => {
+    if (typeof opt === 'string') {
+      const meta = getLanguageMeta(opt);
+      return { code: opt, name: meta.name || opt, flag: meta.flag, nativeName: meta.nativeName };
+    }
+    if (opt && typeof opt === 'object') {
+      const code = opt.code || opt.id || opt.value || '';
+      const meta = getLanguageMeta(code);
+      return {
+        ...opt,
+        code,
+        name: opt.name || meta.name || code,
+        nativeName: opt.nativeName || opt.native || meta.nativeName || '',
+        flag: opt.flag || meta.flag || LANGUAGE_FLAGS[code] || '🌐'
+      };
+    }
+    return null;
+  }).filter((opt) => Boolean(opt && opt.code));
 
   const handleSelect = (langCode) => {
-    if (onChange) {
+    if (onChange && langCode) {
       onChange(langCode);
     }
     setIsOpen(false);
@@ -58,20 +78,17 @@ export function LanguageSelectDropdown({
     <div ref={dropdownRef} className={`relative inline-block text-left ${className}`}>
       {/* Hidden accessible select for screen-readers & test automation */}
       <select
-        value={value}
+        value={typeof value === 'string' ? value : ''}
         onChange={(e) => onChange && onChange(e.target.value)}
         aria-label={label || 'Seleccionar idioma'}
         tabIndex={-1}
         className="sr-only"
       >
-        {options.map((opt) => {
-          const optMeta = getLanguageMeta(opt.code);
-          return (
-            <option key={opt.code} value={opt.code}>
-              {optMeta.flag} {optMeta.name || opt.name}
-            </option>
-          );
-        })}
+        {normalizedOptions.map((opt) => (
+          <option key={opt.code} value={opt.code}>
+            {opt.flag} {opt.name}
+          </option>
+        ))}
       </select>
 
       {/* Aesthetic Trigger Button */}
@@ -135,18 +152,17 @@ export function LanguageSelectDropdown({
           <div className="px-3 py-1.5 mb-1 border-b border-[#3d1a10] flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-rose-300/60">
             <span>{label ? `Elegir ${label}` : 'Seleccionar idioma'}</span>
             <span className="text-[10px] font-normal text-stone-400">
-              {options.length} disponibles
+              {normalizedOptions.length} disponibles
             </span>
           </div>
 
           {/* Options list */}
           <div className="px-1 space-y-0.5">
-            {options.map((opt) => {
-              const optMeta = getLanguageMeta(opt.code);
-              const isSelected = opt.code === value;
-              const flag = optMeta.flag || LANGUAGE_FLAGS[opt.code] || '🌐';
-              const name = optMeta.name || opt.name || opt.code;
-              const native = optMeta.nativeName || opt.nativeName || '';
+            {normalizedOptions.map((opt) => {
+              const isSelected = String(opt.code).toLowerCase() === String(value).toLowerCase();
+              const flag = opt.flag || LANGUAGE_FLAGS[opt.code] || '🌐';
+              const name = opt.name || opt.code;
+              const native = opt.nativeName || '';
 
               return (
                 <button

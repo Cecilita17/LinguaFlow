@@ -19,20 +19,41 @@ export function LanguageModal({
 
   if (!isOpen) return null;
 
+  // Normalize languages array safely
+  const normalizedLanguages = useMemo(() => {
+    return (languages || []).map((l) => {
+      if (typeof l === 'string') {
+        const meta = getLanguageMeta(l);
+        return { code: l, name: meta.name || l, flag: meta.flag, nativeName: meta.nativeName };
+      }
+      if (l && typeof l === 'object') {
+        const code = l.code || l.id || l.value || '';
+        const meta = getLanguageMeta(code);
+        return {
+          ...l,
+          code,
+          name: l.name || meta.name || code,
+          nativeName: l.nativeName || l.native || meta.nativeName || '',
+          flag: l.flag || meta.flag || LANGUAGE_FLAGS[code] || '🌐'
+        };
+      }
+      return null;
+    }).filter((l) => Boolean(l && l.code));
+  }, [languages]);
+
   const filteredLanguages = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return languages;
-    return languages.filter((l) => {
-      const meta = getLanguageMeta(l.code);
-      const nameMatch = (meta.name || l.name || '').toLowerCase().includes(q);
-      const nativeMatch = (meta.nativeName || l.nativeName || '').toLowerCase().includes(q);
-      const codeMatch = l.code.toLowerCase().includes(q);
+    if (!q) return normalizedLanguages;
+    return normalizedLanguages.filter((l) => {
+      const nameMatch = (l.name || '').toLowerCase().includes(q);
+      const nativeMatch = (l.nativeName || '').toLowerCase().includes(q);
+      const codeMatch = (l.code || '').toLowerCase().includes(q);
       return nameMatch || nativeMatch || codeMatch;
     });
-  }, [languages, searchQuery]);
+  }, [normalizedLanguages, searchQuery]);
 
   const handleSelect = (code) => {
-    if (onSelect) {
+    if (onSelect && code) {
       onSelect(code);
     }
     if (onClose) {
@@ -99,11 +120,10 @@ export function LanguageModal({
           }}
         >
           {filteredLanguages.map((l) => {
-            const meta = getLanguageMeta(l.code);
-            const flag = meta.flag || LANGUAGE_FLAGS[l.code] || '🌐';
-            const name = meta.name || l.name || l.code;
-            const native = meta.nativeName || l.nativeName || '';
-            const isSelected = l.code === currentLang;
+            const flag = l.flag || LANGUAGE_FLAGS[l.code] || '🌐';
+            const name = l.name || l.code;
+            const native = l.nativeName || '';
+            const isSelected = String(l.code).toLowerCase() === String(currentLang).toLowerCase();
 
             return (
               <button

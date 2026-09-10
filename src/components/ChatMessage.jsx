@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen } from 'lucide-react';
+import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'lucide-react';
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 export function ChatMessage({
   message,
   targetLang,
+  nativeLang,
   showTransliteration,
   onWordClick,
   onPlayAudio,
   isAudioPlaying,
-  onOpenGrammarBreakdown
+  onOpenGrammarBreakdown,
+  onDeleteMessage
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const [showTranslation, setShowTranslation] = useState(false);
@@ -133,10 +135,12 @@ export function ChatMessage({
   };
 
   const resolveTranslit = (token) => {
+    if (!token) return null;
+    if (typeof token === 'string') return null;
     if (token.translit) return token.translit;
     if (token.pinyin) return token.pinyin;
     if (targetLang === 'zh') {
-      const clean = (token.text || '').trim();
+      const clean = (token.text || token.word || '').trim();
       if (PINYIN_LEXICON[clean]) return PINYIN_LEXICON[clean];
     }
     return null;
@@ -299,10 +303,21 @@ export function ChatMessage({
               <button
                 onClick={handleCopy}
                 className="p-1 hover:text-white hover:bg-white/20 rounded-md transition-colors cursor-pointer"
-                title={isSpanish ? "Copiar texto" : "Copy text"}
+                title={copied ? (isSpanish ? "Copiado" : "Copied") : (isSpanish ? "Copiar texto" : "Copy text")}
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-amber-200" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
+              {onDeleteMessage && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteMessage(message.id)}
+                  className="p-1 hover:text-rose-200 hover:bg-white/20 rounded-md transition-colors cursor-pointer text-white/80"
+                  title={t('delete_message')}
+                  aria-label={t('delete_message')}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -352,20 +367,24 @@ export function ChatMessage({
         >
           {tokens && tokens.length > 0 ? (
             tokens.map((token, idx) => {
-              const clean = token.clean_word || token.word.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '');
-              const isPunctuation = /^[\s.,!?;:()¿¡'"“”‘’]+$/.test(token.word);
+              if (!token) return null;
+              const tokenObj = typeof token === 'string' ? { word: token } : token;
+              const wordStr = tokenObj.word || tokenObj.text || tokenObj.clean_word || '';
+              if (!wordStr) return null;
+              const clean = tokenObj.clean_word || wordStr.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '');
+              const isPunctuation = /^[\s.,!?;:()¿¡'"“”‘’]+$/.test(wordStr);
 
               if (isPunctuation) {
                 return (
                   <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="text-stone-400 px-0.5">
-                    {token.word}
+                    {wordStr}
                   </span>
                 );
               }
 
               if (targetLang === 'zh') {
-                const tokenTranslit = resolveTranslit(token);
-                const { baseWord, cleanTranslit, punctuation } = splitChineseWordAndPunctuation(token.word, tokenTranslit);
+                const tokenTranslit = resolveTranslit(tokenObj);
+                const { baseWord, cleanTranslit, punctuation } = splitChineseWordAndPunctuation(wordStr, tokenTranslit);
                 const cleanForLookup = clean || baseWord;
 
                 return (
@@ -409,7 +428,7 @@ export function ChatMessage({
                 );
               }
 
-              const tokenTranslit = resolveTranslit(token);
+              const tokenTranslit = resolveTranslit(tokenObj);
               return (
                 <button
                   key={idx}
@@ -428,7 +447,7 @@ export function ChatMessage({
                         dir={isArabic ? 'rtl' : 'ltr'}
                         className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
                       >
-                        {token.word}
+                        {wordStr}
                       </span>
                     </ruby>
                   ) : (
@@ -436,14 +455,14 @@ export function ChatMessage({
                       dir={isArabic ? 'rtl' : 'ltr'}
                       className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
                     >
-                      {token.word}
+                      {wordStr}
                     </span>
                   )}
                 </button>
               );
             })
           ) : (
-            message.text.split(/(\s+)/).map((segment, idx) => {
+            (message.text || '').split(/(\s+)/).map((segment, idx) => {
               if (/^\s+$/.test(segment)) {
                 return <span key={idx}> </span>;
               }

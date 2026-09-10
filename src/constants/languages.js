@@ -170,16 +170,28 @@ export const NATIVE_LANG_OPTIONS = [
   { code: 'pt', name: 'Portugués', nativeName: 'Português', flag: '🇧🇷' }
 ];
 
+export const SUPPORTED_LANGUAGES = DEFAULT_TARGET_LANGUAGES;
+
 export function getLanguageMeta(code) {
   if (!code) return { code: '', name: 'Desconocido', nativeName: '', flag: '🌐' };
-  const lower = code.toLowerCase().trim();
+  const rawCode = typeof code === 'string' ? code : (code.code || code.value || '');
+  if (!rawCode || typeof rawCode !== 'string') {
+    return {
+      code: '',
+      name: (typeof code === 'object' && code.name) ? code.name : 'Desconocido',
+      nativeName: (typeof code === 'object' && code.nativeName) ? code.nativeName : '',
+      flag: (typeof code === 'object' && code.flag) ? code.flag : '🌐'
+    };
+  }
+  const lower = rawCode.toLowerCase().trim();
   if (LANGUAGE_METADATA[lower]) {
     return LANGUAGE_METADATA[lower];
   }
   return {
     code: lower,
-    name: lower.toUpperCase(),
-    nativeName: lower.toUpperCase(),
+    name: (typeof code === 'object' && code.name) ? code.name : lower.toUpperCase(),
+    nativeName: (typeof code === 'object' && code.nativeName) ? code.nativeName : lower.toUpperCase(),
     flag: LANGUAGE_FLAGS[lower] || '🌐'
   };
 }
+

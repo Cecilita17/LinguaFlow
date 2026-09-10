@@ -81,6 +81,7 @@ export const TRANSLATIONS = {
     tap_word_meaning: 'Toca cualquier palabra para ver su significado',
     correction: 'Corrección',
     original: 'Original',
+    delete_message: 'Eliminar mensaje',
     
     // Input Bar
     input_placeholder: 'Escribe un mensaje en {lang}...',
@@ -191,6 +192,7 @@ export const TRANSLATIONS = {
     tap_word_meaning: 'Tap any word for its meaning',
     correction: 'Correction',
     original: 'Original',
+    delete_message: 'Delete message',
     
     // Input Bar
     input_placeholder: 'Type a message in {lang}...',
