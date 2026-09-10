@@ -516,6 +516,7 @@ export class ChineseGlossStrategy {
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
+    if (token.glossSource === 'manual' && gloss) return true;
     if (!gloss || (gloss === w && w !== '的')) return false;
 
     // Chinese characters must have tone-marked Pinyin in auxiliary
@@ -608,6 +609,7 @@ export class ArabicGlossStrategy {
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
+    if (token.glossSource === 'manual' && gloss) return true;
     if (!gloss || gloss === w) return false;
     return true;
   }
@@ -628,6 +630,33 @@ export class PolishGlossStrategy {
     if (!text || typeof text !== 'string') return [];
     const cleanStr = text.trim();
     if (!cleanStr) return [];
+
+    try {
+      if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+        const segmenter = new Intl.Segmenter('pl', { granularity: 'word' });
+        const segments = [...segmenter.segment(cleanStr)];
+        const tokens = [];
+        for (const seg of segments) {
+          const w = seg.segment.trim();
+          if (!w) continue;
+          const isPunctuation = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
+          const entry = isPunctuation ? null : this.lookupOffline(w);
+
+          tokens.push({
+            text: w,
+            word: w,
+            auxiliary: null,
+            pinyin: null,
+            translit: null,
+            gloss: isPunctuation ? null : (entry?.gloss || null),
+            isPunctuation
+          });
+        }
+        if (tokens.length > 0) return tokens;
+      }
+    } catch (e) {
+      console.warn('Intl.Segmenter fallback in PolishGlossStrategy:', e);
+    }
 
     const parts = cleanStr.split(/([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+|[^\sa-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+)/).filter(Boolean);
     const tokens = [];
@@ -664,6 +693,7 @@ export class PolishGlossStrategy {
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
+    if (token.glossSource === 'manual' && gloss) return true;
     if (!gloss || gloss.toLowerCase() === w.toLowerCase()) return false;
     return true;
   }
@@ -685,7 +715,33 @@ export class DefaultGlossStrategy {
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
-    const parts = cleanStr.split(/(\s+|[.,!?;:'"()\-]+)/).filter(p => p && p.trim().length > 0);
+    try {
+      if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+        const locale = this.code && this.code !== 'default' ? this.code : undefined;
+        const segmenter = new Intl.Segmenter(locale, { granularity: 'word' });
+        const segments = [...segmenter.segment(cleanStr)];
+        const tokens = [];
+        for (const seg of segments) {
+          const w = seg.segment.trim();
+          if (!w) continue;
+          const isPunctuation = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
+          tokens.push({
+            text: w,
+            word: w,
+            auxiliary: null,
+            pinyin: null,
+            translit: null,
+            gloss: null,
+            isPunctuation
+          });
+        }
+        if (tokens.length > 0) return tokens;
+      }
+    } catch (e) {
+      console.warn(`Intl.Segmenter fallback in DefaultGlossStrategy for ${this.code}:`, e);
+    }
+
+    const parts = cleanStr.split(/(\s+|[.,!?;:'"()\-¿¡«»]+)/).filter(p => p && p.trim().length > 0);
     return parts.map(w => {
       const isPunctuation = PUNCTUATION_REGEX.test(w);
       return {
@@ -710,7 +766,8 @@ export class DefaultGlossStrategy {
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
-    return Boolean(gloss && gloss !== w);
+    if (token.glossSource === 'manual' && gloss) return true;
+    return Boolean(gloss && gloss.toLowerCase() !== w.toLowerCase());
   }
 }
 

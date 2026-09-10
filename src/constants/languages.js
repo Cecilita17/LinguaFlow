@@ -92,8 +92,7 @@ export const LANGUAGE_METADATA = {
     nativeName: 'Русский',
     flag: '🇷🇺',
     speechCode: 'ru-RU',
-    hasTranslit: true,
-    translitName: 'Romanización'
+    hasTranslit: false
   },
   ar: {
     code: 'ar',
@@ -101,8 +100,7 @@ export const LANGUAGE_METADATA = {
     nativeName: 'العربية',
     flag: '🇸🇦',
     speechCode: 'ar-SA',
-    hasTranslit: true,
-    translitName: 'Romanización',
+    hasTranslit: false,
     rtl: true
   },
   pt: {

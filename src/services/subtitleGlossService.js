@@ -317,6 +317,11 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
   return originalTokens.map(orig => {
     if (orig.isPunctuation) return orig;
 
+    // Never overwrite user-defined manual glosses!
+    if (orig.glossSource === 'manual') {
+      return orig;
+    }
+
     const w = (orig.text || orig.word || '').trim();
     let match = aiMap.get(w) || aiMap.get(w.toLowerCase());
 
@@ -360,7 +365,8 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
         auxiliary,
         pinyin: auxiliary,
         translit: null,
-        gloss
+        gloss,
+        glossSource: orig.glossSource || (gloss ? 'ai' : null)
       };
     }
 

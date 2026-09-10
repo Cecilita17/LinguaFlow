@@ -7,6 +7,7 @@
  */
 
 import { getLanguageMeta } from '../constants/languages.js';
+import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
 
 const ACTIVE_DOC_STORAGE_KEY = 'linguaflow_active_text_doc_v1';
 
@@ -205,7 +206,7 @@ export function splitTextIntoParagraphs(rawText, targetLang = 'zh') {
     id: `p-${idx + 1}`,
     index: idx,
     text,
-    tokens: [],
+    tokens: tokenizeAndGlossLineOffline(text, targetLang),
     glosses: [],
     tts: {
       speechCode,

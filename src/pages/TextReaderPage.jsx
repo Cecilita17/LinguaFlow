@@ -147,6 +147,26 @@ export function TextReaderPage({
     setPlayingParagraphId(null);
   }, []);
 
+  // Handle manual per-segment glosses save (0ms latency, zero AI calls)
+  const handleSaveManualGlosses = useCallback((paragraphId, updatedTokens) => {
+    setDocument(prev => {
+      if (!prev || !Array.isArray(prev.paragraphs)) return prev;
+      const nextParagraphs = prev.paragraphs.map(p => {
+        if (p.id !== paragraphId) return p;
+        return {
+          ...p,
+          tokens: updatedTokens
+        };
+      });
+      const nextDoc = {
+        ...prev,
+        paragraphs: nextParagraphs
+      };
+      saveActiveDocumentDraft(nextDoc);
+      return nextDoc;
+    });
+  }, []);
+
   // Trigger background AI glossing
   const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
     if (!Array.isArray(paragraphsToGloss) || paragraphsToGloss.length === 0) return;
@@ -568,6 +588,7 @@ export function TextReaderPage({
                 onPlay={handlePlayParagraph}
                 onStop={handleStopAudio}
                 onWordClick={onWordClick}
+                onSaveManualGlosses={handleSaveManualGlosses}
               />
             ))}
 
