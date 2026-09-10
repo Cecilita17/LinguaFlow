@@ -17,7 +17,6 @@ import {
   Globe
 } from 'lucide-react';
 import { LanguageSelectDropdown } from './LanguageSelectDropdown.jsx';
-import { LanguageModal } from './LanguageModal.jsx';
 import { SiteLanguageToggle } from './SiteLanguageToggle.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import {
@@ -47,7 +46,6 @@ export function Header({
 }) {
   const { t } = useSiteLanguage();
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
-  const [languageModalConfig, setLanguageModalConfig] = useState({ isOpen: false, type: 'target' });
 
   const currentTargetMeta = getLanguageMeta(targetLang);
   const currentNativeMeta = getLanguageMeta(nativeLang);
@@ -94,18 +92,14 @@ export function Header({
             {/* Website Language Switcher (ES/EN) */}
             <SiteLanguageToggle variant="compact" />
 
-            {/* Circular Language Flag Button */}
-            <button
-              type="button"
-              onClick={() => setLanguageModalConfig({ isOpen: true, type: 'target' })}
-              title={`Idioma a practicar: ${currentTargetName}. Toca para cambiar.`}
-              className="flex items-center justify-center bg-[#2d140d] hover:bg-[#3d1a10] border border-[#482015] hover:border-rose-500/60 rounded-full pl-2 pr-1.5 py-1 shadow-xs transition-all active:scale-95 cursor-pointer group"
-            >
-              <span className="text-base leading-none select-none group-hover:scale-110 transition-transform">
-                {LANGUAGE_FLAGS[targetLang] || '🌐'}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-rose-300/80 ml-1 transition-transform group-hover:translate-y-0.5" />
-            </button>
+            {/* Target Language Dropdown */}
+            <LanguageSelectDropdown
+              value={targetLang}
+              onChange={setTargetLang}
+              options={languages}
+              variant="header"
+              align="right"
+            />
 
             {/* Hamburger Button */}
             <button
@@ -467,65 +461,29 @@ export function Header({
               </p>
 
               {/* Tu Idioma (Nativo) */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setLanguageModalConfig({ isOpen: true, type: 'native' })}
-                className="relative bg-gradient-to-r from-[#22100a] to-[#2c140d] hover:from-[#2a130c] hover:to-[#361810] border border-[#441e14] hover:border-rose-500/60 rounded-2xl p-3 flex items-center justify-between shadow-sm mb-2.5 cursor-pointer group transition-all active:scale-[0.99]"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-11 h-11 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
-                    <span>{LANGUAGE_FLAGS[nativeLang] || '🌐'}</span>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-medium text-rose-200/70">
-                      {t('native_lang_card_title')}
-                    </div>
-                    <div className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors flex items-center space-x-1.5">
-                      <span>{currentNativeName}</span>
-                      {currentNativeMeta.nativeName && currentNativeMeta.nativeName !== currentNativeName && (
-                        <span className="text-[10px] text-rose-300/60 font-normal">
-                          · {currentNativeMeta.nativeName}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-1.5 bg-[#170905] px-2.5 py-1.5 rounded-xl border border-[#441b11] group-hover:border-rose-500/40 text-[11px] text-rose-300 font-semibold shadow-xs">
-                  <span>{t('change_button')}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-rose-400" />
-                </div>
+              <div className="mb-2.5">
+                <LanguageSelectDropdown
+                  value={nativeLang}
+                  onChange={setNativeLang}
+                  options={NATIVE_LANG_OPTIONS}
+                  label={t('native_lang_card_title')}
+                  variant="card"
+                  align="left"
+                  className="w-full"
+                />
               </div>
 
               {/* Idioma a Aprender (Target) */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setLanguageModalConfig({ isOpen: true, type: 'target' })}
-                className="relative bg-gradient-to-r from-[#22100a] to-[#2c140d] hover:from-[#2a130c] hover:to-[#361810] border border-[#441e14] hover:border-rose-500/60 rounded-2xl p-3 flex items-center justify-between shadow-sm cursor-pointer group transition-all active:scale-[0.99]"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-11 h-11 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
-                    <span>{LANGUAGE_FLAGS[targetLang] || '🌐'}</span>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-medium text-rose-200/70">
-                      {t('target_lang_card_title')}
-                    </div>
-                    <div className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors flex items-center space-x-1.5">
-                      <span>{currentTargetName}</span>
-                      {currentTargetMeta.nativeName && currentTargetMeta.nativeName !== currentTargetName && (
-                        <span className="text-[10px] text-rose-300/60 font-normal">
-                          · {currentTargetMeta.nativeName}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-1.5 bg-[#170905] px-2.5 py-1.5 rounded-xl border border-[#441b11] group-hover:border-rose-500/40 text-[11px] text-rose-300 font-semibold shadow-xs">
-                  <span>{t('change_button')}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-rose-400" />
-                </div>
+              <div>
+                <LanguageSelectDropdown
+                  value={targetLang}
+                  onChange={setTargetLang}
+                  options={languages}
+                  label={t('target_lang_card_title')}
+                  variant="card"
+                  align="left"
+                  className="w-full"
+                />
               </div>
             </div>
 
@@ -663,28 +621,6 @@ export function Header({
         </div>
       )}
 
-      {/* Aesthetic Language Selection Modal */}
-      <LanguageModal
-        isOpen={languageModalConfig.isOpen}
-        onClose={() => setLanguageModalConfig((prev) => ({ ...prev, isOpen: false }))}
-        title={
-          languageModalConfig.type === 'target'
-            ? t('target_lang_card_title')
-            : t('native_lang_card_title')
-        }
-        subtitle={t('select_lang_subtitle')}
-        currentLang={languageModalConfig.type === 'target' ? targetLang : nativeLang}
-        onSelect={(code) => {
-          if (languageModalConfig.type === 'target') {
-            setTargetLang(code);
-          } else {
-            setNativeLang(code);
-          }
-        }}
-        languages={
-          languageModalConfig.type === 'target' ? languages : NATIVE_LANG_OPTIONS
-        }
-      />
     </>
   );
 }

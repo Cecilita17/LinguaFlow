@@ -98,35 +98,60 @@ export function LanguageSelectDropdown({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={label ? `${label}: ${currentName}` : currentName}
-        className={`group flex items-center space-x-2 transition-all duration-200 outline-none select-none cursor-pointer ${
+        className={`group flex items-center transition-all duration-200 outline-none select-none cursor-pointer ${
           variant === 'header'
-            ? 'bg-[#33170e] hover:bg-[#431f13] text-stone-100 px-2.5 py-1.5 rounded-xl border border-[#522618] hover:border-rose-500/60 shadow-xs active:scale-[0.98]'
+            ? 'space-x-2 bg-[#33170e] hover:bg-[#431f13] text-stone-100 px-2.5 py-1.5 rounded-xl border border-[#522618] hover:border-rose-500/60 shadow-xs active:scale-[0.98]'
             : variant === 'card'
-            ? 'w-full justify-between bg-[#230f09] hover:bg-[#30150d] text-stone-100 p-3 rounded-2xl border border-[#441e13] hover:border-rose-500/60 shadow-md'
+            ? 'w-full justify-between bg-gradient-to-r from-[#22100a] to-[#2c140d] hover:from-[#2a130c] hover:to-[#361810] text-stone-100 p-3 rounded-2xl border border-[#441e14] hover:border-rose-500/60 shadow-sm active:scale-[0.99]'
             : variant === 'pill'
-            ? 'bg-[#36160d] hover:bg-[#481f13] text-stone-100 px-3 py-1.5 rounded-xl border border-[#542416] hover:border-rose-500/60 shadow-xs'
-            : 'bg-[#2b140d] hover:bg-[#381a11] text-stone-100 px-2.5 py-1 rounded-lg border border-[#482015]'
+            ? 'space-x-2 bg-[#36160d] hover:bg-[#481f13] text-stone-100 px-3 py-1.5 rounded-xl border border-[#542416] hover:border-rose-500/60 shadow-xs'
+            : 'space-x-2 bg-[#2b140d] hover:bg-[#381a11] text-stone-100 px-2.5 py-1 rounded-lg border border-[#482015]'
         }`}
       >
-        {/* Optional Icon / Label */}
-        {icon && <span className="shrink-0 text-rose-300">{icon}</span>}
-        {label && (
-          <span className="hidden sm:inline text-xs font-medium text-rose-200/75 shrink-0">
-            {label}:
-          </span>
+        {variant === 'card' ? (
+          <div className="flex items-center space-x-3 text-left min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-2xl shadow-inner shrink-0 group-hover:scale-105 transition-transform">
+              <span>{currentFlag}</span>
+            </div>
+            <div className="min-w-0">
+              {label && (
+                <div className="text-[11px] font-medium text-rose-200/70 leading-tight">
+                  {label}
+                </div>
+              )}
+              <div className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors flex items-center space-x-1.5 truncate">
+                <span className="truncate">{currentName}</span>
+                {currentMeta.nativeName && currentMeta.nativeName !== currentName && (
+                  <span className="text-[10px] text-rose-300/60 font-normal shrink-0">
+                    · {currentMeta.nativeName}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Optional Icon / Label */}
+            {icon && <span className="shrink-0 text-rose-300">{icon}</span>}
+            {label && (
+              <span className="hidden sm:inline text-xs font-medium text-rose-200/75 shrink-0">
+                {label}:
+              </span>
+            )}
+
+            {/* Flag badge */}
+            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-black/30 border border-white/10 shadow-xs shrink-0 text-base leading-none">
+              <span className="transform group-hover:scale-110 transition-transform">
+                {currentFlag}
+              </span>
+            </div>
+
+            {/* Language Name */}
+            <span className="text-xs font-semibold text-white tracking-wide truncate max-w-[110px] sm:max-w-[140px]">
+              {currentName}
+            </span>
+          </>
         )}
-
-        {/* Flag badge */}
-        <div className="flex items-center justify-center w-6 h-6 rounded-md bg-black/30 border border-white/10 shadow-xs shrink-0 text-base leading-none">
-          <span className="transform group-hover:scale-110 transition-transform">
-            {currentFlag}
-          </span>
-        </div>
-
-        {/* Language Name */}
-        <span className="text-xs font-semibold text-white tracking-wide truncate max-w-[110px] sm:max-w-[140px]">
-          {currentName}
-        </span>
 
         {/* Smooth rotating chevron */}
         <ChevronDown
@@ -140,9 +165,9 @@ export function LanguageSelectDropdown({
       {isOpen && (
         <div
           role="listbox"
-          className={`absolute mt-2 py-1.5 z-50 w-64 max-h-80 overflow-y-auto rounded-2xl bg-[#1c0c07]/98 backdrop-blur-xl border border-[#4d2318] shadow-2xl shadow-black/80 animate-fade-in ${
-            align === 'right' ? 'right-0' : 'left-0'
-          }`}
+          className={`absolute mt-2 py-1.5 z-50 ${
+            variant === 'card' ? 'w-full left-0' : (align === 'right' ? 'w-64 right-0' : 'w-64 left-0')
+          } max-h-80 overflow-y-auto rounded-2xl bg-[#1c0c07]/98 backdrop-blur-xl border border-[#4d2318] shadow-2xl shadow-black/80 animate-fade-in`}
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#4d2318 transparent'
