@@ -1,11 +1,15 @@
 import React from 'react';
+import { Volume2, Languages, Loader2 } from 'lucide-react';
 import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
+import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 
 export function TranscriptLine({
   line,
   isActive = false,
   onSeek,
+  onGlossLine = null,
+  isGlossingThisLine = false,
   fontSize = 'base',
   showTimestamps = true,
   searchQuery = '',
@@ -16,6 +20,7 @@ export function TranscriptLine({
   const { startTime, text, tokens = [], glosses = [] } = line;
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
+  const isComplete = isGlossComplete(line, targetLang);
 
   // Font size classes
   const fontClassMap = {
@@ -59,6 +64,55 @@ export function TranscriptLine({
           : 'bg-[#24120c]/60 hover:bg-[#2b160f] border-transparent hover:border-[#482519]'
       }`}
     >
+      {/* Per-Paragraph Actions: 🎧 Audio + 🔤 Traducción */}
+      <div className="flex items-center space-x-1 shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
+        {/* 🎧 Audio Action: Plays/seeks this line in the video */}
+        <button
+          type="button"
+          onClick={handleLineClick}
+          title="Reproducir audio de este párrafo"
+          className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+            isActive
+              ? 'bg-rose-600 text-white shadow-xs'
+              : 'bg-[#180c07] text-rose-300/70 hover:text-white hover:bg-[#32170f] border border-[#3d190f]'
+          }`}
+        >
+          <Volume2 className="w-3.5 h-3.5" />
+        </button>
+
+        {/* 🔤 Translation Action: Glosses ONLY this paragraph */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isComplete && !isGlossingThisLine && onGlossLine) {
+              onGlossLine(line);
+            }
+          }}
+          disabled={isGlossingThisLine}
+          title={
+            isGlossingThisLine
+              ? 'Glosando este párrafo...'
+              : isComplete
+              ? 'Párrafo glosado'
+              : 'Glosar este párrafo con IA'
+          }
+          className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+            isGlossingThisLine
+              ? 'bg-amber-950/80 text-amber-300 border border-amber-500/60 cursor-wait'
+              : isComplete
+              ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-600/50 hover:bg-emerald-900/60'
+              : 'bg-[#180c07] text-rose-300/70 hover:text-white hover:bg-[#32170f] border border-[#3d190f]'
+          }`}
+        >
+          {isGlossingThisLine ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Languages className="w-3.5 h-3.5" />
+          )}
+        </button>
+      </div>
+
       {/* Main Text Content */}
       <div className="flex-1 min-w-0" dir={textDirection}>
         {interlinearMode && tokens && tokens.length > 0 ? (

@@ -1,18 +1,17 @@
-import React, { useState } from 'react';
-import { Play, Square, AlertCircle, Volume2, Languages, Check, X } from 'lucide-react';
+import React from 'react';
+import { Play, Square, AlertCircle, Languages, Loader2 } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
-import { getTextDirection, isRtlLanguage, getLanguageMeta } from '../../constants/languages.js';
-import { tokenizeAndGlossLineOffline } from '../../services/subtitleGlossService.js';
+import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
+import { isGlossComplete } from '../../services/subtitleGlossService.js';
 
 /**
  * TextParagraphItem
  * Renders an independent paragraph with:
  * 1. Interlinear tokens (Chinese Pinyin above word, Arabic tashkeel without Latin transliteration, Polish/Russian words + gloss)
- * 2. Dedicated right-aligned audio button (Play / Playing / Stop / Error)
- * 3. Dedicated manual glossing button (✎ Glosar manualmente) right below the audio button
- * 4. Interactive per-segment manual glossing interface (Spanish glosses, 0ms latency, zero AI calls)
- * 5. Interactive word click for dictionary definition lookup
- * 6. Authentic RTL support for Arabic, Hebrew, etc.
+ * 2. Dedicated right-aligned audio button (Play / Playing / Stop / Error) - plays ONLY this paragraph
+ * 3. Dedicated translation/glossing button right below audio button - glosses ONLY this paragraph with AI
+ * 4. Interactive word click for dictionary definition lookup
+ * 5. Authentic RTL support for Arabic, Hebrew, etc.
  */
 export function TextParagraphItem({
   paragraph,
@@ -21,20 +20,17 @@ export function TextParagraphItem({
   interlinearMode = true,
   isPlaying = false,
   isAudioError = false,
+  isGlossing = false,
   onPlay = null,
   onStop = null,
   onWordClick = null,
-  onSaveManualGlosses = null
+  onGlossParagraph = null
 }) {
-  const { id, text, tokens = [] } = paragraph;
+  const { text, tokens = [] } = paragraph;
   const isChinese = targetLang === 'zh';
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
-  const langMeta = getLanguageMeta(targetLang);
-
-  // Local state for manual gloss editing
-  const [isManualEditing, setIsManualEditing] = useState(false);
-  const [tokenGlosses, setTokenGlosses] = useState({});
+  const isComplete = isGlossComplete(paragraph, targetLang);
 
   // Responsive font size classes
   const fontClassMap = {
@@ -54,77 +50,6 @@ export function TextParagraphItem({
     }
   };
 
-  // Open manual gloss editor
-  const handleOpenManualGloss = (e) => {
-    if (e) e.stopPropagation();
-    const effectiveTokens = Array.isArray(tokens) && tokens.length > 0
-      ? tokens
-      : tokenizeAndGlossLineOffline(text, targetLang);
-
-    const initialMap = {};
-    effectiveTokens.forEach((tok, i) => {
-      if (tok && !tok.isPunctuation) {
-        initialMap[i] = tok.gloss || '';
-      }
-    });
-    setTokenGlosses(initialMap);
-    setIsManualEditing(true);
-  };
-
-  // Handle single token gloss input edit
-  const handleGlossInputChange = (idx, value) => {
-    setTokenGlosses(prev => ({
-      ...prev,
-      [idx]: value
-    }));
-  };
-
-  // Save manual glosses
-  const handleSaveManualGloss = (e) => {
-    if (e) e.stopPropagation();
-    const effectiveTokens = Array.isArray(tokens) && tokens.length > 0
-      ? tokens
-      : tokenizeAndGlossLineOffline(text, targetLang);
-
-    const updatedTokens = effectiveTokens.map((tok, i) => {
-      if (tok.isPunctuation) return tok;
-      const userVal = tokenGlosses[i] !== undefined ? tokenGlosses[i].trim() : (tok.gloss || '');
-      const hasUserVal = Boolean(userVal);
-      return {
-        ...tok,
-        gloss: hasUserVal ? userVal : null,
-        glossSource: hasUserVal ? 'manual' : tok.glossSource || null
-      };
-    });
-
-    if (onSaveManualGlosses) {
-      onSaveManualGlosses(paragraph.id, updatedTokens);
-    }
-    setIsManualEditing(false);
-  };
-
-  // Cancel manual gloss editing
-  const handleCancelManualGloss = (e) => {
-    if (e) e.stopPropagation();
-    setIsManualEditing(false);
-    setTokenGlosses({});
-  };
-
-  // Clear all gloss inputs in this segment
-  const handleClearAllGlosses = (e) => {
-    if (e) e.stopPropagation();
-    const effectiveTokens = Array.isArray(tokens) && tokens.length > 0
-      ? tokens
-      : tokenizeAndGlossLineOffline(text, targetLang);
-    const cleared = {};
-    effectiveTokens.forEach((tok, i) => {
-      if (tok && !tok.isPunctuation) {
-        cleared[i] = '';
-      }
-    });
-    setTokenGlosses(cleared);
-  };
-
   return (
     <div
       className={`group/para relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl transition-all border select-text ${
@@ -133,157 +58,7 @@ export function TextParagraphItem({
           : 'bg-[#24110a]/80 hover:bg-[#2c150d] border-[#441f14] hover:border-[#5a2a1c] shadow-md shadow-black/20'
       }`}
     >
-      {isManualEditing ? (
-        /* ============================================================ */
-        /* MANUAL GLOSSING EDITOR INTERFACE                             */
-        /* ============================================================ */
-        <div className="w-full space-y-4 animate-fade-in select-text">
-          {/* Header Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#3e1b11]">
-            <div className="flex items-center space-x-2">
-              <span className="px-2.5 py-1 rounded-xl bg-rose-950/90 border border-rose-700/70 text-rose-300 text-xs font-bold flex items-center space-x-1.5">
-                <Languages className="w-3.5 h-3.5" />
-                <span>Glosado manual</span>
-              </span>
-              <span className="text-xs text-stone-300 font-medium">
-                Párrafo {(paragraph.index ?? 0) + 1} • {langMeta?.name || targetLang.toUpperCase()} → Español
-              </span>
-              {isRtl && (
-                <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-950/90 text-amber-300 border border-amber-800/70 font-mono">
-                  RTL
-                </span>
-              )}
-            </div>
-            <span className="text-[11px] text-stone-400">
-              Introduce la traducción o glosa en español para cada palabra
-            </span>
-          </div>
-
-          {/* Sentence Context Preview */}
-          <div
-            dir={textDirection}
-            style={{ direction: textDirection }}
-            className={`px-3.5 py-2.5 rounded-xl bg-[#180b06] border border-[#38160d] text-stone-300 text-xs sm:text-sm leading-relaxed ${
-              isRtl ? 'text-right' : 'text-left'
-            }`}
-          >
-            <span className="text-stone-500 mr-1 select-none">“</span>
-            <span className="select-text">{text}</span>
-            <span className="text-stone-500 ml-1 select-none">”</span>
-          </div>
-
-          {/* Token Words Grid in Logical Order (preserves RTL visual flow without reversing memory) */}
-          <div
-            dir={textDirection}
-            style={{ direction: textDirection }}
-            className={`flex flex-wrap items-end gap-2 sm:gap-3 p-3.5 rounded-2xl bg-[#1a0c07] border border-[#3f1b11] ${
-              isRtl ? 'justify-start text-right' : 'justify-start text-left'
-            }`}
-          >
-            {(Array.isArray(tokens) && tokens.length > 0 ? tokens : tokenizeAndGlossLineOffline(text, targetLang)).map((tok, idx) => {
-              const w = typeof tok === 'string' ? tok : (tok.word || tok.text);
-              const isPunct = typeof tok === 'object' ? tok.isPunctuation : PUNCTUATION_REGEX.test(w);
-              const aux = isChinese ? (tok.auxiliary || tok.pinyin || null) : null;
-
-              if (isPunct) {
-                return (
-                  <span
-                    key={idx}
-                    dir={textDirection}
-                    className="text-stone-500 font-semibold px-1 py-1 text-base select-none self-center isolate [unicode-bidi:isolate]"
-                    title="Signo de puntuación"
-                  >
-                    {w}
-                  </span>
-                );
-              }
-
-              const currentVal = tokenGlosses[idx] !== undefined ? tokenGlosses[idx] : (tok.gloss || '');
-              const wasManual = tok.glossSource === 'manual';
-
-              return (
-                <div
-                  key={idx}
-                  dir={textDirection}
-                  className="flex flex-col items-center bg-[#251009] hover:bg-[#2d140b] border border-[#4d2216] focus-within:border-rose-500 focus-within:ring-1 focus-within:ring-rose-500/40 rounded-xl p-2 min-w-[70px] sm:min-w-[85px] transition-all shadow-xs isolate [unicode-bidi:isolate]"
-                >
-                  {/* Tier 1 (ONLY CHINESE): Tone-marked Pinyin */}
-                  {isChinese && aux && (
-                    <span className="text-[11px] text-rose-300 font-mono tracking-tight leading-none mb-1 select-text">
-                      {aux}
-                    </span>
-                  )}
-
-                  {/* Tier 2: Word in target script (Arabic with tashkīl in RTL, Russian Cyrillic, etc.) */}
-                  <span
-                    dir={textDirection}
-                    className={`font-bold tracking-wide text-white text-sm sm:text-base leading-tight mb-1.5 select-text ${
-                      isRtl ? 'text-right' : 'text-center'
-                    }`}
-                  >
-                    {w}
-                  </span>
-
-                  {/* Tier 3: Spanish gloss input (STRICTLY LTR) */}
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={currentVal}
-                    onChange={(e) => handleGlossInputChange(idx, e.target.value)}
-                    placeholder="glosa..."
-                    className="w-full text-center text-xs py-1 px-1.5 rounded-lg bg-[#180a05] border border-[#481f14] focus:border-rose-500 focus:outline-hidden text-rose-100 placeholder-stone-600 transition-all isolate [unicode-bidi:isolate]"
-                  />
-
-                  {/* Badge indicator if previously saved */}
-                  {wasManual ? (
-                    <span className="text-[9px] text-emerald-400/90 font-mono mt-1">manual ✓</span>
-                  ) : tok.gloss ? (
-                    <span className="text-[9px] text-stone-500 font-mono mt-1">auto</span>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Action Buttons Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-            <div className="flex items-center space-x-2">
-              {/* Save Button */}
-              <button
-                type="button"
-                onClick={handleSaveManualGloss}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-md shadow-rose-950/60 transition-all active:scale-95 cursor-pointer"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Guardar glosas</span>
-              </button>
-
-              {/* Cancel Button */}
-              <button
-                type="button"
-                onClick={handleCancelManualGloss}
-                className="px-3.5 py-2 rounded-xl bg-[#28130c] hover:bg-[#361910] border border-[#4a2217] text-stone-300 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span>Cancelar</span>
-              </button>
-            </div>
-
-            {/* Clear Button */}
-            <button
-              type="button"
-              onClick={handleClearAllGlosses}
-              className="px-2.5 py-1.5 rounded-xl text-stone-400 hover:text-rose-300 text-xs font-medium transition-colors cursor-pointer"
-            >
-              Limpiar campos
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* ============================================================ */
-        /* STANDARD VIEW (Text/Interlinear + Audio & Manual Buttons)   */
-        /* ============================================================ */
-        <div className="flex items-start justify-between gap-3 sm:gap-4 w-full">
+      <div className="flex items-start justify-between gap-3 sm:gap-4 w-full">
           {/* LEFT: Text Content / Interlinear Glosses */}
           <div className="flex-1 min-w-0" dir={textDirection}>
             {interlinearMode && Array.isArray(tokens) && tokens.length > 0 ? (
@@ -421,19 +196,40 @@ export function TextParagraphItem({
               )}
             </button>
 
-            {/* Debajo del botón de audio: Glosar manualmente */}
+            {/* Debajo del botón de audio: Botón de glosado individual para este párrafo */}
             <button
               type="button"
-              onClick={handleOpenManualGloss}
-              aria-label="Glosar manualmente"
-              title="Glosar manualmente este segmento"
-              className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer bg-[#2a130b] hover:bg-[#38190e] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isComplete && !isGlossing && onGlossParagraph) {
+                  onGlossParagraph(paragraph);
+                }
+              }}
+              disabled={isGlossing}
+              aria-label="Glosar este párrafo"
+              title={
+                isGlossing
+                  ? 'Glosando este párrafo...'
+                  : isComplete
+                  ? 'Párrafo glosado'
+                  : 'Glosar este párrafo con IA'
+              }
+              className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer ${
+                isGlossing
+                  ? 'bg-amber-950/80 text-amber-300 border border-amber-500/60 cursor-wait'
+                  : isComplete
+                  ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-600/50 hover:bg-emerald-900/60'
+                  : 'bg-[#2a130b] hover:bg-[#38190e] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white'
+              }`}
             >
-              <Languages className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />
+              {isGlossing ? (
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+              ) : (
+                <Languages className={`w-4 h-4 sm:w-5 sm:h-5 ${isComplete ? 'text-emerald-400' : 'text-rose-400'}`} />
+              )}
             </button>
           </div>
         </div>
-      )}
     </div>
   );
 }

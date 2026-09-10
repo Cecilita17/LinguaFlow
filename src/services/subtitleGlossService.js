@@ -393,6 +393,75 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
 }
 
 /**
+ * Gloss a single subtitle line on demand with AI.
+ * 
+ * 1. Checks if the line is already complete via isGlossComplete.
+ *    If already complete, immediately returns the line without any API call ($0 cost).
+ * 2. Ensures the line has offline tokenization applied.
+ * 3. Sends ONLY this single line to Groq AI via fetchBatchGlossesApi([sub], ...).
+ * 4. Merges returned AI tokens with language-specific strategy rules.
+ * 5. Returns the updated line with tokens and glossStatus: 'glosado'.
+ * 
+ * @param {Object} params
+ * @param {Object} params.sub - Subtitle line object
+ * @param {string} [params.targetLang='zh']
+ * @param {string} [params.nativeLang='es']
+ * @param {string} [params.apiKey='']
+ * @param {AbortSignal} [params.abortSignal=null]
+ * @returns {Promise<Object>} The updated subtitle line object
+ */
+export async function glossSingleSubtitleLine({
+  sub,
+  targetLang = 'zh',
+  nativeLang = 'es',
+  apiKey = '',
+  abortSignal = null
+}) {
+  if (!sub || typeof sub !== 'object') return sub;
+
+  // If already complete, return immediately (zero API calls!)
+  if (isGlossComplete(sub, targetLang)) {
+    return {
+      ...sub,
+      glossStatus: 'glosado'
+    };
+  }
+
+  // Ensure tokens are tokenized offline if empty
+  const currentTokens = Array.isArray(sub.tokens) && sub.tokens.length > 0
+    ? sub.tokens
+    : tokenizeAndGlossLineOffline(sub.text || '', targetLang);
+
+  const preparedSub = {
+    ...sub,
+    tokens: currentTokens
+  };
+
+  try {
+    const aiResults = await fetchBatchGlossesApi([preparedSub], targetLang, nativeLang, apiKey, abortSignal);
+    if (Array.isArray(aiResults) && aiResults.length > 0) {
+      const match = aiResults[0];
+      if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
+        const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang);
+        return {
+          ...preparedSub,
+          tokens: mergedTokens,
+          glossStatus: 'glosado'
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[LinguaFlow Gloss Engine] Error glossing single line:', err.message);
+  }
+
+  // Return with existing tokens if API call failed or had no results
+  return {
+    ...preparedSub,
+    glossStatus: isGlossComplete(preparedSub, targetLang) ? 'glosado' : 'sin glosar'
+  };
+}
+
+/**
  * Main orchestrator:
  * 1. Immediately prepares all lines with offline word segmentation + Pinyin/transliteration (no waiting)
  * 2. Merges any already cached AI glosses from localStorage without re-splitting words

@@ -5,15 +5,22 @@ import { SubtitleImporter } from '../components/youtube/SubtitleImporter.jsx';
 import { Transcript } from '../components/youtube/Transcript.jsx';
 import { TranscriptControls } from '../components/youtube/TranscriptControls.jsx';
 import { SavedTranscriptsModal } from '../components/youtube/SavedTranscriptsModal.jsx';
-import { enrichSubtitlesWithGlosses } from '../services/subtitleGlossService.js';
+import {
+  enrichSubtitlesWithGlosses,
+  glossSingleSubtitleLine,
+  isGlossComplete
+} from '../services/subtitleGlossService.js';
 import { parseSubtitlesAuto } from '../services/subtitleService.js';
 import {
   getSavedTranscriptsCount,
-  findTranscriptsByVideoId
+  findTranscriptsByVideoId,
+  saveTranscriptToLibrary,
+  computeSubtitleHash
 } from '../services/transcriptLibraryStorage.js';
 import {
   Youtube,
-  Sparkles,
+  Languages,
+  Loader2,
   FileText,
   CheckCircle2,
   RotateCcw,
@@ -53,6 +60,15 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   const [searchQuery, setSearchQuery] = useState('');
   const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
 
+  const [isAutoGlossing, setIsAutoGlossing] = useState(false);
+  const [loadingLineIds, setLoadingLineIds] = useState(new Set());
+
+  // Count how many subtitle lines are completely glossed
+  const completedLinesCount = useMemo(() => {
+    if (!Array.isArray(subtitles)) return 0;
+    return subtitles.filter(s => isGlossComplete(s, targetLang)).length;
+  }, [subtitles, targetLang]);
+
   // Abort controller ref to stop / pause glossing
   const glossAbortControllerRef = useRef(null);
 
@@ -75,7 +91,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     };
   }, []);
 
-  // Start or resume glossing with abortable controller
+  // Start or resume auto-glossing with abortable controller
   const startGlossing = useCallback((subtitlesToGloss, sourceName = subtitleSource) => {
     if (!Array.isArray(subtitlesToGloss) || subtitlesToGloss.length === 0) return;
 
@@ -84,6 +100,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     }
     const controller = new AbortController();
     glossAbortControllerRef.current = controller;
+    setIsAutoGlossing(true);
 
     const enriched = enrichSubtitlesWithGlosses({
       subtitles: subtitlesToGloss,
@@ -99,12 +116,33 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         setSubtitles(updated);
         refreshLibraryCount();
       },
-      onProgress: (p) => setGlossProgress(p)
+      onProgress: (p) => {
+        setGlossProgress(p);
+        if (p.isComplete) {
+          setIsAutoGlossing(false);
+        }
+      }
     });
 
     setSubtitles(enriched);
     refreshLibraryCount();
   }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount]);
+
+  // Toggle Global Auto-Glossing (ON / OFF)
+  const handleToggleAutoGlossing = useCallback(() => {
+    if (isAutoGlossing) {
+      if (glossAbortControllerRef.current) {
+        glossAbortControllerRef.current.abort();
+        glossAbortControllerRef.current = null;
+      }
+      setIsAutoGlossing(false);
+      setGlossProgress(prev => prev ? ({ ...prev, isGlossing: false, isPaused: true }) : null);
+    } else {
+      if (!subtitles || subtitles.length === 0) return;
+      setIsAutoGlossing(true);
+      startGlossing(subtitles, subtitleSource);
+    }
+  }, [isAutoGlossing, subtitles, subtitleSource, startGlossing]);
 
   // Stop / Pause glossing
   const handleStopOrPauseGlossing = useCallback(() => {
@@ -112,14 +150,64 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       glossAbortControllerRef.current.abort();
       glossAbortControllerRef.current = null;
     }
+    setIsAutoGlossing(false);
     setGlossProgress(prev => prev ? ({ ...prev, isGlossing: false, isPaused: true }) : null);
   }, []);
 
   // Resume glossing
   const handleResumeGlossing = useCallback(() => {
     if (!subtitles || subtitles.length === 0) return;
+    setIsAutoGlossing(true);
     startGlossing(subtitles, subtitleSource);
   }, [subtitles, subtitleSource, startGlossing]);
+
+  // Individual line glossing (runs only for that paragraph, works even when auto-glossing is OFF)
+  const handleGlossSingleLine = useCallback(async (line) => {
+    if (!line || !line.id) return;
+    if (isGlossComplete(line, targetLang)) return; // $0 Groq cost, already glossed!
+
+    setLoadingLineIds(prev => new Set(prev).add(line.id));
+
+    try {
+      const updatedLine = await glossSingleSubtitleLine({
+        sub: line,
+        targetLang,
+        nativeLang,
+        apiKey
+      });
+
+      setSubtitles(prevSubtitles => {
+        const updatedList = prevSubtitles.map(s => s.id === line.id ? updatedLine : s);
+
+        const completedCount = updatedList.filter(s => isGlossComplete(s, targetLang)).length;
+        saveTranscriptToLibrary({
+          videoId,
+          videoTitle,
+          videoUrl,
+          targetLanguage: targetLang,
+          nativeLanguage: nativeLang,
+          sourceType: subtitleSource || 'srt',
+          subtitleHash: computeSubtitleHash(updatedList),
+          subtitlesCount: updatedList.length,
+          completedLinesCount: completedCount,
+          isComplete: completedCount === updatedList.length,
+          subtitles: updatedList
+        }).then(() => {
+          refreshLibraryCount();
+        }).catch(err => console.warn('Failed to save single glossed line to library:', err));
+
+        return updatedList;
+      });
+    } catch (err) {
+      console.error('Failed to gloss single line:', err);
+    } finally {
+      setLoadingLineIds(prev => {
+        const next = new Set(prev);
+        next.delete(line.id);
+        return next;
+      });
+    }
+  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount]);
 
   // 1. Restore previous session on initial mount
   useEffect(() => {
@@ -355,70 +443,45 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
               )}
             </button>
 
-            {/* AI GLOSSING TOGGLE (Compact in header next to YouTube Reader) */}
+            {/* GLOBAL AUTO-GLOSSING TOGGLE (Represented by Languages icon, ON/OFF, Green when ON, Progress badge) */}
             <button
               type="button"
-              onClick={() => setInterlinearMode(!interlinearMode)}
+              onClick={handleToggleAutoGlossing}
               title={
-                interlinearMode
-                  ? (isSpanish ? 'Glosado IA activo: clic para subtítulos tradicionales' : 'AI Glossing active: click for plain subtitles')
-                  : (isSpanish ? 'Activar glosado IA e interlineal' : 'Enable AI Glossing and interlinear breakdown')
+                isAutoGlossing
+                  ? (isSpanish ? 'Glosado automático activo: clic para detener' : 'Auto-glossing active: click to stop')
+                  : (isSpanish ? 'Activar glosado automático global' : 'Enable global auto-glossing')
               }
               className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
-                interlinearMode
-                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white border-rose-400 shadow-rose-950/40'
+                isAutoGlossing
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
                   : 'bg-[#2a1209] hover:bg-[#38180d] text-stone-300 border-[#4a2014]'
               }`}
             >
-              <Sparkles className={`w-3.5 h-3.5 ${interlinearMode ? 'text-white fill-white' : 'text-rose-400'}`} />
-              <span className="font-semibold">AI Glossing</span>
+              <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-400'}`} />
+              <span className="font-semibold">{isSpanish ? 'Glosado Auto' : 'Auto Gloss'}</span>
               <span
                 className={`text-[9px] px-1 py-0.2 rounded font-bold ${
-                  interlinearMode
-                    ? 'bg-rose-950/90 text-rose-100 border border-rose-800'
+                  isAutoGlossing
+                    ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
                     : 'bg-[#180803] text-stone-400 border border-[#3e1b10]'
                 }`}
               >
-                {interlinearMode ? 'ON' : 'OFF'}
+                {isAutoGlossing ? 'ON' : 'OFF'}
               </span>
 
-              {/* Live Glossing Progress Badge */}
-              {glossProgress && glossProgress.isGlossing && (
-                <span className="flex items-center gap-1 ml-0.5 text-[9px] text-pink-100 bg-black/40 px-1.5 py-0.2 rounded-full border border-pink-300/40 animate-pulse">
-                  <span className="w-1 h-1 rounded-full bg-white animate-ping" />
-                  <span>{glossProgress.completed}/{glossProgress.total}</span>
+              {/* Live Auto-Glossing Progress Badge */}
+              {subtitles.length > 0 && (
+                <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
+                  isAutoGlossing
+                    ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
+                    : 'text-stone-400 bg-black/30 border-stone-700/50'
+                }`}>
+                  {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
+                  <span>{completedLinesCount}/{subtitles.length}</span>
                 </span>
               )}
             </button>
-
-            {/* STOP / PAUSE BUTTON (shown while actively glossing) */}
-            {glossProgress && glossProgress.isGlossing && (
-              <button
-                type="button"
-                onClick={handleStopOrPauseGlossing}
-                title={isSpanish ? 'Pausar / Detener glosado IA' : 'Pause / Stop AI glossing'}
-                className="px-2 py-1 rounded-lg bg-amber-950/90 hover:bg-amber-900 border border-amber-500 text-amber-200 hover:text-white text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs animate-pulse"
-              >
-                <Pause className="w-3 h-3 fill-amber-300 text-amber-300" />
-                <span>{isSpanish ? 'Pausar' : 'Pause'}</span>
-              </button>
-            )}
-
-            {/* RESUME BUTTON (shown when paused or stopped with incomplete lines) */}
-            {glossProgress && (glossProgress.isPaused || (!glossProgress.isGlossing && !glossProgress.isComplete && glossProgress.completed < glossProgress.total)) && (
-              <button
-                type="button"
-                onClick={handleResumeGlossing}
-                title={isSpanish ? 'Reanudar glosado IA' : 'Resume AI glossing'}
-                className="px-2 py-1 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500 text-emerald-200 hover:text-white text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
-              >
-                <Play className="w-3 h-3 fill-emerald-300 text-emerald-300" />
-                <span>{isSpanish ? 'Reanudar' : 'Resume'}</span>
-                {glossProgress.total > 0 && (
-                  <span className="text-[9px] opacity-80 font-mono">({glossProgress.completed}/{glossProgress.total})</span>
-                )}
-              </button>
-            )}
 
             {/* Video Link Toggle (if video loaded) */}
             {videoId && (
@@ -488,6 +551,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             subtitles={subtitles}
             currentTime={currentTime}
             onSeek={handleSeek}
+            onGlossLine={handleGlossSingleLine}
+            loadingLineIds={loadingLineIds}
             autoScroll={autoScroll}
             fontSize={fontSize}
             showTimestamps={showTimestamps}

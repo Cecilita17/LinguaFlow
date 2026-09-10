@@ -6,6 +6,8 @@ export function Transcript({
   subtitles = [],
   currentTime = 0,
   onSeek,
+  onGlossLine = null,
+  loadingLineIds = null,
   autoScroll = true,
   fontSize = 'base',
   showTimestamps = true,
@@ -122,6 +124,8 @@ export function Transcript({
               line={line}
               isActive={isCurrentActive}
               onSeek={onSeek}
+              onGlossLine={onGlossLine}
+              isGlossingThisLine={Boolean(loadingLineIds && (loadingLineIds instanceof Set ? loadingLineIds.has(line.id) : loadingLineIds[line.id]))}
               fontSize={fontSize}
               showTimestamps={showTimestamps}
               searchQuery={searchQuery}

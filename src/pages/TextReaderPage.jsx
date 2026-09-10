@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   FileText,
   Sparkles,
@@ -14,7 +14,8 @@ import {
   ChevronDown,
   Type,
   Maximize2,
-  BookOpen
+  BookOpen,
+  Languages
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
@@ -39,6 +40,7 @@ import {
 } from '../services/textLibraryStorage.js';
 import {
   enrichParagraphsWithGlosses,
+  glossSingleParagraph,
   isGlossComplete
 } from '../services/textGlossService.js';
 
@@ -64,7 +66,6 @@ export function TextReaderPage({
   const [showSavedModal, setShowSavedModal] = useState(false);
   const [savedDocsCount, setSavedDocsCount] = useState(0);
 
-
   // Audio TTS states
   const [playingParagraphId, setPlayingParagraphId] = useState(null);
   const [audioErrorId, setAudioErrorId] = useState(null);
@@ -78,6 +79,8 @@ export function TextReaderPage({
     isComplete: false,
     failed: 0
   });
+  const [isAutoGlossing, setIsAutoGlossing] = useState(false);
+  const [loadingParagraphIds, setLoadingParagraphIds] = useState(new Set());
   const abortControllerRef = useRef(null);
 
   // Cleanup speech synthesis & glossing on unmount
@@ -123,6 +126,12 @@ export function TextReaderPage({
 
   // Active document language (falls back to selected targetLang if editing/new)
   const activeDocLang = (document && !isEditing && document.targetLang) ? document.targetLang : targetLang;
+
+  // Count how many paragraphs are completely glossed
+  const completedParagraphsCount = useMemo(() => {
+    if (!document || !Array.isArray(document.paragraphs)) return 0;
+    return document.paragraphs.filter(p => isGlossComplete(p, activeDocLang)).length;
+  }, [document, activeDocLang]);
 
   // Initial sync: if draft document exists with its own targetLang, synchronize targetLang once on mount
   useEffect(() => {
@@ -289,28 +298,6 @@ export function TextReaderPage({
     setPlayingParagraphId(null);
   }, []);
 
-  // Handle manual per-segment glosses save (0ms latency, zero AI calls)
-  const handleSaveManualGlosses = useCallback((paragraphId, updatedTokens) => {
-    setDocument(prev => {
-      if (!prev || !Array.isArray(prev.paragraphs)) return prev;
-      const nextParagraphs = prev.paragraphs.map(p => {
-        if (p.id !== paragraphId) return p;
-        return {
-          ...p,
-          tokens: updatedTokens
-        };
-      });
-      const nextDoc = {
-        ...prev,
-        paragraphs: nextParagraphs
-      };
-      saveDocument(nextDoc).then(() => {
-        refreshLibraryCount();
-      }).catch(err => console.warn('Error saving manual glosses:', err));
-      return nextDoc;
-    });
-  }, [refreshLibraryCount]);
-
   // Trigger background AI glossing
   const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
     if (!Array.isArray(paragraphsToGloss) || paragraphsToGloss.length === 0) return;
@@ -320,6 +307,7 @@ export function TextReaderPage({
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    setIsAutoGlossing(true);
 
     const enriched = enrichParagraphsWithGlosses({
       paragraphs: paragraphsToGloss,
@@ -340,6 +328,9 @@ export function TextReaderPage({
       },
       onProgress: (prog) => {
         setGlossingProgress(prog);
+        if (prog.isComplete) {
+          setIsAutoGlossing(false);
+        }
       }
     });
 
@@ -353,12 +344,33 @@ export function TextReaderPage({
     });
   }, [targetLang, nativeLang, apiKey]);
 
+  // Toggle Global Auto-Glossing (ON / OFF)
+  const handleToggleAutoGlossing = useCallback(() => {
+    if (isAutoGlossing) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsAutoGlossing(false);
+      setGlossingProgress(prev => ({
+        ...prev,
+        isGlossing: false,
+        isPaused: true
+      }));
+    } else {
+      if (!document || !Array.isArray(document.paragraphs) || document.paragraphs.length === 0) return;
+      setIsAutoGlossing(true);
+      triggerGlossing(document.paragraphs, activeDocLang);
+    }
+  }, [isAutoGlossing, document, activeDocLang, triggerGlossing]);
+
   // Stop/Pause glossing
   const handleStopGlossing = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    setIsAutoGlossing(false);
     setGlossingProgress(prev => ({
       ...prev,
       isGlossing: false,
@@ -369,9 +381,51 @@ export function TextReaderPage({
   // Resume glossing
   const handleResumeGlossing = () => {
     if (document && Array.isArray(document.paragraphs)) {
+      setIsAutoGlossing(true);
       triggerGlossing(document.paragraphs, targetLang);
     }
   };
+
+  // Individual paragraph glossing (runs only for that paragraph, works even when auto-glossing is OFF)
+  const handleGlossSingleParagraph = useCallback(async (paragraph) => {
+    if (!paragraph || !paragraph.id) return;
+    if (isGlossComplete(paragraph, activeDocLang)) return; // $0 Groq cost, already complete!
+
+    setLoadingParagraphIds(prev => new Set(prev).add(paragraph.id));
+
+    try {
+      const updatedParagraph = await glossSingleParagraph({
+        paragraph,
+        targetLang: activeDocLang,
+        nativeLang,
+        apiKey
+      });
+
+      setDocument(prev => {
+        if (!prev || !Array.isArray(prev.paragraphs)) return prev;
+        const updatedParagraphs = prev.paragraphs.map(p =>
+          p.id === paragraph.id ? updatedParagraph : p
+        );
+        const updatedDoc = {
+          ...prev,
+          paragraphs: updatedParagraphs
+        };
+        saveDocument(updatedDoc).then(() => {
+          refreshLibraryCount();
+        }).catch(err => console.warn('Failed to save single glossed paragraph to library:', err));
+
+        return updatedDoc;
+      });
+    } catch (err) {
+      console.error('Failed to gloss single paragraph:', err);
+    } finally {
+      setLoadingParagraphIds(prev => {
+        const next = new Set(prev);
+        next.delete(paragraph.id);
+        return next;
+      });
+    }
+  }, [activeDocLang, nativeLang, apiKey, refreshLibraryCount]);
 
   // Submit / Start reading parsed text
   const handleStartReading = async () => {
@@ -442,6 +496,8 @@ export function TextReaderPage({
       isComplete: allComplete,
       failed: 0
     });
+    setIsAutoGlossing(false);
+    setLoadingParagraphIds(new Set());
   }, [setTargetLang]);
 
   // Start new document from modal
@@ -490,6 +546,8 @@ export function TextReaderPage({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+    setIsAutoGlossing(false);
+    setLoadingParagraphIds(new Set());
     clearActiveDocumentDraft();
     setDocument(null);
     setInputText('');
@@ -580,51 +638,48 @@ export function TextReaderPage({
             />
           </div>
 
-          {/* AI Glossing Control (Pause / Resume / Loading) when reader is active */}
+          {/* Reader controls (Auto-glossing, Interlinear, Font size, Edit, Clear) */}
           {document && !isEditing && (
             <>
-              {glossingProgress.isGlossing ? (
-                <button
-                  type="button"
-                  onClick={handleStopGlossing}
-                  className="px-2.5 py-1.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 border border-amber-600/70 text-amber-200 text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
-                  title="Pausar generación de gloses"
+              {/* GLOBAL AUTO-GLOSSING TOGGLE (Represented by Languages icon, ON/OFF, Green when ON, Progress badge) */}
+              <button
+                type="button"
+                onClick={handleToggleAutoGlossing}
+                title={
+                  isAutoGlossing
+                    ? 'Glosado automático activo: clic para detener'
+                    : 'Activar glosado automático global'
+                }
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
+                  isAutoGlossing
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
+                    : 'bg-[#2a130b] hover:bg-[#38190e] text-stone-200 border-[#482015]'
+                }`}
+              >
+                <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-400'}`} />
+                <span className="font-semibold">Auto-Glosado</span>
+                <span
+                  className={`text-[9px] px-1 py-0.2 rounded font-bold ${
+                    isAutoGlossing
+                      ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
+                      : 'bg-[#180803] text-stone-400 border border-[#3e1b10]'
+                  }`}
                 >
-                  <Pause className="w-3.5 h-3.5 fill-current" />
-                  <span className="hidden sm:inline">Pausar</span>
-                  <span className="text-[11px] opacity-80 font-mono">
-                    ({glossingProgress.completed}/{glossingProgress.total})
-                  </span>
-                </button>
-              ) : glossingProgress.isPaused ? (
-                <button
-                  type="button"
-                  onClick={handleResumeGlossing}
-                  className="px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-500/80 text-rose-200 text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
-                  title="Reanudar generación de gloses"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span className="hidden sm:inline">Reanudar</span>
-                  <span className="text-[11px] opacity-80 font-mono">
-                    ({glossingProgress.completed}/{glossingProgress.total})
-                  </span>
-                </button>
-              ) : glossingProgress.isComplete ? (
-                <span className="px-2.5 py-1.5 rounded-xl bg-emerald-950/70 border border-emerald-600/60 text-emerald-200 text-xs font-semibold hidden md:inline-flex items-center space-x-1.5 shadow-xs">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Glosado completo</span>
+                  {isAutoGlossing ? 'ON' : 'OFF'}
                 </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => triggerGlossing(document.paragraphs, targetLang)}
-                  className="px-2.5 py-1.5 rounded-xl bg-[#2e150d] hover:bg-[#3d1c12] border border-[#54271a] text-rose-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
-                  title="Generar o actualizar glosado con IA"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-rose-400" />
-                  <span className="hidden sm:inline">AI Glossing</span>
-                </button>
-              )}
+
+                {/* Live Auto-Glossing Progress Badge */}
+                {document.paragraphs?.length > 0 && (
+                  <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
+                    isAutoGlossing
+                      ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
+                      : 'text-stone-400 bg-black/30 border-stone-700/50'
+                  }`}>
+                    {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
+                    <span>{completedParagraphsCount}/{document.paragraphs.length}</span>
+                  </span>
+                )}
+              </button>
 
               {/* Interlinear Mode Toggle */}
               <button
@@ -812,10 +867,11 @@ export function TextReaderPage({
                 interlinearMode={interlinearMode}
                 isPlaying={playingParagraphId === paragraph.id}
                 isAudioError={audioErrorId === paragraph.id}
+                isGlossing={loadingParagraphIds.has(paragraph.id)}
                 onPlay={handlePlayParagraph}
                 onStop={handleStopAudio}
                 onWordClick={onWordClick}
-                onSaveManualGlosses={handleSaveManualGlosses}
+                onGlossParagraph={handleGlossSingleParagraph}
               />
             ))}
 

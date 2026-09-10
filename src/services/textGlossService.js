@@ -17,15 +17,45 @@ import {
   mergeAiTokensWithSegmented,
   isGlossComplete,
   getLanguageGlossStrategy,
-  PUNCTUATION_REGEX
+  PUNCTUATION_REGEX,
+  glossSingleSubtitleLine
 } from './subtitleGlossService.js';
 
 export {
   tokenizeAndGlossLineOffline,
   isGlossComplete,
   getLanguageGlossStrategy,
-  PUNCTUATION_REGEX
+  PUNCTUATION_REGEX,
+  glossSingleSubtitleLine
 };
+
+/**
+ * Gloss a single text paragraph on demand with AI.
+ * Reuses identical single-line AI glossing engine with language strategy rules.
+ * 
+ * @param {Object} params
+ * @param {Object} params.paragraph - Paragraph object
+ * @param {string} [params.targetLang='zh']
+ * @param {string} [params.nativeLang='es']
+ * @param {string} [params.apiKey='']
+ * @param {AbortSignal} [params.abortSignal=null]
+ * @returns {Promise<Object>} The updated paragraph object with glossed tokens
+ */
+export async function glossSingleParagraph({
+  paragraph,
+  targetLang = 'zh',
+  nativeLang = 'es',
+  apiKey = '',
+  abortSignal = null
+}) {
+  return glossSingleSubtitleLine({
+    sub: paragraph,
+    targetLang,
+    nativeLang,
+    apiKey,
+    abortSignal
+  });
+}
 
 /**
  * Enriches an array of text paragraphs with interlinear glosses.
