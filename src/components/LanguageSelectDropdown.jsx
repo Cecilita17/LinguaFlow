@@ -281,11 +281,11 @@ export function LanguageSelectDropdown({
 
                     {/* Names: Target + Native */}
                     <div className="truncate">
-                      <div className="text-xs font-semibold leading-tight truncate text-[var(--text-primary)]">
+                      <div className={`text-xs font-semibold leading-tight truncate ${isSelected ? 'text-rose-700 dark:text-rose-200' : 'text-[var(--text-primary)]'}`}>
                         {name}
                       </div>
                       {native && native !== name && (
-                        <div className="text-[10px] leading-tight text-[var(--text-muted)] font-normal mt-0.5 truncate">
+                        <div className={`text-[10px] leading-tight font-normal mt-0.5 truncate ${isSelected ? 'text-rose-600/80 dark:text-rose-300/70' : 'text-[var(--text-muted)]'}`}>
                           {native}
                         </div>
                       )}
