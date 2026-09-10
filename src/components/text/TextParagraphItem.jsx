@@ -21,16 +21,19 @@ export function TextParagraphItem({
   isPlaying = false,
   isAudioError = false,
   isGlossing = false,
+  hasGloss = false,
   onPlay = null,
   onStop = null,
   onWordClick = null,
+  onGloss = null,
   onGlossParagraph = null
 }) {
   const { text, tokens = [] } = paragraph;
   const isChinese = targetLang === 'zh';
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
-  const isComplete = isGlossComplete(paragraph, targetLang);
+  const isComplete = hasGloss || isGlossComplete(paragraph, targetLang);
+  const handleGloss = onGloss || onGlossParagraph;
 
   // Responsive font size classes
   const fontClassMap = {
@@ -156,9 +159,9 @@ export function TextParagraphItem({
             )}
           </div>
 
-          {/* RIGHT: Actions (Audio Button + Debajo: ✎ Glosar manualmente) */}
-          <div className="shrink-0 flex flex-col items-center sm:items-end gap-2 pt-0.5 sm:pt-1">
-            {/* Paragraph Audio Button (▶️ / ⏹️ / ⚠️) */}
+          {/* RIGHT: Actions (Audio Button + Gloss Button side-by-side: 🔊 🔤) */}
+          <div className="shrink-0 flex items-center gap-2 pt-0.5 sm:pt-1">
+            {/* Paragraph Audio Button (▶️ / ⏹️ / ⚠️) - Plays ONLY this paragraph */}
             <button
               type="button"
               onClick={handleAudioClick}
@@ -196,16 +199,16 @@ export function TextParagraphItem({
               )}
             </button>
 
-            {/* Debajo del botón de audio: Botón de glosado individual para este párrafo */}
+            {/* Paragraph Gloss Button (🔤) - Glosses ONLY this paragraph */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                if (!isComplete && !isGlossing && onGlossParagraph) {
-                  onGlossParagraph(paragraph);
+                if (!isComplete && !isGlossing && handleGloss) {
+                  handleGloss(paragraph);
                 }
               }}
-              disabled={isGlossing}
+              disabled={isGlossing || isComplete}
               aria-label="Glosar este párrafo"
               title={
                 isGlossing
@@ -218,7 +221,7 @@ export function TextParagraphItem({
                 isGlossing
                   ? 'bg-amber-950/80 text-amber-300 border border-amber-500/60 cursor-wait'
                   : isComplete
-                  ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-600/50 hover:bg-emerald-900/60'
+                  ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-600/50 hover:bg-emerald-900/60 cursor-default'
                   : 'bg-[#2a130b] hover:bg-[#38190e] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white'
               }`}
             >

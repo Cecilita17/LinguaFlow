@@ -6,7 +6,9 @@ export function Transcript({
   subtitles = [],
   currentTime = 0,
   onSeek,
+  onGloss = null,
   onGlossLine = null,
+  glossingLineIds = null,
   loadingLineIds = null,
   autoScroll = true,
   fontSize = 'base',
@@ -18,6 +20,8 @@ export function Transcript({
   const containerRef = useRef(null);
   const activeLineRef = useRef(null);
   const userInteractingRef = useRef(false);
+  const handleGloss = onGloss || onGlossLine;
+  const activeGlossingIds = glossingLineIds || loadingLineIds;
 
   // 1. Identify active subtitle line based on currentTime
   const activeIndex = useMemo(() => {
@@ -124,8 +128,11 @@ export function Transcript({
               line={line}
               isActive={isCurrentActive}
               onSeek={onSeek}
-              onGlossLine={onGlossLine}
-              isGlossingThisLine={Boolean(loadingLineIds && (loadingLineIds instanceof Set ? loadingLineIds.has(line.id) : loadingLineIds[line.id]))}
+              onGloss={handleGloss}
+              onGlossLine={handleGloss}
+              isGlossing={Boolean(activeGlossingIds && (activeGlossingIds instanceof Set ? activeGlossingIds.has(line.id) : activeGlossingIds[line.id]))}
+              isGlossingThisLine={Boolean(activeGlossingIds && (activeGlossingIds instanceof Set ? activeGlossingIds.has(line.id) : activeGlossingIds[line.id]))}
+              hasGloss={isGlossComplete(line, targetLang)}
               fontSize={fontSize}
               showTimestamps={showTimestamps}
               searchQuery={searchQuery}

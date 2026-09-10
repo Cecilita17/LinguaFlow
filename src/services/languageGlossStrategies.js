@@ -460,23 +460,67 @@ export class ChineseGlossStrategy {
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
-    const tokens = [];
+    // 1. Primary: Intl.Segmenter with word granularity
     try {
       if (typeof Intl !== 'undefined' && Intl.Segmenter) {
         const segmenter = new Intl.Segmenter('zh-CN', { granularity: 'word' });
         const segments = [...segmenter.segment(cleanStr)];
+
+        const rawItems = [];
+        let hadSpaceBefore = false;
         for (const seg of segments) {
+          if (seg.segment.trim() === '') {
+            hadSpaceBefore = true;
+            continue;
+          }
           const w = seg.segment.trim();
-          if (!w) continue;
-          const isPunctuation = PUNCTUATION_REGEX.test(w);
-          const entry = isPunctuation ? null : this.lookupOffline(w);
+          const isPunct = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
+          rawItems.push({ text: w, isPunctuation: isPunct, hadSpaceBefore });
+          hadSpaceBefore = false;
+        }
+
+        // 2. Local dictionary compound refinement:
+        // Merge consecutive segments into single lexical units if in dictionary (e.g. 早上好, 明天见, 好久不见, 子轩)
+        // Strictly avoid merging if items were intentionally separated by spaces or punctuation!
+        const refinedItems = [];
+        for (let i = 0; i < rawItems.length; i++) {
+          if (rawItems[i].isPunctuation) {
+            refinedItems.push(rawItems[i]);
+            continue;
+          }
+
+          let merged = false;
+          for (let len = Math.min(4, rawItems.length - i); len >= 2; len--) {
+            let canMerge = true;
+            let combined = '';
+            for (let k = 0; k < len; k++) {
+              const item = rawItems[i + k];
+              if (item.isPunctuation) { canMerge = false; break; }
+              if (k > 0 && item.hadSpaceBefore) { canMerge = false; break; }
+              combined += item.text;
+            }
+            if (canMerge && this.lookupOffline(combined)) {
+              refinedItems.push({ text: combined, isPunctuation: false });
+              i += len - 1;
+              merged = true;
+              break;
+            }
+          }
+          if (!merged) {
+            refinedItems.push(rawItems[i]);
+          }
+        }
+
+        const tokens = [];
+        for (const item of refinedItems) {
+          const entry = item.isPunctuation ? null : this.lookupOffline(item.text);
           tokens.push({
-            text: w,
-            word: w,
-            auxiliary: isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
-            pinyin: isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
-            gloss: isPunctuation ? null : (entry?.gloss || null),
-            isPunctuation
+            text: item.text,
+            word: item.text,
+            auxiliary: item.isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
+            pinyin: item.isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
+            gloss: item.isPunctuation ? null : (entry?.gloss || null),
+            isPunctuation: item.isPunctuation
           });
         }
         if (tokens.length > 0) return tokens;
@@ -485,20 +529,102 @@ export class ChineseGlossStrategy {
       console.warn('Intl.Segmenter fallback in ChineseGlossStrategy:', e);
     }
 
-    // Fallback regex if Intl.Segmenter fails
-    const words = cleanStr.match(/[\u4E00-\u9FFF]{1,4}|[a-zA-Z0-9]+|[^\s]/g) || [cleanStr];
-    for (const w of words) {
-      if (!w.trim()) continue;
-      const isPunctuation = PUNCTUATION_REGEX.test(w);
-      const entry = isPunctuation ? null : this.lookupOffline(w);
+    // 3. Robust Fallback (Only if Intl.Segmenter is absent):
+    // Longest prefix match against dictionary + single CJK characters (never arbitrary 4-character slicing)
+    return this.tokenizeFallback(cleanStr);
+  }
+
+  tokenizeFallback(cleanStr) {
+    const tokens = [];
+    let i = 0;
+    while (i < cleanStr.length) {
+      const remaining = cleanStr.slice(i);
+      // Whitespace
+      const spaceMatch = remaining.match(/^\s+/);
+      if (spaceMatch) {
+        i += spaceMatch[0].length;
+        continue;
+      }
+      // Punctuation
+      const punctMatch = remaining.match(/^([，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]+)/);
+      if (punctMatch) {
+        const p = punctMatch[1];
+        tokens.push({
+          text: p,
+          word: p,
+          auxiliary: null,
+          pinyin: null,
+          gloss: null,
+          isPunctuation: true
+        });
+        i += p.length;
+        continue;
+      }
+
+      // Longest prefix match in offline dictionary (up to 6 chars)
+      let dictMatched = false;
+      for (let len = Math.min(6, remaining.length); len >= 2; len--) {
+        const candidate = remaining.slice(0, len);
+        const entry = this.lookupOffline(candidate);
+        if (entry) {
+          tokens.push({
+            text: candidate,
+            word: candidate,
+            auxiliary: entry.auxiliary || entry.pinyin || null,
+            pinyin: entry.auxiliary || entry.pinyin || null,
+            gloss: entry.gloss || null,
+            isPunctuation: false
+          });
+          i += len;
+          dictMatched = true;
+          break;
+        }
+      }
+      if (dictMatched) continue;
+
+      // Single CJK Character
+      if (/^[\u4E00-\u9FFF]/.test(remaining)) {
+        const char = remaining[0];
+        const entry = this.lookupOffline(char);
+        tokens.push({
+          text: char,
+          word: char,
+          auxiliary: entry?.auxiliary || entry?.pinyin || null,
+          pinyin: entry?.auxiliary || entry?.pinyin || null,
+          gloss: entry?.gloss || null,
+          isPunctuation: false
+        });
+        i += 1;
+        continue;
+      }
+
+      // Latin word or digits
+      const wordMatch = remaining.match(/^[a-zA-Z0-9]+/);
+      if (wordMatch) {
+        const w = wordMatch[0];
+        tokens.push({
+          text: w,
+          word: w,
+          auxiliary: null,
+          pinyin: null,
+          gloss: null,
+          isPunctuation: false
+        });
+        i += w.length;
+        continue;
+      }
+
+      // Any remaining single character
+      const single = remaining[0];
       tokens.push({
-        text: w,
-        word: w,
-        auxiliary: isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
-        pinyin: isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
-        gloss: isPunctuation ? null : (entry?.gloss || null),
-        isPunctuation
+        text: single,
+        word: single,
+        auxiliary: null,
+        pinyin: null,
+        gloss: null,
+        isPunctuation: PUNCTUATION_REGEX.test(single)
       });
+      i += 1;
     }
     return tokens;
   }

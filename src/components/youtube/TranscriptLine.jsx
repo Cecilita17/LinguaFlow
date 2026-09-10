@@ -8,8 +8,11 @@ export function TranscriptLine({
   line,
   isActive = false,
   onSeek,
+  onGloss = null,
   onGlossLine = null,
+  isGlossing = false,
   isGlossingThisLine = false,
+  hasGloss = false,
   fontSize = 'base',
   showTimestamps = true,
   searchQuery = '',
@@ -20,7 +23,9 @@ export function TranscriptLine({
   const { startTime, text, tokens = [], glosses = [] } = line;
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
-  const isComplete = isGlossComplete(line, targetLang);
+  const isComplete = hasGloss || isGlossComplete(line, targetLang);
+  const handleGloss = onGloss || onGlossLine;
+  const glossing = isGlossing || isGlossingThisLine;
 
   // Font size classes
   const fontClassMap = {
@@ -80,35 +85,35 @@ export function TranscriptLine({
           <Volume2 className="w-3.5 h-3.5" />
         </button>
 
-        {/* 🔤 Translation Action: Glosses ONLY this paragraph */}
+        {/* 🔤 Translation Action: Glosses ONLY this line/paragraph */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (!isComplete && !isGlossingThisLine && onGlossLine) {
-              onGlossLine(line);
+            if (!isComplete && !glossing && handleGloss) {
+              handleGloss(line);
             }
           }}
-          disabled={isGlossingThisLine}
+          disabled={glossing || isComplete}
           title={
-            isGlossingThisLine
+            glossing
               ? 'Glosando este párrafo...'
               : isComplete
               ? 'Párrafo glosado'
               : 'Glosar este párrafo con IA'
           }
           className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
-            isGlossingThisLine
+            glossing
               ? 'bg-amber-950/80 text-amber-300 border border-amber-500/60 cursor-wait'
               : isComplete
-              ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-600/50 hover:bg-emerald-900/60'
+              ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-600/50 cursor-default'
               : 'bg-[#180c07] text-rose-300/70 hover:text-white hover:bg-[#32170f] border border-[#3d190f]'
           }`}
         >
-          {isGlossingThisLine ? (
+          {glossing ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
-            <Languages className="w-3.5 h-3.5" />
+            <Languages className={`w-3.5 h-3.5 ${isComplete ? 'text-emerald-400' : 'text-rose-400'}`} />
           )}
         </button>
       </div>

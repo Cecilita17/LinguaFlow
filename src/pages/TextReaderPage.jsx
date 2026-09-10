@@ -80,7 +80,9 @@ export function TextReaderPage({
     failed: 0
   });
   const [isAutoGlossing, setIsAutoGlossing] = useState(false);
-  const [loadingParagraphIds, setLoadingParagraphIds] = useState(new Set());
+  const [glossingParagraphIds, setGlossingParagraphIds] = useState(new Set());
+  const loadingParagraphIds = glossingParagraphIds; // Alias for backward compatibility
+  const setLoadingParagraphIds = setGlossingParagraphIds;
   const abortControllerRef = useRef(null);
 
   // Cleanup speech synthesis & glossing on unmount
@@ -386,14 +388,16 @@ export function TextReaderPage({
     }
   };
 
-  // Individual paragraph glossing (runs only for that paragraph, works even when auto-glossing is OFF)
-  const handleGlossSingleParagraph = useCallback(async (paragraph) => {
+  // Individual paragraph glossing (runs ONLY for that paragraph, works even when auto-glossing is OFF)
+  const handleGlossParagraph = useCallback(async (paragraph) => {
     if (!paragraph || !paragraph.id) return;
-    if (isGlossComplete(paragraph, activeDocLang)) return; // $0 Groq cost, already complete!
+    if (isGlossComplete(paragraph, activeDocLang)) return; // $0 Groq cost: already glossed!
 
-    setLoadingParagraphIds(prev => new Set(prev).add(paragraph.id));
+    // Mark solely this paragraph as glossing
+    setGlossingParagraphIds(prev => new Set(prev).add(paragraph.id));
 
     try {
+      // Send ONLY this single paragraph to the glossing service
       const updatedParagraph = await glossSingleParagraph({
         paragraph,
         targetLang: activeDocLang,
@@ -401,6 +405,7 @@ export function TextReaderPage({
         apiKey
       });
 
+      // Replace ONLY this paragraph inside document.paragraphs and persist immediately
       setDocument(prev => {
         if (!prev || !Array.isArray(prev.paragraphs)) return prev;
         const updatedParagraphs = prev.paragraphs.map(p =>
@@ -419,7 +424,7 @@ export function TextReaderPage({
     } catch (err) {
       console.error('Failed to gloss single paragraph:', err);
     } finally {
-      setLoadingParagraphIds(prev => {
+      setGlossingParagraphIds(prev => {
         const next = new Set(prev);
         next.delete(paragraph.id);
         return next;
@@ -427,7 +432,10 @@ export function TextReaderPage({
     }
   }, [activeDocLang, nativeLang, apiKey, refreshLibraryCount]);
 
-  // Submit / Start reading parsed text
+  // Alias for backwards compatibility
+  const handleGlossSingleParagraph = handleGlossParagraph;
+
+  // Submit / Start reading parsed text (OFFLINE ONLY: Zero AI calls!)
   const handleStartReading = async () => {
     const raw = inputText.trim();
     if (!raw) return;
@@ -454,11 +462,20 @@ export function TextReaderPage({
     setIsEditing(false);
     refreshLibraryCount();
 
-    // Only begin AI glossing if paragraphs have uncompleted tokens
+    // Auto-glossing MUST BE OFF BY DEFAULT:
+    // Display text immediately, persist offline segmentation, ZERO AI calls!
     const alreadyComplete = effectiveParagraphs.every(p => isGlossComplete(p, targetLang));
-    if (!alreadyComplete) {
-      triggerGlossing(effectiveParagraphs, targetLang);
-    }
+    const completedCount = effectiveParagraphs.filter(p => isGlossComplete(p, targetLang)).length;
+
+    setGlossingProgress({
+      total: effectiveParagraphs.length,
+      completed: completedCount,
+      isGlossing: false,
+      isPaused: false,
+      isComplete: alreadyComplete,
+      failed: 0
+    });
+    setIsAutoGlossing(false);
   };
 
   // Open / select document from saved library modal
@@ -867,11 +884,13 @@ export function TextReaderPage({
                 interlinearMode={interlinearMode}
                 isPlaying={playingParagraphId === paragraph.id}
                 isAudioError={audioErrorId === paragraph.id}
-                isGlossing={loadingParagraphIds.has(paragraph.id)}
+                isGlossing={glossingParagraphIds.has(paragraph.id)}
+                hasGloss={isGlossComplete(paragraph, activeDocLang)}
                 onPlay={handlePlayParagraph}
                 onStop={handleStopAudio}
                 onWordClick={onWordClick}
-                onGlossParagraph={handleGlossSingleParagraph}
+                onGloss={handleGlossParagraph}
+                onGlossParagraph={handleGlossParagraph}
               />
             ))}
 

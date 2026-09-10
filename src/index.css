@@ -493,3 +493,292 @@ rt {
   color: var(--text-primary) !important;
 }
 
+/* ============================================================ */
+/* INTERLINEAR TOKENS & CONTROLS IN LIGHT MODE                  */
+/* High-contrast hierarchy: Word (stone-900) > Pinyin (rose-800) > Gloss (stone-600) */
+/* ============================================================ */
+
+/* Tier 1 (TOP): Tone-marked Pinyin in light mode (Deep, sharp, highly readable rose-800) */
+[data-theme="light"] .group\/token .text-rose-300,
+[data-theme="light"] .group\/token span.font-mono,
+[data-theme="light"] .group\/token .text-rose-300\/90,
+[data-theme="light"] .group\/line .text-rose-300,
+[data-theme="light"] ruby rt {
+  color: #9f1239 !important; /* rose-800 */
+  font-weight: 600 !important;
+}
+
+/* Tier 2 (CENTER): Original Word in light mode (stone-900, maximum contrast) */
+[data-theme="light"] .group\/token .text-stone-100,
+[data-theme="light"] .group\/token span.font-semibold,
+[data-theme="light"] .group\/line .text-stone-100,
+[data-theme="light"] .group\/line span.font-semibold {
+  color: #1c1917 !important; /* stone-900 */
+}
+
+[data-theme="light"] .group\/token .text-white,
+[data-theme="light"] .group\/line .text-white {
+  color: #881337 !important; /* rose-900 when active playing */
+  font-weight: 700 !important;
+}
+
+/* Tier 3 (BOTTOM): Gloss in light mode (Clear stone-600, accessible and distinct) */
+[data-theme="light"] .group\/token .text-stone-300\/80,
+[data-theme="light"] .group\/line .text-stone-300\/80,
+[data-theme="light"] .group\/token span[dir="ltr"] {
+  color: #57534e !important; /* stone-600 */
+  font-weight: 500 !important;
+}
+
+[data-theme="light"] .group\/token:hover .text-stone-300\/80,
+[data-theme="light"] .group\/token:hover span[dir="ltr"],
+[data-theme="light"] .group\/token .group-hover\/token\:text-rose-200 {
+  color: #9f1239 !important; /* rose-800 on token hover */
+}
+
+/* Punctuation tokens in light mode */
+[data-theme="light"] .group\/para span.text-stone-400,
+[data-theme="light"] .group\/line span.text-stone-400 {
+  color: #78716c !important; /* stone-500 */
+  font-weight: 600 !important;
+}
+
+/* Continuous paragraph and subtitle text in light mode */
+[data-theme="light"] .group\/para p.text-stone-100,
+[data-theme="light"] .group\/para p.text-stone-100.group-hover\/para\:text-white,
+[data-theme="light"] .group\/line p.text-rose-100\/90 {
+  color: #1c1917 !important;
+}
+
+/* Token hover state */
+[data-theme="light"] .group\/token:hover {
+  background-color: rgba(244, 63, 94, 0.08) !important;
+}
+[data-theme="light"] .group\/token:active {
+  background-color: rgba(244, 63, 94, 0.16) !important;
+}
+
+/* Text Reader Background in Light Mode */
+[data-theme="light"] .bg-gradient-to-b.from-\[\#190904\] {
+  background: linear-gradient(to bottom, #faf5f0 0%, #f4ede6 50%, #eee4d9 100%) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Text Reader Header Bar */
+[data-theme="light"] .bg-\[\#231109\]\/95 {
+  background-color: var(--header-bg) !important;
+  border-color: var(--header-border) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#231109\]\/95 h2.text-white,
+[data-theme="light"] .bg-\[\#231109\]\/95 h3.text-white {
+  color: var(--text-primary) !important;
+}
+
+/* Paragraph Item Card in Light Mode */
+[data-theme="light"] .bg-\[\#24110a\]\/80 {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="light"] .hover\:bg-\[\#2c150d\]:hover {
+  background-color: #fcf9f6 !important;
+  border-color: #e2d3c7 !important;
+}
+
+/* YouTube Subtitle Line Card in Light Mode */
+[data-theme="light"] .bg-\[\#24120c\]\/60 {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03) !important;
+}
+
+[data-theme="light"] .hover\:bg-\[\#2b160f\]:hover {
+  background-color: #fbf7f4 !important;
+  border-color: #e5dad2 !important;
+}
+
+/* Action buttons on Paragraphs and YouTube lines (Audio and Gloss) */
+[data-theme="light"] button.bg-\[\#2f150d\],
+[data-theme="light"] button.bg-\[\#2a130b\],
+[data-theme="light"] button.bg-\[\#180c07\] {
+  background-color: #fdfaf7 !important;
+  border-color: var(--border-primary) !important;
+  color: #9f1239 !important;
+}
+
+[data-theme="light"] button.bg-\[\#2f150d\]:hover,
+[data-theme="light"] button.bg-\[\#2a130b\]:hover,
+[data-theme="light"] button.bg-\[\#180c07\]:hover {
+  background-color: #fff1f2 !important;
+  border-color: #f43f5e !important;
+  color: #881337 !important;
+}
+
+[data-theme="light"] button.bg-\[\#180c07\] .text-rose-300\/70 {
+  color: #9f1239 !important;
+}
+
+/* Completed Gloss Button (Green) */
+[data-theme="light"] button.bg-emerald-950\/50,
+[data-theme="light"] .bg-emerald-950\/50 {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
+}
+
+[data-theme="light"] button.bg-emerald-950\/50 .text-emerald-400,
+[data-theme="light"] .bg-emerald-950\/50 .text-emerald-400 {
+  color: #047857 !important;
+}
+
+/* In-progress Glossing Button (Amber) */
+[data-theme="light"] button.bg-amber-950\/80,
+[data-theme="light"] .bg-amber-950\/80 {
+  background-color: #fef3c7 !important;
+  border-color: #fcd34d !important;
+  color: #b45309 !important;
+}
+
+[data-theme="light"] button.bg-amber-950\/80 .text-amber-300,
+[data-theme="light"] .bg-amber-950\/80 .text-amber-300 {
+  color: #b45309 !important;
+}
+
+/* Text Reader Top Bar Controls */
+[data-theme="light"] .bg-\[\#231109\]\/95 button.bg-\[\#2a130b\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#231109\]\/95 button.bg-\[\#2a130b\]:hover {
+  background-color: var(--surface-tertiary) !important;
+}
+
+[data-theme="light"] .bg-\[\#231109\]\/95 button.bg-\[\#2a130b\] .text-stone-200 {
+  color: var(--text-primary) !important;
+}
+
+/* Text Importer Card in Light Mode */
+[data-theme="light"] .bg-\[\#220f09\]\/95 {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme="light"] .bg-\[\#220f09\]\/95 h3.text-white {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#220f09\]\/95 p.text-rose-200\/70 {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .bg-\[\#220f09\]\/95 label.text-rose-200 {
+  color: #9f1239 !important;
+}
+
+[data-theme="light"] .bg-\[\#220f09\]\/95 input.bg-\[\#190b06\],
+[data-theme="light"] .bg-\[\#220f09\]\/95 textarea.bg-\[\#180b06\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#220f09\]\/95 input.bg-\[\#190b06\]::placeholder,
+[data-theme="light"] .bg-\[\#220f09\]\/95 textarea.bg-\[\#180b06\]::placeholder {
+  color: #a8a29e !important;
+}
+
+[data-theme="light"] .bg-\[\#220f09\]\/95 button.bg-\[\#2d140d\] {
+  background-color: #fdfaf7 !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#220f09\]\/95 button.bg-\[\#2d140d\]:hover {
+  background-color: var(--surface-tertiary) !important;
+}
+
+[data-theme="light"] .bg-\[\#220f09\]\/95 button.bg-\[\#2d140d\] .text-stone-200 {
+  color: var(--text-primary) !important;
+}
+
+/* YouTube Bottom Controls Bar in Light Mode */
+[data-theme="light"] .bg-\[\#200d07\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="light"] .bg-\[\#200d07\] input.bg-\[\#140603\] {
+  background-color: #fdfaf7 !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#200d07\] input.bg-\[\#140603\]::placeholder {
+  color: #a8a29e !important;
+}
+
+[data-theme="light"] .bg-\[\#200d07\] button.bg-\[\#2e130a\] {
+  background-color: #fdfaf7 !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#200d07\] button.bg-\[\#2e130a\]:hover {
+  background-color: #f5ede6 !important;
+}
+
+[data-theme="light"] .bg-\[\#200d07\] .bg-\[\#1c0e09\] {
+  background-color: #fdfaf7 !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#200d07\] .bg-\[\#1c0e09\] button {
+  color: var(--text-primary) !important;
+}
+
+/* Library Modals (Saved Documents & Transcripts) in Light Mode */
+[data-theme="light"] .bg-\[\#1a0b06\] h3.text-white,
+[data-theme="light"] .bg-\[\#1a0b06\] h4.text-white {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#1a0b06\] p.text-rose-300\/70,
+[data-theme="light"] .bg-\[\#1a0b06\] p.text-rose-300\/60 {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .bg-\[\#1a0b06\] input.bg-\[\#120603\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#1a0b06\] input.bg-\[\#120603\]::placeholder {
+  color: #a8a29e !important;
+}
+
+[data-theme="light"] .bg-\[\#180904\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#180904\]:hover {
+  background-color: #fcf9f6 !important;
+  border-color: #e2d3c7 !important;
+}
+
+[data-theme="light"] .bg-\[\#180904\] h4 {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#180904\] p {
+  color: var(--text-secondary) !important;
+}
+

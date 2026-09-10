@@ -8,7 +8,8 @@ import { SavedTranscriptsModal } from '../components/youtube/SavedTranscriptsMod
 import {
   enrichSubtitlesWithGlosses,
   glossSingleSubtitleLine,
-  isGlossComplete
+  isGlossComplete,
+  tokenizeAndGlossLineOffline
 } from '../services/subtitleGlossService.js';
 import { parseSubtitlesAuto } from '../services/subtitleService.js';
 import {
@@ -61,7 +62,9 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
 
   const [isAutoGlossing, setIsAutoGlossing] = useState(false);
-  const [loadingLineIds, setLoadingLineIds] = useState(new Set());
+  const [glossingLineIds, setGlossingLineIds] = useState(new Set());
+  const loadingLineIds = glossingLineIds; // Alias for backward compatibility
+  const setLoadingLineIds = setGlossingLineIds;
 
   // Count how many subtitle lines are completely glossed
   const completedLinesCount = useMemo(() => {
@@ -221,22 +224,25 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         if (parsed.videoUrl) setVideoUrl(parsed.videoUrl);
         if (parsed.videoLanguage) setVideoLanguage(parsed.videoLanguage);
         if (Array.isArray(parsed.subtitles) && parsed.subtitles.length > 0) {
-          const enriched = enrichSubtitlesWithGlosses({
-            subtitles: parsed.subtitles,
-            targetLang,
-            nativeLang,
-            apiKey,
-            videoId: parsed.videoId,
-            videoTitle: parsed.videoTitle || '',
-            videoUrl: parsed.videoUrl || '',
-            sourceType: parsed.subtitleSource || 'srt',
-            onUpdate: (updated) => {
-              setSubtitles(updated);
-              refreshLibraryCount();
-            },
-            onProgress: (p) => setGlossProgress(p)
+          // Offline session restoration: load saved glosses directly with ZERO AI calls!
+          const prepared = parsed.subtitles.map(sub => {
+            if (Array.isArray(sub.tokens) && sub.tokens.length > 0) return sub;
+            return {
+              ...sub,
+              tokens: tokenizeAndGlossLineOffline(sub.text || '', targetLang)
+            };
           });
-          setSubtitles(enriched);
+          setSubtitles(prepared);
+          const completed = prepared.filter(s => isGlossComplete(s, targetLang)).length;
+          setGlossProgress({
+            total: prepared.length,
+            completed,
+            isGlossing: false,
+            isPaused: false,
+            isComplete: prepared.length > 0 && completed === prepared.length,
+            failed: 0
+          });
+          setIsAutoGlossing(false);
         }
         if (parsed.subtitleFormat) setSubtitleFormat(parsed.subtitleFormat);
         if (parsed.subtitleSource) setSubtitleSource(parsed.subtitleSource);
@@ -308,9 +314,33 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   };
 
   const handleSubtitlesLoaded = (newSubtitles, format, sourceName) => {
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+      glossAbortControllerRef.current = null;
+    }
     setSubtitleFormat(format);
     setSubtitleSource(sourceName);
-    startGlossing(newSubtitles, sourceName);
+    setIsAutoGlossing(false);
+
+    // Prepare lines offline with local tokenization (ZERO AI calls on subtitle import)
+    const prepared = (newSubtitles || []).map(sub => {
+      if (Array.isArray(sub.tokens) && sub.tokens.length > 0) return sub;
+      return {
+        ...sub,
+        tokens: tokenizeAndGlossLineOffline(sub.text || '', targetLang)
+      };
+    });
+
+    setSubtitles(prepared);
+    const completed = prepared.filter(s => isGlossComplete(s, targetLang)).length;
+    setGlossProgress({
+      total: prepared.length,
+      completed,
+      isGlossing: false,
+      isPaused: false,
+      isComplete: prepared.length > 0 && completed === prepared.length,
+      failed: 0
+    });
   };
 
   const handleFileUpload = (file) => {
@@ -551,7 +581,9 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             subtitles={subtitles}
             currentTime={currentTime}
             onSeek={handleSeek}
+            onGloss={handleGlossSingleLine}
             onGlossLine={handleGlossSingleLine}
+            glossingLineIds={glossingLineIds}
             loadingLineIds={loadingLineIds}
             autoScroll={autoScroll}
             fontSize={fontSize}
