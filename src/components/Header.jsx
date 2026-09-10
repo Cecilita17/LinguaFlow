@@ -13,10 +13,13 @@ import {
   ChevronDown,
   MessageSquare,
   Youtube,
-  Home
+  Home,
+  Globe
 } from 'lucide-react';
 import { LanguageSelectDropdown } from './LanguageSelectDropdown.jsx';
 import { LanguageModal } from './LanguageModal.jsx';
+import { SiteLanguageToggle } from './SiteLanguageToggle.jsx';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import {
   LANGUAGE_FLAGS,
   NATIVE_LANG_OPTIONS,
@@ -42,6 +45,7 @@ export function Header({
   activeTab = 'chat',
   setActiveTab
 }) {
+  const { t } = useSiteLanguage();
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [languageModalConfig, setLanguageModalConfig] = useState({ isOpen: false, type: 'target' });
 
@@ -65,7 +69,7 @@ export function Header({
             className="flex items-center space-x-2.5 cursor-pointer select-none group"
             role="button"
             tabIndex={0}
-            title="Ir al Inicio"
+            title={t('nav_home')}
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0 group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5 fill-white text-white" />
@@ -76,17 +80,20 @@ export function Header({
                   LinguaFlow
                 </h1>
                 <span className="text-[10px] uppercase tracking-wider font-bold bg-rose-950/70 text-rose-300 px-2 py-0.5 rounded-full border border-rose-800/80">
-                  AI TUTOR
+                  {t('ai_tutor_badge')}
                 </span>
               </div>
               <p className="text-[11px] text-rose-200/60 leading-tight mt-0.5">
-                Práctica conversacional interactiva
+                {t('app_subtitle')}
               </p>
             </div>
           </div>
 
-          {/* Right: Circular Target Language Button + Hamburger Menu */}
-          <div className="flex items-center space-x-2 shrink-0">
+          {/* Right: Site Language Switcher + Circular Target Language Button + Hamburger Menu */}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            {/* Website Language Switcher (ES/EN) */}
+            <SiteLanguageToggle variant="compact" />
+
             {/* Circular Language Flag Button */}
             <button
               type="button"
@@ -120,7 +127,7 @@ export function Header({
             className="flex items-center space-x-2.5 cursor-pointer select-none group"
             role="button"
             tabIndex={0}
-            title="Ir al Inicio"
+            title={t('nav_home')}
           >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-rose-900/40 group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5" />
@@ -131,10 +138,10 @@ export function Header({
                   LinguaFlow
                 </h1>
                 <span className="text-[10px] uppercase tracking-wider font-bold bg-rose-950/80 text-rose-300 px-2.5 py-0.5 rounded-full border border-rose-800/80">
-                  AI Tutor
+                  {t('ai_tutor_badge')}
                 </span>
               </div>
-              <p className="text-xs text-rose-200/70">Práctica conversacional interactiva</p>
+              <p className="text-xs text-rose-200/70">{t('app_subtitle')}</p>
             </div>
           </div>
 
@@ -150,7 +157,7 @@ export function Header({
               }`}
             >
               <span>🏠</span>
-              <span>Inicio</span>
+              <span>{t('nav_home')}</span>
             </button>
             <button
               type="button"
@@ -162,7 +169,7 @@ export function Header({
               }`}
             >
               <span>💬</span>
-              <span>Chat</span>
+              <span>{t('nav_chat')}</span>
             </button>
             <button
               type="button"
@@ -174,7 +181,7 @@ export function Header({
               }`}
             >
               <span>🎥</span>
-              <span>YouTube Reader</span>
+              <span>{t('nav_youtube')}</span>
             </button>
           </div>
 
@@ -184,7 +191,7 @@ export function Header({
               value={targetLang}
               onChange={setTargetLang}
               options={languages}
-              label="Practicar"
+              label={t('practice_label')}
               icon={<Languages className="w-4 h-4 text-rose-300" />}
               variant="header"
               align="left"
@@ -196,11 +203,14 @@ export function Header({
               value={nativeLang}
               onChange={setNativeLang}
               options={NATIVE_LANG_OPTIONS}
-              label="Tu idioma"
+              label={t('native_lang_label')}
               variant="header"
               align="right"
             />
           </div>
+
+          {/* Website Language Switcher (ES / EN) */}
+          <SiteLanguageToggle variant="header" />
 
           {/* Action Toggles */}
           <div className="flex items-center space-x-2">
@@ -363,7 +373,7 @@ export function Header({
             {/* 1. Modo de Práctica Actual */}
             <div className="mt-4">
               <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
-                Modo de Práctica Actual
+                {t('mobile_navigation')}
               </h3>
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -381,7 +391,7 @@ export function Header({
                   <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
                     <Home className="w-4 h-4" />
                   </div>
-                  <span className="text-xs font-semibold">Inicio</span>
+                  <span className="text-xs font-semibold">{t('nav_home')}</span>
                 </button>
 
                 <button
@@ -399,7 +409,7 @@ export function Header({
                   <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
                     <MessageSquare className="w-4 h-4" />
                   </div>
-                  <span className="text-xs font-semibold">Chat</span>
+                  <span className="text-xs font-semibold">{t('nav_chat')}</span>
                 </button>
 
                 <button
@@ -424,19 +434,36 @@ export function Header({
               </div>
             </div>
 
-            {/* 2. Configuración de Idioma */}
+            {/* 2. Idioma del Sitio Web (ES / EN) */}
+            <div className="mt-5">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-xs font-semibold text-rose-100/90 flex items-center space-x-1.5">
+                  <Globe className="w-3.5 h-3.5 text-rose-400" />
+                  <span>{t('site_language_title')}</span>
+                </h3>
+                <span className="text-[10px] text-rose-300/70 font-medium bg-rose-950/70 px-2 py-0.5 rounded-full border border-rose-800/60">
+                  ES / EN
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-400 font-medium mb-2.5">
+                {t('site_language_desc')}
+              </p>
+              <SiteLanguageToggle variant="segmented" />
+            </div>
+
+            {/* 3. Configuración de Idioma */}
             <div className="mt-5">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-xs font-semibold text-rose-100/90 flex items-center space-x-1.5">
                   <Languages className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Configuración de Idioma</span>
+                  <span>{t('mobile_lang_settings')}</span>
                 </h3>
                 <span className="text-[10px] text-rose-300/70 font-medium bg-rose-950/70 px-2 py-0.5 rounded-full border border-rose-800/60">
-                  Banderas & Estilo
+                  Banderas
                 </span>
               </div>
               <p className="text-[11px] text-stone-400 font-medium mb-3">
-                Idiomas activos de la app y tutor IA
+                {t('mobile_lang_desc')}
               </p>
 
               {/* Tu Idioma (Nativo) */}
@@ -452,7 +479,7 @@ export function Header({
                   </div>
                   <div>
                     <div className="text-[11px] font-medium text-rose-200/70">
-                      Tu Idioma (Nativo)
+                      {t('native_lang_card_title')}
                     </div>
                     <div className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors flex items-center space-x-1.5">
                       <span>{currentNativeName}</span>
@@ -465,7 +492,7 @@ export function Header({
                   </div>
                 </div>
                 <div className="flex items-center space-x-1.5 bg-[#170905] px-2.5 py-1.5 rounded-xl border border-[#441b11] group-hover:border-rose-500/40 text-[11px] text-rose-300 font-semibold shadow-xs">
-                  <span>Cambiar</span>
+                  <span>{t('change_button')}</span>
                   <ChevronDown className="w-3.5 h-3.5 text-rose-400" />
                 </div>
               </div>
@@ -483,7 +510,7 @@ export function Header({
                   </div>
                   <div>
                     <div className="text-[11px] font-medium text-rose-200/70">
-                      Idioma a Aprender (Tutor)
+                      {t('target_lang_card_title')}
                     </div>
                     <div className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors flex items-center space-x-1.5">
                       <span>{currentTargetName}</span>
@@ -496,16 +523,16 @@ export function Header({
                   </div>
                 </div>
                 <div className="flex items-center space-x-1.5 bg-[#170905] px-2.5 py-1.5 rounded-xl border border-[#441b11] group-hover:border-rose-500/40 text-[11px] text-rose-300 font-semibold shadow-xs">
-                  <span>Cambiar</span>
+                  <span>{t('change_button')}</span>
                   <ChevronDown className="w-3.5 h-3.5 text-rose-400" />
                 </div>
               </div>
             </div>
 
-            {/* 3. Herramientas de Voz e IA */}
+            {/* 4. Herramientas de Voz e IA */}
             <div className="mt-5">
               <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
-                Herramientas de Voz e IA
+                {t('voice_ai_tools')}
               </h3>
               <div className="space-y-2">
                 {/* Transliteración */}
@@ -515,7 +542,7 @@ export function Header({
                       T
                     </div>
                     <span className="text-xs font-medium text-stone-200">
-                      Transliteración
+                      {t('transliteration')}
                     </span>
                   </div>
                   <button
@@ -543,7 +570,7 @@ export function Header({
                       <Mic className="w-3.5 h-3.5" />
                     </div>
                     <span className="text-xs font-medium text-stone-200">
-                      Manos Libres
+                      {t('hands_free')}
                     </span>
                   </div>
                   <button
@@ -578,7 +605,7 @@ export function Header({
                       <Sparkles className="w-3.5 h-3.5" />
                     </div>
                     <span className="text-xs font-medium text-stone-200 truncate">
-                      Modelo de IA (openai/gpt-oss-120b)
+                      Groq AI (openai/gpt-oss-120b)
                     </span>
                   </div>
                   <ChevronDown className="w-4 h-4 text-stone-400 shrink-0 ml-1" />
@@ -586,10 +613,10 @@ export function Header({
               </div>
             </div>
 
-            {/* 4. Acciones */}
+            {/* 5. Acciones */}
             <div className="mt-5">
               <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
-                Acciones
+                {t('conv_actions')}
               </h3>
               <button
                 type="button"
@@ -601,15 +628,15 @@ export function Header({
               >
                 <RotateCcw className="w-4 h-4 text-rose-300 shrink-0" />
                 <span className="text-xs font-medium text-stone-200">
-                  Reiniciar <span className="text-stone-400">Nueva Conversación</span>
+                  {t('reset_conv')}
                 </span>
               </button>
             </div>
 
-            {/* 5. Cuenta y Ajustes */}
+            {/* 6. Cuenta y Ajustes */}
             <div className="mt-5">
               <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
-                Cuenta y Ajustes
+                {t('account_settings')}
               </h3>
               <button
                 type="button"
@@ -621,7 +648,7 @@ export function Header({
               >
                 <Settings className="w-4 h-4 text-rose-300 shrink-0" />
                 <span className="text-xs font-medium text-stone-200">
-                  Ajustes Avanzados
+                  {t('advanced_settings')}
                 </span>
               </button>
             </div>
@@ -642,14 +669,10 @@ export function Header({
         onClose={() => setLanguageModalConfig((prev) => ({ ...prev, isOpen: false }))}
         title={
           languageModalConfig.type === 'target'
-            ? 'Idioma a Practicar'
-            : 'Tu Idioma (Nativo)'
+            ? t('target_lang_card_title')
+            : t('native_lang_card_title')
         }
-        subtitle={
-          languageModalConfig.type === 'target'
-            ? 'Elegí el idioma que querés aprender con tu Tutor IA'
-            : 'Elegí el idioma para explicaciones, traducciones y glosas'
-        }
+        subtitle={t('select_lang_subtitle')}
         currentLang={languageModalConfig.type === 'target' ? targetLang : nativeLang}
         onSelect={(code) => {
           if (languageModalConfig.type === 'target') {

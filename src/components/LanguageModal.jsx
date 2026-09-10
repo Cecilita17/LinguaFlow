@@ -1,16 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search, Check, Sparkles } from 'lucide-react';
 import { getLanguageMeta, LANGUAGE_FLAGS } from '../constants/languages.js';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 export function LanguageModal({
   isOpen,
   onClose,
-  title = 'Seleccionar Idioma',
-  subtitle = 'Elegí el idioma para tu experiencia',
+  title,
+  subtitle,
   currentLang = 'zh',
   onSelect,
   languages = []
 }) {
+  const { t } = useSiteLanguage();
+  const modalTitle = title || t('select_lang_title');
+  const modalSubtitle = subtitle || t('select_lang_subtitle');
   const [searchQuery, setSearchQuery] = useState('');
 
   if (!isOpen) return null;
@@ -50,9 +54,9 @@ export function LanguageModal({
           <div>
             <h3 className="text-lg font-bold text-white flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-rose-400" />
-              <span>{title}</span>
+              <span>{modalTitle}</span>
             </h3>
-            <p className="text-xs text-rose-200/60 mt-0.5">{subtitle}</p>
+            <p className="text-xs text-rose-200/60 mt-0.5">{modalSubtitle}</p>
           </div>
           <button
             type="button"
@@ -71,7 +75,7 @@ export function LanguageModal({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por idioma o país..."
+            placeholder={t('search_placeholder')}
             className="w-full bg-[#261009] border border-[#482015] focus:border-rose-500/70 rounded-2xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-stone-500 outline-none transition-all shadow-inner"
             autoFocus
           />
@@ -79,9 +83,9 @@ export function LanguageModal({
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-rose-300/60 hover:text-rose-200 p-1"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-rose-300/60 hover:text-rose-200 p-1 cursor-pointer"
             >
-              Borrar
+              {t('clear_search')}
             </button>
           )}
         </div>
@@ -151,20 +155,20 @@ export function LanguageModal({
 
           {filteredLanguages.length === 0 && (
             <div className="col-span-full py-8 text-center text-stone-400 text-xs">
-              No se encontraron idiomas para &quot;{searchQuery}&quot;
+              {t('no_languages_found')} &quot;{searchQuery}&quot;
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
         <div className="mt-3 pt-3 border-t border-[#3d1a10] flex items-center justify-between text-[11px] text-rose-200/50">
-          <span>{languages.length} idiomas compatibles</span>
+          <span>{languages.length} {t('available_languages')}</span>
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-1.5 rounded-xl bg-[#2e130b] hover:bg-[#3d1a10] text-rose-200 font-semibold transition-colors cursor-pointer"
           >
-            Listo
+            {t('done_button')}
           </button>
         </div>
       </div>

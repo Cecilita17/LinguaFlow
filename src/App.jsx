@@ -11,6 +11,7 @@ import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
+import { useSiteLanguage } from './context/SiteLanguageContext.jsx';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -55,6 +56,7 @@ function saveChatToStorage(lang, messagesList) {
 }
 
 export default function App() {
+  const { t, isSpanish } = useSiteLanguage();
   const [languages, setLanguages] = useState(SUPPORTED_LANGUAGES);
   const [targetLang, setTargetLang] = useState(() => {
     try {
@@ -721,17 +723,23 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-rose-200">
-                    Practicando {currentLangObj.name} con LinguaFlow
+                    {t('practicing_banner_title', { lang: currentLangObj.name })}
                   </h2>
-                  <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
-                    Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinámicamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">dorado</span>.
-                  </p>
+                  {isSpanish ? (
+                    <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
+                      Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinámicamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">dorado</span>.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
+                      Speak or write freely. Every message is dynamically analyzed and corrected with modified words highlighted in <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">gold</span>.
+                    </p>
+                  )}
                 </div>
               </div>
               <button
                 onClick={handleResetChat}
-                title="Reiniciar chat"
-                className="p-1.5 text-rose-300/50 hover:text-rose-200 hover:bg-[#482216] rounded-lg transition-colors flex-shrink-0"
+                title={t('restart_tooltip')}
+                className="p-1.5 text-rose-300/50 hover:text-rose-200 hover:bg-[#482216] rounded-lg transition-colors flex-shrink-0 cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
@@ -758,7 +766,7 @@ export default function App() {
                 <div className="w-4 h-4 rounded-full bg-rose-500 animate-pulse flex items-center justify-center text-[9px] text-white font-bold shadow-xs">
                   L
                 </div>
-                <span className="font-medium">LinguaBot está analizando y respondiendo...</span>
+                <span className="font-medium">{t('bot_thinking')}</span>
               </div>
             )}
           </main>

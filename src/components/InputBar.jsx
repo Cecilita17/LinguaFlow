@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Send, Mic, X, Radio, Loader2, Sparkles } from 'lucide-react';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 export function InputBar({
   targetLang,
@@ -14,6 +15,7 @@ export function InputBar({
   interimTranscript,
   isProcessing
 }) {
+  const { isSpanish } = useSiteLanguage();
   const [text, setText] = useState('');
   const [isHovered, setIsHovered] = useState(false);
   const [isDraggingCancel, setIsDraggingCancel] = useState(false);
@@ -247,12 +249,20 @@ export function InputBar({
               disabled={isProcessing || isRecording || isTranscribingAudio}
               placeholder={
                 isRecording
-                  ? "🔴 Grabando mensaje de voz... Suelta el micrófono para enviar"
+                  ? isSpanish
+                    ? "🔴 Grabando mensaje de voz... Suelta el micrófono para enviar"
+                    : "🔴 Recording voice message... Release mic to send"
                   : isTranscribingAudio
-                  ? "⏳ Transcribiendo audio con IA de alta precisión..."
+                  ? isSpanish
+                    ? "⏳ Transcribiendo audio con IA de alta precisión..."
+                    : "⏳ Transcribing audio with high-precision AI..."
                   : isArabic
-                  ? "اكتب رسالتك باللغة العربية هنا... (Escribe en árabe o mantén el micro)"
-                  : "Escribe o mantén presionado el micrófono para hablar..."
+                  ? isSpanish
+                    ? "اكتب رسالتك باللغة العربية هنا... (Escribe en árabe o mantén el micro)"
+                    : "اكتب رسالتك باللغة العربية هنا... (Type in Arabic or hold mic)"
+                  : isSpanish
+                  ? "Escribe o mantén presionado el micrófono para hablar..."
+                  : "Type or press and hold the mic to speak..."
               }
               className={`w-full bg-white border border-stone-200 rounded-2xl px-4 py-3 text-stone-900 placeholder-stone-400 text-sm sm:text-base outline-none focus:ring-2 focus:ring-rose-500 shadow-sm transition-all ${
                 isArabic ? 'font-arabic text-right text-lg' : 'text-left'
@@ -264,7 +274,7 @@ export function InputBar({
           <button
             type="submit"
             disabled={!text.trim() || isProcessing || isRecording || isTranscribingAudio}
-            title="Enviar mensaje"
+            title={isSpanish ? "Enviar mensaje" : "Send message"}
             className={`p-3 rounded-2xl transition-all shadow-md flex items-center justify-center flex-shrink-0 ${
               text.trim() && !isProcessing && !isRecording && !isTranscribingAudio
                 ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/50 transform active:scale-95'
@@ -277,7 +287,15 @@ export function InputBar({
 
         <div className="mt-2 text-center">
           <p className="text-[11px] text-rose-200/60">
-            Mantén presionado <span className="text-rose-300 font-semibold">🎙️ Mic</span> para hablar (soporta acentos y mezcla de idiomas) • Suelta para enviar.
+            {isSpanish ? (
+              <>
+                Mantén presionado <span className="text-rose-300 font-semibold">🎙️ Mic</span> para hablar (soporta acentos y mezcla de idiomas) • Suelta para enviar.
+              </>
+            ) : (
+              <>
+                Press and hold <span className="text-rose-300 font-semibold">🎙️ Mic</span> to speak (supports accents & code-switching) • Release to send.
+              </>
+            )}
           </p>
         </div>
       </div>

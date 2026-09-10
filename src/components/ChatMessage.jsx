@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen } from 'lucide-react';
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 export function ChatMessage({
   message,
@@ -11,6 +12,7 @@ export function ChatMessage({
   isAudioPlaying,
   onOpenGrammarBreakdown
 }) {
+  const { t, isSpanish } = useSiteLanguage();
   const [showTranslation, setShowTranslation] = useState(false);
   const [copied, setCopied] = useState(false);
   const [writingPracticeOpen, setWritingPracticeOpen] = useState(false);
@@ -149,16 +151,16 @@ export function ChatMessage({
     return (
       <div className="flex flex-col items-end my-4 animate-fade-in group">
         <div className="flex items-center space-x-2 mb-1 px-1">
-          <span className="text-xs font-semibold text-rose-200/80">Tú</span>
+          <span className="text-xs font-semibold text-rose-200/80">{isSpanish ? 'Tú' : 'You'}</span>
           {hasCorrection ? (
             <span className="flex items-center space-x-1.5 text-[11px] font-semibold text-amber-200 bg-amber-950/80 px-2.5 py-0.5 rounded-full border border-amber-700/80 shadow-xs">
               <CheckCircle2 className="w-3.5 h-3.5 text-amber-300" />
-              <span>Corregido automáticamente</span>
+              <span>{isSpanish ? 'Corregido automáticamente' : 'Auto-corrected'}</span>
             </span>
           ) : (
-            <span className="flex items-center space-x-1.5 text-[11px] font-semibold text-emerald-200 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-700/80 shadow-xs" title="¡Tu frase es correcta! Sin errores">
+            <span className="flex items-center space-x-1.5 text-[11px] font-semibold text-emerald-200 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-700/80 shadow-xs" title={isSpanish ? '¡Tu frase es correcta! Sin errores' : 'Your sentence is correct! No errors'}>
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Sin errores</span>
+              <span>{t('no_errors')}</span>
             </span>
           )}
         </div>
@@ -265,10 +267,10 @@ export function ChatMessage({
                 type="button"
                 onClick={() => onOpenGrammarBreakdown && onOpenGrammarBreakdown(message)}
                 className="px-2 py-1 bg-white/15 hover:bg-white/25 active:scale-95 rounded-lg transition-all flex items-center space-x-1 text-white text-[11px] font-semibold shadow-xs"
-                title="Ver desglose gramatical detallado de cada palabra"
+                title={isSpanish ? "Ver desglose gramatical detallado de cada palabra" : "View detailed word-by-word grammar breakdown"}
               >
                 <BookOpen className="w-3 h-3 text-amber-200" />
-                <span>Desglose</span>
+                <span>{t('view_breakdown')}</span>
               </button>
             </div>
 
@@ -276,15 +278,15 @@ export function ChatMessage({
               <button
                 onClick={() => onPlayAudio(message.correctedText || message.text)}
                 className="p-1 hover:text-white hover:bg-white/20 rounded-md transition-colors flex items-center space-x-1"
-                title="Escuchar pronunciación correcta"
+                title={isSpanish ? "Escuchar pronunciación correcta" : "Listen to correct pronunciation"}
               >
                 <Volume2 className="w-3.5 h-3.5" />
-                <span className="text-[11px] font-medium">Escuchar</span>
+                <span className="text-[11px] font-medium">{t('listen')}</span>
               </button>
               <button
                 onClick={handleCopy}
                 className="p-1 hover:text-white hover:bg-white/20 rounded-md transition-colors"
-                title="Copiar texto"
+                title={isSpanish ? "Copiar texto" : "Copy text"}
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-amber-200" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
@@ -299,19 +301,19 @@ export function ChatMessage({
               type="button"
               onClick={() => handleOpenWritingPractice('words')}
               className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border border-amber-500/40 text-amber-200 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 backdrop-blur-xs"
-              title="Practicar orden de trazos de caracteres corregidos con Hanzi Writer"
+              title={isSpanish ? "Practicar orden de trazos de caracteres corregidos con Hanzi Writer" : "Practice stroke order of corrected characters with Hanzi Writer"}
             >
               <span>✍️</span>
-              <span>Practicar escritura</span>
+              <span>{t('practice_writing')}</span>
             </button>
             <button
               type="button"
               onClick={() => handleOpenWritingPractice('sentence')}
               className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 active:scale-95 border border-rose-500/40 text-rose-200 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 backdrop-blur-xs"
-              title="Practicar la oración corregida completa carácter por carácter"
+              title={isSpanish ? "Practicar la oración corregida completa carácter por carácter" : "Practice the complete corrected sentence character by character"}
             >
               <span>📝</span>
-              <span>Practicar oración</span>
+              <span>{t('practice_sentence')}</span>
             </button>
           </div>
         )}
@@ -431,7 +433,7 @@ export function ChatMessage({
             <Globe className="w-4 h-4 text-rose-600 mt-0.5 flex-shrink-0" />
             <div>
               <span className="text-[11px] font-bold text-rose-800 block uppercase tracking-wider mb-0.5">
-                Traducción completa:
+                {isSpanish ? 'Traducción completa:' : 'Full translation:'}
               </span>
               <p className="font-medium text-stone-850 leading-snug">{message.translation}</p>
             </div>
@@ -445,10 +447,10 @@ export function ChatMessage({
             <button
               onClick={() => onPlayAudio(message.text)}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-rose-100 hover:text-rose-900 text-stone-700 font-medium transition-colors"
-              title="Escuchar en voz alta"
+              title={isSpanish ? "Escuchar en voz alta" : "Listen aloud"}
             >
               <Volume2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>Escuchar</span>
+              <span>{t('listen')}</span>
             </button>
 
             {/* Translate Button */}
@@ -460,10 +462,18 @@ export function ChatMessage({
                     ? 'bg-rose-600 text-white'
                     : 'bg-stone-100 hover:bg-rose-100 hover:text-rose-900 text-stone-700'
                 }`}
-                title="Traducir la respuesta entera"
+                title={isSpanish ? "Traducir la respuesta entera" : "Translate the entire response"}
               >
                 <Globe className="w-3.5 h-3.5" />
-                <span>{showTranslation ? 'Ocultar traducción' : 'Traducir respuesta'}</span>
+                <span>
+                  {showTranslation
+                    ? isSpanish
+                      ? 'Ocultar traducción'
+                      : 'Hide translation'
+                    : isSpanish
+                    ? 'Traducir respuesta'
+                    : 'Translate response'}
+                </span>
               </button>
             )}
           </div>

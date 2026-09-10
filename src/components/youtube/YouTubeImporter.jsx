@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { validateYouTubeUrl } from '../../services/youtubeService.js';
 import { Youtube, Search, AlertCircle, Globe, Check } from 'lucide-react';
+import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 const SUPPORTED_VIDEO_LANGUAGES = [
   { code: 'auto', name: 'Auto-detectar' },
@@ -25,6 +26,7 @@ export function YouTubeImporter({
   selectedLanguage = 'auto',
   onLanguageChange
 }) {
+  const { isSpanish } = useSiteLanguage();
   const [urlInput, setUrlInput] = useState(initialUrl);
   const [error, setError] = useState(null);
   const [justImported, setJustImported] = useState(false);
@@ -54,14 +56,18 @@ export function YouTubeImporter({
         </div>
         <div>
           <h3 className="text-sm font-bold text-white tracking-wide">YouTube Reader</h3>
-          <p className="text-xs text-rose-200/70">Aprende idiomas leyendo vídeos con subtítulos sincronizados</p>
+          <p className="text-xs text-rose-200/70">
+            {isSpanish
+              ? 'Aprende idiomas leyendo vídeos con subtítulos sincronizados'
+              : 'Learn languages reading videos with synced subtitles'}
+          </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label htmlFor="yt-url-input" className="block text-xs font-semibold text-rose-200/90 mb-1.5">
-            Pegá el enlace de YouTube
+            {isSpanish ? 'Pegá el enlace de YouTube' : 'Paste YouTube link'}
           </label>
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
@@ -73,13 +79,17 @@ export function YouTubeImporter({
                   setUrlInput(e.target.value);
                   if (error) setError(null);
                 }}
-                placeholder="https://www.youtube.com/watch?v=... o youtu.be/..."
+                placeholder={
+                  isSpanish
+                    ? 'https://www.youtube.com/watch?v=... o youtu.be/...'
+                    : 'https://www.youtube.com/watch?v=... or youtu.be/...'
+                }
                 className="w-full bg-[#1e0f0a] text-white text-xs sm:text-sm font-medium rounded-xl px-3.5 py-2.5 border border-[#5a2e20] placeholder-rose-300/30 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent transition-all shadow-inner"
               />
             </div>
             <button
               type="submit"
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 shadow-md flex-shrink-0 ${
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 shadow-md flex-shrink-0 cursor-pointer ${
                 justImported
                   ? 'bg-emerald-600 text-white shadow-emerald-900/40'
                   : 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950 active:scale-95'
@@ -88,12 +98,12 @@ export function YouTubeImporter({
               {justImported ? (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>¡Vídeo cargado!</span>
+                  <span>{isSpanish ? '¡Vídeo cargado!' : 'Video loaded!'}</span>
                 </>
               ) : (
                 <>
                   <Search className="w-4 h-4" />
-                  <span>Importar vídeo</span>
+                  <span>{isSpanish ? 'Importar vídeo' : 'Import video'}</span>
                 </>
               )}
             </button>
@@ -111,7 +121,7 @@ export function YouTubeImporter({
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#482519]/70 text-xs">
           <div className="flex items-center space-x-1.5 text-rose-200/80">
             <Globe className="w-3.5 h-3.5 text-rose-400" />
-            <span className="font-medium">Idioma del vídeo:</span>
+            <span className="font-medium">{isSpanish ? 'Idioma del vídeo:' : 'Video language:'}</span>
           </div>
 
           <select

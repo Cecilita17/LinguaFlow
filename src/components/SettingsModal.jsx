@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, Gauge, Volume2, Save, Info, Check, Zap, Sparkles, Server } from 'lucide-react';
+import { X, Key, Gauge, Volume2, Save, Info, Check, Zap, Sparkles, Server, Globe } from 'lucide-react';
 import { API_BASE_URL } from '../services/chatService.js';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
   if (!isOpen) return null;
 
+  const { siteLang, setSiteLang, isSpanish, t } = useSiteLanguage();
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [level, setLevel] = useState(config.level || 'A2/B1');
   const [speechRate, setSpeechRate] = useState(config.speechRate || 0.95);
@@ -71,7 +73,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
       >
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
           <h3 className="text-lg font-bold text-stone-900 flex items-center space-x-2">
-            <span>Ajustes de LinguaFlow</span>
+            <span>{isSpanish ? 'Ajustes de LinguaFlow' : 'LinguaFlow Settings'}</span>
           </h3>
           <button
             onClick={onClose}
@@ -82,11 +84,53 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
         </div>
 
         <div className="space-y-4 my-4 text-sm">
+          {/* Interface Language (Sitio Web: Español / English) */}
+          <div>
+            <label className="block font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center space-x-1.5">
+                <Globe className="w-4 h-4 text-rose-600" />
+                <span>{isSpanish ? 'Idioma del Sitio Web' : 'Website Language'}</span>
+              </span>
+              <span className="text-[11px] text-rose-600 font-bold uppercase tracking-wider">
+                {isSpanish ? 'Español' : 'English'}
+              </span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSiteLang('es')}
+                className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 border transition-all cursor-pointer ${
+                  isSpanish
+                    ? 'bg-rose-50 border-rose-500 text-rose-800 shadow-xs ring-1 ring-rose-400/40'
+                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <span className="text-base leading-none">🇪🇸</span>
+                <span>Español</span>
+                {isSpanish && <Check className="w-3.5 h-3.5 text-rose-600 ml-1" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSiteLang('en')}
+                className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 border transition-all cursor-pointer ${
+                  !isSpanish
+                    ? 'bg-rose-50 border-rose-500 text-rose-800 shadow-xs ring-1 ring-rose-400/40'
+                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <span className="text-base leading-none">🇺🇸</span>
+                <span>English</span>
+                {!isSpanish && <Check className="w-3.5 h-3.5 text-rose-600 ml-1" />}
+              </button>
+            </div>
+          </div>
+
           {/* Active AI Provider (Groq openai/gpt-oss-120b) */}
           <div>
             <label className="block font-semibold text-stone-800 mb-1.5 flex items-center space-x-1.5">
               <Sparkles className="w-4 h-4 text-rose-600" />
-              <span>Motor de Inteligencia Artificial</span>
+              <span>{isSpanish ? 'Motor de Inteligencia Artificial' : 'Artificial Intelligence Engine'}</span>
             </label>
             <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-xl flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -96,7 +140,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
                   <div className="text-[11px] text-rose-700 font-mono font-medium">openai/gpt-oss-120b</div>
                 </div>
               </div>
-              <span className="text-[10px] bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full font-bold">⚡ Ultra Rápido</span>
+              <span className="text-[10px] bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full font-bold">⚡ {isSpanish ? 'Ultra Rápido' : 'Ultra Fast'}</span>
             </div>
           </div>
 
@@ -105,7 +149,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
             <label className="block font-semibold text-stone-800 mb-1 flex items-center justify-between">
               <span className="flex items-center space-x-1.5">
                 <Server className="w-4 h-4 text-rose-600" />
-                <span>Estado del Backend</span>
+                <span>{isSpanish ? 'Estado del Backend' : 'Backend Status'}</span>
               </span>
               <button
                 type="button"
@@ -113,7 +157,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
                 disabled={testingConnection}
                 className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold underline disabled:opacity-50"
               >
-                {testingConnection ? 'Comprobando...' : 'Verificar conexión'}
+                {testingConnection ? (isSpanish ? 'Comprobando...' : 'Checking...') : (isSpanish ? 'Verificar conexión' : 'Test connection')}
               </button>
             </label>
 
@@ -132,10 +176,10 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
               <Info className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <p>
-                  <strong>Seguridad:</strong> La clave <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GROQ_API_KEY</code> se administra exclusivamente en el servidor backend para proteger tus credenciales.
+                  <strong>{isSpanish ? 'Seguridad:' : 'Security:'}</strong> {isSpanish ? 'La clave' : 'The'} <code className="bg-white px-1 py-0.5 rounded border text-rose-700 font-mono">GROQ_API_KEY</code> {isSpanish ? 'se administra exclusivamente en el servidor backend para proteger tus credenciales.' : 'is managed securely on the backend server.'}
                 </p>
                 <p className="text-[11px] text-stone-500">
-                  Modelo asignado: <code className="font-mono text-rose-700 font-semibold">openai/gpt-oss-120b</code> con transcripción multilingüe Whisper V3.
+                  {isSpanish ? 'Modelo asignado:' : 'Assigned model:'} <code className="font-mono text-rose-700 font-semibold">openai/gpt-oss-120b</code> {isSpanish ? 'con transcripción multilingüe Whisper V3.' : 'with Whisper V3 multilingual transcription.'}
                 </p>
               </div>
             </div>
@@ -145,16 +189,16 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
           <div>
             <label className="block font-semibold text-stone-800 mb-1 flex items-center space-x-1.5">
               <Gauge className="w-4 h-4 text-rose-600" />
-              <span>Nivel de Dificultad</span>
+              <span>{isSpanish ? 'Nivel de Dificultad' : 'Proficiency Level'}</span>
             </label>
             <select
               value={level}
               onChange={(e) => setLevel(e.target.value)}
               className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 outline-none focus:ring-2 focus:ring-rose-500 font-medium"
             >
-              <option value="A1">A1 - Principiante (frases muy simples y cortas)</option>
-              <option value="A2/B1">A2 / B1 - Intermedio cotidiano (Recomendado)</option>
-              <option value="B2/C1">B2 / C1 - Avanzado y fluido</option>
+              <option value="A1">{isSpanish ? 'A1 - Principiante (frases muy simples y cortas)' : 'A1 - Beginner (simple, short sentences)'}</option>
+              <option value="A2/B1">{isSpanish ? 'A2 / B1 - Intermedio cotidiano (Recomendado)' : 'A2 / B1 - Everyday Intermediate (Recommended)'}</option>
+              <option value="B2/C1">{isSpanish ? 'B2 / C1 - Avanzado y fluido' : 'B2 / C1 - Advanced and fluent'}</option>
             </select>
           </div>
 
@@ -163,7 +207,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
             <label className="block font-semibold text-stone-800 mb-1 flex items-center justify-between">
               <span className="flex items-center space-x-1.5">
                 <Volume2 className="w-4 h-4 text-rose-600" />
-                <span>Velocidad de Voz del Bot</span>
+                <span>{isSpanish ? 'Velocidad de Voz del Bot' : 'Bot Speech Rate'}</span>
               </span>
               <span className="text-rose-700 font-bold">{speechRate}x</span>
             </label>
@@ -177,9 +221,9 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
               className="w-full accent-rose-600"
             />
             <div className="flex justify-between text-[11px] text-stone-400 mt-0.5">
-              <span>Lento (0.6x)</span>
-              <span>Normal (0.95x)</span>
-              <span>Rápido (1.3x)</span>
+              <span>{isSpanish ? 'Lento (0.6x)' : 'Slow (0.6x)'}</span>
+              <span>{isSpanish ? 'Normal (0.95x)' : 'Normal (0.95x)'}</span>
+              <span>{isSpanish ? 'Rápido (1.3x)' : 'Fast (1.3x)'}</span>
             </div>
           </div>
         </div>
@@ -190,7 +234,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
             onClick={onClose}
             className="px-4 py-2 rounded-xl text-stone-600 hover:bg-stone-100 font-medium text-xs transition-colors"
           >
-            Cancelar
+            {isSpanish ? 'Cancelar' : 'Cancel'}
           </button>
           <button
             onClick={handleSave}
@@ -204,12 +248,12 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
             {savedSuccess ? (
               <>
                 <Check className="w-3.5 h-3.5" />
-                <span>¡Guardado!</span>
+                <span>{isSpanish ? '¡Guardado!' : 'Saved!'}</span>
               </>
             ) : (
               <>
                 <Save className="w-3.5 h-3.5" />
-                <span>Guardar Ajustes</span>
+                <span>{isSpanish ? 'Guardar Ajustes' : 'Save Settings'}</span>
               </>
             )}
           </button>

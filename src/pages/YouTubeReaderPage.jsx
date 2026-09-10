@@ -6,10 +6,12 @@ import { Transcript } from '../components/youtube/Transcript.jsx';
 import { TranscriptControls } from '../components/youtube/TranscriptControls.jsx';
 import { enrichSubtitlesWithGlosses } from '../services/subtitleGlossService.js';
 import { Youtube, Sparkles, FileText, CheckCircle2, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 const SESSION_STORAGE_KEY = 'linguaflow_youtube_reader_session';
 
 export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey = '' }) {
+  const { isSpanish } = useSiteLanguage();
   // Session state with localStorage persistence
   const [videoId, setVideoId] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
@@ -192,16 +194,18 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
               <button
                 type="button"
                 onClick={() => setIsUrlImporterOpen(!isUrlImporterOpen)}
-                className="px-2 py-1 rounded-lg bg-[#2b160f] hover:bg-[#3b1e15] border border-[#482519] text-rose-200 text-[11px] font-medium transition-colors"
+                className="px-2 py-1 rounded-lg bg-[#2b160f] hover:bg-[#3b1e15] border border-[#482519] text-rose-200 text-[11px] font-medium transition-colors cursor-pointer"
               >
-                {isUrlImporterOpen ? 'Ocultar link' : 'Cambiar vídeo'}
+                {isUrlImporterOpen
+                  ? (isSpanish ? 'Ocultar link' : 'Hide link')
+                  : (isSpanish ? 'Cambiar vídeo' : 'Change video')}
               </button>
 
               <button
                 type="button"
                 onClick={handleResetSession}
-                title="Reiniciar lector"
-                className="p-1.5 text-rose-300/60 hover:text-white hover:bg-[#3b1e15] rounded-lg transition-colors"
+                title={isSpanish ? 'Reiniciar lector' : 'Reset reader'}
+                className="p-1.5 text-rose-300/60 hover:text-white hover:bg-[#3b1e15] rounded-lg transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>

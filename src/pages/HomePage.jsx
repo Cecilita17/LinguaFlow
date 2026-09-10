@@ -8,6 +8,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import {
   LANGUAGE_FLAGS,
   NATIVE_LANG_OPTIONS,
@@ -22,6 +23,7 @@ export default function HomePage({
   setNativeLang,
   languages = []
 }) {
+  const { t } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
   const currentNativeMeta = getLanguageMeta(nativeLang);
   const currentTargetName = currentTargetMeta.name || languages.find((l) => l.code === targetLang)?.name || targetLang;
@@ -45,19 +47,19 @@ export default function HomePage({
           <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-rose-950/90 to-[#38160e] border border-rose-700/50 shadow-md shadow-black/40 mb-4">
             <Sparkles className="w-4 h-4 text-rose-400" />
             <span className="text-xs font-bold tracking-wider uppercase text-rose-200">
-              LinguaFlow AI Platform
+              {t('home_badge')}
             </span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight sm:leading-tight">
-            ¿Cómo querés practicar{' '}
+            {t('home_title_pre')}
             <span className="bg-gradient-to-r from-rose-400 via-pink-400 to-amber-300 bg-clip-text text-transparent">
-              hoy?
+              {t('home_title_highlight')}
             </span>
           </h1>
 
           <p className="mt-3 text-sm sm:text-base text-rose-100/70 leading-relaxed max-w-xl mx-auto">
-            Elegí tu experiencia de inmersión lingüística: conversá en tiempo real con tu tutor inteligente o entrená tu comprensión con videos de YouTube y subtítulos interactivos.
+            {t('home_subtitle')}
           </p>
 
           {/* Quick Language Selection Bar */}
@@ -66,7 +68,7 @@ export default function HomePage({
               value={targetLang}
               onChange={(newLang) => setTargetLang && setTargetLang(newLang)}
               options={languages}
-              label="Practicando"
+              label={t('home_practicing')}
               variant="pill"
             />
 
@@ -74,7 +76,7 @@ export default function HomePage({
               value={nativeLang}
               onChange={(newLang) => setNativeLang && setNativeLang(newLang)}
               options={NATIVE_LANG_OPTIONS}
-              label="Tu idioma"
+              label={t('home_your_lang')}
               variant="pill"
             />
           </div>
@@ -98,35 +100,31 @@ export default function HomePage({
                   <MessageSquare className="w-7 h-7" />
                 </div>
                 <span className="text-[11px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-rose-950/80 text-rose-300 border border-rose-800/70">
-                  ✦ Tutor IA
+                  ✦ {t('home_chat_tag')}
                 </span>
               </div>
 
               {/* Title & Description */}
               <h2 className="text-xl sm:text-2xl font-bold text-white group-hover:text-rose-200 transition-colors">
-                Chat con Tutor IA
+                {t('home_chat_title')}
               </h2>
               <p className="mt-2 text-xs sm:text-sm text-stone-300 leading-relaxed">
-                Conversación interactiva y fluida con corrección pedagógica en vivo, desglose morfológico y pronunciación.
+                {t('home_chat_desc')}
               </p>
 
               {/* Features List */}
               <ul className="mt-5 space-y-2.5 text-xs text-rose-100/80">
                 <li className="flex items-start space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <span>Corrección en tiempo real con palabras editadas en <strong className="text-amber-300 font-semibold">dorado</strong></span>
+                  <span>{t('home_chat_f1')}</span>
                 </li>
                 <li className="flex items-start space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <span>Desglose gramatical interactivo de cada oración</span>
+                  <span>{t('home_chat_f2')}</span>
                 </li>
                 <li className="flex items-start space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <span>Reconocimiento de voz con code-switching multilingüe</span>
-                </li>
-                <li className="flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <span>Práctica de trazos de caracteres Hanzi (chino)</span>
+                  <span>{t('home_chat_f3')}</span>
                 </li>
               </ul>
             </div>
@@ -137,7 +135,7 @@ export default function HomePage({
                 type="button"
                 className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-sm shadow-lg shadow-rose-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-rose-900/80"
               >
-                <span>Entrar al Chat</span>
+                <span>{t('home_chat_btn')}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
@@ -158,35 +156,31 @@ export default function HomePage({
                   <Youtube className="w-7 h-7" />
                 </div>
                 <span className="text-[11px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/70">
-                  🎬 Inmersión Audiovisual
+                  ✦ {t('home_yt_tag')}
                 </span>
               </div>
 
               {/* Title & Description */}
               <h2 className="text-xl sm:text-2xl font-bold text-white group-hover:text-amber-200 transition-colors">
-                Lector de YouTube
+                {t('home_yt_title')}
               </h2>
               <p className="mt-2 text-xs sm:text-sm text-stone-300 leading-relaxed">
-                Estudiá con cualquier video de YouTube, subtítulos interactivos, glosado palabra por palabra y navegación sincronizada.
+                {t('home_yt_desc')}
               </p>
 
               {/* Features List */}
               <ul className="mt-5 space-y-2.5 text-xs text-rose-100/80">
                 <li className="flex items-start space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <span>Reproductor fijo con scroll independiente estilo Miraa</span>
+                  <span>{t('home_yt_f1')}</span>
                 </li>
                 <li className="flex items-start space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <span>Glosado interlineal completo palabra por palabra</span>
+                  <span>{t('home_yt_f2')}</span>
                 </li>
                 <li className="flex items-start space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <span>Segmentación lingüística china y Pinyin interlineal</span>
-                </li>
-                <li className="flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <span>Importación de subtítulos SRT, VTT y texto plano</span>
+                  <span>{t('home_yt_f3')}</span>
                 </li>
               </ul>
             </div>
@@ -197,7 +191,7 @@ export default function HomePage({
                 type="button"
                 className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-600 via-rose-600 to-red-600 hover:from-amber-500 hover:to-rose-500 text-white font-bold text-sm shadow-lg shadow-amber-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-amber-900/80"
               >
-                <span>Abrir Lector de YouTube</span>
+                <span>{t('home_yt_btn')}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
