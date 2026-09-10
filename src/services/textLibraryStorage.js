@@ -224,10 +224,24 @@ export async function deleteTextDocument(id) {
     if (typeof window !== 'undefined' && window.localStorage) {
       const raw = localStorage.getItem('linguaflow_active_text_doc_v1');
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.id === id) {
-          localStorage.removeItem('linguaflow_active_text_doc_v1');
-        }
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.id === id) {
+            localStorage.removeItem('linguaflow_active_text_doc_v1');
+          }
+        } catch (_) {}
+      }
+
+      // Also clean from legacy library if present
+      const legacyRaw = localStorage.getItem('linguaflow_text_library_v1');
+      if (legacyRaw) {
+        try {
+          const parsedLib = JSON.parse(legacyRaw);
+          if (Array.isArray(parsedLib)) {
+            const filtered = parsedLib.filter(d => d && d.id !== id);
+            localStorage.setItem('linguaflow_text_library_v1', JSON.stringify(filtered));
+          }
+        } catch (_) {}
       }
     }
   } catch (e) {
@@ -298,10 +312,16 @@ export async function clearTextLibrary() {
  */
 export async function migrateFromLocalStorage() {
   if (typeof window === 'undefined' || !window.localStorage) return 0;
+
+  // Once legacy migration has executed, do not re-run or re-resurrect deleted documents
+  if (localStorage.getItem('linguaflow_text_library_migrated_v1') === 'true') {
+    return 0;
+  }
+
   let migratedCount = 0;
 
   try {
-    // 1. Check legacy text library
+    // Check legacy text library
     const legacyKey = 'linguaflow_text_library_v1';
     const legacyLibRaw = localStorage.getItem(legacyKey);
     if (legacyLibRaw) {
@@ -336,29 +356,14 @@ export async function migrateFromLocalStorage() {
         // Once verified, remove legacy localStorage key so IndexedDB is the sole source of truth!
         if (allSuccess) {
           localStorage.removeItem(legacyKey);
+          localStorage.setItem('linguaflow_text_library_migrated_v1', 'true');
         }
       } else {
         localStorage.removeItem(legacyKey);
+        localStorage.setItem('linguaflow_text_library_migrated_v1', 'true');
       }
-    }
-
-    // 2. Ensure active draft is also backed up in IndexedDB if not already present
-    // Note: linguaflow_active_text_doc_v1 is NOT removed from localStorage, as it is the active working draft.
-    const activeDraftKey = 'linguaflow_active_text_doc_v1';
-    const draftRaw = localStorage.getItem(activeDraftKey);
-    if (draftRaw) {
-      try {
-        const parsedDraft = JSON.parse(draftRaw);
-        if (parsedDraft && typeof parsedDraft === 'object' && parsedDraft.id) {
-          const existing = await getTextDocumentById(parsedDraft.id);
-          if (!existing) {
-            await saveTextDocument(parsedDraft);
-            migratedCount++;
-          }
-        }
-      } catch (draftErr) {
-        console.warn('[TextLibraryStorage] Error syncing active draft to IndexedDB:', draftErr);
-      }
+    } else {
+      localStorage.setItem('linguaflow_text_library_migrated_v1', 'true');
     }
   } catch (err) {
     console.warn('[TextLibraryStorage] Error migrating from localStorage:', err);

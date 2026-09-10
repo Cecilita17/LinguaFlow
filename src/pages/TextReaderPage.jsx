@@ -517,6 +517,34 @@ export function TextReaderPage({
     setLoadingParagraphIds(new Set());
   }, [setTargetLang]);
 
+  // Delete document handler from library modal
+  const handleDeleteDocumentFromLibrary = useCallback(async (deletedId) => {
+    if (document && document.id === deletedId) {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setIsAutoGlossing(false);
+      setLoadingParagraphIds(new Set());
+      clearActiveDocumentDraft();
+      setDocument(null);
+      setInputText('');
+      setInputTitle('');
+      setIsEditing(true);
+      setGlossingProgress({
+        total: 0,
+        completed: 0,
+        isGlossing: false,
+        isPaused: false,
+        isComplete: false,
+        failed: 0
+      });
+    }
+    await refreshLibraryCount();
+  }, [document, refreshLibraryCount]);
+
   // Start new document from modal
   const handleNewDocumentFromModal = useCallback(() => {
     handleClearDocument();
@@ -913,6 +941,7 @@ export function TextReaderPage({
         onClose={() => setShowSavedModal(false)}
         onSelectDocument={handleSelectSavedDocument}
         onNewDocument={handleNewDocumentFromModal}
+        onDeleteDocument={handleDeleteDocumentFromLibrary}
         currentDocumentId={document?.id || ''}
       />
     </div>
