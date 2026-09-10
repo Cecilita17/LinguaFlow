@@ -92,59 +92,38 @@ export function SubtitleImporter({
     reader.readAsText(file, 'UTF-8');
   };
 
-  // If subtitles are loaded and not manually expanded, show a slim, non-intrusive compact bar
+  // If subtitles are loaded and not manually expanded, show a slim, single-line compact bar
   if (subtitlesCount > 0 && !isExpanded) {
     return (
-      <div className="px-3.5 py-2 rounded-xl bg-[#26120b]/90 border border-[#482015] shadow-xs flex items-center justify-between text-xs transition-all">
-        <div className="flex flex-wrap items-center gap-2 text-stone-200">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="font-semibold text-emerald-300">
-            {subtitlesCount} líneas cargadas
+      <div className="px-3 py-1.5 rounded-xl bg-[#200d07] border border-[#482015] shadow-xs flex items-center justify-between text-xs transition-all">
+        <div className="flex items-center space-x-2 text-stone-200 truncate">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="font-semibold text-emerald-300 text-xs truncate">
+            {isSpanish ? 'Subtítulos cargados' : 'Subtitles loaded'}
           </span>
-          <span className="text-stone-400 text-[11px] hidden sm:inline">
-            ({currentFormat?.toUpperCase() || 'SRT'})
+          <span className="text-stone-400 text-[11px] font-mono shrink-0">
+            ({subtitlesCount} {isSpanish ? 'líneas' : 'lines'}{currentFormat ? ` · ${currentFormat.toUpperCase()}` : ''})
           </span>
-
-          {glossProgress && glossProgress.isGlossing && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-950/80 border border-rose-800 text-[10px] text-rose-300 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
-              <span>
-                {isSpanish ? 'Glosando con IA:' : 'AI Glossing:'} {glossProgress.completed} / {glossProgress.total}
-              </span>
-            </div>
-          )}
-
-          {glossProgress && !glossProgress.isGlossing && glossProgress.completed > 0 && (
-            glossProgress.completed === glossProgress.total ? (
-              <span className="text-[10px] text-emerald-400 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60 shadow-xs">
-                {isSpanish ? `✓ Glosado completo (${glossProgress.completed}/${glossProgress.total})` : `✓ Glossing complete (${glossProgress.completed}/${glossProgress.total})`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-amber-300 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60 shadow-xs">
-                {isSpanish ? `⚠️ ${glossProgress.completed}/${glossProgress.total} glosados` : `⚠️ ${glossProgress.completed}/${glossProgress.total} glossed`}
-              </span>
-            )
-          )}
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1.5 shrink-0">
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="px-2.5 py-1 rounded-lg bg-[#381a11] hover:bg-[#482216] border border-[#5a2e20] text-rose-200 hover:text-white font-medium text-[11px] transition-colors flex items-center gap-1.5 shadow-xs"
+            className="px-2.5 py-1 rounded-lg bg-[#2e130a] hover:bg-[#3e190d] border border-[#4e2215] text-rose-200 hover:text-white font-medium text-[11px] transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
           >
-            <FileCode className="w-3.5 h-3.5 text-rose-400" />
-            <span>Cambiar subtítulos</span>
+            <FileCode className="w-3 h-3 text-rose-400" />
+            <span>{isSpanish ? 'Cambiar / Importar otros' : 'Change / Import other'}</span>
           </button>
 
           {onClearSubtitles && (
             <button
               type="button"
               onClick={onClearSubtitles}
-              title="Borrar subtítulos"
-              className="p-1 rounded-lg text-rose-300/50 hover:text-rose-200 hover:bg-[#381a11] transition-colors"
+              title={isSpanish ? 'Borrar subtítulos' : 'Clear subtitles'}
+              className="p-1 rounded-lg text-rose-300/60 hover:text-rose-200 hover:bg-[#381a11] transition-colors cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -153,25 +132,27 @@ export function SubtitleImporter({
   }
 
   return (
-    <div className="p-4 sm:p-5 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-lg shadow-black/30">
-      <div className="flex items-center justify-between gap-2 mb-3">
+    <div className="p-3.5 sm:p-4 rounded-2xl bg-[#200d07] border border-[#482015] shadow-lg shadow-black/30">
+      <div className="flex items-center justify-between gap-2 mb-2.5">
         <div className="flex items-center space-x-2">
           <FileCode className="w-4 h-4 text-rose-400" />
-          <h3 className="text-sm font-bold text-white tracking-wide">Subtítulos / Transcripción</h3>
+          <h3 className="text-sm font-bold text-white tracking-wide">
+            {isSpanish ? 'Subtítulos / Transcripción' : 'Subtitles / Transcript'}
+          </h3>
         </div>
 
         {subtitlesCount > 0 && (
           <div className="flex items-center space-x-2">
-            <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-300 bg-emerald-950/70 px-2.5 py-0.5 rounded-full border border-emerald-800">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{subtitlesCount} líneas ({currentFormat?.toUpperCase() || 'OK'})</span>
+            <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-300 bg-emerald-950/70 px-2 py-0.5 rounded-full border border-emerald-800">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>{subtitlesCount} {isSpanish ? 'líneas' : 'lines'}</span>
             </span>
             <button
               type="button"
               onClick={() => setIsExpanded(false)}
-              className="px-2 py-0.5 rounded-lg text-[11px] text-stone-400 hover:text-white bg-[#220f09] border border-[#482015]"
+              className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-stone-300 hover:text-white bg-[#2e130a] hover:bg-[#3e190d] border border-[#4e2215] cursor-pointer"
             >
-              Cerrar
+              {isSpanish ? '✕ Cerrar' : '✕ Close'}
             </button>
           </div>
         )}
