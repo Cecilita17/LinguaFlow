@@ -365,22 +365,33 @@ export function TextReaderPage({
     const raw = inputText.trim();
     if (!raw) return;
 
-    const paragraphs = splitTextIntoParagraphs(raw, targetLang);
-    const newDoc = createTextDocument({
+    const isExistingDoc = Boolean(document && document.id);
+    const rawTextChanged = isExistingDoc && document.rawText.trim() !== raw;
+    const effectiveParagraphs = (!rawTextChanged && isExistingDoc && Array.isArray(document.paragraphs) && document.paragraphs.length > 0)
+      ? document.paragraphs
+      : splitTextIntoParagraphs(raw, targetLang);
+
+    const docToSave = createTextDocument({
+      id: isExistingDoc ? document.id : null,
       title: inputTitle.trim(),
       rawText: raw,
       targetLang,
       nativeLang,
-      paragraphs
+      paragraphs: effectiveParagraphs,
+      languageStates: isExistingDoc ? document.languageStates : null,
+      createdAt: isExistingDoc ? document.createdAt : null
     });
 
-    const saved = saveDocument(newDoc);
+    const saved = saveDocument(docToSave);
     setDocument(saved);
     setIsEditing(false);
     setSavedDocsCount(getAllDocuments().length);
 
-    // Automatically begin glossing
-    triggerGlossing(paragraphs, targetLang);
+    // Only begin AI glossing if paragraphs have uncompleted tokens
+    const alreadyComplete = effectiveParagraphs.every(p => isGlossComplete(p, targetLang));
+    if (!alreadyComplete) {
+      triggerGlossing(effectiveParagraphs, targetLang);
+    }
   };
 
   // Open / select document from saved library modal
@@ -405,13 +416,17 @@ export function TextReaderPage({
       setTargetLang(doc.targetLang);
     }
 
-    const complete = isGlossComplete(doc.paragraphs);
+    const docLang = doc.targetLang || 'zh';
+    const paras = Array.isArray(doc.paragraphs) ? doc.paragraphs : [];
+    const allComplete = paras.length > 0 && paras.every(p => isGlossComplete(p, docLang));
+    const completedCount = paras.filter(p => isGlossComplete(p, docLang)).length;
+
     setGlossingProgress({
-      total: doc.paragraphs?.length || 0,
-      completed: doc.paragraphs?.filter(p => Array.isArray(p.tokens) && p.tokens.some(t => t.gloss)).length || 0,
+      total: paras.length,
+      completed: completedCount,
       isGlossing: false,
       isPaused: false,
-      isComplete: complete,
+      isComplete: allComplete,
       failed: 0
     });
   }, [setTargetLang]);
