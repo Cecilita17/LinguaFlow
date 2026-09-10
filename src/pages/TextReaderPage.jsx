@@ -16,6 +16,7 @@ import {
   Maximize2,
   BookOpen,
   Languages,
+  MoreVertical,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -1030,6 +1031,88 @@ export function TextReaderPage({
     setFontSize(order[nextIdx]);
   };
 
+  // Contextual actions menu state for top bar
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!isActionsMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target)) {
+        setIsActionsMenuOpen(false);
+      }
+    };
+    window.document.addEventListener('pointerdown', handleClickOutside);
+    return () => {
+      window.document.removeEventListener('pointerdown', handleClickOutside);
+    };
+  }, [isActionsMenuOpen]);
+
+  // Audio toggle helper for top bar "A" button
+  const isPlayingAnyAudio = Boolean(playingParagraphId);
+
+  const handleToggleAudio = useCallback(() => {
+    if (isPlayingAnyAudio) {
+      handleStopAudio();
+      return;
+    }
+    const paras = visibleParagraphs.length > 0 ? visibleParagraphs : (document?.paragraphs || []);
+    if (paras.length === 0) return;
+
+    let targetPara = null;
+    if (lastAudioParagraphId) {
+      targetPara = paras.find(p => p.id === lastAudioParagraphId);
+    }
+    if (!targetPara) {
+      targetPara = paras[0];
+    }
+    if (targetPara) {
+      handlePlayParagraph(targetPara);
+    }
+  }, [isPlayingAnyAudio, handleStopAudio, visibleParagraphs, document?.paragraphs, lastAudioParagraphId, handlePlayParagraph]);
+
+  // Edit title action from three-dots menu
+  const handleEditTitle = useCallback(() => {
+    setIsActionsMenuOpen(false);
+    const currentTitle = document?.title || '';
+    const newTitle = window.prompt(t('edit_title') || 'Editar título del documento:', currentTitle);
+    if (newTitle !== null && newTitle.trim()) {
+      const trimmed = newTitle.trim();
+      setDocument(prev => {
+        if (!prev) return prev;
+        const updated = {
+          ...prev,
+          title: trimmed,
+          updatedAt: new Date().toISOString()
+        };
+        saveActiveDocumentDraft(updated);
+        if (updated.id) {
+          saveTextDocument(updated).then(() => refreshLibraryCount()).catch(() => {});
+        }
+        return updated;
+      });
+      setInputTitle(trimmed);
+    }
+  }, [document?.title, t, refreshLibraryCount]);
+
+  // Delete document action from three-dots menu
+  const handleDeleteText = useCallback(() => {
+    setIsActionsMenuOpen(false);
+    const confirmed = window.confirm(t('confirm_delete_text') || '¿Seguro que deseas eliminar este texto?');
+    if (confirmed) {
+      if (document?.id) {
+        deleteTextDocument(document.id).then(() => refreshLibraryCount()).catch(() => {});
+      }
+      handleClearDocument();
+    }
+  }, [document?.id, handleClearDocument, refreshLibraryCount, t]);
+
+  // Open library action from three-dots menu
+  const handleOpenLibrary = useCallback(() => {
+    setIsActionsMenuOpen(false);
+    setShowSavedModal(true);
+  }, []);
+
   const currentLangMeta = getLanguageMeta(targetLang);
 
   return (
@@ -1042,176 +1125,188 @@ export function TextReaderPage({
         inert={isHeaderHidden && !isEditing ? '' : undefined}
         aria-hidden={isHeaderHidden && !isEditing}
       >
-        {/* PARTE 1 — BARRA PRINCIPAL: Document title, reader badge, essential context */}
-        <div className="reader-main-bar px-4 py-2 sm:py-2.5 flex items-center justify-between gap-3">
-          {/* Left: Section Title & Editable Doc Title */}
-          <div className="flex items-center space-x-3 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0">
-              <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center space-x-2">
-                <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
-                  📖 {t('text_reader_title') || 'Importador de Textos'}
-                </span>
-                {document && !isEditing && (
-                  <span className="text-xs text-[var(--text-muted)] font-medium hidden sm:inline">
-                    • {document.paragraphs?.length || 0} párrafos
-                  </span>
-                )}
+        {document && !isEditing ? (
+          /* ============================================================ */
+          /* READING MODE: Single unified row: [Título]  [T] [A] [Auto-gloss] [⋮] */
+          /* ============================================================ */
+          <div className="reader-main-bar px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-3 min-w-0">
+            {/* Left: Título del texto (occupies all available space, truncates cleanly) */}
+            <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-1">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-xs shrink-0">
+                <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
-
-              {/* Editable or Static Document Title */}
-              {document && !isEditing ? (
+              <div className="min-w-0 flex-1">
                 <h2
-                  title="Título del documento"
-                  className="text-sm sm:text-base font-bold text-[var(--text-primary)] truncate leading-tight max-w-[240px] sm:max-w-md mt-0.5"
+                  title={document.title}
+                  className="text-xs sm:text-sm md:text-base font-bold text-[var(--text-primary)] truncate leading-snug"
                 >
                   {document.title}
                 </h2>
-              ) : (
-                <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] leading-tight mt-0.5">
-                  {t('home_text_title') || 'Lector Independiente'}
+              </div>
+            </div>
+
+            {/* Right: [T] [A] [Auto-gloss] [⋮] Controls aligned in the same row */}
+            <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+              {/* T — Transliteration */}
+              <button
+                type="button"
+                onClick={() => setInterlinearMode(!interlinearMode)}
+                title={interlinearMode ? "Desactivar transliteración (ver texto continuo)" : "Activar transliteración / interlineal"}
+                aria-label="Transliteración"
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 ${
+                  interlinearMode
+                    ? 'bg-rose-600 text-white shadow-rose-900/40 border border-rose-500 ring-1 ring-rose-400/30'
+                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                <span className="font-serif text-[13px] sm:text-sm font-bold leading-none select-none">T</span>
+              </button>
+
+              {/* A — Audio */}
+              <button
+                type="button"
+                onClick={handleToggleAudio}
+                title={
+                  isPlayingAnyAudio
+                    ? "Detener reproducción de audio"
+                    : "Reproducir audio del texto"
+                }
+                aria-label="Audio"
+                className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 ${
+                  isPlayingAnyAudio
+                    ? 'bg-gradient-to-tr from-pink-600 to-rose-600 text-white border border-rose-400/90 shadow-rose-900/60 ring-2 ring-rose-400/40'
+                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                {isPlayingAnyAudio && (
+                  <span className="absolute -inset-0.5 rounded-lg sm:rounded-xl border-2 border-rose-400/60 animate-ping pointer-events-none" />
+                )}
+                <span className="text-[13px] sm:text-sm font-bold leading-none select-none">A</span>
+              </button>
+
+              {/* Auto-gloss — Símbolo (Green when ON, normal when OFF) */}
+              <button
+                type="button"
+                onClick={handleToggleAutoGlossing}
+                title={
+                  isAutoGlossing
+                    ? 'Glosado automático activo (clic para pausar)'
+                    : 'Activar glosado automático'
+                }
+                aria-label="Auto-glosado"
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                  isAutoGlossing
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 shadow-emerald-950/40'
+                    : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border-primary)]'
+                }`}
+              >
+                <Sparkles className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isAutoGlossing ? 'text-white fill-white' : 'text-[var(--text-secondary)]'}`} />
+              </button>
+
+              {/* ⋮ — Menú contextual de tres puntos */}
+              <div className="relative" ref={actionsMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+                  title="Más opciones"
+                  aria-label="Más opciones"
+                  aria-expanded={isActionsMenuOpen}
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                    isActionsMenuOpen
+                      ? 'bg-[var(--surface-hover)] text-[var(--text-primary)] border border-rose-500/50'
+                      : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                  }`}
+                >
+                  <MoreVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+
+                {/* Contextual dropdown popup */}
+                {isActionsMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[175px] py-1.5 px-1 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-xl backdrop-blur-md animate-fade-in text-xs font-medium text-[var(--text-primary)]">
+                    {/* ✏️ Editar título */}
+                    <button
+                      type="button"
+                      onClick={handleEditTitle}
+                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                    >
+                      <span className="text-sm leading-none">✏️</span>
+                      <span>Editar título</span>
+                    </button>
+
+                    {/* 🗑️ Eliminar */}
+                    <button
+                      type="button"
+                      onClick={handleDeleteText}
+                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                    >
+                      <span className="text-sm leading-none">🗑️</span>
+                      <span>Eliminar</span>
+                    </button>
+
+                    <div className="my-1 border-t border-[var(--border-subtle)]/60" />
+
+                    {/* 📚 Librería */}
+                    <button
+                      type="button"
+                      onClick={handleOpenLibrary}
+                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                    >
+                      <span className="text-sm leading-none">📚</span>
+                      <span>Librería</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ============================================================ */
+          /* EDIT / IMPORT MODE HEADER                                    */
+          /* ============================================================ */
+          <div className="reader-main-bar px-4 py-2 sm:py-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0">
+                <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] leading-tight">
+                  {t('home_text_title') || 'Importador de Textos'}
                 </h2>
-              )}
+                <p className="text-xs text-[var(--text-muted)] mt-0.5 hidden sm:block">
+                  Pega texto o importa un archivo TXT / EPUB para leer con glosado interactivo
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Right: Language indicator pill on main bar when reading */}
-          {document && !isEditing && (
+            {/* Right: Library Button & Language Selector for new text */}
             <div className="flex items-center space-x-2 shrink-0">
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] flex items-center gap-1.5 shadow-xs select-none">
-                <span className="text-sm">{currentLangMeta?.flag || '🌐'}</span>
-                <span className="hidden xs:inline font-medium">{currentLangMeta?.name || activeDocLang.toUpperCase()}</span>
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* PARTE 2 — CONTROLES DEL LECTOR (All controls inside same header wrapper) */}
-        <div className="reader-controls overflow-hidden">
-          <div className="px-4 pb-2.5 sm:pb-3 pt-1 flex items-center flex-wrap gap-2 border-t border-[var(--border-subtle)]/40">
-            {/* Saved Documents Library Button */}
-            <button
-              type="button"
-              onClick={() => setShowSavedModal(true)}
-              title={t('saved_documents') || 'Biblioteca de textos guardados'}
-              className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-              <span className="hidden sm:inline">Biblioteca</span>
-              {savedDocsCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-mono font-bold">
-                  {savedDocsCount}
-                </span>
-              )}
-            </button>
-
-            {/* Target Language Dropdown */}
-            <div className="bg-[var(--surface-tertiary)] rounded-xl border border-[var(--border-primary)] p-0.5">
-              <LanguageSelectDropdown
-                value={activeDocLang}
-                onChange={handleLanguageChange}
-                options={languages}
-                variant="header"
-                align="right"
-              />
-            </div>
-
-            {/* Reader controls (Auto-glossing, Interlinear, Font size, Edit, Clear) */}
-            {document && !isEditing && (
-              <>
-                {/* GLOBAL AUTO-GLOSSING TOGGLE (Represented by Languages icon, ON/OFF, Green when ON, Progress badge) */}
-                <button
-                  type="button"
-                  onClick={handleToggleAutoGlossing}
-                  title={
-                    isAutoGlossing
-                      ? 'Glosado automático activo: clic para detener'
-                      : 'Activar glosado automático global'
-                  }
-                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
-                    isAutoGlossing
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
-                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border-[var(--border-primary)]'
-                  }`}
-                >
-                  <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
-                  <span className="font-semibold">Auto-Glosado</span>
-                  <span
-                    className={`text-[9px] px-1 py-0.2 rounded font-bold ${
-                      isAutoGlossing
-                        ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
-                        : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)] border border-[var(--border-primary)]'
-                    }`}
-                  >
-                    {isAutoGlossing ? 'ON' : 'OFF'}
+              <button
+                type="button"
+                onClick={() => setShowSavedModal(true)}
+                title={t('saved_documents') || 'Biblioteca de textos guardados'}
+                className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
+                <span className="hidden sm:inline">Librería</span>
+                {savedDocsCount > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-mono font-bold">
+                    {savedDocsCount}
                   </span>
+                )}
+              </button>
 
-                  {/* Live Auto-Glossing Progress Badge */}
-                  {document.paragraphs?.length > 0 && (
-                    <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
-                      isAutoGlossing
-                        ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
-                        : 'text-[var(--text-muted)] bg-[var(--surface-tertiary)] border-[var(--border-primary)]'
-                    }`}>
-                      {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
-                      <span>{completedParagraphsCount}/{document.paragraphs.length}</span>
-                    </span>
-                  )}
-                </button>
-
-                {/* Interlinear Mode Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setInterlinearMode(!interlinearMode)}
-                  title={interlinearMode ? "Cambiar a texto continuo" : "Ver con glosado interlineal"}
-                  className={`p-2 rounded-xl border text-xs font-semibold transition-all shadow-xs cursor-pointer ${
-                    interlinearMode
-                      ? 'bg-rose-600 border-rose-400 text-white shadow-rose-900/40'
-                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
-                  }`}
-                >
-                  <Type className="w-4 h-4" />
-                </button>
-
-                {/* Font Size Button */}
-                <button
-                  type="button"
-                  onClick={cycleFontSize}
-                  title={`Tamaño de fuente: ${fontSize.toUpperCase()}`}
-                  className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
-                >
-                  A{fontSize === 'xl' ? '++' : fontSize === 'lg' ? '+' : fontSize === 'sm' ? '-' : ''}
-                </button>
-
-                {/* Edit text button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditing(true);
-                    setIsHeaderHidden(false);
-                    previousScrollTopRef.current = 0;
-                  }}
-                  title="Editar o cambiar el texto"
-                  className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-
-                {/* New / Clear button */}
-                <button
-                  type="button"
-                  onClick={handleClearDocument}
-                  title="Nuevo texto / Limpiar documento"
-                  className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-rose-500 transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </>
-            )}
+              <div className="bg-[var(--surface-tertiary)] rounded-xl border border-[var(--border-primary)] p-0.5">
+                <LanguageSelectDropdown
+                  value={activeDocLang}
+                  onChange={handleLanguageChange}
+                  options={languages}
+                  variant="header"
+                  align="right"
+                />
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
       {/* MAIN CONTENT AREA */}
