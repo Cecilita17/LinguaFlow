@@ -11,7 +11,6 @@ import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
-import { reanalyzeGrammarStrictly } from './services/grammarEngine';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -228,33 +227,6 @@ export default function App() {
       console.warn('Grammar breakdown fetch notice:', e);
     } finally {
       setIsBreakdownLoading(false);
-    }
-  };
-
-  // Re-analyze message with strict grammar engine
-  const handleReanalyzeMessage = async (msg) => {
-    try {
-      setIsReanalyzingId(msg.id);
-      const textToAnalyze = msg.originalText || msg.text;
-      const result = await reanalyzeGrammarStrictly(textToAnalyze, targetLang, nativeLang, config?.apiKey || '', config?.provider || 'groq');
-      if (result) {
-        setMessages(prev => prev.map(m => {
-          if (m.id === msg.id) {
-            return {
-              ...m,
-              originalText: textToAnalyze,
-              correctedText: result.corrected_text,
-              hasCorrection: result.has_errors || result.diff_tokens?.some(t => t.changed),
-              diffTokens: result.diff_tokens
-            };
-          }
-          return m;
-        }));
-      }
-    } catch (err) {
-      console.warn('Reanalyze grammar error:', err);
-    } finally {
-      setIsReanalyzingId(null);
     }
   };
 
@@ -777,8 +749,6 @@ export default function App() {
                 onPlayAudio={handlePlayAudio}
                 isAudioPlaying={isSpeaking}
                 onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
-                onReanalyzeMessage={handleReanalyzeMessage}
-                isReanalyzing={isReanalyzingId}
               />
             ))}
 

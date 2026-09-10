@@ -338,7 +338,10 @@ const DEEP_LANGUAGE_RULES = {
     { regex: /我困/g, replacement: '我很困' },
     { regex: /我睡觉/g, replacement: '我想去睡觉' },
     { regex: /我喝咖啡/g, replacement: '我想喝杯咖啡' },
-    { regex: /你好吗/g, replacement: '你好，最近怎么样？' }
+    { regex: /你好吗/g, replacement: '你好，最近怎么样？' },
+    { regex: /\b(ni\s*hao\s*,\s*ni\s*hao\s*ma\??)\b/gi, replacement: '你好，你好吗？' },
+    { regex: /\b(ni\s*hao\s*ma\??)\b/gi, replacement: '你好吗？' },
+    { regex: /\b(ni\s*hao)\b/gi, replacement: '你好' }
   ]
 };
 
