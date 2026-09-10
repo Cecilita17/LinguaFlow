@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+// import { createPortal } from 'react-dom'; // removed unused import
 import {
   FileText,
   Sparkles,
@@ -1032,57 +1032,28 @@ export function TextReaderPage({
     setFontSize(order[nextIdx]);
   };
 
-  // Contextual actions menu state for top bar (rendered via portal to escape header overflow:hidden)
+  // Contextual actions menu state for top bar
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
-  const [actionsMenuCoords, setActionsMenuCoords] = useState(null);
   const actionsMenuRef = useRef(null);
-  const actionsMenuPopoverRef = useRef(null);
 
-  const updateActionsMenuCoords = useCallback(() => {
-    if (!actionsMenuRef.current) return;
-    const rect = actionsMenuRef.current.getBoundingClientRect();
-    const menuWidth = 180;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const placeAbove = spaceBelow < 180 && rect.top > spaceBelow;
-    const top = placeAbove ? undefined : (rect.bottom + 6);
-    const bottom = placeAbove ? (window.innerHeight - rect.top + 6) : undefined;
-    let left = rect.right - menuWidth;
-    if (left < 8) left = 8;
-    setActionsMenuCoords({
-      top: top !== undefined ? `${top}px` : 'auto',
-      bottom: bottom !== undefined ? `${bottom}px` : 'auto',
-      left: `${left}px`
-    });
+  // Toggle menu visibility
+  const toggleActionsMenu = useCallback(() => {
+    setIsActionsMenuOpen(prev => !prev);
   }, []);
 
-  const toggleActionsMenu = useCallback(() => {
-    setIsActionsMenuOpen(prev => {
-      const next = !prev;
-      if (next) {
-        updateActionsMenuCoords();
-      }
-      return next;
-    });
-  }, [updateActionsMenuCoords]);
-
+  // Close the menu when clicking outside of the trigger
   useEffect(() => {
     if (!isActionsMenuOpen) return;
     const handleClickOutside = (e) => {
-      const isOutsideTrigger = actionsMenuRef.current && !actionsMenuRef.current.contains(e.target);
-      const isOutsidePopover = actionsMenuPopoverRef.current && !actionsMenuPopoverRef.current.contains(e.target);
-      if (isOutsideTrigger && isOutsidePopover) {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target)) {
         setIsActionsMenuOpen(false);
       }
     };
-    window.document.addEventListener('pointerdown', handleClickOutside);
-    window.addEventListener('resize', updateActionsMenuCoords);
-    window.addEventListener('scroll', updateActionsMenuCoords, true);
+    window.addEventListener('pointerdown', handleClickOutside);
     return () => {
-      window.document.removeEventListener('pointerdown', handleClickOutside);
-      window.removeEventListener('resize', updateActionsMenuCoords);
-      window.removeEventListener('scroll', updateActionsMenuCoords, true);
+      window.removeEventListener('pointerdown', handleClickOutside);
     };
-  }, [isActionsMenuOpen, updateActionsMenuCoords]);
+  }, [isActionsMenuOpen]);
 
   // Audio toggle helper for top bar "A" button
   const isPlayingAnyAudio = Boolean(playingParagraphId);
@@ -1257,105 +1228,97 @@ export function TextReaderPage({
                 </button>
 
                 {/* Contextual dropdown popup rendered via portal to prevent overflow clipping */}
-                {isActionsMenuOpen && actionsMenuCoords && typeof window !== 'undefined' && createPortal(
-                  <div
-                    ref={actionsMenuPopoverRef}
-                    style={{
-                      position: 'fixed',
-                      top: actionsMenuCoords.top,
-                      bottom: actionsMenuCoords.bottom,
-                      left: actionsMenuCoords.left,
-                      width: '180px',
-                      zIndex: 99999
-                    }}
-                    className="py-1.5 px-1 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl backdrop-blur-md animate-fade-in text-xs font-medium text-[var(--text-primary)]"
-                  >
-                    {/* ✏️ Editar título */}
-                    <button
-                      type="button"
-                      onClick={handleEditTitle}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                    >
-                      <span className="text-sm leading-none">✏️</span>
-                      <span>Editar título</span>
-                    </button>
-
-                    {/* 🗑️ Eliminar */}
-                    <button
-                      type="button"
-                      onClick={handleDeleteText}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-                    >
-                      <span className="text-sm leading-none">🗑️</span>
-                      <span>Eliminar</span>
-                    </button>
-
-                    <div className="my-1 border-t border-[var(--border-subtle)]/60" />
-
-                    {/* 📚 Librería */}
-                    <button
-                      type="button"
-                      onClick={handleOpenLibrary}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                    >
-                      <span className="text-sm leading-none">📚</span>
-                      <span>Librería</span>
-                    </button>
-                  </div>,
-                  document.body
-                )}
+                {isActionsMenuOpen && (
+  <div className="absolute right-0 top-full mt-2 z-20 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)]">
+    <button
+      type="button"
+      onClick={handleEditTitle}
+      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+    >
+      <span className="text-sm leading-none">✏️</span>
+      <span>Editar título</span>
+    </button>
+    <button
+      type="button"
+      onClick={handleDeleteText}
+      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+    >
+      <span className="text-sm leading-none">🗑️</span>
+      <span>Eliminar</span>
+    </button>
+    <div className="my-1 border-t border-[var(--border-subtle)]/60" />
+    <button
+      type="button"
+      onClick={handleOpenLibrary}
+      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+    >
+      <span className="text-sm leading-none">📚</span>
+      <span>Librería</span>
+    </button>
+  </div>
+)}
               </div>
             </div>
           </div>
-        ) : (
-          /* ============================================================ */
-          /* EDIT / IMPORT MODE HEADER                                    */
-          /* ============================================================ */
-          <div className="reader-main-bar px-4 py-2 sm:py-2.5 flex items-center justify-between gap-3">
-            <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0">
-                <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] leading-tight">
-                  {t('home_text_title') || 'Importador de Textos'}
-                </h2>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5 hidden sm:block">
-                  Pega texto o importa un archivo TXT / EPUB para leer con glosado interactivo
-                </p>
-              </div>
-            </div>
-
-            {/* Right: Library Button & Language Selector for new text */}
-            <div className="flex items-center space-x-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowSavedModal(true)}
-                title={t('saved_documents') || 'Biblioteca de textos guardados'}
-                className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-                <span className="hidden sm:inline">Librería</span>
-                {savedDocsCount > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-mono font-bold">
-                    {savedDocsCount}
-                  </span>
-                )}
-              </button>
-
-              <div className="bg-[var(--surface-tertiary)] rounded-xl border border-[var(--border-primary)] p-0.5">
-                <LanguageSelectDropdown
-                  value={activeDocLang}
-                  onChange={handleLanguageChange}
-                  options={languages}
-                  variant="header"
-                  align="right"
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        ) : null}
       </header>
+{isEpub && chapters.length > 1 && (
+  <div className="sticky top-0 z-20 -mx-4 px-4 py-2.5 mb-5 bg-[var(--surface-primary)] border-b border-[var(--border-primary)] shadow-sm flex items-center justify-between gap-2 sm:gap-3 transition-colors">
+    <button
+      type="button"
+      disabled={currentChapterIndex === 0}
+      onClick={() => handleNavigateChapter(currentChapterIndex - 1)}
+      className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1 sm:space-x-1.5 transition-all ${
+        currentChapterIndex === 0
+          ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
+          : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
+      }`}
+      title="Capítulo anterior"
+    >
+      <ChevronLeft className="w-4 h-4" />
+      <span className="hidden sm:inline">Anterior</span>
+    </button>
+
+    <div className="flex-1 min-w-0 max-w-sm sm:max-w-md mx-auto text-center">
+      <div className="relative inline-block w-full">
+        <select
+          value={currentChapterIndex}
+          onChange={(e) => handleNavigateChapter(Number(e.target.value))}
+          className="w-full text-xs font-bold text-[var(--text-primary)] bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-xl py-1.5 px-3 pr-8 truncate appearance-none cursor-pointer text-center hover:border-rose-500/50 transition-colors focus:outline-none focus:ring-1 focus:ring-rose-500"
+        >
+          {chapters.map((ch, idx) => {
+            const hasCustomTitle = ch.title && !/^cap[ií]tulo\s+\d+$/i.test(ch.title.trim()) && !/^chapter\s+\d+$/i.test(ch.title.trim());
+            const label = hasCustomTitle
+              ? `Capítulo ${idx + 1} de ${chapters.length}: ${ch.title}`
+              : `Capítulo ${idx + 1} de ${chapters.length}`;
+            return (
+              <option key={ch.id || idx} value={idx}>
+                {label}
+              </option>
+            );
+          })}
+        </select>
+        <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]" />
+      </div>
+    </div>
+
+    <button
+      type="button"
+      disabled={currentChapterIndex === chapters.length - 1}
+      onClick={() => handleNavigateChapter(currentChapterIndex + 1)}
+      className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1 sm:space-x-1.5 transition-all ${
+        currentChapterIndex === chapters.length - 1
+          ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
+          : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
+      }`}
+      title="Capítulo siguiente"
+    >
+      <span className="hidden sm:inline">Siguiente</span>
+      <ChevronRight className="w-4 h-4" />
+    </button>
+  </div>
+)}
+
 
       {/* MAIN CONTENT AREA */}
       <main
@@ -1495,62 +1458,7 @@ export function TextReaderPage({
           /* ============================================================ */
           <div className="flex-1 flex flex-col animate-fade-in">
             {/* EPUB Top Chapter Navigation Bar: Sticky flush top inside reader view */}
-            {isEpub && chapters.length > 1 && (
-              <div className="sticky top-0 z-20 -mx-4 px-4 py-2.5 mb-5 bg-[var(--surface-primary)] border-b border-[var(--border-primary)] shadow-sm flex items-center justify-between gap-2 sm:gap-3 transition-colors">
-                <button
-                  type="button"
-                  disabled={currentChapterIndex === 0}
-                  onClick={() => handleNavigateChapter(currentChapterIndex - 1)}
-                  className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1 sm:space-x-1.5 transition-all ${
-                    currentChapterIndex === 0
-                      ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
-                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
-                  }`}
-                  title="Capítulo anterior"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span className="hidden sm:inline">Anterior</span>
-                </button>
-
-                <div className="flex-1 min-w-0 max-w-sm sm:max-w-md mx-auto text-center">
-                  <div className="relative inline-block w-full">
-                    <select
-                      value={currentChapterIndex}
-                      onChange={(e) => handleNavigateChapter(Number(e.target.value))}
-                      className="w-full text-xs font-bold text-[var(--text-primary)] bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-xl py-1.5 px-3 pr-8 truncate appearance-none cursor-pointer text-center hover:border-rose-500/50 transition-colors focus:outline-none focus:ring-1 focus:ring-rose-500"
-                    >
-                      {chapters.map((ch, idx) => {
-                        const hasCustomTitle = ch.title && !/^cap[ií]tulo\s+\d+$/i.test(ch.title.trim()) && !/^chapter\s+\d+$/i.test(ch.title.trim());
-                        const label = hasCustomTitle
-                          ? `Capítulo ${idx + 1} de ${chapters.length}: ${ch.title}`
-                          : `Capítulo ${idx + 1} de ${chapters.length}`;
-                        return (
-                          <option key={ch.id || idx} value={idx}>
-                            {label}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]" />
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={currentChapterIndex === chapters.length - 1}
-                  onClick={() => handleNavigateChapter(currentChapterIndex + 1)}
-                  className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1 sm:space-x-1.5 transition-all ${
-                    currentChapterIndex === chapters.length - 1
-                      ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
-                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
-                  }`}
-                  title="Capítulo siguiente"
-                >
-                  <span className="hidden sm:inline">Siguiente</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            
 
             <div className="space-y-4 sm:space-y-5">
               {visibleParagraphs.map((paragraph, pIdx) => {
