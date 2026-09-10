@@ -273,6 +273,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             showTimestamps={showTimestamps}
             searchQuery={searchQuery}
             interlinearMode={interlinearMode}
+            targetLang={targetLang}
           />
         </div>
       )}

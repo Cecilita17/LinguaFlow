@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatTimestamp } from '../../services/subtitleService.js';
+import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { Play, Volume2 } from 'lucide-react';
 
 export function TranscriptLine({
@@ -10,6 +11,7 @@ export function TranscriptLine({
   showTimestamps = true,
   searchQuery = '',
   interlinearMode = true,
+  targetLang = 'zh',
   onWordClick = null // Prepared for future word-level glossary lookup
 }) {
   const { startTime, text, tokens = [], glosses = [] } = line;
@@ -79,74 +81,83 @@ export function TranscriptLine({
       {/* Main Text Content */}
       <div className="flex-1 min-w-0">
         {interlinearMode && tokens && tokens.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2.5 gap-y-2 leading-tight break-words max-w-full">
-            {tokens.map((tokenObj, idx) => {
-              const word = typeof tokenObj === 'string' ? tokenObj : tokenObj.word;
-              const pinyin = typeof tokenObj === 'object' ? tokenObj.pinyin : null;
-              const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : (glosses && glosses[idx]);
-              const isPunctuation = typeof tokenObj === 'object'
-                ? tokenObj.isPunctuation
-                : /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()\-]+$/.test(word);
+          (() => {
+            const strategy = getLanguageGlossStrategy(targetLang);
+            const hasLineTranslit = strategy.hasTranslit && tokens.some(t => Boolean(t && typeof t === 'object' && (t.pinyin || t.translit || t.transliteration)));
 
-              // Never display Pinyin as gloss or word as gloss (except when gloss is a valid Spanish word like 'de')
-              const isLegitSameWord = word === '的' && rawGloss?.toLowerCase() === 'de';
-              const cleanGloss = (rawGloss && (rawGloss !== pinyin || isLegitSameWord) && rawGloss !== word) ? rawGloss : null;
+            return (
+              <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2.5 gap-y-2 leading-tight break-words max-w-full">
+                {tokens.map((tokenObj, idx) => {
+                  const word = typeof tokenObj === 'string' ? tokenObj : tokenObj.word;
+                  const phonetic = typeof tokenObj === 'object' ? (tokenObj.pinyin || tokenObj.translit || tokenObj.transliteration) : null;
+                  const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : (glosses && glosses[idx]);
+                  const isPunctuation = typeof tokenObj === 'object'
+                    ? tokenObj.isPunctuation
+                    : PUNCTUATION_REGEX.test(word);
 
-              if (isPunctuation) {
-                return (
-                  <span
-                    key={idx}
-                    className="text-stone-400 font-medium px-0.5 select-text self-center text-base sm:text-lg"
-                  >
-                    {word}
-                  </span>
-                );
-              }
+                  // Never display Pinyin/translit as gloss or word as gloss (except when gloss is a valid Spanish word like 'de')
+                  const isLegitSameWord = word === '的' && rawGloss?.toLowerCase() === 'de';
+                  const cleanGloss = (rawGloss && (rawGloss !== phonetic || isLegitSameWord) && rawGloss.toLowerCase() !== word?.toLowerCase()) ? rawGloss : null;
 
-              return (
-                <div
-                  key={idx}
-                  onClick={(e) => {
-                    if (onWordClick) {
-                      e.stopPropagation();
-                      onWordClick(word, { word, pinyin, gloss: cleanGloss });
-                    }
-                  }}
-                  className="inline-flex flex-col items-center justify-center px-1 py-0.5 rounded-lg hover:bg-white/10 transition-colors group/token max-w-full"
-                >
-                  {/* Tier 1 (TOP): Pinyin with tone marks */}
-                  {pinyin ? (
-                    <span className="text-[11px] sm:text-xs text-rose-300 font-mono tracking-tight leading-none mb-1 select-text">
-                      {pinyin}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-transparent select-none leading-none mb-1">
-                      &nbsp;
-                    </span>
-                  )}
+                  if (isPunctuation) {
+                    return (
+                      <span
+                        key={idx}
+                        className="text-stone-400 font-medium px-0.5 select-text self-center text-base sm:text-lg"
+                      >
+                        {word}
+                      </span>
+                    );
+                  }
 
-                  {/* Tier 2 (CENTER): Chinese Character / Word */}
-                  <span
-                    className={`font-semibold tracking-wide ${
-                      isActive ? 'text-white font-bold drop-shadow-xs' : 'text-stone-100'
-                    } ${fontClass}`}
-                  >
-                    {renderHighlightedText(word)}
-                  </span>
-
-                  {/* Tier 3 (BOTTOM): Gloss / Meaning in student's native language */}
-                  {cleanGloss && (
-                    <span
-                      title={cleanGloss}
-                      className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/line:text-stone-200 font-normal leading-tight mt-1 max-w-[120px] truncate text-center select-text"
+                  return (
+                    <div
+                      key={idx}
+                      onClick={(e) => {
+                        if (onWordClick) {
+                          e.stopPropagation();
+                          onWordClick(word, { word, pinyin: phonetic, translit: phonetic, gloss: cleanGloss });
+                        }
+                      }}
+                      className="inline-flex flex-col items-center justify-center px-1 py-0.5 rounded-lg hover:bg-white/10 transition-colors group/token max-w-full"
                     >
-                      {cleanGloss}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                      {/* Tier 1 (TOP): Phonetic Transliteration (Pinyin or Romanization) - OMITTED for Polish and non-translit languages */}
+                      {hasLineTranslit && (
+                        phonetic ? (
+                          <span className="text-[11px] sm:text-xs text-rose-300 font-mono tracking-tight leading-none mb-1 select-text">
+                            {phonetic}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-transparent select-none leading-none mb-1">
+                            &nbsp;
+                          </span>
+                        )
+                      )}
+
+                      {/* Tier 2 (CENTER): Word */}
+                      <span
+                        className={`font-semibold tracking-wide ${
+                          isActive ? 'text-white font-bold drop-shadow-xs' : 'text-stone-100'
+                        } ${fontClass}`}
+                      >
+                        {renderHighlightedText(word)}
+                      </span>
+
+                      {/* Tier 3 (BOTTOM): Gloss / Meaning in student's native language */}
+                      {cleanGloss && (
+                        <span
+                          title={cleanGloss}
+                          className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/line:text-stone-200 font-normal leading-tight mt-1 max-w-[120px] truncate text-center select-text"
+                        >
+                          {cleanGloss}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
         ) : (
           /* Normal Subtitle View Mode (Traditional Subtitles) */
           <p

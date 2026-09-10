@@ -566,11 +566,17 @@ export async function handleBatchGloss(req, res) {
 const activeModel = getSanitizedGroqModel();
 
     if (effectiveApiKey) {
-      console.log(`Analyzing batch gloss with Groq (${activeModel}) for ${lines.length} lines (lang: ${targetLang} -> ${nativeLang})`);
+      const hasSpecificUnknowns = lines.some(l => Array.isArray(l.unknownTokens) && l.unknownTokens.length > 0);
+      const totalUnknownTokens = lines.reduce((acc, l) => acc + (Array.isArray(l.unknownTokens) ? l.unknownTokens.length : (Array.isArray(l.words) ? l.words.length : 0)), 0);
+      console.log(`Analyzing batch gloss with Groq (${activeModel}) for ${lines.length} lines (lang: ${targetLang} -> ${nativeLang}) | Total tokens to resolve: ${totalUnknownTokens} (hybrid: ${hasSpecificUnknowns})`);
+
       const linesFormatted = lines
         .map((l, i) => {
           const id = l.id || `line_${i + 1}`;
           const text = (l.text || '').trim();
+          if (Array.isArray(l.unknownTokens) && l.unknownTokens.length > 0) {
+            return `[ID: ${id}] Sentence Context: "${text}" | ONLY generate tokens for these unknown words: [${l.unknownTokens.map(w => `"${w}"`).join(', ')}]`;
+          }
           const wordsStr = Array.isArray(l.words) && l.words.length > 0
             ? ` | Pre-segmented words: [${l.words.map(w => `"${w}"`).join(', ')}]`
             : '';
@@ -578,24 +584,21 @@ const activeModel = getSanitizedGroqModel();
         })
         .join('\n');
 
-      const prompt = `You are a master linguistic professor and vocabulary glossing engine.
+      const prompt = `You are a master multilingual linguistic professor and vocabulary glossing engine.
 Analyze each subtitle line in language "${targetLang}" and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLang}".
 
 CRITICAL REQUIREMENTS:
-- PRESERVE PRE-SEGMENTED WORDS: You MUST preserve the exact pre-segmented word units. DO NOT break multi-character words into individual characters! For example:
-  * "欢迎" must remain a single unit "欢迎"
-  * "收听" must remain a single unit "收听"
-  * "今天" must remain a single unit "今天"
-  * "写给" must remain a single unit "写给"
-  * "自己" must remain a single unit "自己"
-- COMPLETE GLOSSING: You MUST provide an accurate gloss for EVERY SINGLE substantive word in each line. Do NOT skip any words!
-- For each token provide:
-  * "word": the exact word/compound in "${targetLang}"
-  * "pinyin": Pinyin with tone marks for Chinese (e.g. "huānyíng", "shōutīng", "jīntiān", "zìjǐ", "de"), or transliteration for Arabic/Russian, or null for Latin scripts.
-  * "gloss": accurate, direct, concise definition/translation of this specific word in "${nativeLang}" (e.g. "bienvenido", "escuchar", "hoy", "uno mismo", "de", "carta"). DO NOT output the whole sentence as the gloss!
+${hasSpecificUnknowns ? `- HYBRID CONTEXTUAL GLOSSING:
+  * For lines with "ONLY generate tokens for these unknown words", analyze the full sentence context to understand the exact contextual meaning, but ONLY output tokens and glosses for the requested unknown words!
+  * Do NOT generate tokens for words outside the unknown list. This saves tokens and preserves local dictionary resolutions.` : `- PRESERVE PRE-SEGMENTED WORDS: You MUST preserve the exact pre-segmented word units. DO NOT break multi-character words into individual characters!
+  * Complete glossing: Provide an accurate gloss for all substantive words.`}
+- LANGUAGE-SPECIFIC TRANSLITERATION RULES:
+  * For Polish (targetLang: 'pl') or Latin scripts: STRICTLY NO TRANSLITERATION! Always set "pinyin": null and "translit": null. Only output the Polish word and Spanish gloss.
+  * For Chinese (targetLang: 'zh'): Provide tone-marked Pinyin in "pinyin" (e.g. "huānyíng", "jīntiān", "de") and direct Spanish meaning in "gloss".
+  * For Arabic (targetLang: 'ar'): Provide phonetic Latin transliteration in "translit" (e.g. "marḥaban", "kayfa", "ḥāluka") and direct Spanish meaning in "gloss".
 - Omit punctuation marks or give them null gloss.
 - EXACT IDS: You MUST preserve and return the EXACT same line ID string for each line as provided in the input (e.g. "srt_1", "srt_2").
-- RETURN ALL LINES: You MUST return all ${lines.length} requested lines matching IDs [${lines.map(l => `"${l.id}"`).join(', ')}]. Do NOT omit any line!
+- RETURN ALL LINES: You MUST return all ${lines.length} requested lines matching IDs [${lines.map(l => `"${l.id}"`).join(', ')}].
 
 Subtitle lines to process:
 ${linesFormatted}
@@ -609,6 +612,7 @@ Return STRICTLY valid JSON with no markdown formatting:
         {
           "word": "string (exact word unit)",
           "pinyin": "string with tones or null",
+          "translit": "string with phonetic transliteration or null",
           "gloss": "string (direct concise meaning in ${nativeLang})"
         }
       ]
@@ -650,7 +654,7 @@ Return STRICTLY valid JSON with no markdown formatting:
           const parsed = cleanAndParseJSON(rawText);
           if (parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0) {
             const requestedIds = new Set(lines.map(l => String(l.id)));
-            const validLines = parsed.lines.filter(l => l && l.id && Array.isArray(l.tokens) && l.tokens.length > 0);
+            const validLines = parsed.lines.filter(l => l && l.id && Array.isArray(l.tokens));
             const returnedIds = new Set(validLines.map(l => String(l.id)));
             const missingIds = [...requestedIds].filter(id => !returnedIds.has(id));
 

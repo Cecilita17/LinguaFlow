@@ -10,7 +10,8 @@ export function Transcript({
   fontSize = 'base',
   showTimestamps = true,
   searchQuery = '',
-  interlinearMode = true
+  interlinearMode = true,
+  targetLang = 'zh'
 }) {
   const containerRef = useRef(null);
   const activeLineRef = useRef(null);
@@ -125,6 +126,7 @@ export function Transcript({
               showTimestamps={showTimestamps}
               searchQuery={searchQuery}
               interlinearMode={interlinearMode}
+              targetLang={targetLang}
             />
           </div>
         );
