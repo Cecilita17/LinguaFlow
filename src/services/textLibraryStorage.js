@@ -219,6 +219,21 @@ export async function deleteTextDocument(id) {
   if (!id) return false;
   memoryStore.delete(id);
 
+  // If the deleted document matches the active draft in localStorage, clean active draft
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = localStorage.getItem('linguaflow_active_text_doc_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.id === id) {
+          localStorage.removeItem('linguaflow_active_text_doc_v1');
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[TextLibraryStorage] Error checking active draft during delete:', e);
+  }
+
   const db = await openDatabase();
   if (!db) return true;
 
@@ -275,8 +290,9 @@ export async function clearTextLibrary() {
 }
 
 /**
- * Migrates legacy localStorage drafts or library documents into IndexedDB.
+ * Migrates legacy localStorage library documents into IndexedDB.
  * Guarantees zero data loss for existing users.
+ * Removes legacy key from localStorage once successfully verified to prevent dual truth.
  * 
  * @returns {Promise<number>} Number of migrated documents
  */
@@ -286,32 +302,62 @@ export async function migrateFromLocalStorage() {
 
   try {
     // 1. Check legacy text library
-    const legacyLibRaw = localStorage.getItem('linguaflow_text_library_v1');
+    const legacyKey = 'linguaflow_text_library_v1';
+    const legacyLibRaw = localStorage.getItem(legacyKey);
     if (legacyLibRaw) {
-      const parsed = JSON.parse(legacyLibRaw);
-      if (Array.isArray(parsed)) {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(legacyLibRaw);
+      } catch (err) {
+        console.warn('[TextLibraryStorage] Corrupted legacy library JSON:', err);
+      }
+
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        let allSuccess = true;
         for (const doc of parsed) {
-          if (doc && doc.id) {
-            const existing = await getTextDocumentById(doc.id);
-            if (!existing) {
-              await saveTextDocument(doc);
-              migratedCount++;
+          if (doc && typeof doc === 'object' && doc.id) {
+            try {
+              const existing = await getTextDocumentById(doc.id);
+              if (!existing) {
+                await saveTextDocument(doc);
+                const verified = await getTextDocumentById(doc.id);
+                if (verified) {
+                  migratedCount++;
+                } else {
+                  allSuccess = false;
+                }
+              }
+            } catch (err) {
+              console.warn('[TextLibraryStorage] Failed migrating doc:', doc.id, err);
+              allSuccess = false;
             }
           }
         }
+        // Once verified, remove legacy localStorage key so IndexedDB is the sole source of truth!
+        if (allSuccess) {
+          localStorage.removeItem(legacyKey);
+        }
+      } else {
+        localStorage.removeItem(legacyKey);
       }
     }
 
-    // 2. Check active draft
-    const draftRaw = localStorage.getItem('linguaflow_active_text_doc_v1');
+    // 2. Ensure active draft is also backed up in IndexedDB if not already present
+    // Note: linguaflow_active_text_doc_v1 is NOT removed from localStorage, as it is the active working draft.
+    const activeDraftKey = 'linguaflow_active_text_doc_v1';
+    const draftRaw = localStorage.getItem(activeDraftKey);
     if (draftRaw) {
-      const parsedDraft = JSON.parse(draftRaw);
-      if (parsedDraft && parsedDraft.id) {
-        const existing = await getTextDocumentById(parsedDraft.id);
-        if (!existing) {
-          await saveTextDocument(parsedDraft);
-          migratedCount++;
+      try {
+        const parsedDraft = JSON.parse(draftRaw);
+        if (parsedDraft && typeof parsedDraft === 'object' && parsedDraft.id) {
+          const existing = await getTextDocumentById(parsedDraft.id);
+          if (!existing) {
+            await saveTextDocument(parsedDraft);
+            migratedCount++;
+          }
         }
+      } catch (draftErr) {
+        console.warn('[TextLibraryStorage] Error syncing active draft to IndexedDB:', draftErr);
       }
     }
   } catch (err) {

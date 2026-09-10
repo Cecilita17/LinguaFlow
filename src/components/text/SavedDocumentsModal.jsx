@@ -14,10 +14,6 @@ import {
   getAllTextDocuments,
   deleteTextDocument
 } from '../../services/textLibraryStorage.js';
-import {
-  getAllDocuments,
-  deleteDocument
-} from '../../services/textDocumentService.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 const LANGUAGE_META = {
@@ -52,11 +48,8 @@ export function SavedDocumentsModal({
       const items = await getAllTextDocuments();
       setDocuments(items);
     } catch (e) {
-      console.warn('Error loading saved text documents from IndexedDB:', e);
-      try {
-        const fallback = getAllDocuments();
-        setDocuments(fallback);
-      } catch (err) {}
+      console.warn('[SavedDocumentsModal] Error loading saved text documents from IndexedDB:', e);
+      setDocuments([]);
     } finally {
       setLoading(false);
     }
@@ -75,9 +68,11 @@ export function SavedDocumentsModal({
     e.stopPropagation();
     if (deleteConfirmId === id) {
       await deleteTextDocument(id);
-      deleteDocument(id);
       setDeleteConfirmId(null);
       await loadDocuments();
+      if (currentDocumentId === id && onNewDocument) {
+        onNewDocument();
+      }
     } else {
       setDeleteConfirmId(id);
       setTimeout(() => {

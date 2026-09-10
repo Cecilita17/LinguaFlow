@@ -27,10 +27,9 @@ export {
 };
 
 export const ACTIVE_DOC_STORAGE_KEY = 'linguaflow_active_text_doc_v1';
-export const LIBRARY_DOCS_STORAGE_KEY = 'linguaflow_text_library_v1';
+export const LIBRARY_DOCS_STORAGE_KEY = 'linguaflow_text_library_v1'; // Legacy key for migration purposes only
 
-// In-memory fallback if localStorage is unavailable or disabled
-const memoryDocStore = new Map();
+// In-memory fallback for active working draft
 let memoryActiveDraft = null;
 
 /**
@@ -353,147 +352,57 @@ export function createTextDocument({
 }
 
 /**
- * Internal helper to read the library collection from localStorage with memory fallback.
+ * Retrieves all saved text documents from IndexedDB.
+ * Delegates directly to textLibraryStorage.js (Single Source of Truth).
  * 
- * @returns {Array<object>}
+ * @returns {Promise<Array<object>>}
  */
-function getStorageLibrary() {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = localStorage.getItem(LIBRARY_DOCS_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const list = parsed.map(normalizeDocument).filter(Boolean);
-          list.forEach(doc => memoryDocStore.set(doc.id, doc));
-          return list;
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to read text document library from localStorage:', e);
-  }
-  return Array.from(memoryDocStore.values());
+export async function getAllDocuments() {
+  return getAllTextDocuments();
 }
 
 /**
- * Internal helper to persist the library collection to localStorage and memory.
- * 
- * @param {Array<object>} docs
- */
-function setStorageLibrary(docs) {
-  const normalizedDocs = (Array.isArray(docs) ? docs : []).map(normalizeDocument).filter(Boolean);
-  memoryDocStore.clear();
-  normalizedDocs.forEach(d => memoryDocStore.set(d.id, d));
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem(LIBRARY_DOCS_STORAGE_KEY, JSON.stringify(normalizedDocs));
-    }
-  } catch (e) {
-    console.warn('Failed to write text document library to localStorage:', e);
-  }
-}
-
-/**
- * Retrieves all saved text documents, sorted newest first by updatedAt.
- * 
- * @returns {Array<object>}
- */
-export function getAllDocuments() {
-  const docs = getStorageLibrary();
-  return docs.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-}
-
-/**
- * Retrieves a single document by its unique id.
+ * Retrieves a single document by its unique id from IndexedDB.
+ * Delegates directly to textLibraryStorage.js.
  * 
  * @param {string} id
- * @returns {object|null}
+ * @returns {Promise<object|null>}
  */
-export function getDocumentById(id) {
-  if (!id) return null;
-  const docs = getStorageLibrary();
-  return docs.find(d => d.id === id) || memoryDocStore.get(id) || null;
+export async function getDocumentById(id) {
+  return getTextDocumentById(id);
 }
 
 /**
- * Saves or updates a document in persistent storage and marks active draft.
- * Preserves stable ID and createdAt, updates updatedAt, and syncs languageStates.
+ * Saves or updates a document in the persistent IndexedDB library.
+ * Delegates directly to textLibraryStorage.js and updates active draft in localStorage.
  * 
  * @param {object} doc
- * @returns {object} Saved normalized document
+ * @returns {Promise<object>} Saved normalized document
  */
-export function saveDocument(doc) {
+export async function saveDocument(doc) {
   if (!doc || typeof doc !== 'object') return null;
-  const now = new Date().toISOString();
-  const existing = doc.id ? getDocumentById(doc.id) : null;
-
-  const targetLang = doc.targetLang || 'zh';
-  const effectiveParagraphs = Array.isArray(doc.paragraphs) ? doc.paragraphs : [];
-
-  const existingStates = (doc.languageStates && typeof doc.languageStates === 'object')
-    ? { ...doc.languageStates }
-    : (existing?.languageStates ? { ...existing.languageStates } : {});
-
-  existingStates[targetLang] = {
-    targetLang,
-    paragraphs: effectiveParagraphs,
-    updatedAt: now
-  };
-
-  const toSave = normalizeDocument({
-    ...doc,
-    createdAt: existing?.createdAt || doc.createdAt || now,
-    updatedAt: now,
-    languageStates: existingStates
-  });
-
-  const docs = getStorageLibrary();
-  const idx = docs.findIndex(d => d.id === toSave.id);
-  if (idx >= 0) {
-    docs[idx] = toSave;
-  } else {
-    docs.unshift(toSave);
+  const saved = await saveTextDocument(doc);
+  if (saved) {
+    saveActiveDocumentDraft(saved);
   }
-
-  setStorageLibrary(docs);
-  saveActiveDocumentDraft(toSave);
-
-  // Sync to IndexedDB persistently
-  try {
-    saveTextDocument(toSave).catch(e => console.warn('[TextDocumentService] IndexedDB save notice:', e));
-  } catch (e) {}
-
-  return toSave;
+  return saved;
 }
 
 /**
- * Deletes a document by id from storage. If it matches the active draft,
- * the draft is cleared as well.
+ * Deletes a document by id from IndexedDB. If it matches the active draft,
+ * the draft is cleared from localStorage as well.
  * 
  * @param {string} id
- * @returns {boolean}
+ * @returns {Promise<boolean>}
  */
-export function deleteDocument(id) {
+export async function deleteDocument(id) {
   if (!id) return false;
-  const docs = getStorageLibrary();
-  const filtered = docs.filter(d => d.id !== id);
-  setStorageLibrary(filtered);
-  memoryDocStore.delete(id);
-
-  // Sync deletion to IndexedDB
-  try {
-    deleteTextDocument(id).catch(e => console.warn('[TextDocumentService] IndexedDB delete notice:', e));
-  } catch (e) {}
-
-  try {
-    const activeDraft = loadActiveDocumentDraft();
-    if (activeDraft && activeDraft.id === id) {
-      clearActiveDocumentDraft();
-    }
-  } catch (e) {}
-
-  return true;
+  const res = await deleteTextDocument(id);
+  const activeDraft = loadActiveDocumentDraft();
+  if (activeDraft && activeDraft.id === id) {
+    clearActiveDocumentDraft();
+  }
+  return res;
 }
 
 /**
@@ -527,7 +436,6 @@ export function saveActiveDocumentDraft(doc) {
 
 /**
  * Load active document draft from localStorage (with in-memory fallback).
- * Gracefully migrates legacy drafts to library.
  * 
  * @returns {object|null}
  */
@@ -541,12 +449,6 @@ export function loadActiveDocumentDraft() {
           const normalized = normalizeDocument(parsed);
           if (normalized && normalized.id) {
             memoryActiveDraft = normalized;
-            // Ensure library also has this draft
-            const docs = getStorageLibrary();
-            if (!docs.some(d => d.id === normalized.id)) {
-              docs.unshift(normalized);
-              setStorageLibrary(docs);
-            }
           }
           return normalized;
         }

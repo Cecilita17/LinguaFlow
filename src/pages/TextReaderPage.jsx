@@ -25,8 +25,6 @@ import {
   splitTextIntoParagraphs,
   createTextDocument,
   saveDocument,
-  getAllDocuments,
-  deleteDocument,
   saveActiveDocumentDraft,
   loadActiveDocumentDraft,
   clearActiveDocumentDraft
@@ -64,7 +62,7 @@ export function TextReaderPage({
 
   // Saved documents library modal
   const [showSavedModal, setShowSavedModal] = useState(false);
-  const [savedDocsCount, setSavedDocsCount] = useState(() => getAllDocuments().length);
+  const [savedDocsCount, setSavedDocsCount] = useState(0);
 
 
   // Audio TTS states
@@ -134,7 +132,7 @@ export function TextReaderPage({
   }, []);
 
   // Change target language safely without silently deleting user manual glosses or prior language states
-  const handleLanguageChange = useCallback((newLang) => {
+  const handleLanguageChange = useCallback(async (newLang) => {
     if (!newLang) return;
 
     if (document && !isEditing) {
@@ -161,9 +159,9 @@ export function TextReaderPage({
           paragraphs: currentStates[newLang].paragraphs,
           languageStates: currentStates
         };
-        const saved = saveDocument(restoredDoc);
+        const saved = await saveDocument(restoredDoc);
         setDocument(saved);
-        setSavedDocsCount(getAllDocuments().length);
+        refreshLibraryCount();
         if (setTargetLang) setTargetLang(newLang);
         return;
       }
@@ -199,43 +197,27 @@ export function TextReaderPage({
         }
       });
 
-      // Retokenize for new language
-      const retokenized = splitTextIntoParagraphs(document.rawText, newLang);
+      // Split and tokenize for the new language
+      const freshParagraphs = splitTextIntoParagraphs(document.rawText, newLang);
 
-      // Remap preserved manual glosses to matching tokens
-      const preservedParagraphs = retokenized.map((p, pIdx) => {
-        const oldPara = document.paragraphs[pIdx];
-        const oldParaMap = new Map();
-        if (oldPara && Array.isArray(oldPara.tokens)) {
-          oldPara.tokens.forEach(tok => {
-            if (tok.glossSource === 'manual' && tok.gloss) {
-              const w = (tok.word || tok.text || '').trim();
-              if (w) {
-                oldParaMap.set(w, tok.gloss);
-                oldParaMap.set(w.toLowerCase(), tok.gloss);
-              }
-            }
-          });
-        }
-
-        const remappedTokens = p.tokens.map(tok => {
-          if (tok.isPunctuation) return tok;
+      // Restore matching manual glosses onto fresh paragraphs
+      const preservedParagraphs = freshParagraphs.map(p => {
+        if (!Array.isArray(p.tokens)) return p;
+        let modified = false;
+        const newTokens = p.tokens.map(tok => {
           const w = (tok.word || tok.text || '').trim();
-          const preserved = oldParaMap.get(w) || oldParaMap.get(w.toLowerCase()) || globalManualMap.get(w) || globalManualMap.get(w.toLowerCase());
-          if (preserved) {
+          if (w && (globalManualMap.has(w) || globalManualMap.has(w.toLowerCase()))) {
+            const preservedGloss = globalManualMap.get(w) || globalManualMap.get(w.toLowerCase());
+            modified = true;
             return {
               ...tok,
-              gloss: preserved,
+              gloss: preservedGloss,
               glossSource: 'manual'
             };
           }
           return tok;
         });
-
-        return {
-          ...p,
-          tokens: remappedTokens
-        };
+        return modified ? { ...p, tokens: newTokens } : p;
       });
 
       currentStates[newLang] = {
@@ -250,14 +232,14 @@ export function TextReaderPage({
         paragraphs: preservedParagraphs,
         languageStates: currentStates
       };
-      const saved = saveDocument(updatedDoc);
+      const saved = await saveDocument(updatedDoc);
       setDocument(saved);
-      setSavedDocsCount(getAllDocuments().length);
+      refreshLibraryCount();
       if (setTargetLang) setTargetLang(newLang);
     } else {
       if (setTargetLang) setTargetLang(newLang);
     }
-  }, [document, isEditing, setTargetLang]);
+  }, [document, isEditing, setTargetLang, refreshLibraryCount]);
 
   // Handle single-paragraph TTS playback
   const handlePlayParagraph = useCallback((paragraph) => {
@@ -322,11 +304,12 @@ export function TextReaderPage({
         ...prev,
         paragraphs: nextParagraphs
       };
-      const saved = saveDocument(nextDoc);
-      setSavedDocsCount(getAllDocuments().length);
-      return saved;
+      saveDocument(nextDoc).then(() => {
+        refreshLibraryCount();
+      }).catch(err => console.warn('Error saving manual glosses:', err));
+      return nextDoc;
     });
-  }, []);
+  }, [refreshLibraryCount]);
 
   // Trigger background AI glossing
   const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
@@ -351,8 +334,8 @@ export function TextReaderPage({
             ...prev,
             paragraphs: updatedParagraphs
           };
-          const saved = saveDocument(nextDoc);
-          return saved;
+          saveDocument(nextDoc).catch(err => console.warn('Error saving glossing update:', err));
+          return nextDoc;
         });
       },
       onProgress: (prog) => {
@@ -391,7 +374,7 @@ export function TextReaderPage({
   };
 
   // Submit / Start reading parsed text
-  const handleStartReading = () => {
+  const handleStartReading = async () => {
     const raw = inputText.trim();
     if (!raw) return;
 
@@ -412,10 +395,10 @@ export function TextReaderPage({
       createdAt: isExistingDoc ? document.createdAt : null
     });
 
-    const saved = saveDocument(docToSave);
+    const saved = await saveDocument(docToSave);
     setDocument(saved);
     setIsEditing(false);
-    setSavedDocsCount(getAllDocuments().length);
+    refreshLibraryCount();
 
     // Only begin AI glossing if paragraphs have uncompleted tokens
     const alreadyComplete = effectiveParagraphs.every(p => isGlossComplete(p, targetLang));
