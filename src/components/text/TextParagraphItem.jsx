@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Square, AlertCircle, Languages, Loader2 } from 'lucide-react';
+import { Play, Square, AlertCircle, Languages, Loader2, Headphones } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
@@ -62,16 +62,21 @@ export function TextParagraphItem({
       className={`group/para relative p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl transition-all border select-text ${
         isPlaying
           ? 'bg-gradient-to-r from-rose-950/80 via-[#3a180e]/90 to-[#2c120a] border-rose-500/80 shadow-lg shadow-rose-950/40 ring-2 ring-rose-500/30 text-white'
-          : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border-[var(--border-primary)] hover:border-rose-500/50 shadow-sm shadow-black/5 dark:shadow-black/20 text-[var(--text-primary)]'
+          : isLastAudioPosition
+            ? `bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border-rose-500/60 dark:border-rose-500/50 shadow-md shadow-rose-950/10 ring-1 ring-rose-500/30 text-[var(--text-primary)] ${isRtl ? 'border-r-4 border-r-rose-500' : 'border-l-4 border-l-rose-500'}`
+            : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border-[var(--border-primary)] hover:border-rose-500/50 shadow-sm shadow-black/5 dark:shadow-black/20 text-[var(--text-primary)]'
       }`}
     >
-      {/* LAST AUDIO POSITION BOOKMARK — small dot in top-right corner */}
+      {/* LAST AUDIO POSITION BOOKMARK — Discreet, clearly visible accent */}
       {isLastAudioPosition && !isPlaying && (
-        <span
-          aria-label="Última posición de audio"
-          title="Último párrafo reproducido"
-          className="absolute top-3 right-3 w-2 h-2 rounded-full bg-rose-500/80 ring-2 ring-rose-500/20 dark:ring-rose-500/30 shadow-sm shadow-rose-600/40 pointer-events-none"
-        />
+        <div
+          aria-label="Último párrafo reproducido"
+          title="Último párrafo cuyo audio fue reproducido"
+          className={`absolute -top-2.5 ${isRtl ? 'left-4 sm:left-6' : 'right-4 sm:right-6'} z-10 px-2.5 py-0.5 rounded-full bg-[var(--surface-primary)] border border-rose-500/50 shadow-sm flex items-center gap-1.5 text-[10px] font-medium text-rose-600 dark:text-rose-400 select-none pointer-events-none`}
+        >
+          <Headphones className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+          <span>Último audio</span>
+        </div>
       )}
       <div
         className="flex items-start justify-between gap-2.5 sm:gap-3.5 w-full"

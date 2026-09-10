@@ -90,8 +90,25 @@ export async function saveTextDocument(rawDoc) {
     updatedAt: now
   };
 
+  // Safe preservation of lastAudioPosition:
+  // If rawDoc explicitly specifies lastAudioPosition, compare with existing to prevent race conditions.
+  // If rawDoc.lastAudioPosition is undefined, fall back to existing?.lastAudioPosition.
+  let effectiveLastAudioPosition = rawDoc.lastAudioPosition !== undefined
+    ? rawDoc.lastAudioPosition
+    : (existing?.lastAudioPosition || null);
+
+  // If both exist, keep the newer one based on updatedAt timestamp
+  if (existing?.lastAudioPosition && effectiveLastAudioPosition && effectiveLastAudioPosition !== existing.lastAudioPosition) {
+    const existingTime = existing.lastAudioPosition.updatedAt || 0;
+    const incomingTime = effectiveLastAudioPosition.updatedAt || 0;
+    if (existingTime > incomingTime) {
+      effectiveLastAudioPosition = existing.lastAudioPosition;
+    }
+  }
+
   const toSave = normalizeDocument({
     ...rawDoc,
+    lastAudioPosition: effectiveLastAudioPosition,
     createdAt: existing?.createdAt || rawDoc.createdAt || now,
     updatedAt: now,
     languageStates: existingStates

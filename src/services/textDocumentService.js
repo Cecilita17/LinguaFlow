@@ -309,6 +309,7 @@ export function createTextDocument({
   nativeLang = 'es',
   paragraphs = null,
   languageStates = null,
+  lastAudioPosition = null,
   createdAt = null
 }) {
   const now = new Date().toISOString();
@@ -347,6 +348,7 @@ export function createTextDocument({
     paragraphsCount: effectiveParagraphs.length,
     paragraphs: effectiveParagraphs,
     languageStates: initialStates,
+    lastAudioPosition: lastAudioPosition || null,
     createdAt: createdAt || now,
     updatedAt: now
   };

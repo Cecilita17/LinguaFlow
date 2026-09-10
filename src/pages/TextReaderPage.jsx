@@ -162,11 +162,21 @@ export function TextReaderPage({
     }
   }, []);
 
-  // On mount: run migration from legacy localStorage to IndexedDB and refresh count
+  // On mount: run migration from legacy localStorage to IndexedDB, refresh count, and schedule draft scroll restoration
   useEffect(() => {
     migrateFromLocalStorage().then(() => {
       refreshLibraryCount();
     }).catch(() => {});
+
+    // Restore scroll to last audio position on initial mount / app reload
+    const draft = loadActiveDocumentDraft();
+    if (draft && draft.lastAudioPosition?.paragraphId) {
+      const posId = draft.lastAudioPosition.paragraphId;
+      const exists = Array.isArray(draft.paragraphs) && draft.paragraphs.some(p => p.id === posId);
+      if (exists) {
+        setPendingScrollParagraphId(posId);
+      }
+    }
   }, [refreshLibraryCount]);
 
   // Save active document state whenever document changes (syncs draft + IndexedDB)
@@ -181,22 +191,46 @@ export function TextReaderPage({
     }
   }, [document, refreshLibraryCount]);
 
-  // Scroll to last audio position when a document is opened from library
-  // (pendingScrollParagraphId is set by handleSelectSavedDocument)
+  // Scroll restoration: smoothly scrolls the real overflow container to the last audio paragraph
   useEffect(() => {
     if (!pendingScrollParagraphId) return;
-    // Small delay to allow: modal close animation + React render of paragraphs
-    const timer = setTimeout(() => {
-      const el = window.document.querySelector(`[data-paragraph-id="${pendingScrollParagraphId}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    let cancelled = false;
+    let attempts = 0;
+    let timeoutId = null;
+
+    const performScroll = () => {
+      if (cancelled) return;
+      const targetId = pendingScrollParagraphId;
+      const container = scrollContainerRef.current;
+      const el = container?.querySelector(`[data-paragraph-id="${targetId}"]`)
+        || window.document.querySelector(`[data-paragraph-id="${targetId}"]`);
+
+      if (el && container) {
+        const containerRect = container.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const relativeTop = elRect.top - containerRect.top + container.scrollTop;
+        const targetScrollTop = Math.max(0, relativeTop - (container.clientHeight / 2) + (elRect.height / 2));
+
+        container.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth'
+        });
+
+        previousScrollTopRef.current = targetScrollTop;
+        setPendingScrollParagraphId(null);
+      } else if (attempts < 6) {
+        attempts++;
+        timeoutId = setTimeout(performScroll, 80);
+      } else {
+        setPendingScrollParagraphId(null);
       }
-      setPendingScrollParagraphId(null);
-      if (scrollContainerRef.current) {
-        previousScrollTopRef.current = scrollContainerRef.current.scrollTop;
-      }
-    }, 120);
-    return () => clearTimeout(timer);
+    };
+
+    timeoutId = setTimeout(performScroll, 100);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [pendingScrollParagraphId]);
 
   // Active document language (falls back to selected targetLang if editing/new)
@@ -338,18 +372,28 @@ export function TextReaderPage({
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
 
-    // Save last audio position immediately (before speak(), so it persists even if page closes)
+    // Save last audio position immediately (persists even if page closes or switches document)
     setLastAudioParagraphId(paragraph.id);
     setDocument(prev => {
       if (!prev) return prev;
-      return {
-        ...prev,
-        lastAudioPosition: {
-          paragraphId: paragraph.id,
-          paragraphIndex: (prev.paragraphs || []).findIndex(p => p.id === paragraph.id),
-          updatedAt: Date.now()
-        }
+      const posData = {
+        paragraphId: paragraph.id,
+        paragraphIndex: (prev.paragraphs || []).findIndex(p => p.id === paragraph.id),
+        updatedAt: Date.now()
       };
+      const updated = {
+        ...prev,
+        lastAudioPosition: posData
+      };
+      // Persist immediately to active draft in localStorage
+      saveActiveDocumentDraft(updated);
+      // Persist immediately to IndexedDB
+      if (updated.id) {
+        saveTextDocument(updated).then(() => {
+          refreshLibraryCount();
+        }).catch(err => console.warn('Failed to save lastAudioPosition to library:', err));
+      }
+      return updated;
     });
 
     const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
@@ -378,7 +422,7 @@ export function TextReaderPage({
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [targetLang]);
+  }, [activeDocLang, refreshLibraryCount]);
 
   const handleStopAudio = useCallback(() => {
     if (window.speechSynthesis) {
@@ -533,6 +577,19 @@ export function TextReaderPage({
       ? document.paragraphs
       : splitTextIntoParagraphs(raw, targetLang);
 
+    // Validate if lastAudioPosition still points to an existing paragraph after edit
+    let preservedLastAudioPosition = null;
+    if (isExistingDoc && document?.lastAudioPosition?.paragraphId) {
+      const targetId = document.lastAudioPosition.paragraphId;
+      const targetIdx = effectiveParagraphs.findIndex(p => p.id === targetId);
+      if (targetIdx !== -1) {
+        preservedLastAudioPosition = {
+          ...document.lastAudioPosition,
+          paragraphIndex: targetIdx
+        };
+      }
+    }
+
     const docToSave = createTextDocument({
       id: isExistingDoc ? document.id : null,
       title: inputTitle.trim(),
@@ -541,11 +598,13 @@ export function TextReaderPage({
       nativeLang,
       paragraphs: effectiveParagraphs,
       languageStates: isExistingDoc ? document.languageStates : null,
+      lastAudioPosition: preservedLastAudioPosition,
       createdAt: isExistingDoc ? document.createdAt : null
     });
 
     const saved = await saveDocument(docToSave);
     setDocument(saved);
+    setLastAudioParagraphId(preservedLastAudioPosition ? preservedLastAudioPosition.paragraphId : null);
     setIsEditing(false);
     setIsReaderControlsHidden(false);
     previousScrollTopRef.current = 0;
@@ -587,12 +646,21 @@ export function TextReaderPage({
     previousScrollTopRef.current = 0;
     saveActiveDocumentDraft(doc);
 
-    // Sync last audio position bookmark from the loaded document
-    const savedPosId = doc.lastAudioPosition?.paragraphId || null;
-    setLastAudioParagraphId(savedPosId);
+    // Sync last audio position bookmark from the loaded document (validate existence)
+    const savedPos = doc.lastAudioPosition;
+    const isValidPos = Boolean(
+      savedPos?.paragraphId &&
+      Array.isArray(doc.paragraphs) &&
+      doc.paragraphs.some(p => p.id === savedPos.paragraphId)
+    );
+
+    const validPosId = isValidPos ? savedPos.paragraphId : null;
+    setLastAudioParagraphId(validPosId);
     // Schedule one-time scroll to that paragraph (fires after render + modal close)
-    if (savedPosId) {
-      setPendingScrollParagraphId(savedPosId);
+    if (validPosId) {
+      setPendingScrollParagraphId(validPosId);
+    } else {
+      setPendingScrollParagraphId(null);
     }
 
     if (setTargetLang && doc.targetLang) {
@@ -694,6 +762,10 @@ export function TextReaderPage({
     }
     setIsAutoGlossing(false);
     setLoadingParagraphIds(new Set());
+    setPlayingParagraphId(null);
+    setAudioErrorId(null);
+    setLastAudioParagraphId(null);
+    setPendingScrollParagraphId(null);
     clearActiveDocumentDraft();
     setDocument(null);
     setInputText('');
