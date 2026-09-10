@@ -73,17 +73,9 @@ export function Header({
               <Sparkles className="w-5 h-5 fill-white text-white" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="font-bold text-white text-[17px] leading-tight tracking-wide group-hover:text-rose-200 transition-colors">
-                  LinguaFlow
-                </h1>
-                <span className="text-[10px] uppercase tracking-wider font-bold bg-rose-950/70 text-rose-300 px-2 py-0.5 rounded-full border border-rose-800/80">
-                  {t('ai_tutor_badge')}
-                </span>
-              </div>
-              <p className="text-[11px] text-rose-200/60 leading-tight mt-0.5">
-                {t('app_subtitle')}
-              </p>
+              <h1 className="font-bold text-white text-[17px] leading-tight tracking-wide group-hover:text-rose-200 transition-colors">
+                LinguaFlow
+              </h1>
             </div>
           </div>
 
@@ -127,15 +119,9 @@ export function Header({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="font-bold text-white text-lg leading-tight tracking-wide group-hover:text-rose-200 transition-colors">
-                  LinguaFlow
-                </h1>
-                <span className="text-[10px] uppercase tracking-wider font-bold bg-rose-950/80 text-rose-300 px-2.5 py-0.5 rounded-full border border-rose-800/80">
-                  {t('ai_tutor_badge')}
-                </span>
-              </div>
-              <p className="text-xs text-rose-200/70">{t('app_subtitle')}</p>
+              <h1 className="font-bold text-white text-lg leading-tight tracking-wide group-hover:text-rose-200 transition-colors">
+                LinguaFlow
+              </h1>
             </div>
           </div>
 
@@ -180,13 +166,14 @@ export function Header({
           </div>
 
           {/* Aesthetic Language Selectors */}
-          <div className="flex items-center space-x-1.5 bg-[#1e0f0a]/95 p-1 rounded-2xl border border-[#482519] shadow-md text-xs">
+          <div
+            className="flex items-center space-x-1.5 p-1 rounded-2xl border border-[#482519] shadow-md text-xs bg-[#180904]"
+            style={{ backgroundColor: '#180904' }}
+          >
             <LanguageSelectDropdown
               value={targetLang}
               onChange={setTargetLang}
               options={languages}
-              label={t('practice_label')}
-              icon={<Languages className="w-4 h-4 text-rose-300" />}
               variant="header"
               align="left"
             />
@@ -197,7 +184,6 @@ export function Header({
               value={nativeLang}
               onChange={setNativeLang}
               options={NATIVE_LANG_OPTIONS}
-              label={t('native_lang_label')}
               variant="header"
               align="right"
             />

@@ -100,17 +100,23 @@ export function LanguageSelectDropdown({
         aria-label={label ? `${label}: ${currentName}` : currentName}
         className={`group flex items-center transition-all duration-200 outline-none select-none cursor-pointer ${
           variant === 'header'
-            ? 'space-x-2 bg-[#33170e] hover:bg-[#431f13] text-stone-100 px-2.5 py-1.5 rounded-xl border border-[#522618] hover:border-rose-500/60 shadow-xs active:scale-[0.98]'
+            ? 'space-x-2 bg-[#250e08] hover:bg-[#35150b] text-stone-100 px-2.5 py-1.5 rounded-xl border border-[#4d2015] hover:border-rose-500/60 shadow-sm active:scale-[0.98]'
             : variant === 'card'
-            ? 'w-full justify-between bg-gradient-to-r from-[#22100a] to-[#2c140d] hover:from-[#2a130c] hover:to-[#361810] text-stone-100 p-3 rounded-2xl border border-[#441e14] hover:border-rose-500/60 shadow-sm active:scale-[0.99]'
+            ? 'w-full justify-between bg-[#220d07] hover:bg-[#2c120a] text-stone-100 p-3 rounded-2xl border border-[#441e14] hover:border-rose-500/60 shadow-sm active:scale-[0.99]'
             : variant === 'pill'
-            ? 'space-x-2 bg-[#36160d] hover:bg-[#481f13] text-stone-100 px-3 py-1.5 rounded-xl border border-[#542416] hover:border-rose-500/60 shadow-xs'
-            : 'space-x-2 bg-[#2b140d] hover:bg-[#381a11] text-stone-100 px-2.5 py-1 rounded-lg border border-[#482015]'
+            ? 'space-x-2 bg-[#2a1009] hover:bg-[#38150c] text-stone-100 px-3 py-1.5 rounded-xl border border-[#4d2015] hover:border-rose-500/60 shadow-xs'
+            : 'space-x-2 bg-[#240e08] hover:bg-[#32140b] text-stone-100 px-2.5 py-1 rounded-lg border border-[#441c12]'
         }`}
+        style={{
+          backgroundColor: variant === 'card' ? '#220d07' : '#250e08'
+        }}
       >
         {variant === 'card' ? (
           <div className="flex items-center space-x-3 text-left min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-2xl shadow-inner shrink-0 group-hover:scale-105 transition-transform">
+            <div
+              className="w-10 h-10 rounded-2xl border border-[#4a1f14] flex items-center justify-center text-2xl shadow-inner shrink-0 group-hover:scale-105 transition-transform"
+              style={{ backgroundColor: '#140603' }}
+            >
               <span>{currentFlag}</span>
             </div>
             <div className="min-w-0">
@@ -140,7 +146,10 @@ export function LanguageSelectDropdown({
             )}
 
             {/* Flag badge */}
-            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-black/30 border border-white/10 shadow-xs shrink-0 text-base leading-none">
+            <div
+              className="flex items-center justify-center w-6 h-6 rounded-md border border-[#4a1f14] shadow-xs shrink-0 text-base leading-none"
+              style={{ backgroundColor: '#140603' }}
+            >
               <span className="transform group-hover:scale-110 transition-transform">
                 {currentFlag}
               </span>
@@ -161,28 +170,26 @@ export function LanguageSelectDropdown({
         />
       </button>
 
-      {/* Aesthetic Glassmorphism Popover Menu */}
+      {/* Aesthetic Opaque Popover Menu */}
       {isOpen && (
         <div
           role="listbox"
           className={`absolute mt-2 py-1.5 z-50 ${
             variant === 'card' ? 'w-full left-0' : (align === 'right' ? 'w-64 right-0' : 'w-64 left-0')
-          } max-h-80 overflow-y-auto rounded-2xl bg-[#1c0c07]/98 backdrop-blur-xl border border-[#4d2318] shadow-2xl shadow-black/80 animate-fade-in`}
+          } max-h-80 overflow-y-auto rounded-2xl bg-[#180a05] border border-[#522618] shadow-2xl shadow-black animate-fade-in`}
           style={{
+            backgroundColor: '#180a05',
             scrollbarWidth: 'thin',
             scrollbarColor: '#4d2318 transparent'
           }}
         >
           {/* Header in Popover */}
-          <div className="px-3 py-1.5 mb-1 border-b border-[#3d1a10] flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-rose-300/60">
+          <div className="px-3 py-1.5 mb-1 border-b border-[#3d1a10] flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-rose-300/70">
             <span>{label ? `Elegir ${label}` : 'Seleccionar idioma'}</span>
-            <span className="text-[10px] font-normal text-stone-400">
-              {normalizedOptions.length} disponibles
-            </span>
           </div>
 
           {/* Options list */}
-          <div className="px-1 space-y-0.5">
+          <div className="px-1.5 space-y-1">
             {normalizedOptions.map((opt) => {
               const isSelected = String(opt.code).toLowerCase() === String(value).toLowerCase();
               const flag = opt.flag || LANGUAGE_FLAGS[opt.code] || '🌐';
@@ -196,20 +203,32 @@ export function LanguageSelectDropdown({
                   role="option"
                   aria-selected={isSelected}
                   onClick={() => handleSelect(opt.code)}
-                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all duration-150 group cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all duration-150 group cursor-pointer border ${
                     isSelected
-                      ? 'bg-gradient-to-r from-rose-950/80 to-[#3b170e] border border-rose-500/50 text-white shadow-xs'
-                      : 'hover:bg-[#2e130b] text-stone-200 hover:text-white border border-transparent'
+                      ? 'border-rose-500/70 text-white shadow-sm'
+                      : 'border-[#38160d] hover:border-[#522618] text-stone-200 hover:text-white'
                   }`}
+                  style={{
+                    backgroundColor: isSelected ? '#42160d' : '#240f09'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = '#34150c';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = '#240f09';
+                  }}
                 >
                   <div className="flex items-center space-x-2.5 truncate">
                     {/* Flag badge */}
                     <div
                       className={`w-7 h-7 rounded-lg flex items-center justify-center text-lg shrink-0 border transition-transform group-hover:scale-110 shadow-xs ${
                         isSelected
-                          ? 'bg-rose-950/60 border-rose-500/40'
-                          : 'bg-black/35 border-white/5'
+                          ? 'border-rose-500/60'
+                          : 'border-[#421b12]'
                       }`}
+                      style={{
+                        backgroundColor: isSelected ? '#2b0d06' : '#140603'
+                      }}
                     >
                       <span className="leading-none">{flag}</span>
                     </div>
