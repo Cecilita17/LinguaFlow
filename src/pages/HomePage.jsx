@@ -7,36 +7,12 @@ import {
   CheckCircle2,
   ChevronDown
 } from 'lucide-react';
-
-const LANGUAGE_FLAGS = {
-  es: '🇪🇸',
-  en: '🇺🇸',
-  de: '🇩🇪',
-  nl: '🇳🇱',
-  pl: '🇵🇱',
-  ru: '🇷🇺',
-  fr: '🇫🇷',
-  it: '🇮🇹',
-  pt: '🇧🇷',
-  zh: '🇨🇳',
-  ja: '🇯🇵',
-  ko: '🇰🇷',
-  ar: '🇸🇦',
-  hi: '🇮🇳',
-  tr: '🇹🇷'
-};
-
-const NATIVE_LANG_OPTIONS = [
-  { code: 'es', name: 'Español' },
-  { code: 'en', name: 'Inglés (English)' },
-  { code: 'fr', name: 'Francés (Français)' },
-  { code: 'de', name: 'Alemán (Deutsch)' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'pt', name: 'Portugués' },
-  { code: 'pl', name: 'Polaco' },
-  { code: 'ru', name: 'Ruso' },
-  { code: 'zh', name: 'Chino' }
-];
+import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
+import {
+  LANGUAGE_FLAGS,
+  NATIVE_LANG_OPTIONS,
+  getLanguageMeta
+} from '../constants/languages.js';
 
 export default function HomePage({
   onSelectMode,
@@ -46,8 +22,11 @@ export default function HomePage({
   setNativeLang,
   languages = []
 }) {
-  const currentTargetName = languages.find((l) => l.code === targetLang)?.name || targetLang;
+  const currentTargetMeta = getLanguageMeta(targetLang);
+  const currentNativeMeta = getLanguageMeta(nativeLang);
+  const currentTargetName = currentTargetMeta.name || languages.find((l) => l.code === targetLang)?.name || targetLang;
   const currentNativeName =
+    currentNativeMeta.name ||
     NATIVE_LANG_OPTIONS.find((l) => l.code === nativeLang)?.name ||
     languages.find((l) => l.code === nativeLang)?.name ||
     nativeLang;
@@ -83,45 +62,21 @@ export default function HomePage({
 
           {/* Quick Language Selection Bar */}
           <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-3 p-2 rounded-2xl bg-[#26110a]/90 border border-[#482015] shadow-lg shadow-black/30 backdrop-blur-md">
-            {/* Target Lang */}
-            <div className="relative flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#36160d] border border-[#542416] hover:border-rose-500/50 transition-colors">
-              <span className="text-xs text-rose-200/70 font-medium">Practicando:</span>
-              <span className="text-base leading-none">{LANGUAGE_FLAGS[targetLang] || '🌐'}</span>
-              <span className="text-xs font-bold text-white">{currentTargetName}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-rose-300/70 ml-0.5 pointer-events-none" />
-              <select
-                value={targetLang}
-                onChange={(e) => setTargetLang && setTargetLang(e.target.value)}
-                aria-label="Idioma a practicar"
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-base"
-              >
-                {languages.map((l) => (
-                  <option key={l.code} value={l.code} className="bg-[#1a0c07] text-white">
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <LanguageSelectDropdown
+              value={targetLang}
+              onChange={(newLang) => setTargetLang && setTargetLang(newLang)}
+              options={languages}
+              label="Practicando"
+              variant="pill"
+            />
 
-            {/* Native Lang */}
-            <div className="relative flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#36160d] border border-[#542416] hover:border-rose-500/50 transition-colors">
-              <span className="text-xs text-rose-200/70 font-medium">Tu idioma:</span>
-              <span className="text-base leading-none">{LANGUAGE_FLAGS[nativeLang] || '🌐'}</span>
-              <span className="text-xs font-bold text-white">{currentNativeName}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-rose-300/70 ml-0.5 pointer-events-none" />
-              <select
-                value={nativeLang}
-                onChange={(e) => setNativeLang && setNativeLang(e.target.value)}
-                aria-label="Tu idioma nativo"
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-base"
-              >
-                {NATIVE_LANG_OPTIONS.map((l) => (
-                  <option key={l.code} value={l.code} className="bg-[#1a0c07] text-white">
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <LanguageSelectDropdown
+              value={nativeLang}
+              onChange={(newLang) => setNativeLang && setNativeLang(newLang)}
+              options={NATIVE_LANG_OPTIONS}
+              label="Tu idioma"
+              variant="pill"
+            />
           </div>
         </div>
 

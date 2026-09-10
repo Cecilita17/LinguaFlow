@@ -15,36 +15,13 @@ import {
   Youtube,
   Home
 } from 'lucide-react';
-
-const LANGUAGE_FLAGS = {
-  es: '🇪🇸',
-  en: '🇺🇸',
-  de: '🇩🇪',
-  nl: '🇳🇱',
-  pl: '🇵🇱',
-  ru: '🇷🇺',
-  fr: '🇫🇷',
-  it: '🇮🇹',
-  zh: '🇨🇳',
-  ar: '🇸🇦',
-  pt: '🇧🇷',
-  tr: '🇹🇷',
-  ja: '🇯🇵'
-};
-
-const NATIVE_LANG_OPTIONS = [
-  { code: 'es', name: 'Español' },
-  { code: 'en', name: 'English' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'nl', name: 'Nederlands' },
-  { code: 'ru', name: 'Русский' },
-  { code: 'pl', name: 'Polski' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'fr', name: 'Français' },
-  { code: 'zh', name: '中文' },
-  { code: 'ar', name: 'العربية' },
-  { code: 'pt', name: 'Português' }
-];
+import { LanguageSelectDropdown } from './LanguageSelectDropdown.jsx';
+import { LanguageModal } from './LanguageModal.jsx';
+import {
+  LANGUAGE_FLAGS,
+  NATIVE_LANG_OPTIONS,
+  getLanguageMeta
+} from '../constants/languages.js';
 
 export function Header({
   languages = [],
@@ -66,9 +43,13 @@ export function Header({
   setActiveTab
 }) {
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [languageModalConfig, setLanguageModalConfig] = useState({ isOpen: false, type: 'target' });
 
-  const currentTargetName = languages.find((l) => l.code === targetLang)?.name || targetLang;
+  const currentTargetMeta = getLanguageMeta(targetLang);
+  const currentNativeMeta = getLanguageMeta(nativeLang);
+  const currentTargetName = currentTargetMeta.name || languages.find((l) => l.code === targetLang)?.name || targetLang;
   const currentNativeName =
+    currentNativeMeta.name ||
     NATIVE_LANG_OPTIONS.find((l) => l.code === nativeLang)?.name ||
     languages.find((l) => l.code === nativeLang)?.name ||
     nativeLang;
@@ -107,24 +88,17 @@ export function Header({
           {/* Right: Circular Target Language Button + Hamburger Menu */}
           <div className="flex items-center space-x-2 shrink-0">
             {/* Circular Language Flag Button */}
-            <div className="relative flex items-center justify-center bg-[#2d140d] border border-[#482015] rounded-full pl-2 pr-1.5 py-1 shadow-xs hover:bg-[#381a11] transition-colors">
-              <span className="text-base leading-none select-none">
+            <button
+              type="button"
+              onClick={() => setLanguageModalConfig({ isOpen: true, type: 'target' })}
+              title={`Idioma a practicar: ${currentTargetName}. Toca para cambiar.`}
+              className="flex items-center justify-center bg-[#2d140d] hover:bg-[#3d1a10] border border-[#482015] hover:border-rose-500/60 rounded-full pl-2 pr-1.5 py-1 shadow-xs transition-all active:scale-95 cursor-pointer group"
+            >
+              <span className="text-base leading-none select-none group-hover:scale-110 transition-transform">
                 {LANGUAGE_FLAGS[targetLang] || '🌐'}
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-stone-300 ml-1 pointer-events-none" />
-              <select
-                value={targetLang}
-                onChange={(e) => setTargetLang(e.target.value)}
-                aria-label="Idioma a practicar"
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-base"
-              >
-                {languages.map((l) => (
-                  <option key={l.code} value={l.code} className="bg-[#1a0c07] text-white">
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <ChevronDown className="w-3.5 h-3.5 text-rose-300/80 ml-1 transition-transform group-hover:translate-y-0.5" />
+            </button>
 
             {/* Hamburger Button */}
             <button
@@ -204,48 +178,28 @@ export function Header({
             </button>
           </div>
 
-          {/* Language Selectors */}
-          <div className="flex items-center space-x-2 bg-[#1e0f0a]/90 p-1.5 rounded-xl border border-[#482519] text-xs">
-            <div className="flex items-center space-x-1 pl-1 text-rose-200/70">
-              <Languages className="w-4 h-4 text-rose-300" />
-              <span className="hidden sm:inline font-medium">Practicar:</span>
-            </div>
-            <select
+          {/* Aesthetic Language Selectors */}
+          <div className="flex items-center space-x-1.5 bg-[#1e0f0a]/95 p-1 rounded-2xl border border-[#482519] shadow-md text-xs">
+            <LanguageSelectDropdown
               value={targetLang}
-              onChange={(e) => setTargetLang(e.target.value)}
-              aria-label="Idioma a practicar"
-              className="bg-[#3b1e15] text-white font-semibold rounded-lg px-2 py-1 shadow-xs border border-[#5a2e20] outline-none focus:ring-2 focus:ring-rose-400"
-            >
-              {languages.map((l) => (
-                <option key={l.code} value={l.code} className="bg-[#2b160f] text-white">
-                  {l.name}
-                </option>
-              ))}
-            </select>
+              onChange={setTargetLang}
+              options={languages}
+              label="Practicar"
+              icon={<Languages className="w-4 h-4 text-rose-300" />}
+              variant="header"
+              align="left"
+            />
 
             <span className="text-[#5a2e20] font-light">|</span>
 
-            <div className="flex items-center space-x-1 text-rose-200/70">
-              <span className="hidden sm:inline font-medium">Tu idioma:</span>
-            </div>
-            <select
+            <LanguageSelectDropdown
               value={nativeLang}
-              onChange={(e) => setNativeLang(e.target.value)}
-              aria-label="Tu idioma nativo"
-              className="bg-[#3b1e15] text-white font-semibold rounded-lg px-2 py-1 shadow-xs border border-[#5a2e20] outline-none focus:ring-2 focus:ring-rose-400"
-            >
-              <option value="es" className="bg-[#2b160f] text-white">Español</option>
-              <option value="en" className="bg-[#2b160f] text-white">English</option>
-              <option value="de" className="bg-[#2b160f] text-white">Deutsch</option>
-              <option value="nl" className="bg-[#2b160f] text-white">Nederlands</option>
-              <option value="ru" className="bg-[#2b160f] text-white">Русский</option>
-              <option value="pl" className="bg-[#2b160f] text-white">Polski</option>
-              <option value="it" className="bg-[#2b160f] text-white">Italiano</option>
-              <option value="fr" className="bg-[#2b160f] text-white">Français</option>
-              <option value="zh" className="bg-[#2b160f] text-white">中文</option>
-              <option value="ar" className="bg-[#2b160f] text-white">العربية</option>
-              <option value="pt" className="bg-[#2b160f] text-white">Português</option>
-            </select>
+              onChange={setNativeLang}
+              options={NATIVE_LANG_OPTIONS}
+              label="Tu idioma"
+              variant="header"
+              align="right"
+            />
           </div>
 
           {/* Action Toggles */}
@@ -472,61 +426,79 @@ export function Header({
 
             {/* 2. Configuración de Idioma */}
             <div className="mt-5">
-              <h3 className="text-xs font-semibold text-rose-100/90 mb-1">
-                Configuración de Idioma
-              </h3>
-              <p className="text-[11px] text-stone-400 font-medium mb-2.5">
-                Idiomas de la App y Tutor
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-xs font-semibold text-rose-100/90 flex items-center space-x-1.5">
+                  <Languages className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Configuración de Idioma</span>
+                </h3>
+                <span className="text-[10px] text-rose-300/70 font-medium bg-rose-950/70 px-2 py-0.5 rounded-full border border-rose-800/60">
+                  Banderas & Estilo
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-400 font-medium mb-3">
+                Idiomas activos de la app y tutor IA
               </p>
 
-              {/* Tu Idioma */}
-              <div className="relative bg-[#200f0a] border border-[#3d190f] rounded-2xl p-3 flex items-center justify-between shadow-xs mb-2">
-                <div className="flex items-center space-x-3 pointer-events-none">
-                  <span className="text-xl leading-none">
-                    {LANGUAGE_FLAGS[nativeLang] || '🌐'}
-                  </span>
-                  <span className="text-xs font-medium text-stone-200">
-                    Tu Idioma ({currentNativeName})
-                  </span>
+              {/* Tu Idioma (Nativo) */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setLanguageModalConfig({ isOpen: true, type: 'native' })}
+                className="relative bg-gradient-to-r from-[#22100a] to-[#2c140d] hover:from-[#2a130c] hover:to-[#361810] border border-[#441e14] hover:border-rose-500/60 rounded-2xl p-3 flex items-center justify-between shadow-sm mb-2.5 cursor-pointer group transition-all active:scale-[0.99]"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-11 h-11 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+                    <span>{LANGUAGE_FLAGS[nativeLang] || '🌐'}</span>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-medium text-rose-200/70">
+                      Tu Idioma (Nativo)
+                    </div>
+                    <div className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors flex items-center space-x-1.5">
+                      <span>{currentNativeName}</span>
+                      {currentNativeMeta.nativeName && currentNativeMeta.nativeName !== currentNativeName && (
+                        <span className="text-[10px] text-rose-300/60 font-normal">
+                          · {currentNativeMeta.nativeName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <ChevronDown className="w-4 h-4 text-stone-400 pointer-events-none" />
-                <select
-                  value={nativeLang}
-                  onChange={(e) => setNativeLang(e.target.value)}
-                  aria-label="Tu idioma nativo"
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-base bg-[#200f0a] text-white"
-                >
-                  {NATIVE_LANG_OPTIONS.map((l) => (
-                    <option key={l.code} value={l.code} className="bg-[#1a0c07] text-white">
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center space-x-1.5 bg-[#170905] px-2.5 py-1.5 rounded-xl border border-[#441b11] group-hover:border-rose-500/40 text-[11px] text-rose-300 font-semibold shadow-xs">
+                  <span>Cambiar</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-rose-400" />
+                </div>
               </div>
 
-              {/* Idioma a Aprender */}
-              <div className="relative bg-[#200f0a] border border-[#3d190f] rounded-2xl p-3 flex items-center justify-between shadow-xs">
-                <div className="flex items-center space-x-3 pointer-events-none">
-                  <span className="text-xl leading-none">
-                    {LANGUAGE_FLAGS[targetLang] || '🌐'}
-                  </span>
-                  <span className="text-xs font-medium text-stone-200">
-                    Idioma a Aprender ({currentTargetName})
-                  </span>
+              {/* Idioma a Aprender (Target) */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setLanguageModalConfig({ isOpen: true, type: 'target' })}
+                className="relative bg-gradient-to-r from-[#22100a] to-[#2c140d] hover:from-[#2a130c] hover:to-[#361810] border border-[#441e14] hover:border-rose-500/60 rounded-2xl p-3 flex items-center justify-between shadow-sm cursor-pointer group transition-all active:scale-[0.99]"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-11 h-11 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+                    <span>{LANGUAGE_FLAGS[targetLang] || '🌐'}</span>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-medium text-rose-200/70">
+                      Idioma a Aprender (Tutor)
+                    </div>
+                    <div className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors flex items-center space-x-1.5">
+                      <span>{currentTargetName}</span>
+                      {currentTargetMeta.nativeName && currentTargetMeta.nativeName !== currentTargetName && (
+                        <span className="text-[10px] text-rose-300/60 font-normal">
+                          · {currentTargetMeta.nativeName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <ChevronDown className="w-4 h-4 text-stone-400 pointer-events-none" />
-                <select
-                  value={targetLang}
-                  onChange={(e) => setTargetLang(e.target.value)}
-                  aria-label="Idioma a practicar"
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-base bg-[#200f0a] text-white"
-                >
-                  {languages.map((l) => (
-                    <option key={l.code} value={l.code} className="bg-[#1a0c07] text-white">
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center space-x-1.5 bg-[#170905] px-2.5 py-1.5 rounded-xl border border-[#441b11] group-hover:border-rose-500/40 text-[11px] text-rose-300 font-semibold shadow-xs">
+                  <span>Cambiar</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-rose-400" />
+                </div>
               </div>
             </div>
 
@@ -663,6 +635,33 @@ export function Header({
           </div>
         </div>
       )}
+
+      {/* Aesthetic Language Selection Modal */}
+      <LanguageModal
+        isOpen={languageModalConfig.isOpen}
+        onClose={() => setLanguageModalConfig((prev) => ({ ...prev, isOpen: false }))}
+        title={
+          languageModalConfig.type === 'target'
+            ? 'Idioma a Practicar'
+            : 'Tu Idioma (Nativo)'
+        }
+        subtitle={
+          languageModalConfig.type === 'target'
+            ? 'Elegí el idioma que querés aprender con tu Tutor IA'
+            : 'Elegí el idioma para explicaciones, traducciones y glosas'
+        }
+        currentLang={languageModalConfig.type === 'target' ? targetLang : nativeLang}
+        onSelect={(code) => {
+          if (languageModalConfig.type === 'target') {
+            setTargetLang(code);
+          } else {
+            setNativeLang(code);
+          }
+        }}
+        languages={
+          languageModalConfig.type === 'target' ? languages : NATIVE_LANG_OPTIONS
+        }
+      />
     </>
   );
 }
