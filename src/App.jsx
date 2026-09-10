@@ -13,6 +13,7 @@ import { Sparkles, RotateCcw } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
 import { useSiteLanguage } from './context/SiteLanguageContext.jsx';
+import { useAudioSettings } from './context/AudioSettingsContext.jsx';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -174,6 +175,8 @@ export default function App() {
   });
   const [apiWarning, setApiWarning] = useState(null);
 
+  const { speechRate, autoPlayAi } = useAudioSettings();
+  const playedBotMsgIdsRef = useRef(new Set());
   const chatContainerRef = useRef(null);
   const currentLangObj = (languages && languages.find((l) => l && l.code === targetLang)) || (languages && languages[0]) || SUPPORTED_LANGUAGES[0] || { name: 'Español', speechCode: 'es-ES' };
 
@@ -579,9 +582,12 @@ export default function App() {
 
         setMessages(prev => [...prev, botMsg]);
 
-        // Auto-speak if hands-free is enabled
-        if (handsFree && bot_response.text) {
-          speakText(bot_response.text, currentLangObj.speechCode, config.speechRate);
+        // Auto-speak if autoPlayAi or hands-free is enabled (runs only once per bot message)
+        if ((autoPlayAi || handsFree) && bot_response.text) {
+          if (!playedBotMsgIdsRef.current.has(botMsg.id)) {
+            playedBotMsgIdsRef.current.add(botMsg.id);
+            speakText(bot_response.text, currentLangObj.speechCode, speechRate);
+          }
         }
       }
     } catch (err) {
@@ -644,7 +650,7 @@ export default function App() {
 
   // Play audio helper
   const handlePlayAudio = (textToSpeak) => {
-    speakText(textToSpeak, currentLangObj.speechCode, config.speechRate);
+    speakText(textToSpeak, currentLangObj.speechCode, speechRate);
   };
 
   // Pronounce single word helper (normal or slow)
@@ -834,7 +840,7 @@ export default function App() {
         originalText={breakdownData?.originalText || ''}
         correctedText={breakdownData?.correctedText || ''}
         targetLang={targetLang}
-        onPronounceWord={(word) => speakText(word, currentLangObj.speechCode, config.speechRate)}
+        onPronounceWord={(word) => speakText(word, currentLangObj.speechCode, speechRate)}
         isLoading={isBreakdownLoading}
       />
 

@@ -15,7 +15,9 @@ import {
   Type,
   Maximize2,
   BookOpen,
-  Languages
+  Languages,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
@@ -44,6 +46,7 @@ import {
   isGlossComplete
 } from '../services/textGlossService.js';
 import { parseEpubFile } from '../services/epubService.js';
+import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
 
 export function TextReaderPage({
   targetLang = 'zh',
@@ -54,9 +57,56 @@ export function TextReaderPage({
   onWordClick = null
 }) {
   const { t } = useSiteLanguage();
+  const { speechRate } = useAudioSettings();
 
   // Load existing draft if available
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
+
+  // EPUB Chapter-by-chapter state
+  const isEpub = Boolean(
+    document &&
+    (document.format === 'epub' || document.sourceType === 'epub' || (Array.isArray(document.chapters) && document.chapters.length > 0))
+  );
+  const chapters = useMemo(() => {
+    return (isEpub && Array.isArray(document?.chapters)) ? document.chapters : [];
+  }, [isEpub, document?.chapters]);
+
+  // Helper to resolve chapter index from a document's saved positions
+  const resolveChapterIndexForDoc = useCallback((doc) => {
+    if (!doc || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
+    const targetId = doc.lastAudioPosition?.paragraphId || doc.lastReadingPosition?.paragraphId;
+    if (targetId) {
+      const chIdx = doc.chapters.findIndex(ch => Array.isArray(ch.paragraphIds) && ch.paragraphIds.includes(targetId));
+      if (chIdx !== -1) return chIdx;
+    }
+    if (typeof doc.lastReadingPosition?.chapterIndex === 'number' && doc.lastReadingPosition.chapterIndex >= 0 && doc.lastReadingPosition.chapterIndex < doc.chapters.length) {
+      return doc.lastReadingPosition.chapterIndex;
+    }
+    return 0;
+  }, []);
+
+  const [currentChapterIndex, setCurrentChapterIndex] = useState(() => {
+    return resolveChapterIndexForDoc(loadActiveDocumentDraft());
+  });
+
+  // Synchronize chapter index when switching documents or after EPUB import
+  useEffect(() => {
+    if (document && isEpub && chapters.length > 0) {
+      const idx = resolveChapterIndexForDoc(document);
+      setCurrentChapterIndex(idx);
+    }
+  }, [document?.id, isEpub, resolveChapterIndexForDoc]);
+
+  const currentChapter = isEpub && chapters[currentChapterIndex] ? chapters[currentChapterIndex] : null;
+
+  // Render ONLY the current chapter's paragraphs for EPUB, or all paragraphs for TXT
+  const visibleParagraphs = useMemo(() => {
+    if (!document || !Array.isArray(document.paragraphs)) return [];
+    if (!isEpub || chapters.length === 0 || !currentChapter) {
+      return document.paragraphs;
+    }
+    return document.paragraphs.filter(p => p.chapterId === currentChapter.id);
+  }, [document, isEpub, chapters, currentChapter]);
   const [isEditing, setIsEditing] = useState(() => !loadActiveDocumentDraft());
   const [inputText, setInputText] = useState(() => loadActiveDocumentDraft()?.rawText || '');
   const [inputTitle, setInputTitle] = useState(() => loadActiveDocumentDraft()?.title || '');
@@ -148,6 +198,8 @@ export function TextReaderPage({
                   if (!prev || prev.lastReadingPosition?.paragraphId === pid) return prev;
                   const posData = {
                     paragraphId: pid,
+                    chapterIndex: currentChapterIndex,
+                    chapterId: currentChapter?.id,
                     updatedAt: Date.now()
                   };
                   const updated = {
@@ -173,6 +225,46 @@ export function TextReaderPage({
       element.removeEventListener('scroll', handleScroll);
     };
   }, [isEditing]);
+
+  // Navigate to another chapter (unmounts previous chapter, mounts new chapter, scrolls to top)
+  const handleNavigateChapter = useCallback((newIndex) => {
+    if (newIndex < 0 || newIndex >= chapters.length) return;
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setPlayingParagraphId(null);
+    setCurrentChapterIndex(newIndex);
+
+    if (scrollContainerRef.current) {
+      isProgrammaticScrollRef.current = true;
+      scrollContainerRef.current.scrollTop = 0;
+      setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 150);
+    }
+
+    const targetChapter = chapters[newIndex];
+    const firstParaId = targetChapter?.paragraphIds?.[0];
+    if (firstParaId) {
+      setDocument(prev => {
+        if (!prev) return prev;
+        const updated = {
+          ...prev,
+          lastReadingPosition: {
+            paragraphId: firstParaId,
+            chapterIndex: newIndex,
+            chapterId: targetChapter.id,
+            updatedAt: Date.now()
+          }
+        };
+        saveActiveDocumentDraft(updated);
+        if (updated.id) {
+          saveTextDocument(updated).catch(() => {});
+        }
+        return updated;
+      });
+    }
+  }, [chapters]);
 
   // Glossing progress & controller
   const [glossingProgress, setGlossingProgress] = useState({
@@ -463,7 +555,7 @@ export function TextReaderPage({
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = speechCode;
-    utterance.rate = 0.95;
+    utterance.rate = speechRate || 1.0;
 
     // Select suitable voice if available
     const voices = window.speechSynthesis.getVoices();
@@ -511,10 +603,12 @@ export function TextReaderPage({
       abortSignal: controller.signal,
       onUpdate: (updatedParagraphs) => {
         setDocument(prev => {
-          if (!prev) return prev;
+          if (!prev || !Array.isArray(prev.paragraphs)) return prev;
+          const updatedMap = new Map(updatedParagraphs.map(p => [p.id, p]));
+          const nextParagraphs = prev.paragraphs.map(p => updatedMap.get(p.id) || p);
           const nextDoc = {
             ...prev,
-            paragraphs: updatedParagraphs
+            paragraphs: nextParagraphs
           };
           saveDocument(nextDoc).catch(err => console.warn('Error saving glossing update:', err));
           return nextDoc;
@@ -530,10 +624,12 @@ export function TextReaderPage({
 
     // Update document with immediately prepared offline tokens
     setDocument(prev => {
-      if (!prev) return prev;
+      if (!prev || !Array.isArray(prev.paragraphs)) return prev;
+      const enrichedMap = new Map(enriched.map(p => [p.id, p]));
+      const nextParagraphs = prev.paragraphs.map(p => enrichedMap.get(p.id) || p);
       return {
         ...prev,
-        paragraphs: enriched
+        paragraphs: nextParagraphs
       };
     });
   }, [targetLang, nativeLang, apiKey]);
@@ -552,9 +648,12 @@ export function TextReaderPage({
         isPaused: true
       }));
     } else {
-      if (!document || !Array.isArray(document.paragraphs) || document.paragraphs.length === 0) return;
+      const paragraphsToGloss = (isEpub && visibleParagraphs.length > 0)
+        ? visibleParagraphs
+        : (document?.paragraphs || []);
+      if (!paragraphsToGloss || paragraphsToGloss.length === 0) return;
       setIsAutoGlossing(true);
-      triggerGlossing(document.paragraphs, activeDocLang);
+      triggerGlossing(paragraphsToGloss, activeDocLang);
     }
   }, [isAutoGlossing, document, activeDocLang, triggerGlossing]);
 
@@ -1252,7 +1351,65 @@ export function TextReaderPage({
           /* 2. READER VIEW (Párrafos con audio alineado y glosado)       */
           /* ============================================================ */
           <div className="space-y-4 sm:space-y-5 animate-fade-in pb-16">
-            {document?.paragraphs?.map((paragraph, pIdx) => {
+            {/* EPUB Top Chapter Navigation Bar */}
+            {isEpub && chapters.length > 1 && (
+              <div className="sticky top-0 z-10 py-2 px-3 sm:px-4 mb-4 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm backdrop-blur-md flex items-center justify-between gap-2 sm:gap-3 transition-colors">
+                <button
+                  type="button"
+                  disabled={currentChapterIndex === 0}
+                  onClick={() => handleNavigateChapter(currentChapterIndex - 1)}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1 sm:space-x-1.5 transition-all ${
+                    currentChapterIndex === 0
+                      ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
+                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
+                  }`}
+                  title="Capítulo anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span className="hidden sm:inline">Anterior</span>
+                </button>
+
+                <div className="flex-1 min-w-0 max-w-sm sm:max-w-md mx-auto text-center">
+                  <div className="relative inline-block w-full">
+                    <select
+                      value={currentChapterIndex}
+                      onChange={(e) => handleNavigateChapter(Number(e.target.value))}
+                      className="w-full text-xs font-bold text-[var(--text-primary)] bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-xl py-1.5 px-3 pr-8 truncate appearance-none cursor-pointer text-center hover:border-rose-500/50 transition-colors focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    >
+                      {chapters.map((ch, idx) => {
+                        const hasCustomTitle = ch.title && !/^cap[ií]tulo\s+\d+$/i.test(ch.title.trim()) && !/^chapter\s+\d+$/i.test(ch.title.trim());
+                        const label = hasCustomTitle
+                          ? `Capítulo ${idx + 1} de ${chapters.length}: ${ch.title}`
+                          : `Capítulo ${idx + 1} de ${chapters.length}`;
+                        return (
+                          <option key={ch.id || idx} value={idx}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]" />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={currentChapterIndex === chapters.length - 1}
+                  onClick={() => handleNavigateChapter(currentChapterIndex + 1)}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1 sm:space-x-1.5 transition-all ${
+                    currentChapterIndex === chapters.length - 1
+                      ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
+                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
+                  }`}
+                  title="Capítulo siguiente"
+                >
+                  <span className="hidden sm:inline">Siguiente</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {visibleParagraphs.map((paragraph, pIdx) => {
               const isChapterHeading = paragraph.isChapterStart && paragraph.chapterTitle;
               return (
                 <React.Fragment key={paragraph.id}>
@@ -1291,6 +1448,36 @@ export function TextReaderPage({
               );
             })}
 
+            {/* EPUB Bottom Chapter Navigation Footer Card */}
+            {isEpub && chapters.length > 1 && (
+              <div className="mt-8 pt-5 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-3">
+                <button
+                  type="button"
+                  disabled={currentChapterIndex === 0}
+                  onClick={() => handleNavigateChapter(currentChapterIndex - 1)}
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-primary)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center space-x-1.5 transition-all active:scale-95 cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Capítulo anterior</span>
+                </button>
+                <span className="text-xs text-[var(--text-muted)] font-medium text-center">
+                  Capítulo {currentChapterIndex + 1} de {chapters.length}
+                  {currentChapter?.title && !/^cap[ií]tulo\s+\d+$/i.test(currentChapter.title.trim()) && !/^chapter\s+\d+$/i.test(currentChapter.title.trim()) && (
+                    <span className="text-[var(--text-primary)] font-bold ml-1">• {currentChapter.title}</span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  disabled={currentChapterIndex === chapters.length - 1}
+                  onClick={() => handleNavigateChapter(currentChapterIndex + 1)}
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-md shadow-rose-950/40 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center space-x-1.5 transition-all active:scale-95 cursor-pointer"
+                >
+                  <span>Siguiente capítulo</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
           </div>
         )}
       </main>
@@ -1299,7 +1486,11 @@ export function TextReaderPage({
       {!isEditing && document && (
         <footer className="relative z-20 shrink-0 px-4 py-2.5 bg-[var(--header-bg)] border-t border-[var(--header-border)] text-center text-xs text-[var(--text-muted)] flex items-center justify-center space-x-2 shadow-xs">
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
-          <span className="truncate">Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación</span>
+          <span className="truncate">
+            {isEpub && chapters.length > 1
+              ? `Capítulo ${currentChapterIndex + 1} de ${chapters.length} • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación`
+              : 'Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación'}
+          </span>
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
         </footer>
       )}

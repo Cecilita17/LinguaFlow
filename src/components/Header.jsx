@@ -15,11 +15,13 @@ import {
   Youtube,
   Home,
   Globe,
-  FileText
+  FileText,
+  Gauge
 } from 'lucide-react';
 import { LanguageSelectDropdown } from './LanguageSelectDropdown.jsx';
 import { SiteLanguageToggle } from './SiteLanguageToggle.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+import { useAudioSettings, SPEECH_RATE_OPTIONS } from '../context/AudioSettingsContext.jsx';
 import {
   LANGUAGE_FLAGS,
   NATIVE_LANG_OPTIONS,
@@ -46,6 +48,7 @@ export function Header({
   setActiveTab
 }) {
   const { t } = useSiteLanguage();
+  const { speechRate, setSpeechRate, autoPlayAi, setAutoPlayAi } = useAudioSettings();
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
   const currentTargetMeta = getLanguageMeta(targetLang);
@@ -565,6 +568,70 @@ export function Header({
                       <div className="w-5 h-5 rounded-full bg-white shadow-xs" />
                     )}
                   </button>
+                </div>
+
+                {/* Reproducir automáticamente las respuestas de la IA */}
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-600 dark:text-rose-300">
+                      <Volume2 className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex flex-col pr-1">
+                      <span className="text-xs font-semibold text-[var(--text-primary)] leading-snug">
+                        {t('auto_play_ai_title')}
+                      </span>
+                      <span className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                        {t('auto_play_ai_desc')}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAutoPlayAi(!autoPlayAi)}
+                    aria-label="Alternar reproducción automática de respuestas de IA"
+                    className={`w-12 h-6 rounded-full transition-all flex items-center px-0.5 shrink-0 ${
+                      autoPlayAi
+                        ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end pr-1.5'
+                        : 'bg-[var(--surface-tertiary)] border border-[var(--border-primary)] justify-start pl-0.5'
+                    }`}
+                  >
+                    {autoPlayAi ? (
+                      <span className="text-[10px] font-bold text-white tracking-wide">ON</span>
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-white shadow-xs" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Velocidad Global de Reproducción */}
+                <div className="p-2.5 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <Gauge className="w-3.5 h-3.5 text-rose-600 dark:text-rose-300" />
+                      <span className="text-xs font-semibold text-[var(--text-primary)]">
+                        {t('speech_playback_speed')}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 font-mono">
+                      {speechRate}×
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-6 gap-1">
+                    {SPEECH_RATE_OPTIONS.map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => setSpeechRate(rate)}
+                        className={`py-1 rounded-lg text-[11px] font-bold transition-all ${
+                          speechRate === rate
+                            ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs shadow-rose-950/40'
+                            : 'bg-[var(--surface-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                        }`}
+                      >
+                        {rate}×
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Modelo de IA */}

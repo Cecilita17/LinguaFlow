@@ -231,7 +231,7 @@ export function splitTextIntoParagraphs(rawText, targetLang = 'zh') {
     glosses: [],
     tts: {
       speechCode,
-      rate: 0.95
+      rate: 1.0
     }
   }));
 }

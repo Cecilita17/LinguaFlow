@@ -3,15 +3,17 @@ import { X, Key, Gauge, Volume2, Save, Info, Check, Zap, Sparkles, Server, Globe
 import { API_BASE_URL } from '../services/chatService.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
+import { useAudioSettings, SPEECH_RATE_OPTIONS } from '../context/AudioSettingsContext.jsx';
 
 export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
   if (!isOpen) return null;
 
   const { siteLang, setSiteLang, isSpanish, t } = useSiteLanguage();
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const { speechRate: globalSpeechRate, setSpeechRate: setGlobalSpeechRate } = useAudioSettings();
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [level, setLevel] = useState(config.level || 'A2/B1');
-  const [speechRate, setSpeechRate] = useState(config.speechRate || 0.95);
+  const [speechRate, setSpeechRate] = useState(globalSpeechRate || config.speechRate || 1.0);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const [testingConnection, setTestingConnection] = useState(false);
@@ -21,10 +23,10 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
     if (isOpen) {
       setApiKey(config.apiKey || '');
       setLevel(config.level || 'A2/B1');
-      setSpeechRate(config.speechRate || 0.95);
+      setSpeechRate(globalSpeechRate || config.speechRate || 1.0);
       setConnectionStatus(null);
     }
-  }, [isOpen, config]);
+  }, [isOpen, config, globalSpeechRate]);
 
   const handleTestConnection = async () => {
     setTestingConnection(true);
@@ -56,7 +58,9 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
 
   const handleSave = () => {
     const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
-    onSaveConfig({ provider: 'groq', apiKey: cleanKey, level, speechRate: parseFloat(speechRate) });
+    const rateNum = parseFloat(speechRate) || 1.0;
+    setGlobalSpeechRate(rateNum);
+    onSaveConfig({ provider: 'groq', apiKey: cleanKey, level, speechRate: rateNum });
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -283,24 +287,31 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
             <label className="block font-semibold text-stone-800 mb-1 flex items-center justify-between">
               <span className="flex items-center space-x-1.5">
                 <Volume2 className="w-4 h-4 text-rose-600" />
-                <span>{isSpanish ? 'Velocidad de Voz del Bot' : 'Bot Speech Rate'}</span>
+                <span>{isSpanish ? 'Velocidad Global de Reproducción' : 'Global Playback Speed'}</span>
               </span>
-              <span className="text-rose-700 font-bold">{speechRate}x</span>
+              <span className="text-rose-700 font-bold font-mono">{speechRate}×</span>
             </label>
-            <input
-              type="range"
-              min="0.6"
-              max="1.3"
-              step="0.05"
-              value={speechRate}
-              onChange={(e) => setSpeechRate(e.target.value)}
-              className="w-full accent-rose-600"
-            />
-            <div className="flex justify-between text-[11px] text-stone-400 mt-0.5">
-              <span>{isSpanish ? 'Lento (0.6x)' : 'Slow (0.6x)'}</span>
-              <span>{isSpanish ? 'Normal (0.95x)' : 'Normal (0.95x)'}</span>
-              <span>{isSpanish ? 'Rápido (1.3x)' : 'Fast (1.3x)'}</span>
+            <div className="grid grid-cols-6 gap-1.5 mt-2">
+              {SPEECH_RATE_OPTIONS.map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => setSpeechRate(rate)}
+                  className={`py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                    speechRate === rate
+                      ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                      : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100 hover:text-stone-900'
+                  }`}
+                >
+                  {rate}×
+                </button>
+              ))}
             </div>
+            <p className="text-[11px] text-stone-500 mt-1.5">
+              {isSpanish
+                ? 'Aplica al Chat, Text Reader, libros EPUB y audios de pronunciación.'
+                : 'Applies to Chat, Text Reader, EPUB books, and pronunciation audio.'}
+            </p>
           </div>
         </div>
 

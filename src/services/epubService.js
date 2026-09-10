@@ -426,7 +426,7 @@ export async function parseEpubFile(file, options = {}) {
           isChapterStart: paraInChapterIndex === 0,
           tts: {
             speechCode,
-            rate: 0.95
+            rate: 1.0
           }
         };
 
@@ -463,7 +463,7 @@ export async function parseEpubFile(file, options = {}) {
       chapterId: 'ch_1',
       chapterTitle: 'Capítulo 1',
       isChapterStart: true,
-      tts: { speechCode, rate: 0.95 }
+      tts: { speechCode, rate: 1.0 }
     };
     allParagraphs.push(emptyPara);
     chapters.push({
