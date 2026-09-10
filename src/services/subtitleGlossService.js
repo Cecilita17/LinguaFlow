@@ -18,14 +18,30 @@ import {
   POLISH_OFFLINE_DICT,
   PUNCTUATION_REGEX
 } from './languageGlossStrategies.js';
+import {
+  computeSubtitleHash,
+  getTranscriptFromLibrary,
+  saveTranscriptToLibrary,
+  getAllSavedTranscripts,
+  findTranscriptsByVideoId,
+  deleteTranscriptFromLibrary,
+  getSavedTranscriptsCount
+} from './transcriptLibraryStorage.js';
 
-// Re-export dictionaries and strategies for backwards-compatibility
+// Re-export dictionaries, strategies, and library functions for backwards-compatibility
 export {
   CHINESE_OFFLINE_DICT,
   ARABIC_OFFLINE_DICT,
   POLISH_OFFLINE_DICT,
   PUNCTUATION_REGEX,
-  getLanguageGlossStrategy
+  getLanguageGlossStrategy,
+  computeSubtitleHash,
+  getTranscriptFromLibrary,
+  saveTranscriptToLibrary,
+  getAllSavedTranscripts,
+  findTranscriptsByVideoId,
+  deleteTranscriptFromLibrary,
+  getSavedTranscriptsCount
 };
 
 /**
@@ -364,6 +380,9 @@ export function enrichSubtitlesWithGlosses({
   nativeLang = 'es',
   apiKey = '',
   videoId = '',
+  videoTitle = '',
+  videoUrl = '',
+  sourceType = 'srt',
   onUpdate = null,
   onProgress = null
 }) {
@@ -373,6 +392,7 @@ export function enrichSubtitlesWithGlosses({
 
   const strategy = getLanguageGlossStrategy(targetLang);
   const totalSubtitles = subtitles.length;
+  const subHash = computeSubtitleHash(subtitles);
   const cache = loadCachedGlosses(videoId, totalSubtitles, targetLang);
 
   // Phase 1: Apply offline tokenization & merge cached AI tokens if available
@@ -396,75 +416,138 @@ export function enrichSubtitlesWithGlosses({
   const getCompletedCount = (subsList) => subsList.filter(s => isGlossComplete(s, targetLang)).length;
   const initialCompleted = getCompletedCount(prepared);
 
-  // Metrics calculation
-  let totalSubstantiveTokens = 0;
-  let locallyResolvedTokens = 0;
-  let sentToGroqTokens = 0;
-
-  prepared.forEach(sub => {
-    (sub.tokens || []).forEach(t => {
-      if (!t.isPunctuation && (t.text || t.word)) {
-        totalSubstantiveTokens++;
-        if (strategy.isTokenComplete(t)) {
-          locallyResolvedTokens++;
-        }
-      }
-    });
-  });
-
-  // Identify lines that still need AI glossing (not complete)
-  const missingLines = prepared.filter(sub => !isGlossComplete(sub, targetLang));
-  missingLines.forEach(sub => {
-    (sub.tokens || []).forEach(t => {
-      if (!t.isPunctuation && (t.text || t.word) && !strategy.isTokenComplete(t)) {
-        sentToGroqTokens++;
-      }
-    });
-  });
-
-  const estimatedAiRequests = missingLines.length > 0 ? Math.ceil(missingLines.length / 5) : 0;
-  console.log(`[LinguaFlow Gloss Engine] Subtitle lines: ${totalSubtitles} | Total tokens: ${totalSubstantiveTokens} | Resolved locally: ${locallyResolvedTokens} | Sent to Groq: ${sentToGroqTokens} | AI requests: ${estimatedAiRequests}`);
-
-  if (missingLines.length === 0) {
-    if (onProgress) {
-      onProgress({
-        total: totalSubtitles,
-        completed: totalSubtitles,
-        isGlossing: false,
-        isComplete: true,
-        failed: 0
-      });
-    }
-    return prepared;
-  }
-
-  if (onProgress) {
-    onProgress({
-      total: totalSubtitles,
-      completed: initialCompleted,
-      isGlossing: true,
-      isComplete: false,
-      failed: 0
-    });
-  }
-
   if (!onUpdate) {
     return prepared;
   }
 
-  // Phase 2: Reliable batch processing in small chunks of 5 lines + retrying missing IDs
-  const CHUNK_SIZE = 5;
-  const MAX_RETRIES = 2; // Up to 2 retries per missing line
-  const retryCountMap = new Map();
-  let actualAiRequestsCount = 0;
-
-  const initialChunks = [];
-  for (let i = 0; i < missingLines.length; i += CHUNK_SIZE) {
-    initialChunks.push(missingLines.slice(i, i + CHUNK_SIZE));
-  }
-
   (async () => {
     let currentSubtitles = [...prepared];
+
+    // Check persistent library (IndexedDB)
+    let savedRecord = null;
+    try {
+      savedRecord = await getTranscriptFromLibrary(videoId, subHash, targetLang);
+    } catch (e) {
+      console.warn('Failed to check transcript library:', e);
+    }
+
+    if (savedRecord && Array.isArray(savedRecord.subtitles) && savedRecord.subtitles.length > 0) {
+      const savedCompleted = getCompletedCount(savedRecord.subtitles);
+      if (savedRecord.isComplete || savedCompleted === totalSubtitles) {
+        console.log(`[GlossCache] HIT — loading saved transcript (${savedCompleted}/${totalSubtitles} lines)`);
+        if (onUpdate) onUpdate(savedRecord.subtitles);
+        if (onProgress) {
+          onProgress({
+            total: totalSubtitles,
+            completed: totalSubtitles,
+            isGlossing: false,
+            isComplete: true,
+            failed: 0
+          });
+        }
+        return; // Zero calls to Groq! $0 cost!
+      } else if (savedCompleted > 0) {
+        console.log(`[GlossCache] PARTIAL — ${savedCompleted}/${totalSubtitles} lines already processed`);
+        // Merge tokens from savedRecord into currentSubtitles
+        currentSubtitles = currentSubtitles.map(sub => {
+          const matching = savedRecord.subtitles.find(s => s.id === sub.id || (s.startTime && Math.abs(s.startTime - sub.startTime) < 0.1));
+          if (matching && matching.tokens && matching.tokens.length > 0) {
+            return {
+              ...sub,
+              tokens: mergeAiTokensWithSegmented(sub.tokens, matching.tokens, targetLang)
+            };
+          }
+          return sub;
+        });
+        if (onUpdate) onUpdate([...currentSubtitles]);
+      }
+    } else {
+      console.log('[GlossCache] MISS — generating glosses');
+    }
+
+    // Recalculate missing lines that still need AI glossing
+    const missingLines = currentSubtitles.filter(sub => !isGlossComplete(sub, targetLang));
+    const nowCompleted = getCompletedCount(currentSubtitles);
+
+    // Calculate metrics for logging
+    let totalSubstantiveTokens = 0;
+    let locallyResolvedTokens = 0;
+    let sentToGroqTokens = 0;
+
+    currentSubtitles.forEach(sub => {
+      (sub.tokens || []).forEach(t => {
+        if (!t.isPunctuation && (t.text || t.word)) {
+          totalSubstantiveTokens++;
+          if (strategy.isTokenComplete(t)) {
+            locallyResolvedTokens++;
+          }
+        }
+      });
+    });
+
+    missingLines.forEach(sub => {
+      (sub.tokens || []).forEach(t => {
+        if (!t.isPunctuation && (t.text || t.word) && !strategy.isTokenComplete(t)) {
+          sentToGroqTokens++;
+        }
+      });
+    });
+
+    const estimatedAiRequests = missingLines.length > 0 ? Math.ceil(missingLines.length / 5) : 0;
+    console.log(`[LinguaFlow Gloss Engine] Subtitle lines: ${totalSubtitles} | Total tokens: ${totalSubstantiveTokens} | Resolved locally: ${locallyResolvedTokens} | Sent to Groq: ${sentToGroqTokens} | AI requests: ${estimatedAiRequests}`);
+
+    if (missingLines.length === 0) {
+      console.log(`[GlossCache] SAVED — ${totalSubtitles}/${totalSubtitles} lines`);
+      try {
+        await saveTranscriptToLibrary({
+          videoId,
+          videoTitle,
+          videoUrl,
+          targetLanguage: targetLang,
+          nativeLanguage: nativeLang,
+          sourceType,
+          subtitleHash: subHash,
+          subtitlesCount: totalSubtitles,
+          completedLinesCount: totalSubtitles,
+          isComplete: true,
+          subtitles: currentSubtitles
+        });
+      } catch (e) {
+        console.warn('[GlossCache] Error saving complete transcript to library:', e);
+      }
+
+      if (onProgress) {
+        onProgress({
+          total: totalSubtitles,
+          completed: totalSubtitles,
+          isGlossing: false,
+          isComplete: true,
+          failed: 0
+        });
+      }
+      return;
+    }
+
+    if (onProgress) {
+      onProgress({
+        total: totalSubtitles,
+        completed: nowCompleted,
+        isGlossing: true,
+        isComplete: false,
+        failed: 0
+      });
+    }
+
+    // Phase 2: Reliable batch processing in small chunks of 5 lines + retrying missing IDs
+    const CHUNK_SIZE = 5;
+    const MAX_RETRIES = 2; // Up to 2 retries per missing line
+    const retryCountMap = new Map();
+    let actualAiRequestsCount = 0;
+
+    const initialChunks = [];
+    for (let i = 0; i < missingLines.length; i += CHUNK_SIZE) {
+      initialChunks.push(missingLines.slice(i, i + CHUNK_SIZE));
+    }
 
     // Helper to process a single batch of lines
     const processBatch = async (batch) => {
@@ -500,6 +583,28 @@ export function enrichSubtitlesWithGlosses({
 
       if (hasNewData) {
         saveCachedGlosses(videoId, totalSubtitles, cache, targetLang);
+        const currentCompleted = getCompletedCount(currentSubtitles);
+
+        // PERSIST IMMEDIATELY TO INDEXEDDB LIBRARY AFTER EACH BATCH
+        try {
+          await saveTranscriptToLibrary({
+            videoId,
+            videoTitle,
+            videoUrl,
+            targetLanguage: targetLang,
+            nativeLanguage: nativeLang,
+            sourceType,
+            subtitleHash: subHash,
+            subtitlesCount: totalSubtitles,
+            completedLinesCount: currentCompleted,
+            isComplete: currentCompleted === totalSubtitles,
+            subtitles: currentSubtitles
+          });
+          console.log(`[GlossCache] SAVED — ${currentCompleted}/${totalSubtitles} lines`);
+        } catch (e) {
+          console.warn('[GlossCache] Failed to save batch to library:', e);
+        }
+
         if (onUpdate) {
           onUpdate([...currentSubtitles]);
         }
@@ -556,11 +661,30 @@ export function enrichSubtitlesWithGlosses({
       await new Promise(r => setTimeout(r, 300));
     }
 
-    // Final verified progress update
+    // Final verified progress update and save
     const finalCompleted = getCompletedCount(currentSubtitles);
     const failed = totalSubtitles - finalCompleted;
 
-    console.log(`[LinguaFlow Gloss Engine] Finished: Subtitle lines: ${totalSubtitles} | Total tokens: ${totalSubstantiveTokens} | Resolved locally: ${locallyResolvedTokens} | Sent to Groq: ${sentToGroqTokens} | AI requests: ${actualAiRequestsCount}`);
+    try {
+      await saveTranscriptToLibrary({
+        videoId,
+        videoTitle,
+        videoUrl,
+        targetLanguage: targetLang,
+        nativeLanguage: nativeLang,
+        sourceType,
+        subtitleHash: subHash,
+        subtitlesCount: totalSubtitles,
+        completedLinesCount: finalCompleted,
+        isComplete: finalCompleted === totalSubtitles,
+        subtitles: currentSubtitles
+      });
+      console.log(`[GlossCache] SAVED — ${finalCompleted}/${totalSubtitles} lines`);
+    } catch (e) {
+      console.warn('[GlossCache] Failed final save to library:', e);
+    }
+
+    console.log(`[LinguaFlow Gloss Engine] Finished: Subtitle lines: ${totalSubtitles} | AI requests: ${actualAiRequestsCount}`);
 
     if (onProgress) {
       onProgress({

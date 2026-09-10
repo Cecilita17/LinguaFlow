@@ -4,8 +4,20 @@ import { YouTubeImporter } from '../components/youtube/YouTubeImporter.jsx';
 import { SubtitleImporter } from '../components/youtube/SubtitleImporter.jsx';
 import { Transcript } from '../components/youtube/Transcript.jsx';
 import { TranscriptControls } from '../components/youtube/TranscriptControls.jsx';
+import { SavedTranscriptsModal } from '../components/youtube/SavedTranscriptsModal.jsx';
 import { enrichSubtitlesWithGlosses } from '../services/subtitleGlossService.js';
-import { Youtube, Sparkles, FileText, CheckCircle2, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  getSavedTranscriptsCount,
+  findTranscriptsByVideoId
+} from '../services/transcriptLibraryStorage.js';
+import {
+  Youtube,
+  Sparkles,
+  FileText,
+  CheckCircle2,
+  RotateCcw,
+  BookOpen
+} from 'lucide-react';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 const SESSION_STORAGE_KEY = 'linguaflow_youtube_reader_session';
@@ -14,12 +26,17 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   const { isSpanish } = useSiteLanguage();
   // Session state with localStorage persistence
   const [videoId, setVideoId] = useState('');
+  const [videoTitle, setVideoTitle] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [videoLanguage, setVideoLanguage] = useState('auto');
   const [subtitles, setSubtitles] = useState([]);
   const [subtitleFormat, setSubtitleFormat] = useState(null);
   const [subtitleSource, setSubtitleSource] = useState('');
   const [glossProgress, setGlossProgress] = useState(null);
+
+  // Library modal state
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [libraryCount, setLibraryCount] = useState(0);
 
   // Player & synchronization state
   const [currentTime, setCurrentTime] = useState(0);
@@ -33,13 +50,25 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   const [searchQuery, setSearchQuery] = useState('');
   const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
 
+  // Refresh saved transcripts count
+  const refreshLibraryCount = useCallback(async () => {
+    try {
+      const count = await getSavedTranscriptsCount();
+      setLibraryCount(count);
+    } catch (e) {
+      console.warn('Failed to get library count:', e);
+    }
+  }, []);
+
   // 1. Restore previous session on initial mount
   useEffect(() => {
+    refreshLibraryCount();
     try {
       const saved = localStorage.getItem(SESSION_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.videoId) setVideoId(parsed.videoId);
+        if (parsed.videoTitle) setVideoTitle(parsed.videoTitle);
         if (parsed.videoUrl) setVideoUrl(parsed.videoUrl);
         if (parsed.videoLanguage) setVideoLanguage(parsed.videoLanguage);
         if (Array.isArray(parsed.subtitles) && parsed.subtitles.length > 0) {
@@ -49,7 +78,13 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             nativeLang,
             apiKey,
             videoId: parsed.videoId,
-            onUpdate: (updated) => setSubtitles(updated),
+            videoTitle: parsed.videoTitle || '',
+            videoUrl: parsed.videoUrl || '',
+            sourceType: parsed.subtitleSource || 'srt',
+            onUpdate: (updated) => {
+              setSubtitles(updated);
+              refreshLibraryCount();
+            },
             onProgress: (p) => setGlossProgress(p)
           });
           setSubtitles(enriched);
@@ -74,13 +109,14 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     } catch (e) {
       console.warn('Failed to load YouTube Reader session from storage:', e);
     }
-  }, [targetLang, nativeLang]);
+  }, [targetLang, nativeLang, refreshLibraryCount]);
 
   // 2. Persist session when critical state changes
   useEffect(() => {
     try {
       const sessionData = {
         videoId,
+        videoTitle,
         videoUrl,
         videoLanguage,
         subtitles,
@@ -97,7 +133,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     } catch (e) {
       console.warn('Failed to save YouTube Reader session to storage:', e);
     }
-  }, [videoId, videoUrl, videoLanguage, subtitles, subtitleFormat, subtitleSource, autoScroll, fontSize, showTimestamps, interlinearMode]);
+  }, [videoId, videoTitle, videoUrl, videoLanguage, subtitles, subtitleFormat, subtitleSource, autoScroll, fontSize, showTimestamps, interlinearMode]);
 
   // Handlers
   const handleImportVideo = (newVideoId, newUrl) => {
@@ -105,6 +141,17 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     setVideoUrl(newUrl);
     setCurrentTime(0);
     setIsUrlImporterOpen(false);
+
+    // Auto-check if a saved transcript exists in the library for this video
+    findTranscriptsByVideoId(newVideoId, targetLang)
+      .then((saved) => {
+        if (saved && saved.length > 0) {
+          const latest = saved[0];
+          console.log(`[GlossCache] Auto-recovering saved transcript for video ${newVideoId}: "${latest.videoTitle}" (${latest.subtitlesCount} lines)`);
+          handleLoadFromLibrary(latest);
+        }
+      })
+      .catch((err) => console.warn('Error checking saved transcripts for video:', err));
   };
 
   const handleSubtitlesLoaded = (newSubtitles, format, sourceName) => {
@@ -116,10 +163,51 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       nativeLang,
       apiKey,
       videoId,
-      onUpdate: (updated) => setSubtitles(updated),
+      videoTitle,
+      videoUrl,
+      sourceType: sourceName,
+      onUpdate: (updated) => {
+        setSubtitles(updated);
+        refreshLibraryCount();
+      },
       onProgress: (p) => setGlossProgress(p)
     });
     setSubtitles(enriched);
+    refreshLibraryCount();
+  };
+
+  const handleLoadFromLibrary = (record) => {
+    if (!record) return;
+    if (record.videoId) setVideoId(record.videoId);
+    if (record.videoUrl) setVideoUrl(record.videoUrl);
+    if (record.videoTitle) setVideoTitle(record.videoTitle);
+    if (record.sourceType) setSubtitleSource(record.sourceType);
+    if (record.format) setSubtitleFormat(record.format);
+    if (Array.isArray(record.subtitles)) {
+      setSubtitles(record.subtitles);
+      setGlossProgress({
+        total: record.subtitles.length,
+        completed: record.completedLinesCount || record.subtitles.length,
+        isGlossing: false,
+        isComplete: Boolean(record.isComplete),
+        failed: 0
+      });
+    }
+    setCurrentTime(0);
+    refreshLibraryCount();
+  };
+
+  const handlePlayerReady = (player) => {
+    try {
+      if (player && typeof player.getVideoData === 'function') {
+        const data = player.getVideoData();
+        if (data && data.title && (!videoTitle || videoTitle.startsWith('YouTube Video'))) {
+          setVideoTitle(data.title);
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading video title from player:', e);
+    }
   };
 
   const handleClearSubtitles = () => {
@@ -131,6 +219,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
 
   const handleResetSession = () => {
     setVideoId('');
+    setVideoTitle('');
     setVideoUrl('');
     setSubtitles([]);
     setSubtitleFormat(null);
@@ -153,7 +242,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
 
   return (
     <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-white">
-      {/* 1. Header: YouTube Reader + AI Glossing Control */}
+      {/* 1. Header: YouTube Reader + AI Glossing Control + Saved Transcripts Library */}
       <div className="flex-shrink-0 space-y-2 pb-1">
         <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#200d07] rounded-xl border border-[#482015] shadow-xs text-xs">
           {/* Left: Brand & Target Language */}
@@ -169,8 +258,24 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             </span>
           </div>
 
-          {/* Right: AI Glossing Toggle + Video Controls */}
+          {/* Right: Library Button + AI Glossing Toggle + Video Controls */}
           <div className="flex items-center space-x-1.5 shrink-0">
+            {/* SAVED TRANSCRIPTS LIBRARY BUTTON */}
+            <button
+              type="button"
+              onClick={() => setIsLibraryOpen(true)}
+              title={isSpanish ? 'Abrir biblioteca de transcripciones guardadas' : 'Open saved transcripts library'}
+              className="px-2 py-1 rounded-lg bg-[#2a1209] hover:bg-[#38180d] border border-[#4a2014] text-rose-200 hover:text-white text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">{isSpanish ? 'Biblioteca' : 'Library'}</span>
+              {libraryCount > 0 && (
+                <span className="text-[9px] px-1.5 py-0.2 bg-rose-950 text-rose-300 rounded-full font-bold border border-rose-800">
+                  {libraryCount}
+                </span>
+              )}
+            </button>
+
             {/* AI GLOSSING TOGGLE (Compact in header next to YouTube Reader) */}
             <button
               type="button"
@@ -250,6 +355,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             <YouTubePlayer
               videoId={videoId}
               onTimeUpdate={setCurrentTime}
+              onPlayerReady={handlePlayerReady}
               seekToTime={seekToTime}
             />
           </div>
@@ -297,9 +403,19 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
           />
         </div>
       )}
+
+      {/* 7. Saved Transcripts Modal (IndexedDB persistent library) */}
+      <SavedTranscriptsModal
+        isOpen={isLibraryOpen}
+        onClose={() => {
+          setIsLibraryOpen(false);
+          refreshLibraryCount();
+        }}
+        onLoadTranscript={handleLoadFromLibrary}
+        currentVideoId={videoId}
+      />
     </div>
   );
 }
 
 export default YouTubeReaderPage;
-
