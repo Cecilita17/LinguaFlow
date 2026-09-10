@@ -77,12 +77,13 @@ export function TextReaderPage({
   // Scheduling a scroll: set to a paragraphId, cleared after scroll fires
   const [pendingScrollParagraphId, setPendingScrollParagraphId] = useState(null);
 
-  // Auto-hide reader secondary controls on scroll down
-  const [isReaderControlsHidden, setIsReaderControlsHidden] = useState(false);
+  // Auto-hide entire reader header on scroll down
+  const [isHeaderHidden, setIsHeaderHidden] = useState(false);
   const scrollContainerRef = useRef(null);
   const previousScrollTopRef = useRef(0);
+  const isProgrammaticScrollRef = useRef(false);
 
-  // Scroll listener on main content container for auto-hiding reader controls
+  // Scroll listener on main content container for auto-hiding full header
   useEffect(() => {
     const element = scrollContainerRef.current;
     if (!element) return;
@@ -95,25 +96,32 @@ export function TextReaderPage({
       const previousScrollTop = previousScrollTopRef.current;
       const delta = currentScrollTop - previousScrollTop;
 
-      // 1. If at or near top (<= 10px), always show controls
+      // 1. Ignore programmatic scrolls (such as restoring last audio position)
+      if (isProgrammaticScrollRef.current) {
+        previousScrollTopRef.current = currentScrollTop;
+        setIsHeaderHidden(false);
+        return;
+      }
+
+      // 2. If at or near top (<= 10px), always show entire header
       if (currentScrollTop <= 10) {
         previousScrollTopRef.current = Math.max(0, currentScrollTop);
-        setIsReaderControlsHidden(prev => (prev ? false : prev));
+        setIsHeaderHidden(false);
         return;
       }
 
-      // 2. Ignore micro-scrolls (tolerance threshold 6px)
-      if (Math.abs(delta) < 6) {
+      // 3. Ignore micro-scrolls (tolerance threshold 8px) to prevent flicker
+      if (Math.abs(delta) < 8) {
         return;
       }
 
-      // 3. Detect scroll direction
+      // 4. Detect scroll direction
       if (delta > 0) {
-        // Scrolling DOWN -> hide controls
-        setIsReaderControlsHidden(prev => (prev ? prev : true));
+        // Scrolling DOWN -> hide entire header
+        setIsHeaderHidden(true);
       } else {
-        // Scrolling UP -> show controls immediately
-        setIsReaderControlsHidden(prev => (prev ? false : prev));
+        // Scrolling UP -> show entire header immediately
+        setIsHeaderHidden(false);
       }
 
       previousScrollTopRef.current = currentScrollTop;
@@ -211,6 +219,7 @@ export function TextReaderPage({
         const relativeTop = elRect.top - containerRect.top + container.scrollTop;
         const targetScrollTop = Math.max(0, relativeTop - (container.clientHeight / 2) + (elRect.height / 2));
 
+        isProgrammaticScrollRef.current = true;
         container.scrollTo({
           top: targetScrollTop,
           behavior: 'smooth'
@@ -218,6 +227,14 @@ export function TextReaderPage({
 
         previousScrollTopRef.current = targetScrollTop;
         setPendingScrollParagraphId(null);
+
+        // Keep header visible and release programmatic lock after smooth scroll completes
+        setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+          if (container) {
+            previousScrollTopRef.current = container.scrollTop;
+          }
+        }, 500);
       } else if (attempts < 6) {
         attempts++;
         timeoutId = setTimeout(performScroll, 80);
@@ -606,7 +623,7 @@ export function TextReaderPage({
     setDocument(saved);
     setLastAudioParagraphId(preservedLastAudioPosition ? preservedLastAudioPosition.paragraphId : null);
     setIsEditing(false);
-    setIsReaderControlsHidden(false);
+    setIsHeaderHidden(false);
     previousScrollTopRef.current = 0;
     refreshLibraryCount();
 
@@ -642,7 +659,7 @@ export function TextReaderPage({
     setInputText(doc.rawText || '');
     setInputTitle(doc.title || '');
     setIsEditing(false);
-    setIsReaderControlsHidden(false);
+    setIsHeaderHidden(false);
     previousScrollTopRef.current = 0;
     saveActiveDocumentDraft(doc);
 
@@ -771,7 +788,7 @@ export function TextReaderPage({
     setInputText('');
     setInputTitle('');
     setIsEditing(true);
-    setIsReaderControlsHidden(false);
+    setIsHeaderHidden(false);
     previousScrollTopRef.current = 0;
     setGlossingProgress({
       total: 0,
@@ -794,9 +811,15 @@ export function TextReaderPage({
 
   return (
     <div className="h-full flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)] min-h-0">
-      {/* TOP HEADER CONTROLS BAR */}
-      <header className="relative z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] shrink-0 transition-colors">
-        {/* PARTE 1 — BARRA PRINCIPAL (SIEMPRE VISIBLE: Document title, reader badge, essential context) */}
+      {/* TOP HEADER CONTROLS BAR: FULL AUTO-HIDE ON SCROLL DOWN */}
+      <header
+        className={`reader-full-header relative z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] shrink-0 transition-colors ${
+          isHeaderHidden && !isEditing ? 'is-hidden' : ''
+        }`}
+        inert={isHeaderHidden && !isEditing ? '' : undefined}
+        aria-hidden={isHeaderHidden && !isEditing}
+      >
+        {/* PARTE 1 — BARRA PRINCIPAL: Document title, reader badge, essential context */}
         <div className="reader-main-bar px-4 py-2 sm:py-2.5 flex items-center justify-between gap-3">
           {/* Left: Section Title & Editable Doc Title */}
           <div className="flex items-center space-x-3 min-w-0">
@@ -842,14 +865,8 @@ export function TextReaderPage({
           )}
         </div>
 
-        {/* PARTE 2 — CONTROLES DEL LECTOR (AUTO-HIDE AL HACER SCROLL DOWN, SHOW AL HACER SCROLL UP O TOP) */}
-        <div
-          className={`reader-controls overflow-hidden reader-controls-collapsible ${
-            isReaderControlsHidden && !isEditing ? 'is-hidden' : ''
-          }`}
-          inert={isReaderControlsHidden && !isEditing ? '' : undefined}
-          aria-hidden={isReaderControlsHidden && !isEditing}
-        >
+        {/* PARTE 2 — CONTROLES DEL LECTOR (All controls inside same header wrapper) */}
+        <div className="reader-controls overflow-hidden">
           <div className="px-4 pb-2.5 sm:pb-3 pt-1 flex items-center flex-wrap gap-2 border-t border-[var(--border-subtle)]/40">
             {/* Saved Documents Library Button */}
             <button
@@ -950,7 +967,7 @@ export function TextReaderPage({
                   type="button"
                   onClick={() => {
                     setIsEditing(true);
-                    setIsReaderControlsHidden(false);
+                    setIsHeaderHidden(false);
                     previousScrollTopRef.current = 0;
                   }}
                   title="Editar o cambiar el texto"
@@ -1018,7 +1035,7 @@ export function TextReaderPage({
                       type="button"
                       onClick={() => {
                         setIsEditing(false);
-                        setIsReaderControlsHidden(false);
+                        setIsHeaderHidden(false);
                         previousScrollTopRef.current = 0;
                       }}
                       className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold cursor-pointer hover:bg-[var(--surface-hover)]"
