@@ -129,7 +129,11 @@ export function TranscriptLine({
               <div
                 dir={textDirection}
                 style={{ direction: textDirection }}
-                className={`flex flex-wrap items-center gap-x-1.5 sm:gap-x-2.5 gap-y-2 leading-tight break-words max-w-full ${
+                className={`flex flex-wrap items-center ${
+                  isChinese
+                    ? 'gap-x-1 sm:gap-x-1.5 gap-y-1'
+                    : 'gap-x-1.5 sm:gap-x-2.5 gap-y-2'
+                } leading-tight break-words max-w-full ${
                   isRtl ? 'justify-start text-right' : 'justify-start text-left'
                 }`}
               >
@@ -150,7 +154,9 @@ export function TranscriptLine({
                       <span
                         key={idx}
                         dir={textDirection}
-                        className="text-stone-400 font-medium px-0.5 select-text self-center text-base sm:text-lg isolate [unicode-bidi:isolate]"
+                        className={`text-stone-400 font-medium ${
+                          isChinese ? 'px-0 text-sm sm:text-base -ml-0.5' : 'px-0.5 text-base sm:text-lg'
+                        } select-text self-center isolate [unicode-bidi:isolate]`}
                       >
                         {word}
                       </span>
@@ -167,11 +173,13 @@ export function TranscriptLine({
                           onWordClick(word, { word, auxiliary, gloss: cleanGloss });
                         }
                       }}
-                      className="inline-flex flex-col items-center justify-center px-1 py-0.5 rounded-lg hover:bg-white/10 transition-colors group/token max-w-full isolate [unicode-bidi:isolate]"
+                      className={`inline-flex flex-col items-center justify-center rounded-md hover:bg-white/10 transition-colors group/token max-w-full isolate [unicode-bidi:isolate] cursor-pointer ${
+                        isChinese ? 'px-0.5 sm:px-1 py-0.5' : 'px-1 py-0.5'
+                      }`}
                     >
                       {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
                       {isChinese && auxiliary && (
-                        <span className="text-[11px] sm:text-xs text-rose-600 dark:text-rose-300 font-mono font-semibold tracking-tight leading-none mb-1 select-text">
+                        <span className="text-[10px] sm:text-[11px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                           {auxiliary}
                         </span>
                       )}
@@ -179,7 +187,9 @@ export function TranscriptLine({
                       {/* Tier 2 (CENTER): Word (Arabic with diacritics/tashkeel in RTL, Russian/Polish/Latin scripts in LTR) */}
                       <span
                         dir={textDirection}
-                        className={`font-semibold tracking-wide ${
+                        className={`${
+                          isChinese ? 'font-medium tracking-normal' : 'font-semibold tracking-wide'
+                        } ${
                           isActive ? 'text-white font-bold drop-shadow-xs' : 'text-[var(--text-primary)]'
                         } ${fontClass}`}
                       >
@@ -191,7 +201,11 @@ export function TranscriptLine({
                         <span
                           dir="ltr"
                           title={cleanGloss}
-                          className="text-[10px] sm:text-[11px] text-[var(--text-muted)] group-hover/line:text-[var(--text-secondary)] font-normal leading-tight mt-1 max-w-[120px] truncate text-center select-text isolate [unicode-bidi:isolate]"
+                          className={`${
+                            isChinese
+                              ? 'text-[9.5px] sm:text-[10px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/line:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
+                              : 'text-[10px] sm:text-[11px] text-[var(--text-muted)] group-hover/line:text-[var(--text-secondary)] mt-1 max-w-[120px]'
+                          } font-normal leading-tight truncate text-center select-text isolate [unicode-bidi:isolate] transition-colors`}
                         >
                           {cleanGloss}
                         </span>

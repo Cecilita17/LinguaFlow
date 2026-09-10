@@ -88,7 +88,11 @@ export function TextParagraphItem({
             <div
               dir={textDirection}
               style={{ direction: textDirection }}
-              className={`flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-2 leading-tight break-words max-w-full ${
+              className={`flex flex-wrap items-center ${
+                isChinese
+                  ? 'gap-x-1 sm:gap-x-1.5 gap-y-1'
+                  : 'gap-x-2 sm:gap-x-3 gap-y-2'
+              } leading-tight break-words max-w-full ${
                 isRtl ? 'justify-start text-right' : 'justify-start text-left'
               }`}
             >
@@ -111,7 +115,9 @@ export function TextParagraphItem({
                     <span
                       key={idx}
                       dir={textDirection}
-                      className="text-[var(--text-muted)] font-medium px-0.5 select-text self-center text-base sm:text-lg isolate [unicode-bidi:isolate]"
+                      className={`text-[var(--text-muted)] font-medium ${
+                        isChinese ? 'px-0 text-sm sm:text-base -ml-0.5' : 'px-0.5 text-base sm:text-lg'
+                      } select-text self-center isolate [unicode-bidi:isolate]`}
                     >
                       {word}
                     </span>
@@ -130,12 +136,16 @@ export function TextParagraphItem({
                     }}
                     role={onWordClick ? 'button' : undefined}
                     tabIndex={onWordClick ? 0 : undefined}
-                    className="inline-flex flex-col items-center justify-center px-1.5 py-1 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 active:bg-rose-500/20 transition-colors cursor-pointer group/token max-w-full isolate [unicode-bidi:isolate]"
+                    className={`inline-flex flex-col items-center justify-center transition-colors cursor-pointer group/token max-w-full isolate [unicode-bidi:isolate] ${
+                      isChinese
+                        ? 'px-0.5 sm:px-1 py-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 active:bg-rose-500/15'
+                        : 'px-1.5 py-1 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 active:bg-rose-500/20'
+                    }`}
                     title={cleanGloss ? `"${word}": ${cleanGloss}` : word}
                   >
                     {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
                     {isChinese && auxiliary && (
-                      <span className="text-[11px] sm:text-xs text-rose-600 dark:text-rose-300 font-mono font-semibold tracking-tight leading-none mb-1 select-text">
+                      <span className="text-[10px] sm:text-[11px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                         {auxiliary}
                       </span>
                     )}
@@ -143,7 +153,9 @@ export function TextParagraphItem({
                     {/* Tier 2 (CENTER): Word (Arabic with tashkīl in RTL, Russian, Polish, Latin scripts in LTR) */}
                     <span
                       dir={textDirection}
-                      className={`font-semibold tracking-wide select-text ${
+                      className={`${
+                        isChinese ? 'font-medium tracking-normal' : 'font-semibold tracking-wide'
+                      } select-text leading-tight ${
                         isPlaying ? 'text-white font-bold drop-shadow-xs' : 'text-[var(--text-primary)]'
                       } ${fontClass}`}
                     >
@@ -154,7 +166,11 @@ export function TextParagraphItem({
                     {cleanGloss && (
                       <span
                         dir="ltr"
-                        className="text-[10px] sm:text-[11px] text-[var(--text-muted)] group-hover/token:text-rose-600 dark:group-hover/token:text-rose-300 font-normal leading-tight mt-1 max-w-[140px] truncate text-center select-text isolate [unicode-bidi:isolate]"
+                        className={`${
+                          isChinese
+                            ? 'text-[9.5px] sm:text-[10px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/token:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
+                            : 'text-[10px] sm:text-[11px] text-[var(--text-muted)] group-hover/token:text-rose-600 dark:group-hover/token:text-rose-300 mt-1 max-w-[140px]'
+                        } font-normal leading-tight truncate text-center select-text isolate [unicode-bidi:isolate] transition-colors`}
                       >
                         {cleanGloss}
                       </span>
