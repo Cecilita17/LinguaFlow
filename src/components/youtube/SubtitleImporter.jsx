@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { parseSubtitlesAuto } from '../../services/subtitleService.js';
 import { FileText, Upload, CheckCircle2, RotateCcw, AlertCircle, FileCode } from 'lucide-react';
+import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 export function SubtitleImporter({
   onSubtitlesLoaded,
@@ -9,6 +10,7 @@ export function SubtitleImporter({
   onClearSubtitles,
   glossProgress = null
 }) {
+  const { isSpanish } = useSiteLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [tab, setTab] = useState('paste'); // 'paste' | 'file'
   const [pastedText, setPastedText] = useState('');
@@ -106,14 +108,22 @@ export function SubtitleImporter({
           {glossProgress && glossProgress.isGlossing && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-950/80 border border-rose-800 text-[10px] text-rose-300 animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
-              <span>Glosando con IA: {glossProgress.completed} / {glossProgress.total}</span>
+              <span>
+                {isSpanish ? 'Glosando con IA:' : 'AI Glossing:'} {glossProgress.completed} / {glossProgress.total}
+              </span>
             </div>
           )}
 
           {glossProgress && !glossProgress.isGlossing && glossProgress.completed > 0 && (
-            <span className="text-[10px] text-emerald-400 font-medium bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60">
-              ✓ Glosado completo
-            </span>
+            glossProgress.completed === glossProgress.total ? (
+              <span className="text-[10px] text-emerald-400 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60 shadow-xs">
+                {isSpanish ? `✓ Glosado completo (${glossProgress.completed}/${glossProgress.total})` : `✓ Glossing complete (${glossProgress.completed}/${glossProgress.total})`}
+              </span>
+            ) : (
+              <span className="text-[10px] text-amber-300 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60 shadow-xs">
+                {isSpanish ? `⚠️ ${glossProgress.completed}/${glossProgress.total} glosados` : `⚠️ ${glossProgress.completed}/${glossProgress.total} glossed`}
+              </span>
+            )
           )}
         </div>
 

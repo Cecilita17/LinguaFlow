@@ -595,6 +595,7 @@ CRITICAL REQUIREMENTS:
   * "gloss": accurate, direct, concise definition/translation of this specific word in "${nativeLang}" (e.g. "bienvenido", "escuchar", "hoy", "uno mismo", "de", "carta"). DO NOT output the whole sentence as the gloss!
 - Omit punctuation marks or give them null gloss.
 - EXACT IDS: You MUST preserve and return the EXACT same line ID string for each line as provided in the input (e.g. "srt_1", "srt_2").
+- RETURN ALL LINES: You MUST return all ${lines.length} requested lines matching IDs [${lines.map(l => `"${l.id}"`).join(', ')}]. Do NOT omit any line!
 
 Subtitle lines to process:
 ${linesFormatted}
@@ -648,10 +649,17 @@ Return STRICTLY valid JSON with no markdown formatting:
           const rawText = data?.choices?.[0]?.message?.content;
           const parsed = cleanAndParseJSON(rawText);
           if (parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0) {
+            const requestedIds = new Set(lines.map(l => String(l.id)));
+            const validLines = parsed.lines.filter(l => l && l.id && Array.isArray(l.tokens) && l.tokens.length > 0);
+            const returnedIds = new Set(validLines.map(l => String(l.id)));
+            const missingIds = [...requestedIds].filter(id => !returnedIds.has(id));
+
             return res.status(200).json({
               success: true,
               source: `groq (${activeModel})`,
-              lines: parsed.lines
+              lines: validLines,
+              isComplete: missingIds.length === 0,
+              missingIds
             });
           }
         } else {

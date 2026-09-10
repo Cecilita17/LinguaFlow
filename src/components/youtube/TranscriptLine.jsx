@@ -88,8 +88,9 @@ export function TranscriptLine({
                 ? tokenObj.isPunctuation
                 : /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()\-]+$/.test(word);
 
-              // Never display Pinyin as gloss or word as gloss
-              const cleanGloss = (rawGloss && rawGloss !== pinyin && rawGloss !== word) ? rawGloss : null;
+              // Never display Pinyin as gloss or word as gloss (except when gloss is a valid Spanish word like 'de')
+              const isLegitSameWord = word === '的' && rawGloss?.toLowerCase() === 'de';
+              const cleanGloss = (rawGloss && (rawGloss !== pinyin || isLegitSameWord) && rawGloss !== word) ? rawGloss : null;
 
               if (isPunctuation) {
                 return (
