@@ -62,8 +62,7 @@ export function SiteLanguageToggle({
   // Default 'header' variant: Sleek sliding toggle pill
   return (
     <div
-      className={`inline-flex items-center bg-[#180904] p-0.5 rounded-xl border border-[#482519] shadow-xs ${className}`}
-      style={{ backgroundColor: '#180904' }}
+      className={`inline-flex items-center bg-[#180904] p-0.5 rounded-xl border border-[#482519] shadow-xs site-lang-toggle-header ${className}`}
       title={isSpanish ? 'Idioma del sitio: Español (clic para English)' : 'Site language: English (click for Spanish)'}
     >
       <button

@@ -2,14 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================ */
+/* LINGUAFLOW THEME SYSTEM: CSS VARIABLES                       */
+/* ============================================================ */
+
+:root,
+[data-theme="dark"] {
+  /* Rich Warm Chocolate Palette (Preserves 100% current design) */
+  --app-bg: #24120c;
+  --app-bg-dot: #381c13;
+  --text-primary: #f5f5f4; /* stone-100 */
+  --text-secondary: #e7d8d2;
+  --text-muted: rgba(254, 205, 211, 0.7); /* rose-200/70 */
+  --header-bg: rgba(35, 18, 11, 0.95);
+  --header-border: #3d190f;
+  --surface-primary: #241009;
+  --surface-secondary: #2b160e;
+  --surface-tertiary: #1a0c07;
+  --surface-hover: #2e150d;
+  --border-primary: #4a2216;
+  --border-secondary: #3f1b11;
+  --border-subtle: #38160d;
+  --input-bg: #180803;
+  --input-border: #3e1b10;
+  --ruby-rt: #0284c7; /* vibrant sky-600 */
+  --scrollbar-track: #1e0f0a;
+  --scrollbar-thumb: #4a281d;
+  --scrollbar-thumb-hover: #6b3a2a;
+  --custom-scrollbar-track: #180c07;
+  --custom-scrollbar-thumb: #5d2a1b;
+  --custom-scrollbar-thumb-hover: #e11d48;
+}
+
+[data-theme="light"] {
+  /* Warm Soft Cream & Linen Palette (Harmonious with rose/amber brand) */
+  --app-bg: #faf5f0;
+  --app-bg-dot: #e6dad0;
+  --text-primary: #1c1917; /* stone-900 */
+  --text-secondary: #44403c; /* stone-700 */
+  --text-muted: #78716c; /* stone-500 */
+  --header-bg: rgba(255, 252, 249, 0.97);
+  --header-border: #e7ded7;
+  --surface-primary: #ffffff;
+  --surface-secondary: #fbf7f4;
+  --surface-tertiary: #f5ede6;
+  --surface-hover: #f5ede6;
+  --border-primary: #e5dad2;
+  --border-secondary: #ebdcd2;
+  --border-subtle: #efe3da;
+  --input-bg: #ffffff;
+  --input-border: #e2d6cc;
+  --ruby-rt: #0369a1; /* deep readable sky-700 */
+  --scrollbar-track: #f0eae4;
+  --scrollbar-thumb: #cdbfb4;
+  --scrollbar-thumb-hover: #b5a295;
+  --custom-scrollbar-track: #ede5de;
+  --custom-scrollbar-thumb: #c5b6aa;
+  --custom-scrollbar-thumb-hover: #e11d48;
+}
+
 @layer base {
   body {
-    @apply antialiased text-stone-900;
-    /* Rich Warm Chocolate Background */
-    background-color: #24120c;
-    background-image: radial-gradient(#381c13 1px, transparent 1px), radial-gradient(#381c13 1px, #24120c 1px);
+    @apply antialiased;
+    background-color: var(--app-bg);
+    background-image: radial-gradient(var(--app-bg-dot) 1px, transparent 1px), radial-gradient(var(--app-bg-dot) 1px, var(--app-bg) 1px);
     background-size: 40px 40px;
     background-position: 0 0, 20px 20px;
+    color: var(--text-primary);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
@@ -23,12 +82,12 @@ ruby {
   padding: 0 1.5px;
 }
 
-/* Default rt transliteration: vibrant, clear sky-600 */
+/* Default rt transliteration */
 rt {
   font-size: 0.72em;
   font-weight: 700;
   line-height: 1.1;
-  color: #0284c7;
+  color: var(--ruby-rt);
   user-select: none;
   text-align: center;
   letter-spacing: 0.02em;
@@ -62,29 +121,29 @@ rt {
   font-family: 'Noto Sans SC', sans-serif;
 }
 
-/* Custom Scrollbars in Chocolate Theme */
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1e0f0a;
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4a281d;
+  background: var(--scrollbar-thumb);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b3a2a;
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Transcript Specific Scrollbar */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #6a3424 #1e0f0a;
+  scrollbar-color: var(--custom-scrollbar-thumb) var(--custom-scrollbar-track);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -93,18 +152,18 @@ rt {
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #180c07;
+  background: var(--custom-scrollbar-track);
   border-radius: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #5d2a1b;
+  background: var(--custom-scrollbar-thumb);
   border-radius: 8px;
-  border: 1px solid #180c07;
+  border: 1px solid var(--custom-scrollbar-track);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #e11d48;
+  background: var(--custom-scrollbar-thumb-hover);
 }
 
 /* Wave animation */
@@ -120,3 +179,317 @@ rt {
 .animate-soundwave {
   animation: wavePulse 1s ease-in-out infinite;
 }
+
+/* ============================================================ */
+/* LIGHT THEME COMPONENT OVERRIDES                              */
+/* Automatically maps dark chocolate surfaces to light palette   */
+/* ============================================================ */
+
+/* Top header in light mode */
+[data-theme="light"] header.sticky {
+  background-color: var(--header-bg) !important;
+  border-color: var(--header-border) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 2px 12px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme="light"] header.sticky h1 {
+  color: var(--text-primary) !important;
+}
+
+/* Home page background & elements in light mode */
+[data-theme="light"] .home-gradient-bg,
+[data-theme="light"] .bg-gradient-to-b.from-\[\#180905\] {
+  background: linear-gradient(to bottom, #faf5f0 0%, #f4ede6 50%, #eee4d9 100%) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .home-gradient-bg h1,
+[data-theme="light"] .home-gradient-bg h2,
+[data-theme="light"] .home-gradient-bg h3 {
+  color: var(--text-primary) !important;
+}
+
+/* Universal surface mapping for dark cards in light mode */
+[data-theme="light"] .bg-\[\#241009\]\/95,
+[data-theme="light"] .bg-\[\#24110a\]\/80,
+[data-theme="light"] .bg-\[\#220e08\]\/90,
+[data-theme="light"] .bg-\[\#1a0c06\],
+[data-theme="light"] .bg-\[\#1a0b06\],
+[data-theme="light"] .bg-\[\#180b06\],
+[data-theme="light"] .bg-\[\#1c0e09\] {
+  background-color: var(--surface-primary) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#241009\]\/95:hover,
+[data-theme="light"] .bg-\[\#24110a\]\/80:hover,
+[data-theme="light"] .bg-\[\#220e08\]\/90:hover {
+  background-color: var(--surface-secondary) !important;
+}
+
+/* Header, topbar & bottom bar containers */
+[data-theme="light"] .bg-\[\#23120b\]\/95,
+[data-theme="light"] .bg-\[\#2b160f\]\/95,
+[data-theme="light"] .bg-\[\#220e08\] {
+  background-color: var(--header-bg) !important;
+  border-color: var(--header-border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Borders in light mode */
+[data-theme="light"] .border-\[\#3d190f\],
+[data-theme="light"] .border-\[\#4a2216\],
+[data-theme="light"] .border-\[\#441f14\],
+[data-theme="light"] .border-\[\#482519\],
+[data-theme="light"] .border-\[\#482015\],
+[data-theme="light"] .border-\[\#54271a\],
+[data-theme="light"] .border-\[\#52271a\],
+[data-theme="light"] .border-\[\#38160d\],
+[data-theme="light"] .border-\[\#3f1b11\],
+[data-theme="light"] .border-\[\#4a1f14\],
+[data-theme="light"] .border-\[\#441f15\] {
+  border-color: var(--border-primary) !important;
+}
+
+/* Light mode text contrast adjustments */
+[data-theme="light"] .text-rose-100\/70,
+[data-theme="light"] .text-rose-200\/70,
+[data-theme="light"] .text-rose-200\/80,
+[data-theme="light"] .text-rose-300\/60,
+[data-theme="light"] .text-rose-300\/70,
+[data-theme="light"] .text-stone-300,
+[data-theme="light"] .text-stone-300\/80 {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .text-stone-100,
+[data-theme="light"] .text-stone-200 {
+  color: var(--text-primary) !important;
+}
+
+/* Text paragraph active playing state in light mode */
+[data-theme="light"] .bg-gradient-to-r.from-rose-950\/80 {
+  background: linear-gradient(to right, #fff1f2, #fff7f5, #fff1f2) !important;
+  border-color: #f43f5e !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 4px 15px -2px rgba(244, 63, 94, 0.15) !important;
+}
+
+/* YouTube line active playing state in light mode */
+[data-theme="light"] .bg-gradient-to-r.from-rose-950\/90 {
+  background: linear-gradient(to right, #fff1f2, #fff7f5, #fff1f2) !important;
+  border-color: #f43f5e !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 4px 15px -2px rgba(244, 63, 94, 0.15) !important;
+}
+
+/* Helper banners in light mode */
+[data-theme="light"] .bg-\[\#32170f\]\/90 {
+  background-color: #ffffff !important;
+  border-color: #fecdd3 !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="light"] .bg-\[\#32170f\]\/90 h2 {
+  color: #9f1239 !important;
+}
+
+/* Inner pill & secondary boxes in light mode */
+[data-theme="light"] .bg-\[\#180904\],
+[data-theme="light"] .bg-\[\#26110a\]\/90 {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Inactive action toggle buttons (Transliteration, Hands Free, etc.) */
+[data-theme="light"] .bg-\[\#3b1e15\] {
+  background-color: #fbf7f4 !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .bg-\[\#3b1e15\]:hover {
+  background-color: #f5ede6 !important;
+}
+
+/* Reset button in light mode */
+[data-theme="light"] .hover\:bg-\[\#482216\]:hover,
+[data-theme="light"] .hover\:bg-\[\#38180d\]:hover {
+  background-color: #f5ede6 !important;
+  color: var(--text-primary) !important;
+}
+
+/* Language Dropdown components in light mode */
+[data-theme="light"] .dropdown-trigger-btn {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .dropdown-trigger-btn:hover {
+  background-color: var(--surface-secondary) !important;
+  border-color: #f43f5e !important;
+}
+
+[data-theme="light"] .dropdown-lang-name {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .dropdown-flag-box {
+  background-color: var(--surface-tertiary) !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="light"] .dropdown-popover {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05) !important;
+  scrollbar-color: #d1c5bc transparent !important;
+}
+
+[data-theme="light"] .dropdown-popover-header {
+  border-color: var(--border-subtle) !important;
+  color: #881337 !important;
+}
+
+[data-theme="light"] .dropdown-option-btn {
+  background-color: #ffffff !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .dropdown-option-btn:hover {
+  background-color: #fdf7f4 !important;
+  border-color: #fecdd3 !important;
+}
+
+[data-theme="light"] .dropdown-option-btn .text-stone-100 {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .dropdown-option-selected {
+  background-color: #ffe4e6 !important;
+  border-color: #f43f5e !important;
+  color: #9f1239 !important;
+}
+
+[data-theme="light"] .dropdown-option-selected .text-stone-100 {
+  color: #9f1239 !important;
+}
+
+/* Site Language Toggle in light mode */
+[data-theme="light"] .site-lang-toggle-header {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="light"] .site-lang-toggle-header button:not(.bg-gradient-to-r) {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="light"] .site-lang-toggle-header button:not(.bg-gradient-to-r):hover {
+  background-color: var(--surface-tertiary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Modals (Saved Documents, Transcripts, Word Breakdown) */
+[data-theme="light"] .bg-\[\#1a0b06\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="light"] .bg-\[\#220e08\] {
+  background-color: #fdfaf7 !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#1d0c07\] {
+  background-color: #faf5f0 !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#120603\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#2f140c\] {
+  background-color: #fff1f2 !important;
+  border-color: #f43f5e !important;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.1) !important;
+}
+
+[data-theme="light"] .bg-\[\#230e08\] {
+  background-color: #faf5f0 !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#230e08\]:hover {
+  background-color: #f5ede6 !important;
+}
+
+/* Badges and Tags in light mode */
+[data-theme="light"] .bg-rose-950\/80 {
+  background-color: #ffe4e6 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+
+[data-theme="light"] .bg-amber-950\/80 {
+  background-color: #fef3c7 !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+
+[data-theme="light"] .bg-pink-950\/80 {
+  background-color: #fce7f3 !important;
+  border-color: #fbcfe8 !important;
+  color: #9d174d !important;
+}
+
+/* Mobile Drawer items in light mode */
+[data-theme="light"] .bg-\[\#200f0a\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#200f0a\]:hover {
+  background-color: var(--surface-secondary) !important;
+}
+
+[data-theme="light"] .bg-\[\#2d140d\] {
+  background-color: var(--surface-tertiary) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-\[\#2d160e\] {
+  background-color: #e5dad2 !important;
+  border-color: var(--border-primary) !important;
+}
+
+/* Inputs & textareas inside reader */
+[data-theme="light"] textarea.bg-\[\#1c0e09\],
+[data-theme="light"] input.bg-\[\#1c0e09\] {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Home Page highlights strip & headings in light mode */
+[data-theme="light"] .bg-\[\#1e0d08\]\/80 {
+  background-color: #ffffff !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="light"] .group h2 {
+  color: var(--text-primary) !important;
+}
+

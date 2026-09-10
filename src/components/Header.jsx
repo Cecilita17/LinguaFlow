@@ -181,7 +181,6 @@ export function Header({
           {/* Aesthetic Language Selectors */}
           <div
             className="flex items-center space-x-1.5 p-1 rounded-2xl border border-[#482519] shadow-md text-xs bg-[#180904]"
-            style={{ backgroundColor: '#180904' }}
           >
             <LanguageSelectDropdown
               value={targetLang}

@@ -98,7 +98,7 @@ export function LanguageSelectDropdown({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={label ? `${label}: ${currentName}` : currentName}
-        className={`group flex items-center transition-all duration-200 outline-none select-none cursor-pointer ${
+        className={`group flex items-center transition-all duration-200 outline-none select-none cursor-pointer dropdown-trigger-btn ${
           variant === 'header'
             ? 'space-x-2 bg-[#250e08] hover:bg-[#35150b] text-stone-100 px-2.5 py-1.5 rounded-xl border border-[#4d2015] hover:border-rose-500/60 shadow-sm active:scale-[0.98]'
             : variant === 'card'
@@ -107,15 +107,11 @@ export function LanguageSelectDropdown({
             ? 'space-x-2 bg-[#2a1009] hover:bg-[#38150c] text-stone-100 px-3 py-1.5 rounded-xl border border-[#4d2015] hover:border-rose-500/60 shadow-xs'
             : 'space-x-2 bg-[#240e08] hover:bg-[#32140b] text-stone-100 px-2.5 py-1 rounded-lg border border-[#441c12]'
         }`}
-        style={{
-          backgroundColor: variant === 'card' ? '#220d07' : '#250e08'
-        }}
       >
         {variant === 'card' ? (
           <div className="flex items-center space-x-3 text-left min-w-0">
             <div
-              className="w-10 h-10 rounded-2xl border border-[#4a1f14] flex items-center justify-center text-2xl shadow-inner shrink-0 group-hover:scale-105 transition-transform"
-              style={{ backgroundColor: '#140603' }}
+              className="w-10 h-10 rounded-2xl border border-[#4a1f14] bg-[#140603] flex items-center justify-center text-2xl shadow-inner shrink-0 group-hover:scale-105 transition-transform dropdown-flag-box"
             >
               <span>{currentFlag}</span>
             </div>
@@ -147,8 +143,7 @@ export function LanguageSelectDropdown({
 
             {/* Flag badge */}
             <div
-              className="flex items-center justify-center w-6 h-6 rounded-md border border-[#4a1f14] shadow-xs shrink-0 text-base leading-none"
-              style={{ backgroundColor: '#140603' }}
+              className="flex items-center justify-center w-6 h-6 rounded-md border border-[#4a1f14] bg-[#140603] shadow-xs shrink-0 text-base leading-none dropdown-flag-box"
             >
               <span className="transform group-hover:scale-110 transition-transform">
                 {currentFlag}
@@ -156,7 +151,7 @@ export function LanguageSelectDropdown({
             </div>
 
             {/* Language Name */}
-            <span className="text-xs font-semibold text-white tracking-wide truncate max-w-[110px] sm:max-w-[140px]">
+            <span className="text-xs font-semibold text-white tracking-wide truncate max-w-[110px] sm:max-w-[140px] dropdown-lang-name">
               {currentName}
             </span>
           </>
@@ -176,15 +171,14 @@ export function LanguageSelectDropdown({
           role="listbox"
           className={`absolute mt-2 py-1.5 z-50 ${
             variant === 'card' ? 'w-full left-0' : (align === 'right' ? 'w-64 right-0' : 'w-64 left-0')
-          } max-h-80 overflow-y-auto rounded-2xl bg-[#180a05] border border-[#522618] shadow-2xl shadow-black animate-fade-in`}
+          } max-h-80 overflow-y-auto rounded-2xl bg-[#180a05] border border-[#522618] shadow-2xl shadow-black animate-fade-in dropdown-popover`}
           style={{
-            backgroundColor: '#180a05',
             scrollbarWidth: 'thin',
             scrollbarColor: '#4d2318 transparent'
           }}
         >
           {/* Header in Popover */}
-          <div className="px-3 py-1.5 mb-1 border-b border-[#3d1a10] flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-rose-300/70">
+          <div className="px-3 py-1.5 mb-1 border-b border-[#3d1a10] flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-rose-300/70 dropdown-popover-header">
             <span>{label ? `Elegir ${label}` : 'Seleccionar idioma'}</span>
           </div>
 
@@ -203,32 +197,20 @@ export function LanguageSelectDropdown({
                   role="option"
                   aria-selected={isSelected}
                   onClick={() => handleSelect(opt.code)}
-                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all duration-150 group cursor-pointer border ${
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all duration-150 group cursor-pointer border dropdown-option-btn ${
                     isSelected
-                      ? 'border-rose-500/70 text-white shadow-sm'
-                      : 'border-[#38160d] hover:border-[#522618] text-stone-200 hover:text-white'
+                      ? 'bg-[#42160d] border-rose-500/70 text-white shadow-sm dropdown-option-selected'
+                      : 'bg-[#240f09] hover:bg-[#34150c] border-[#38160d] hover:border-[#522618] text-stone-200 hover:text-white'
                   }`}
-                  style={{
-                    backgroundColor: isSelected ? '#42160d' : '#240f09'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = '#34150c';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = '#240f09';
-                  }}
                 >
                   <div className="flex items-center space-x-2.5 truncate">
                     {/* Flag badge */}
                     <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center text-lg shrink-0 border transition-transform group-hover:scale-110 shadow-xs ${
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center text-lg shrink-0 border transition-transform group-hover:scale-110 shadow-xs dropdown-flag-box ${
                         isSelected
-                          ? 'border-rose-500/60'
-                          : 'border-[#421b12]'
+                          ? 'border-rose-500/60 bg-[#2b0d06]'
+                          : 'border-[#421b12] bg-[#140603]'
                       }`}
-                      style={{
-                        backgroundColor: isSelected ? '#2b0d06' : '#140603'
-                      }}
                     >
                       <span className="leading-none">{flag}</span>
                     </div>

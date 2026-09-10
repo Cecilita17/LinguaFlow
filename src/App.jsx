@@ -661,7 +661,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen font-sans text-stone-100 transition-colors">
+    <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
       {/* Header */}
       <Header
         languages={languages}

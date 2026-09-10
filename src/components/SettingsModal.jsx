@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, Gauge, Volume2, Save, Info, Check, Zap, Sparkles, Server, Globe } from 'lucide-react';
+import { X, Key, Gauge, Volume2, Save, Info, Check, Zap, Sparkles, Server, Globe, Sun, Moon, Monitor, Palette } from 'lucide-react';
 import { API_BASE_URL } from '../services/chatService.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+import { useTheme } from '../context/ThemeContext.jsx';
 
 export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
   if (!isOpen) return null;
 
   const { siteLang, setSiteLang, isSpanish, t } = useSiteLanguage();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [level, setLevel] = useState(config.level || 'A2/B1');
   const [speechRate, setSpeechRate] = useState(config.speechRate || 0.95);
@@ -77,7 +79,7 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
           </h3>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+            className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -124,6 +126,80 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
                 {!isSpanish && <Check className="w-3.5 h-3.5 text-rose-600 ml-1" />}
               </button>
             </div>
+          </div>
+
+          {/* Theme Selection (Claro / Oscuro / Sistema) */}
+          <div>
+            <label className="block font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center space-x-1.5">
+                <Palette className="w-4 h-4 text-rose-600" />
+                <span>{isSpanish ? 'Tema' : 'Theme'}</span>
+              </span>
+              <span className="text-[11px] text-rose-600 font-bold uppercase tracking-wider">
+                {theme === 'system'
+                  ? (isSpanish ? 'Sistema' : 'System')
+                  : theme === 'dark'
+                  ? (isSpanish ? 'Oscuro' : 'Dark')
+                  : (isSpanish ? 'Claro' : 'Light')}
+              </span>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 border transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-rose-50 border-rose-500 text-rose-800 shadow-xs ring-1 ring-rose-400/40'
+                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5 text-amber-500" />
+                <span>{isSpanish ? 'Claro' : 'Light'}</span>
+                {theme === 'light' && <Check className="w-3 h-3 text-rose-600 ml-0.5" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 border transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-rose-50 border-rose-500 text-rose-800 shadow-xs ring-1 ring-rose-400/40'
+                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <Moon className="w-3.5 h-3.5 text-indigo-500" />
+                <span>{isSpanish ? 'Oscuro' : 'Dark'}</span>
+                {theme === 'dark' && <Check className="w-3 h-3 text-rose-600 ml-0.5" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTheme('system')}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 border transition-all cursor-pointer ${
+                  theme === 'system'
+                    ? 'bg-rose-50 border-rose-500 text-rose-800 shadow-xs ring-1 ring-rose-400/40'
+                    : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                <Monitor className="w-3.5 h-3.5 text-stone-500" />
+                <span>{isSpanish ? 'Sistema' : 'System'}</span>
+                {theme === 'system' && <Check className="w-3.5 h-3.5 text-rose-600 ml-0.5" />}
+              </button>
+            </div>
+            <p className="text-[11px] text-stone-500 mt-1.5 leading-relaxed">
+              {theme === 'system'
+                ? (isSpanish
+                    ? `Detectando automáticamente la preferencia de tu sistema operativo (${resolvedTheme === 'dark' ? 'Oscuro' : 'Claro'}).`
+                    : `Automatically following your operating system preference (${resolvedTheme === 'dark' ? 'Dark' : 'Light'}).`)
+                : theme === 'dark'
+                ? (isSpanish
+                    ? 'Diseño chocolate cálido de LinguaFlow.'
+                    : 'LinguaFlow signature warm chocolate and rose dark theme.')
+                : (isSpanish
+                    ? 'Diseño claro cálido y nítido con alto contraste y legibilidad.'
+                    : 'Clean, warm, high-contrast light theme.')
+              }
+            </p>
           </div>
 
           {/* Active AI Provider (Groq openai/gpt-oss-120b) */}
