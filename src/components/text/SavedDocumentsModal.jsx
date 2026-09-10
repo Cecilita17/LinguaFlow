@@ -328,6 +328,12 @@ export function SavedDocumentsModal({
                         </span>
                       )}
 
+                      {(doc.sourceType === 'epub' || doc.format === 'epub') && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 font-mono font-bold tracking-wider">
+                          EPUB
+                        </span>
+                      )}
+
                       {isCurrent && (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-bold tracking-wide">
                           {isSpanish ? 'EN LECTURA' : 'CURRENT'}
@@ -335,9 +341,16 @@ export function SavedDocumentsModal({
                       )}
                     </div>
 
-                    <h4 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-rose-500 dark:group-hover:text-rose-300 transition-colors line-clamp-1">
-                      {doc.title || (isSpanish ? 'Texto sin título' : 'Untitled text')}
-                    </h4>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-rose-500 dark:group-hover:text-rose-300 transition-colors line-clamp-1">
+                        {doc.title || (isSpanish ? 'Texto sin título' : 'Untitled text')}
+                      </h4>
+                      {doc.author && (
+                        <span className="text-xs text-[var(--text-muted)] font-medium italic">
+                          de {doc.author}
+                        </span>
+                      )}
+                    </div>
 
                     {doc.rawText && (
                       <p className="text-xs text-[var(--text-muted)] line-clamp-1 mt-0.5 font-sans">

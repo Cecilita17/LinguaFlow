@@ -272,16 +272,29 @@ export function normalizeDocument(rawDoc) {
     };
   }
 
+  const author = typeof rawDoc.author === 'string' ? rawDoc.author.trim() : '';
+  const sourceType = rawDoc.sourceType || rawDoc.format || 'txt';
+  const format = rawDoc.format || sourceType;
+  const chapters = Array.isArray(rawDoc.chapters) ? rawDoc.chapters : [];
+  const lastReadingPosition = (rawDoc.lastReadingPosition && typeof rawDoc.lastReadingPosition === 'object')
+    ? rawDoc.lastReadingPosition
+    : null;
+
   return {
     id,
     title,
+    author,
+    sourceType,
+    format,
     rawText,
     targetLang,
     nativeLang,
     paragraphsCount: paragraphs.length,
     paragraphs,
+    chapters,
     languageStates,
     lastAudioPosition: rawDoc.lastAudioPosition || null,
+    lastReadingPosition,
     createdAt: rawDoc.createdAt || now,
     updatedAt: rawDoc.updatedAt || now
   };
@@ -293,23 +306,34 @@ export function normalizeDocument(rawDoc) {
  * @param {object} params
  * @param {string} [params.id]
  * @param {string} params.title
+ * @param {string} [params.author='']
+ * @param {string} [params.sourceType='txt']
+ * @param {string} [params.format='txt']
  * @param {string} params.rawText
  * @param {string} params.targetLang
  * @param {string} params.nativeLang
  * @param {Array} [params.paragraphs]
+ * @param {Array} [params.chapters]
  * @param {object} [params.languageStates]
+ * @param {object} [params.lastAudioPosition]
+ * @param {object} [params.lastReadingPosition]
  * @param {string} [params.createdAt]
  * @returns {object} Normalized document object
  */
 export function createTextDocument({
   id = null,
   title = '',
+  author = '',
+  sourceType = 'txt',
+  format = 'txt',
   rawText = '',
   targetLang = 'zh',
   nativeLang = 'es',
   paragraphs = null,
+  chapters = null,
   languageStates = null,
   lastAudioPosition = null,
+  lastReadingPosition = null,
   createdAt = null
 }) {
   const now = new Date().toISOString();
@@ -342,13 +366,18 @@ export function createTextDocument({
   return {
     id: id || `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     title: derivedTitle,
+    author: (author || '').trim(),
+    sourceType: sourceType || format || 'txt',
+    format: format || sourceType || 'txt',
     rawText,
     targetLang,
     nativeLang,
     paragraphsCount: effectiveParagraphs.length,
     paragraphs: effectiveParagraphs,
+    chapters: Array.isArray(chapters) ? chapters : [],
     languageStates: initialStates,
     lastAudioPosition: lastAudioPosition || null,
+    lastReadingPosition: lastReadingPosition || null,
     createdAt: createdAt || now,
     updatedAt: now
   };

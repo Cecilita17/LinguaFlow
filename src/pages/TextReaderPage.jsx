@@ -43,6 +43,7 @@ import {
   glossSingleParagraph,
   isGlossComplete
 } from '../services/textGlossService.js';
+import { parseEpubFile } from '../services/epubService.js';
 
 export function TextReaderPage({
   targetLang = 'zh',
@@ -66,6 +67,10 @@ export function TextReaderPage({
   const [showSavedModal, setShowSavedModal] = useState(false);
   const [savedDocsCount, setSavedDocsCount] = useState(0);
 
+  // EPUB Import state
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState('');
+
   // Audio TTS states
   const [playingParagraphId, setPlayingParagraphId] = useState(null);
   const [audioErrorId, setAudioErrorId] = useState(null);
@@ -82,6 +87,7 @@ export function TextReaderPage({
   const scrollContainerRef = useRef(null);
   const previousScrollTopRef = useRef(0);
   const isProgrammaticScrollRef = useRef(false);
+  const saveReadingPositionTimeoutRef = useRef(null);
 
   // Scroll listener on main content container for auto-hiding full header
   useEffect(() => {
@@ -125,6 +131,41 @@ export function TextReaderPage({
       }
 
       previousScrollTopRef.current = currentScrollTop;
+
+      // 5. Debounce saving last reading position (topmost visible paragraph)
+      if (!isProgrammaticScrollRef.current && element) {
+        clearTimeout(saveReadingPositionTimeoutRef.current);
+        saveReadingPositionTimeoutRef.current = setTimeout(() => {
+          if (!element) return;
+          const containerRect = element.getBoundingClientRect();
+          const paraEls = element.querySelectorAll('[data-paragraph-id]');
+          for (const pEl of paraEls) {
+            const pRect = pEl.getBoundingClientRect();
+            if (pRect.bottom >= containerRect.top + 60 && pRect.top <= containerRect.bottom) {
+              const pid = pEl.getAttribute('data-paragraph-id');
+              if (pid) {
+                setDocument(prev => {
+                  if (!prev || prev.lastReadingPosition?.paragraphId === pid) return prev;
+                  const posData = {
+                    paragraphId: pid,
+                    updatedAt: Date.now()
+                  };
+                  const updated = {
+                    ...prev,
+                    lastReadingPosition: posData
+                  };
+                  saveActiveDocumentDraft(updated);
+                  if (updated.id) {
+                    saveTextDocument(updated).catch(() => {});
+                  }
+                  return updated;
+                });
+              }
+              break;
+            }
+          }
+        }, 800);
+      }
     };
 
     element.addEventListener('scroll', handleScroll, { passive: true });
@@ -148,7 +189,7 @@ export function TextReaderPage({
   const setLoadingParagraphIds = setGlossingParagraphIds;
   const abortControllerRef = useRef(null);
 
-  // Cleanup speech synthesis & glossing on unmount
+  // Cleanup speech synthesis, glossing & timers on unmount
   useEffect(() => {
     return () => {
       if (window.speechSynthesis) {
@@ -156,6 +197,9 @@ export function TextReaderPage({
       }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+      }
+      if (saveReadingPositionTimeoutRef.current) {
+        clearTimeout(saveReadingPositionTimeoutRef.current);
       }
     };
   }, []);
@@ -176,13 +220,13 @@ export function TextReaderPage({
       refreshLibraryCount();
     }).catch(() => {});
 
-    // Restore scroll to last audio position on initial mount / app reload
+    // Restore scroll to last audio position or last reading position on initial mount / app reload
     const draft = loadActiveDocumentDraft();
-    if (draft && draft.lastAudioPosition?.paragraphId) {
-      const posId = draft.lastAudioPosition.paragraphId;
-      const exists = Array.isArray(draft.paragraphs) && draft.paragraphs.some(p => p.id === posId);
+    const targetPosId = draft?.lastAudioPosition?.paragraphId || draft?.lastReadingPosition?.paragraphId;
+    if (draft && targetPosId) {
+      const exists = Array.isArray(draft.paragraphs) && draft.paragraphs.some(p => p.id === targetPosId);
       if (exists) {
-        setPendingScrollParagraphId(posId);
+        setPendingScrollParagraphId(targetPosId);
       }
     }
   }, [refreshLibraryCount]);
@@ -663,19 +707,28 @@ export function TextReaderPage({
     previousScrollTopRef.current = 0;
     saveActiveDocumentDraft(doc);
 
-    // Sync last audio position bookmark from the loaded document (validate existence)
-    const savedPos = doc.lastAudioPosition;
-    const isValidPos = Boolean(
-      savedPos?.paragraphId &&
+    // Sync last audio position or reading position bookmark from the loaded document (validate existence)
+    const savedAudioPos = doc.lastAudioPosition;
+    const isValidAudioPos = Boolean(
+      savedAudioPos?.paragraphId &&
       Array.isArray(doc.paragraphs) &&
-      doc.paragraphs.some(p => p.id === savedPos.paragraphId)
+      doc.paragraphs.some(p => p.id === savedAudioPos.paragraphId)
     );
+    const validAudioPosId = isValidAudioPos ? savedAudioPos.paragraphId : null;
+    setLastAudioParagraphId(validAudioPosId);
 
-    const validPosId = isValidPos ? savedPos.paragraphId : null;
-    setLastAudioParagraphId(validPosId);
-    // Schedule one-time scroll to that paragraph (fires after render + modal close)
-    if (validPosId) {
-      setPendingScrollParagraphId(validPosId);
+    const savedReadingPos = doc.lastReadingPosition;
+    const isValidReadingPos = Boolean(
+      savedReadingPos?.paragraphId &&
+      Array.isArray(doc.paragraphs) &&
+      doc.paragraphs.some(p => p.id === savedReadingPos.paragraphId)
+    );
+    const validReadingPosId = isValidReadingPos ? savedReadingPos.paragraphId : null;
+
+    // Prioritize audio position bookmark; fallback to last reading position
+    const targetScrollId = validAudioPosId || validReadingPosId;
+    if (targetScrollId) {
+      setPendingScrollParagraphId(targetScrollId);
     } else {
       setPendingScrollParagraphId(null);
     }
@@ -736,11 +789,82 @@ export function TextReaderPage({
     handleClearDocument();
   }, []);
 
-  // File Upload handler (.txt)
-  const handleFileUpload = (e) => {
+  // File Upload handler (.txt and .epub)
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Reset file input value so selecting same file again re-triggers
+    e.target.value = '';
+
+    const isEpub = file.name.toLowerCase().endsWith('.epub') || file.type.includes('epub');
+
+    if (isEpub) {
+      setIsImporting(true);
+      setImportStatus('Leyendo archivo EPUB...');
+      try {
+        const parsed = await parseEpubFile(file, {
+          targetLang,
+          nativeLang,
+          onProgress: (prog) => {
+            setImportStatus(`Extrayendo capítulos... (${prog.current} de ${prog.total})`);
+          }
+        });
+
+        // Set detected language if available and not explicitly customized
+        const docLang = parsed.targetLang || targetLang;
+        if (parsed.detectedLanguage && setTargetLang && parsed.detectedLanguage !== targetLang) {
+          setTargetLang(parsed.detectedLanguage);
+        }
+
+        const docToSave = createTextDocument({
+          title: parsed.title,
+          author: parsed.author,
+          sourceType: 'epub',
+          format: 'epub',
+          rawText: parsed.rawText,
+          targetLang: docLang,
+          nativeLang,
+          paragraphs: parsed.paragraphs,
+          chapters: parsed.chapters,
+          createdAt: new Date().toISOString()
+        });
+
+        const saved = await saveDocument(docToSave);
+        setDocument(saved);
+        setInputText(saved.rawText || '');
+        setInputTitle(saved.title || '');
+        setIsEditing(false);
+        setIsHeaderHidden(false);
+        setLastAudioParagraphId(null);
+        setPendingScrollParagraphId(null);
+        previousScrollTopRef.current = 0;
+        await refreshLibraryCount();
+
+        // Auto-glossing is OFF by default:
+        const alreadyComplete = saved.paragraphs.every(p => isGlossComplete(p, docLang));
+        const completedCount = saved.paragraphs.filter(p => isGlossComplete(p, docLang)).length;
+
+        setGlossingProgress({
+          total: saved.paragraphs.length,
+          completed: completedCount,
+          isGlossing: false,
+          isPaused: false,
+          isComplete: alreadyComplete,
+          failed: 0
+        });
+        setIsAutoGlossing(false);
+      } catch (err) {
+        console.error('Error al importar archivo EPUB:', err);
+        alert(`Error al importar el archivo EPUB: ${err.message || err}`);
+      } finally {
+        setIsImporting(false);
+        setImportStatus('');
+      }
+      return;
+    }
+
+    // Default: .txt handling
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result;
@@ -1093,13 +1217,13 @@ export function TextReaderPage({
                     <span>Pegar texto</span>
                   </button>
 
-                  {/* File Upload Button (.txt) */}
+                  {/* File Upload Button (.txt, .epub) */}
                   <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
                     <Upload className="w-4 h-4 text-amber-500 dark:text-amber-400" />
-                    <span>Cargar archivo .txt</span>
+                    <span>Cargar archivo (.txt, .epub)</span>
                     <input
                       type="file"
-                      accept=".txt,text/plain"
+                      accept=".txt,.epub,text/plain,application/epub+zip"
                       onChange={handleFileUpload}
                       className="hidden"
                     />
@@ -1128,25 +1252,44 @@ export function TextReaderPage({
           /* 2. READER VIEW (Párrafos con audio alineado y glosado)       */
           /* ============================================================ */
           <div className="space-y-4 sm:space-y-5 animate-fade-in pb-16">
-            {document?.paragraphs?.map((paragraph) => (
-              <TextParagraphItem
-                key={paragraph.id}
-                paragraph={paragraph}
-                targetLang={activeDocLang}
-                fontSize={fontSize}
-                interlinearMode={interlinearMode}
-                isPlaying={playingParagraphId === paragraph.id}
-                isAudioError={audioErrorId === paragraph.id}
-                isGlossing={glossingParagraphIds.has(paragraph.id)}
-                hasGloss={isGlossComplete(paragraph, activeDocLang)}
-                isLastAudioPosition={lastAudioParagraphId === paragraph.id}
-                onPlay={handlePlayParagraph}
-                onStop={handleStopAudio}
-                onWordClick={onWordClick}
-                onGloss={handleGlossParagraph}
-                onGlossParagraph={handleGlossParagraph}
-              />
-            ))}
+            {document?.paragraphs?.map((paragraph, pIdx) => {
+              const isChapterHeading = paragraph.isChapterStart && paragraph.chapterTitle;
+              return (
+                <React.Fragment key={paragraph.id}>
+                  {isChapterHeading && (
+                    <div className="pt-6 pb-2 border-b border-[var(--border-subtle)] mb-4 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+                        <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] tracking-wide">
+                          {paragraph.chapterTitle}
+                        </h3>
+                      </div>
+                      {document.author && pIdx === 0 && (
+                        <span className="text-xs text-[var(--text-muted)] italic">
+                          de {document.author}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <TextParagraphItem
+                    paragraph={paragraph}
+                    targetLang={activeDocLang}
+                    fontSize={fontSize}
+                    interlinearMode={interlinearMode}
+                    isPlaying={playingParagraphId === paragraph.id}
+                    isAudioError={audioErrorId === paragraph.id}
+                    isGlossing={glossingParagraphIds.has(paragraph.id)}
+                    hasGloss={isGlossComplete(paragraph, activeDocLang)}
+                    isLastAudioPosition={lastAudioParagraphId === paragraph.id}
+                    onPlay={handlePlayParagraph}
+                    onStop={handleStopAudio}
+                    onWordClick={onWordClick}
+                    onGloss={handleGlossParagraph}
+                    onGlossParagraph={handleGlossParagraph}
+                  />
+                </React.Fragment>
+              );
+            })}
 
           </div>
         )}
@@ -1159,6 +1302,25 @@ export function TextReaderPage({
           <span className="truncate">Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación</span>
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
         </footer>
+      )}
+
+      {/* Loading Overlay during EPUB import */}
+      {isImporting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div className="p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl text-[var(--text-primary)] max-w-sm w-full flex flex-col items-center text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/60">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-[var(--text-primary)]">
+                Importando libro EPUB
+              </h4>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                {importStatus || 'Procesando capítulos y texto...'}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Saved Documents Library Modal */}

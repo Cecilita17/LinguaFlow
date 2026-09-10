@@ -106,9 +106,27 @@ export async function saveTextDocument(rawDoc) {
     }
   }
 
+  // Safe preservation of lastReadingPosition:
+  let effectiveLastReadingPosition = rawDoc.lastReadingPosition !== undefined
+    ? rawDoc.lastReadingPosition
+    : (existing?.lastReadingPosition || null);
+
+  if (existing?.lastReadingPosition && effectiveLastReadingPosition && effectiveLastReadingPosition !== existing.lastReadingPosition) {
+    const existingTime = existing.lastReadingPosition.updatedAt || 0;
+    const incomingTime = effectiveLastReadingPosition.updatedAt || 0;
+    if (existingTime > incomingTime) {
+      effectiveLastReadingPosition = existing.lastReadingPosition;
+    }
+  }
+
   const toSave = normalizeDocument({
     ...rawDoc,
+    author: rawDoc.author !== undefined ? rawDoc.author : (existing?.author || ''),
+    sourceType: rawDoc.sourceType || existing?.sourceType || rawDoc.format || existing?.format || 'txt',
+    format: rawDoc.format || existing?.format || rawDoc.sourceType || existing?.sourceType || 'txt',
+    chapters: (Array.isArray(rawDoc.chapters) && rawDoc.chapters.length > 0) ? rawDoc.chapters : (existing?.chapters || []),
     lastAudioPosition: effectiveLastAudioPosition,
+    lastReadingPosition: effectiveLastReadingPosition,
     createdAt: existing?.createdAt || rawDoc.createdAt || now,
     updatedAt: now,
     languageStates: existingStates
