@@ -77,6 +77,54 @@ export function TextReaderPage({
   // Scheduling a scroll: set to a paragraphId, cleared after scroll fires
   const [pendingScrollParagraphId, setPendingScrollParagraphId] = useState(null);
 
+  // Auto-hide reader secondary controls on scroll down
+  const [isReaderControlsHidden, setIsReaderControlsHidden] = useState(false);
+  const scrollContainerRef = useRef(null);
+  const previousScrollTopRef = useRef(0);
+
+  // Scroll listener on main content container for auto-hiding reader controls
+  useEffect(() => {
+    const element = scrollContainerRef.current;
+    if (!element) return;
+
+    // Initialize previous scroll position
+    previousScrollTopRef.current = element.scrollTop;
+
+    const handleScroll = () => {
+      const currentScrollTop = element.scrollTop;
+      const previousScrollTop = previousScrollTopRef.current;
+      const delta = currentScrollTop - previousScrollTop;
+
+      // 1. If at or near top (<= 10px), always show controls
+      if (currentScrollTop <= 10) {
+        previousScrollTopRef.current = Math.max(0, currentScrollTop);
+        setIsReaderControlsHidden(prev => (prev ? false : prev));
+        return;
+      }
+
+      // 2. Ignore micro-scrolls (tolerance threshold 6px)
+      if (Math.abs(delta) < 6) {
+        return;
+      }
+
+      // 3. Detect scroll direction
+      if (delta > 0) {
+        // Scrolling DOWN -> hide controls
+        setIsReaderControlsHidden(prev => (prev ? prev : true));
+      } else {
+        // Scrolling UP -> show controls immediately
+        setIsReaderControlsHidden(prev => (prev ? false : prev));
+      }
+
+      previousScrollTopRef.current = currentScrollTop;
+    };
+
+    element.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      element.removeEventListener('scroll', handleScroll);
+    };
+  }, [isEditing]);
+
   // Glossing progress & controller
   const [glossingProgress, setGlossingProgress] = useState({
     total: 0,
@@ -144,6 +192,9 @@ export function TextReaderPage({
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       setPendingScrollParagraphId(null);
+      if (scrollContainerRef.current) {
+        previousScrollTopRef.current = scrollContainerRef.current.scrollTop;
+      }
     }, 120);
     return () => clearTimeout(timer);
   }, [pendingScrollParagraphId]);
@@ -496,6 +547,8 @@ export function TextReaderPage({
     const saved = await saveDocument(docToSave);
     setDocument(saved);
     setIsEditing(false);
+    setIsReaderControlsHidden(false);
+    previousScrollTopRef.current = 0;
     refreshLibraryCount();
 
     // Auto-glossing MUST BE OFF BY DEFAULT:
@@ -530,6 +583,8 @@ export function TextReaderPage({
     setInputText(doc.rawText || '');
     setInputTitle(doc.title || '');
     setIsEditing(false);
+    setIsReaderControlsHidden(false);
+    previousScrollTopRef.current = 0;
     saveActiveDocumentDraft(doc);
 
     // Sync last audio position bookmark from the loaded document
@@ -644,6 +699,8 @@ export function TextReaderPage({
     setInputText('');
     setInputTitle('');
     setIsEditing(true);
+    setIsReaderControlsHidden(false);
+    previousScrollTopRef.current = 0;
     setGlossingProgress({
       total: 0,
       completed: 0,
@@ -666,162 +723,190 @@ export function TextReaderPage({
   return (
     <div className="h-full flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)] min-h-0">
       {/* TOP HEADER CONTROLS BAR */}
-      <header className="relative z-30 px-4 py-3 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] flex flex-wrap items-center justify-between gap-3 shrink-0">
-        {/* Left: Section Title & Editable Doc Title */}
-        <div className="flex items-center space-x-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0">
-            <FileText className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
-                📖 {t('text_reader_title') || 'Importador de Textos'}
-              </span>
-              {document && !isEditing && (
-                <span className="text-xs text-[var(--text-muted)] font-medium hidden sm:inline">
-                  • {document.paragraphs?.length || 0} párrafos
-                </span>
-              )}
+      <header className="relative z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] shrink-0 transition-colors">
+        {/* PARTE 1 — BARRA PRINCIPAL (SIEMPRE VISIBLE: Document title, reader badge, essential context) */}
+        <div className="reader-main-bar px-4 py-2 sm:py-2.5 flex items-center justify-between gap-3">
+          {/* Left: Section Title & Editable Doc Title */}
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0">
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-
-            {/* Editable or Static Document Title */}
-            {document && !isEditing ? (
-              <h2
-                title="Título del documento"
-                className="text-base sm:text-lg font-bold text-[var(--text-primary)] truncate leading-tight max-w-[240px] sm:max-w-md mt-0.5"
-              >
-                {document.title}
-              </h2>
-            ) : (
-              <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] leading-tight mt-0.5">
-                {t('home_text_title') || 'Lector Independiente'}
-              </h2>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Language Dropdown, AI Glossing button, Font Size, Edit / New Controls */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* Saved Documents Library Button */}
-          <button
-            type="button"
-            onClick={() => setShowSavedModal(true)}
-            title={t('saved_documents') || 'Biblioteca de textos guardados'}
-            className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-            <span className="hidden sm:inline">Biblioteca</span>
-            {savedDocsCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-mono font-bold">
-                {savedDocsCount}
-              </span>
-            )}
-          </button>
-
-          {/* Target Language Dropdown */}
-          <div className="bg-[var(--surface-tertiary)] rounded-xl border border-[var(--border-primary)] p-0.5">
-            <LanguageSelectDropdown
-              value={activeDocLang}
-              onChange={handleLanguageChange}
-              options={languages}
-              variant="header"
-              align="right"
-            />
-          </div>
-
-          {/* Reader controls (Auto-glossing, Interlinear, Font size, Edit, Clear) */}
-          {document && !isEditing && (
-            <>
-              {/* GLOBAL AUTO-GLOSSING TOGGLE (Represented by Languages icon, ON/OFF, Green when ON, Progress badge) */}
-              <button
-                type="button"
-                onClick={handleToggleAutoGlossing}
-                title={
-                  isAutoGlossing
-                    ? 'Glosado automático activo: clic para detener'
-                    : 'Activar glosado automático global'
-                }
-                className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
-                  isAutoGlossing
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
-                    : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border-[var(--border-primary)]'
-                }`}
-              >
-                <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
-                <span className="font-semibold">Auto-Glosado</span>
-                <span
-                  className={`text-[9px] px-1 py-0.2 rounded font-bold ${
-                    isAutoGlossing
-                      ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
-                      : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)] border border-[var(--border-primary)]'
-                  }`}
-                >
-                  {isAutoGlossing ? 'ON' : 'OFF'}
+            <div className="min-w-0">
+              <div className="flex items-center space-x-2">
+                <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
+                  📖 {t('text_reader_title') || 'Importador de Textos'}
                 </span>
-
-                {/* Live Auto-Glossing Progress Badge */}
-                {document.paragraphs?.length > 0 && (
-                  <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
-                    isAutoGlossing
-                      ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
-                      : 'text-[var(--text-muted)] bg-[var(--surface-tertiary)] border-[var(--border-primary)]'
-                  }`}>
-                    {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
-                    <span>{completedParagraphsCount}/{document.paragraphs.length}</span>
+                {document && !isEditing && (
+                  <span className="text-xs text-[var(--text-muted)] font-medium hidden sm:inline">
+                    • {document.paragraphs?.length || 0} párrafos
                   </span>
                 )}
-              </button>
+              </div>
 
-              {/* Interlinear Mode Toggle */}
-              <button
-                type="button"
-                onClick={() => setInterlinearMode(!interlinearMode)}
-                title={interlinearMode ? "Cambiar a texto continuo" : "Ver con glosado interlineal"}
-                className={`p-2 rounded-xl border text-xs font-semibold transition-all shadow-xs cursor-pointer ${
-                  interlinearMode
-                    ? 'bg-rose-600 border-rose-400 text-white shadow-rose-900/40'
-                    : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
-                }`}
-              >
-                <Type className="w-4 h-4" />
-              </button>
+              {/* Editable or Static Document Title */}
+              {document && !isEditing ? (
+                <h2
+                  title="Título del documento"
+                  className="text-sm sm:text-base font-bold text-[var(--text-primary)] truncate leading-tight max-w-[240px] sm:max-w-md mt-0.5"
+                >
+                  {document.title}
+                </h2>
+              ) : (
+                <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] leading-tight mt-0.5">
+                  {t('home_text_title') || 'Lector Independiente'}
+                </h2>
+              )}
+            </div>
+          </div>
 
-              {/* Font Size Button */}
-              <button
-                type="button"
-                onClick={cycleFontSize}
-                title={`Tamaño de fuente: ${fontSize.toUpperCase()}`}
-                className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
-              >
-                A{fontSize === 'xl' ? '++' : fontSize === 'lg' ? '+' : fontSize === 'sm' ? '-' : ''}
-              </button>
-
-              {/* Edit text button */}
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                title="Editar o cambiar el texto"
-                className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
-              >
-                <Edit3 className="w-4 h-4" />
-              </button>
-
-              {/* New / Clear button */}
-              <button
-                type="button"
-                onClick={handleClearDocument}
-                title="Nuevo texto / Limpiar documento"
-                className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-rose-500 transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </>
+          {/* Right: Language indicator pill on main bar when reading */}
+          {document && !isEditing && (
+            <div className="flex items-center space-x-2 shrink-0">
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] flex items-center gap-1.5 shadow-xs select-none">
+                <span className="text-sm">{currentLangMeta?.flag || '🌐'}</span>
+                <span className="hidden xs:inline font-medium">{currentLangMeta?.name || activeDocLang.toUpperCase()}</span>
+              </span>
+            </div>
           )}
+        </div>
+
+        {/* PARTE 2 — CONTROLES DEL LECTOR (AUTO-HIDE AL HACER SCROLL DOWN, SHOW AL HACER SCROLL UP O TOP) */}
+        <div
+          className={`reader-controls overflow-hidden reader-controls-collapsible ${
+            isReaderControlsHidden && !isEditing ? 'is-hidden' : ''
+          }`}
+          inert={isReaderControlsHidden && !isEditing ? '' : undefined}
+          aria-hidden={isReaderControlsHidden && !isEditing}
+        >
+          <div className="px-4 pb-2.5 sm:pb-3 pt-1 flex items-center flex-wrap gap-2 border-t border-[var(--border-subtle)]/40">
+            {/* Saved Documents Library Button */}
+            <button
+              type="button"
+              onClick={() => setShowSavedModal(true)}
+              title={t('saved_documents') || 'Biblioteca de textos guardados'}
+              className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
+              <span className="hidden sm:inline">Biblioteca</span>
+              {savedDocsCount > 0 && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-mono font-bold">
+                  {savedDocsCount}
+                </span>
+              )}
+            </button>
+
+            {/* Target Language Dropdown */}
+            <div className="bg-[var(--surface-tertiary)] rounded-xl border border-[var(--border-primary)] p-0.5">
+              <LanguageSelectDropdown
+                value={activeDocLang}
+                onChange={handleLanguageChange}
+                options={languages}
+                variant="header"
+                align="right"
+              />
+            </div>
+
+            {/* Reader controls (Auto-glossing, Interlinear, Font size, Edit, Clear) */}
+            {document && !isEditing && (
+              <>
+                {/* GLOBAL AUTO-GLOSSING TOGGLE (Represented by Languages icon, ON/OFF, Green when ON, Progress badge) */}
+                <button
+                  type="button"
+                  onClick={handleToggleAutoGlossing}
+                  title={
+                    isAutoGlossing
+                      ? 'Glosado automático activo: clic para detener'
+                      : 'Activar glosado automático global'
+                  }
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
+                    isAutoGlossing
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
+                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border-[var(--border-primary)]'
+                  }`}
+                >
+                  <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
+                  <span className="font-semibold">Auto-Glosado</span>
+                  <span
+                    className={`text-[9px] px-1 py-0.2 rounded font-bold ${
+                      isAutoGlossing
+                        ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
+                        : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)] border border-[var(--border-primary)]'
+                    }`}
+                  >
+                    {isAutoGlossing ? 'ON' : 'OFF'}
+                  </span>
+
+                  {/* Live Auto-Glossing Progress Badge */}
+                  {document.paragraphs?.length > 0 && (
+                    <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
+                      isAutoGlossing
+                        ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
+                        : 'text-[var(--text-muted)] bg-[var(--surface-tertiary)] border-[var(--border-primary)]'
+                    }`}>
+                      {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
+                      <span>{completedParagraphsCount}/{document.paragraphs.length}</span>
+                    </span>
+                  )}
+                </button>
+
+                {/* Interlinear Mode Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setInterlinearMode(!interlinearMode)}
+                  title={interlinearMode ? "Cambiar a texto continuo" : "Ver con glosado interlineal"}
+                  className={`p-2 rounded-xl border text-xs font-semibold transition-all shadow-xs cursor-pointer ${
+                    interlinearMode
+                      ? 'bg-rose-600 border-rose-400 text-white shadow-rose-900/40'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                  }`}
+                >
+                  <Type className="w-4 h-4" />
+                </button>
+
+                {/* Font Size Button */}
+                <button
+                  type="button"
+                  onClick={cycleFontSize}
+                  title={`Tamaño de fuente: ${fontSize.toUpperCase()}`}
+                  className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
+                >
+                  A{fontSize === 'xl' ? '++' : fontSize === 'lg' ? '+' : fontSize === 'sm' ? '-' : ''}
+                </button>
+
+                {/* Edit text button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(true);
+                    setIsReaderControlsHidden(false);
+                    previousScrollTopRef.current = 0;
+                  }}
+                  title="Editar o cambiar el texto"
+                  className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+
+                {/* New / Clear button */}
+                <button
+                  type="button"
+                  onClick={handleClearDocument}
+                  title="Nuevo texto / Limpiar documento"
+                  className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-rose-500 transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto flex flex-col min-h-0">
+      <main
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto flex flex-col min-h-0"
+      >
         {isEditing ? (
           /* ============================================================ */
           /* 1. INPUT / IMPORT VIEW (Escribir, Pegar, Importar archivo)     */
@@ -859,7 +944,11 @@ export function TextReaderPage({
                   {document && (
                     <button
                       type="button"
-                      onClick={() => setIsEditing(false)}
+                      onClick={() => {
+                        setIsEditing(false);
+                        setIsReaderControlsHidden(false);
+                        previousScrollTopRef.current = 0;
+                      }}
                       className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold cursor-pointer hover:bg-[var(--surface-hover)]"
                     >
                       Volver a lectura
@@ -867,6 +956,7 @@ export function TextReaderPage({
                   )}
                 </div>
               </div>
+
 
               {/* Title Input */}
               <div className="mb-4">
