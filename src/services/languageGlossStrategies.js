@@ -448,6 +448,7 @@ export class ChineseGlossStrategy {
   constructor() {
     this.code = 'zh';
     this.name = 'Chino';
+    this.hasAuxiliary = true;
     this.hasTranslit = true;
     this.requiresTranslit = true;
     this.translitKey = 'pinyin';
@@ -472,7 +473,8 @@ export class ChineseGlossStrategy {
           tokens.push({
             text: w,
             word: w,
-            pinyin: isPunctuation ? null : (entry?.pinyin || null),
+            auxiliary: isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
+            pinyin: isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
             gloss: isPunctuation ? null : (entry?.gloss || null),
             isPunctuation
           });
@@ -492,7 +494,8 @@ export class ChineseGlossStrategy {
       tokens.push({
         text: w,
         word: w,
-        pinyin: isPunctuation ? null : (entry?.pinyin || null),
+        auxiliary: isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
+        pinyin: isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
         gloss: isPunctuation ? null : (entry?.gloss || null),
         isPunctuation
       });
@@ -515,10 +518,10 @@ export class ChineseGlossStrategy {
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (!gloss || (gloss === w && w !== '的')) return false;
 
-    // Chinese characters must have tone-marked Pinyin
+    // Chinese characters must have tone-marked Pinyin in auxiliary
     if (/[\u4E00-\u9FFF]/.test(w)) {
-      const pinyin = typeof token.pinyin === 'string' ? token.pinyin.trim() : '';
-      if (!pinyin || pinyin === gloss) return false;
+      const aux = typeof (token.auxiliary || token.pinyin) === 'string' ? (token.auxiliary || token.pinyin).trim() : '';
+      if (!aux || aux === gloss) return false;
     }
     return true;
   }
@@ -528,9 +531,10 @@ export class ArabicGlossStrategy {
   constructor() {
     this.code = 'ar';
     this.name = 'Árabe';
-    this.hasTranslit = true;
-    this.requiresTranslit = false; // Transliteration is supported/prioritized, but doesn't block completion if gloss exists
-    this.translitKey = 'translit';
+    this.hasAuxiliary = false;
+    this.hasTranslit = false;
+    this.requiresTranslit = false;
+    this.translitKey = null;
     this.offlineDict = ARABIC_OFFLINE_DICT;
   }
 
@@ -553,8 +557,9 @@ export class ArabicGlossStrategy {
           tokens.push({
             text: w,
             word: w,
+            auxiliary: null,
             pinyin: null,
-            translit: isPunctuation ? null : (entry?.translit || null),
+            translit: null,
             gloss: isPunctuation ? null : (entry?.gloss || null),
             isPunctuation
           });
@@ -577,8 +582,9 @@ export class ArabicGlossStrategy {
       tokens.push({
         text: w,
         word: w,
+        auxiliary: null,
         pinyin: null,
-        translit: isPunctuation ? null : (entry?.translit || null),
+        translit: null,
         gloss: isPunctuation ? null : (entry?.gloss || null),
         isPunctuation
       });
@@ -589,9 +595,7 @@ export class ArabicGlossStrategy {
   lookupOffline(word) {
     if (!word) return null;
     const clean = word.trim();
-    // Try exact (with vowels if present)
     if (this.offlineDict[clean]) return this.offlineDict[clean];
-    // Try normalized without tashkeel (fatḥah, kasrah, ḍammah, sukūn, shaddah, etc.)
     const stripped = clean.replace(/[\u064B-\u065F\u0670]/g, '');
     if (this.offlineDict[stripped]) return this.offlineDict[stripped];
     return null;
@@ -613,7 +617,8 @@ export class PolishGlossStrategy {
   constructor() {
     this.code = 'pl';
     this.name = 'Polaco';
-    this.hasTranslit = false; // STRICTLY NO TRANSLITERATION FOR POLISH!
+    this.hasAuxiliary = false;
+    this.hasTranslit = false;
     this.requiresTranslit = false;
     this.translitKey = null;
     this.offlineDict = POLISH_OFFLINE_DICT;
@@ -624,7 +629,6 @@ export class PolishGlossStrategy {
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
-    // Polish words with diacritics (ą, ę, ś, ć, ż, ź, ł, ó, ń)
     const parts = cleanStr.split(/([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+|[^\sa-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+)/).filter(Boolean);
     const tokens = [];
 
@@ -637,6 +641,7 @@ export class PolishGlossStrategy {
       tokens.push({
         text: w,
         word: w,
+        auxiliary: null,
         pinyin: null,
         translit: null,
         gloss: isPunctuation ? null : (entry?.gloss || null),
@@ -668,9 +673,10 @@ export class DefaultGlossStrategy {
   constructor(langCode = 'default') {
     this.code = langCode;
     this.name = langCode.toUpperCase();
-    this.hasTranslit = ['ru'].includes(langCode);
+    this.hasAuxiliary = false;
+    this.hasTranslit = false; // Strictly NO transliteration or auxiliary for Russian, Bulgarian, Dutch, English, etc.
     this.requiresTranslit = false;
-    this.translitKey = this.hasTranslit ? 'translit' : null;
+    this.translitKey = null;
     this.offlineDict = {};
   }
 
@@ -685,6 +691,7 @@ export class DefaultGlossStrategy {
       return {
         text: w,
         word: w,
+        auxiliary: null,
         pinyin: null,
         translit: null,
         gloss: null,

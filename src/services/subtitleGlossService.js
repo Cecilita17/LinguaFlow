@@ -181,11 +181,11 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
 }
 
 /**
- * Cache key generator for persistent storage (version 2 prevents stale single-character cache)
+ * Cache key generator for persistent storage (version 3 ensures auxiliary-only schema)
  */
 function getStorageKey(videoId, subtitlesCount, targetLang = 'zh') {
   const cleanId = (videoId || 'generic').replace(/[^a-zA-Z0-9_-]/g, '');
-  return `linguaflow_yt_gloss_v2_${targetLang}_${cleanId}_${subtitlesCount}`;
+  return `linguaflow_yt_gloss_v3_${targetLang}_${cleanId}_${subtitlesCount}`;
 }
 
 /**
@@ -265,11 +265,14 @@ export function findMatchingSubtitleIndex(subtitlesList, chunkList, aiItem, item
  * Safely merge AI tokens onto pre-segmented client tokens.
  * NEVER breaks or splits client word units!
  * Preserves locally resolved tokens and enriches unresolved ones.
+ * Strictly enforces that ONLY Chinese (zh) receives an auxiliary (Pinyin with tones).
  */
-export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = []) {
+export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], targetLang = 'zh') {
   if (!Array.isArray(aiTokens) || aiTokens.length === 0) {
     return originalTokens;
   }
+
+  const isChinese = targetLang === 'zh';
 
   // Create lookup map by exact word, lowercase, and normalized Arabic
   const aiMap = new Map();
@@ -298,40 +301,50 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = []) {
     }
 
     // If compound Chinese word had no direct match, check if AI returned constituent characters
-    if (!match && w.length > 1 && /[\u4E00-\u9FFF]/.test(w)) {
+    if (!match && isChinese && w.length > 1 && /[\u4E00-\u9FFF]/.test(w)) {
       const chars = [...w];
       const subMatches = chars.map(c => aiMap.get(c)).filter(Boolean);
       if (subMatches.length === chars.length) {
         match = {
-          pinyin: subMatches.map(m => m.pinyin).filter(Boolean).join(' '),
+          auxiliary: subMatches.map(m => m.auxiliary || m.pinyin).filter(Boolean).join(' '),
           gloss: subMatches.map(m => m.gloss).filter(Boolean).join(' ')
         };
       }
     }
 
     if (match) {
-      const pinyin = match.pinyin || orig.pinyin;
-      const translit = match.translit || match.transliteration || orig.translit || null;
+      // ONLY Chinese gets auxiliary (Pinyin with tones). All others are strictly null!
+      const auxiliary = isChinese ? (match.auxiliary || match.pinyin || orig.auxiliary || orig.pinyin || null) : null;
       let gloss = match.gloss || orig.gloss;
 
-      // Sanitize: never allow gloss to duplicate pinyin or the word itself (except when gloss is genuinely a valid Spanish word like 'de')
-      if (gloss && (gloss === pinyin || (gloss.toLowerCase() === w.toLowerCase() && w !== 'de'))) {
-        if (w === '的' && gloss.toLowerCase() === 'de') {
-          gloss = 'de';
-        } else {
-          gloss = orig.gloss && orig.gloss !== pinyin ? orig.gloss : null;
-        }
+      // Sanitize: never allow gloss to duplicate auxiliary or the word itself
+      if (gloss && isChinese && auxiliary && gloss === auxiliary) {
+        gloss = orig.gloss && orig.gloss !== auxiliary ? orig.gloss : null;
       }
+      if (gloss && (gloss.toLowerCase() === w.toLowerCase() && w !== 'de' && w !== '的')) {
+        gloss = orig.gloss || null;
+      }
+
+      // If AI returned Arabic word with diacritics/tashkeel, use that word
+      const wordToUse = (match.word && /[\u064B-\u065F\u0670]/.test(match.word)) ? match.word : (orig.word || orig.text || w);
 
       return {
         ...orig,
-        pinyin,
-        translit,
+        word: wordToUse,
+        text: wordToUse,
+        auxiliary,
+        pinyin: auxiliary,
+        translit: null,
         gloss
       };
     }
 
-    return orig;
+    return {
+      ...orig,
+      auxiliary: isChinese ? (orig.auxiliary || orig.pinyin || null) : null,
+      pinyin: isChinese ? (orig.auxiliary || orig.pinyin || null) : null,
+      translit: null
+    };
   });
 }
 
@@ -367,7 +380,7 @@ export function enrichSubtitlesWithGlosses({
     const offlineTokens = tokenizeAndGlossLineOffline(sub.text, targetLang);
 
     if (cache[sub.id] && Array.isArray(cache[sub.id]) && cache[sub.id].length > 0) {
-      const mergedTokens = mergeAiTokensWithSegmented(offlineTokens, cache[sub.id]);
+      const mergedTokens = mergeAiTokensWithSegmented(offlineTokens, cache[sub.id], targetLang);
       return {
         ...sub,
         tokens: mergedTokens
@@ -467,7 +480,7 @@ export function enrichSubtitlesWithGlosses({
             const idx = findMatchingSubtitleIndex(currentSubtitles, batch, item, itemIdx);
             if (idx !== -1) {
               const sub = currentSubtitles[idx];
-              const mergedTokens = mergeAiTokensWithSegmented(sub.tokens, item.tokens);
+              const mergedTokens = mergeAiTokensWithSegmented(sub.tokens, item.tokens, targetLang);
               const candidateSub = {
                 ...sub,
                 tokens: mergedTokens

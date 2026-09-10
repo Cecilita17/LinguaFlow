@@ -584,6 +584,29 @@ const activeModel = getSanitizedGroqModel();
         })
         .join('\n');
 
+      const isChinese = targetLang === 'zh';
+      const isArabic = targetLang === 'ar';
+      const targetLangName = (SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang }).name;
+
+      let languageRules = '';
+      if (isChinese) {
+        languageRules = `- CHINESE RULES (targetLang: 'zh'):
+  * Generate tone-marked Pinyin in the "auxiliary" field (e.g. "huānyíng", "jīntiān", "de").
+  * In the "word" field, provide the exact Chinese characters (Hanzi).
+  * In the "gloss" field, provide the direct concise meaning in "${nativeLang}".`;
+      } else if (isArabic) {
+        languageRules = `- ARABIC RULES (targetLang: 'ar'):
+  * Preserve Arabic script. Use Arabic diacritics (tashkeel) on words when appropriate to help with reading.
+  * Never transliterate Arabic into Latin characters.
+  * Do NOT generate pronunciation, transliteration, romanization, Pinyin, or any auxiliary text. STRICTLY set "auxiliary": null for all tokens.
+  * In the "gloss" field, provide the direct concise meaning in "${nativeLang}".`;
+      } else {
+        languageRules = `- RULES FOR ${targetLang.toUpperCase()} (${targetLangName}):
+  * Do NOT generate pronunciation, transliteration, romanization, Pinyin, or any auxiliary text. STRICTLY set "auxiliary": null for all tokens.
+  * In the "word" field, provide the exact word in ${targetLangName}.
+  * In the "gloss" field, provide the direct concise meaning in "${nativeLang}".`;
+      }
+
       const prompt = `You are a master multilingual linguistic professor and vocabulary glossing engine.
 Analyze each subtitle line in language "${targetLang}" and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLang}".
 
@@ -592,11 +615,9 @@ ${hasSpecificUnknowns ? `- HYBRID CONTEXTUAL GLOSSING:
   * For lines with "ONLY generate tokens for these unknown words", analyze the full sentence context to understand the exact contextual meaning, but ONLY output tokens and glosses for the requested unknown words!
   * Do NOT generate tokens for words outside the unknown list. This saves tokens and preserves local dictionary resolutions.` : `- PRESERVE PRE-SEGMENTED WORDS: You MUST preserve the exact pre-segmented word units. DO NOT break multi-character words into individual characters!
   * Complete glossing: Provide an accurate gloss for all substantive words.`}
-- LANGUAGE-SPECIFIC TRANSLITERATION RULES:
-  * For Polish (targetLang: 'pl') or Latin scripts: STRICTLY NO TRANSLITERATION! Always set "pinyin": null and "translit": null. Only output the Polish word and Spanish gloss.
-  * For Chinese (targetLang: 'zh'): Provide tone-marked Pinyin in "pinyin" (e.g. "huānyíng", "jīntiān", "de") and direct Spanish meaning in "gloss".
-  * For Arabic (targetLang: 'ar'): Provide phonetic Latin transliteration in "translit" (e.g. "marḥaban", "kayfa", "ḥāluka") and direct Spanish meaning in "gloss".
-- Omit punctuation marks or give them null gloss.
+- LANGUAGE-SPECIFIC RULES:
+${languageRules}
+- Omit punctuation marks or give them null gloss and null auxiliary.
 - EXACT IDS: You MUST preserve and return the EXACT same line ID string for each line as provided in the input (e.g. "srt_1", "srt_2").
 - RETURN ALL LINES: You MUST return all ${lines.length} requested lines matching IDs [${lines.map(l => `"${l.id}"`).join(', ')}].
 
@@ -611,8 +632,7 @@ Return STRICTLY valid JSON with no markdown formatting:
       "tokens": [
         {
           "word": "string (exact word unit)",
-          "pinyin": "string with tones or null",
-          "translit": "string with phonetic transliteration or null",
+          "auxiliary": ${isChinese ? '"string with tone-marked Pinyin"' : 'null'},
           "gloss": "string (direct concise meaning in ${nativeLang})"
         }
       ]
@@ -654,7 +674,22 @@ Return STRICTLY valid JSON with no markdown formatting:
           const parsed = cleanAndParseJSON(rawText);
           if (parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0) {
             const requestedIds = new Set(lines.map(l => String(l.id)));
-            const validLines = parsed.lines.filter(l => l && l.id && Array.isArray(l.tokens));
+            const validLines = parsed.lines
+              .filter(l => l && l.id && Array.isArray(l.tokens))
+              .map(l => ({
+                id: String(l.id),
+                tokens: l.tokens.map(t => {
+                  const w = String(t.word || t.text || '').trim();
+                  const aux = isChinese ? (t.auxiliary || t.pinyin || null) : null;
+                  const gloss = t.gloss ? String(t.gloss).trim() : null;
+                  return {
+                    word: w,
+                    auxiliary: aux,
+                    gloss
+                  };
+                })
+              }));
+
             const returnedIds = new Set(validLines.map(l => String(l.id)));
             const missingIds = [...requestedIds].filter(id => !returnedIds.has(id));
 

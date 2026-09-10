@@ -82,22 +82,21 @@ export function TranscriptLine({
       <div className="flex-1 min-w-0">
         {interlinearMode && tokens && tokens.length > 0 ? (
           (() => {
-            const strategy = getLanguageGlossStrategy(targetLang);
-            const hasLineTranslit = strategy.hasTranslit && tokens.some(t => Boolean(t && typeof t === 'object' && (t.pinyin || t.translit || t.transliteration)));
+            const isChinese = targetLang === 'zh';
 
             return (
               <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2.5 gap-y-2 leading-tight break-words max-w-full">
                 {tokens.map((tokenObj, idx) => {
-                  const word = typeof tokenObj === 'string' ? tokenObj : tokenObj.word;
-                  const phonetic = typeof tokenObj === 'object' ? (tokenObj.pinyin || tokenObj.translit || tokenObj.transliteration) : null;
+                  const word = typeof tokenObj === 'string' ? tokenObj : (tokenObj.word || tokenObj.text);
+                  const auxiliary = isChinese ? (tokenObj.auxiliary || tokenObj.pinyin || null) : null;
                   const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : (glosses && glosses[idx]);
                   const isPunctuation = typeof tokenObj === 'object'
                     ? tokenObj.isPunctuation
                     : PUNCTUATION_REGEX.test(word);
 
-                  // Never display Pinyin/translit as gloss or word as gloss (except when gloss is a valid Spanish word like 'de')
+                  // Never display auxiliary as gloss or word as gloss (except when gloss is a valid word like 'de')
                   const isLegitSameWord = word === '的' && rawGloss?.toLowerCase() === 'de';
-                  const cleanGloss = (rawGloss && (rawGloss !== phonetic || isLegitSameWord) && rawGloss.toLowerCase() !== word?.toLowerCase()) ? rawGloss : null;
+                  const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameWord) && rawGloss.toLowerCase() !== word?.toLowerCase()) ? rawGloss : null;
 
                   if (isPunctuation) {
                     return (
@@ -116,25 +115,19 @@ export function TranscriptLine({
                       onClick={(e) => {
                         if (onWordClick) {
                           e.stopPropagation();
-                          onWordClick(word, { word, pinyin: phonetic, translit: phonetic, gloss: cleanGloss });
+                          onWordClick(word, { word, auxiliary, gloss: cleanGloss });
                         }
                       }}
                       className="inline-flex flex-col items-center justify-center px-1 py-0.5 rounded-lg hover:bg-white/10 transition-colors group/token max-w-full"
                     >
-                      {/* Tier 1 (TOP): Phonetic Transliteration (Pinyin or Romanization) - OMITTED for Polish and non-translit languages */}
-                      {hasLineTranslit && (
-                        phonetic ? (
-                          <span className="text-[11px] sm:text-xs text-rose-300 font-mono tracking-tight leading-none mb-1 select-text">
-                            {phonetic}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-transparent select-none leading-none mb-1">
-                            &nbsp;
-                          </span>
-                        )
+                      {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
+                      {isChinese && auxiliary && (
+                        <span className="text-[11px] sm:text-xs text-rose-300 font-mono tracking-tight leading-none mb-1 select-text">
+                          {auxiliary}
+                        </span>
                       )}
 
-                      {/* Tier 2 (CENTER): Word */}
+                      {/* Tier 2 (CENTER): Word (Arabic with diacritics/tashkeel, Russian/Polish/Latin scripts) */}
                       <span
                         className={`font-semibold tracking-wide ${
                           isActive ? 'text-white font-bold drop-shadow-xs' : 'text-stone-100'
@@ -143,7 +136,7 @@ export function TranscriptLine({
                         {renderHighlightedText(word)}
                       </span>
 
-                      {/* Tier 3 (BOTTOM): Gloss / Meaning in student's native language */}
+                      {/* Tier 3 (BOTTOM): Gloss in student's native language */}
                       {cleanGloss && (
                         <span
                           title={cleanGloss}
