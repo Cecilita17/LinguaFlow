@@ -74,9 +74,11 @@ export const TRANSLATIONS = {
     bot_thinking: 'LinguaBot está analizando y respondiendo...',
     no_errors: 'Sin errores',
     practice_writing: 'Practicar escritura',
+    practice_writing_short: 'Escritura',
     practice_sentence: 'Practicar oración',
     view_breakdown: 'Ver desglose',
     listen: 'Escuchar',
+    tap_word_meaning: 'Toca cualquier palabra para ver su significado',
     correction: 'Corrección',
     original: 'Original',
     
@@ -182,9 +184,11 @@ export const TRANSLATIONS = {
     bot_thinking: 'LinguaBot is analyzing and replying...',
     no_errors: 'No errors',
     practice_writing: 'Practice writing',
+    practice_writing_short: 'Writing',
     practice_sentence: 'Practice sentence',
     view_breakdown: 'View breakdown',
     listen: 'Listen',
+    tap_word_meaning: 'Tap any word for its meaning',
     correction: 'Correction',
     original: 'Original',
     
