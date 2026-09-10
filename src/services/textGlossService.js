@@ -196,7 +196,7 @@ export function enrichParagraphsWithGlosses({
 
             if (idx !== -1) {
               const p = currentParagraphs[idx];
-              const mergedTokens = mergeAiTokensWithSegmented(p.tokens, item.tokens, targetLang);
+              const mergedTokens = mergeAiTokensWithSegmented(p.tokens, item.tokens, targetLang, p.text || item.text);
               currentParagraphs[idx] = {
                 ...p,
                 tokens: mergedTokens

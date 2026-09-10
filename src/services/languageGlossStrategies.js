@@ -460,7 +460,7 @@ export class ChineseGlossStrategy {
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
-    // PRIMARY: Dictionary-first longest-prefix-match segmentation.
+    // Phase 1 (Provisional): Dictionary-first longest-prefix-match segmentation for 0ms offline rendering.
     //
     // Intl.Segmenter('zh-CN') is intentionally NOT used as primary here because:
     // 1. It produces inconsistent results across browsers and Node.js environments.
@@ -468,9 +468,12 @@ export class ChineseGlossStrategy {
     //    separate isWordLike=true segments, breaking compound words like 喜欢 → [喜, 欢].
     // 3. The offline dict covers HSK 1-3 high-frequency words reliably.
     //
-    // Strategy: longest-prefix dict match first (greedy, up to 6 chars), then single CJK char.
-    // Result: offline compound words (喜欢, 学习, 中文, 朋友, etc.) are always correctly grouped.
-    // Unknown chars → single tokens provisionally, AI re-segments them correctly.
+    // Architecture Note:
+    // - Local tokens generated here are strictly PROVISIONAL for instant UI display.
+    // - Phase 2 (Authoritative): mergeAiTokensWithSegmented() in subtitleGlossService.js performs
+    //   authoritative text-coverage resegmentation based on AI lexical units, grouping multi-character
+    //   words (e.g. 喜欢, 学习, 中文) seamlessly.
+    // - Once AI results are merged, the merged tokens are persisted in IndexedDB and never re-split.
     return this.tokenizeFallback(cleanStr);
   }
 

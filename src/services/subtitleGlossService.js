@@ -331,18 +331,26 @@ export function findMatchingSubtitleIndex(subtitlesList, chunkList, aiItem, item
 /**
  * Safely merge AI tokens onto pre-segmented client tokens.
  *
- * For Chinese (zh): RESEGMENTATION MODE
- *   - AI tokens are used as the authoritative segmentation (multi-char compound words).
- *   - Validates that AI token chars exactly reproduce original token chars.
- *   - If valid: reconstructs the token array from AI words, preserving punctuation.
+ * For Chinese (zh): AUTHORITATIVE RESEGMENTATION MODE
+ *   - AI tokens define the authoritative lexical units (multi-character compound words).
+ *   - Validates that AI tokens sequentially cover the exact original Chinese sentence.
+ *   - Preserves all punctuation in exact positions (whether returned by AI or in source text).
+ *   - Preserves any user manual glosses for words.
+ *   - If validation passes: returns the new authoritative lexical token array.
  *   - If validation fails: falls back to map-based merge (safe fallback, zero data loss).
  *
  * For all other languages: MAP-BASED MERGE (unchanged behavior)
  *   - NEVER breaks or splits client word units.
  *   - Preserves locally resolved tokens and enriches unresolved ones.
  *   - Strictly enforces that ONLY Chinese (zh) receives an auxiliary (Pinyin with tones).
+ *
+ * @param {Array} originalTokens - Client-side provisional tokens
+ * @param {Array} aiTokens - AI-returned tokens with lexical groupings
+ * @param {string} targetLang - Target language code (e.g. 'zh', 'ar', 'pl')
+ * @param {string} [originalText=''] - Optional raw original text of the sentence/paragraph
+ * @returns {Array} Final merged/resegmented tokens
  */
-export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], targetLang = 'zh') {
+export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], targetLang = 'zh', originalText = '') {
   if (!Array.isArray(aiTokens) || aiTokens.length === 0) {
     return originalTokens;
   }
@@ -350,15 +358,15 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
   const isChinese = targetLang === 'zh';
 
   // ============================================================
-  // CHINESE RESEGMENTATION MODE
+  // CHINESE RESEGMENTATION MODE (Coverage-based lexical merge)
   // ============================================================
   if (isChinese) {
-    const resegmented = tryChineseResegmentation(originalTokens, aiTokens);
+    const resegmented = tryChineseResegmentation(originalTokens, aiTokens, originalText);
     if (resegmented !== null) {
       return resegmented;
     }
     // Validation failed: fall through to map-based merge as safe fallback
-    console.warn('[ChineseMerge] Resegmentation validation failed — falling back to map-based merge');
+    console.warn('[ChineseMerge] Resegmentation coverage validation failed — falling back to map-based merge');
   }
 
   // ============================================================
@@ -456,103 +464,124 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
 }
 
 /**
- * Attempts to reconstruct Chinese token array using AI lexical segmentation.
+ * Validates and reconstructs the Chinese token array from AI lexical units based on exact text coverage.
  *
  * Algorithm:
- * 1. Extracts non-punctuation Chinese chars from both original and AI tokens.
- * 2. Validates that AI char sequence === original char sequence (exact match).
- * 3. If valid: iterates original tokens in order, consuming AI tokens greedily
- *    by character count. Pushes an AI token once enough original chars have been
- *    consumed to complete it. Punctuation tokens pass through unchanged.
- * 4. Returns the new token array, or null if validation fails.
+ * 1. Obtains the full original sentence text (from rawOriginalText or originalTokens).
+ * 2. Iterates along the original sentence text, consuming matching AI tokens.
+ * 3. Preserves punctuation in its exact original positions (whether present in AI tokens or in source text).
+ * 4. Preserves manual gloss overrides from provisional original tokens.
+ * 5. Strictly validates that:
+ *    - No characters are omitted.
+ *    - No characters are invented or hallucinated.
+ *    - Character order is preserved exactly.
+ *    - All AI tokens are accounted for.
+ * 6. Returns the reconstructed token array if 100% verified, or null on any mismatch.
  *
- * Example:
- *   original: [我(1), 喜(1), 欢(1), 学(1), 习(1), 中(1), 文(1), 。(punct)]
- *   AI:       [我(1), 喜欢(2), 学习(2), 中文(2)]
- *   result:   [我, 喜欢, 学习, 中文, 。]
- *
- * @param {Array} originalTokens - Client-side pre-segmented tokens
- * @param {Array} aiTokens - AI-returned tokens with lexical grouping
- * @returns {Array|null} New token array, or null if validation fails
+ * @param {Array} originalTokens - Client-side provisional tokens
+ * @param {Array} aiTokens - AI-returned tokens with lexical groupings
+ * @param {string} [rawOriginalText=''] - Raw sentence text
+ * @returns {Array|null} New token array, or null if coverage validation fails
  */
-function tryChineseResegmentation(originalTokens, aiTokens) {
-  const CJK_REGEX = /[\u4e00-\u9fff\u3400-\u4dbf\u20000-\u2a6df\u2a700-\u2b73f\uff01-\uff60]/;
+function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = '') {
+  if (!Array.isArray(aiTokens) || aiTokens.length === 0) return null;
 
-  // Filter AI tokens: only non-punctuation Chinese word tokens
-  const aiNonPunct = aiTokens.filter(t => {
-    const w = (t.word || t.text || '').trim();
-    return w && !PUNCTUATION_REGEX.test(w) && CJK_REGEX.test(w);
-  });
+  // 1. Obtain authoritative full original text
+  const fullOriginalText = (typeof rawOriginalText === 'string' && rawOriginalText.trim())
+    ? rawOriginalText.trim()
+    : (Array.isArray(originalTokens) ? originalTokens.map(t => t.text || t.word || '').join('').trim() : '');
 
-  if (aiNonPunct.length === 0) return null;
+  if (!fullOriginalText) return null;
 
-  // Get original non-punctuation tokens (could be single chars or multi-char if already from dict)
-  const origNonPunct = originalTokens.filter(t => {
-    if (t.isPunctuation) return false;
-    const w = (t.text || t.word || '').trim();
-    return w && !PUNCTUATION_REGEX.test(w) && CJK_REGEX.test(w);
-  });
+  // 2. Clean and filter AI tokens (trim words, skip empty)
+  const cleanAiTokens = aiTokens
+    .map(t => ({
+      ...t,
+      word: (t.word || t.text || '').trim()
+    }))
+    .filter(t => t.word.length > 0);
 
-  // Build char strings for validation
-  const originalChars = origNonPunct
-    .map(t => (t.text || t.word || '').replace(/\s/g, ''))
-    .join('');
-  const aiChars = aiNonPunct
-    .map(t => (t.word || t.text || '').replace(/\s/g, ''))
-    .join('');
+  if (cleanAiTokens.length === 0) return null;
 
-  // CRITICAL VALIDATION: AI chars must exactly reproduce original chars
-  // If AI hallucinated or omitted characters, refuse the resegmentation
-  if (aiChars !== originalChars || originalChars.length === 0) {
-    return null;
+  // 3. Preserve manual gloss overrides from provisional original tokens
+  const manualGlossMap = new Map();
+  if (Array.isArray(originalTokens)) {
+    for (const tok of originalTokens) {
+      if (tok && tok.glossSource === 'manual' && tok.gloss) {
+        const w = (tok.word || tok.text || '').trim();
+        if (w) manualGlossMap.set(w, tok.gloss);
+      }
+    }
   }
 
-  // Build result by iterating original tokens in sequence order
+  // Punctuation run matcher for Chinese & Western punctuation
+  const PUNCT_RUN_REGEX = /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]+/;
+
   const result = [];
-  let aiNonPunctIdx = 0;  // Current position in AI non-punct token list
-  let charsConsumed = 0;  // Chars consumed from origNonPunct toward current AI token
+  let textIdx = 0;
+  let aiIdx = 0;
+  const textLen = fullOriginalText.length;
 
-  for (const orig of originalTokens) {
-    const origWord = (orig.text || orig.word || '').replace(/\s/g, '');
-
-    // Punctuation and non-CJK tokens pass through unchanged
-    if (orig.isPunctuation || PUNCTUATION_REGEX.test(origWord) || !CJK_REGEX.test(origWord)) {
-      result.push(orig);
+  while (textIdx < textLen) {
+    // Skip whitespace in original text
+    if (/\s/.test(fullOriginalText[textIdx])) {
+      textIdx++;
       continue;
     }
 
-    // Consume characters toward the current AI token
-    if (aiNonPunctIdx >= aiNonPunct.length) {
-      // Safety: shouldn't happen if validation passed, but keep orig to avoid data loss
-      result.push(orig);
-      continue;
-    }
+    const remainingText = fullOriginalText.slice(textIdx);
+    const currentAiToken = aiIdx < cleanAiTokens.length ? cleanAiTokens[aiIdx] : null;
 
-    charsConsumed += origWord.length;
-    const aiToken = aiNonPunct[aiNonPunctIdx];
-    const aiWord = (aiToken.word || aiToken.text || '').replace(/\s/g, '');
+    // Check if current AI token matches directly at textIdx
+    if (currentAiToken && remainingText.startsWith(currentAiToken.word)) {
+      const isPunct = PUNCTUATION_REGEX.test(currentAiToken.word);
+      const isManual = manualGlossMap.has(currentAiToken.word);
+      const aux = isPunct ? null : (currentAiToken.auxiliary || currentAiToken.pinyin || null);
+      const gloss = isManual
+        ? manualGlossMap.get(currentAiToken.word)
+        : (isPunct ? null : (currentAiToken.gloss || null));
 
-    if (charsConsumed >= aiWord.length) {
-      // We've consumed enough original chars to complete this AI token — emit it
-      const aux = aiToken.auxiliary || aiToken.pinyin || null;
       result.push({
-        text: aiWord,
-        word: aiWord,
+        text: currentAiToken.word,
+        word: currentAiToken.word,
         auxiliary: aux,
         pinyin: aux,
         translit: null,
-        gloss: aiToken.gloss || null,
-        isPunctuation: false,
-        glossSource: 'ai'
+        gloss,
+        isPunctuation: isPunct,
+        glossSource: isManual ? 'manual' : (isPunct ? undefined : 'ai')
       });
-      aiNonPunctIdx++;
-      charsConsumed = 0;
+
+      textIdx += currentAiToken.word.length;
+      aiIdx++;
+      continue;
     }
-    // else: still accumulating chars for this AI token — skip pushing until done
+
+    // If AI omitted punctuation that exists in original text, emit punctuation from original text
+    const punctMatch = remainingText.match(PUNCT_RUN_REGEX);
+    if (punctMatch) {
+      const p = punctMatch[0].trim();
+      if (p) {
+        result.push({
+          text: p,
+          word: p,
+          auxiliary: null,
+          pinyin: null,
+          translit: null,
+          gloss: null,
+          isPunctuation: true
+        });
+      }
+      textIdx += punctMatch[0].length;
+      continue;
+    }
+
+    // Mismatch: AI tokens do not accurately match or cover the original text
+    return null;
   }
 
-  // Safety: if we couldn't place all AI tokens, something went wrong — fallback
-  if (aiNonPunctIdx < aiNonPunct.length) {
+  // Verification: All AI tokens must be consumed, and all text must be covered
+  if (aiIdx < cleanAiTokens.length || textIdx < textLen) {
     return null;
   }
 
@@ -610,7 +639,7 @@ export async function glossSingleSubtitleLine({
     if (Array.isArray(aiResults) && aiResults.length > 0) {
       const match = aiResults[0];
       if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
-        const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang);
+        const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang, preparedSub.text || rawSub.text);
         return {
           ...preparedSub,
           tokens: mergedTokens,
@@ -666,7 +695,7 @@ export function enrichSubtitlesWithGlosses({
     const offlineTokens = tokenizeAndGlossLineOffline(sub.text, targetLang);
 
     if (cache[sub.id] && Array.isArray(cache[sub.id]) && cache[sub.id].length > 0) {
-      const mergedTokens = mergeAiTokensWithSegmented(offlineTokens, cache[sub.id], targetLang);
+      const mergedTokens = mergeAiTokensWithSegmented(offlineTokens, cache[sub.id], targetLang, sub.text);
       return {
         ...sub,
         tokens: mergedTokens
@@ -741,7 +770,7 @@ export function enrichSubtitlesWithGlosses({
           if (matching && matching.tokens && matching.tokens.length > 0) {
             return {
               ...sub,
-              tokens: mergeAiTokensWithSegmented(sub.tokens, matching.tokens, targetLang)
+              tokens: mergeAiTokensWithSegmented(sub.tokens, matching.tokens, targetLang, sub.text)
             };
           }
           return sub;
@@ -852,7 +881,7 @@ export function enrichSubtitlesWithGlosses({
             const idx = findMatchingSubtitleIndex(currentSubtitles, batch, item, itemIdx);
             if (idx !== -1) {
               const sub = currentSubtitles[idx];
-              const mergedTokens = mergeAiTokensWithSegmented(sub.tokens, item.tokens, targetLang);
+              const mergedTokens = mergeAiTokensWithSegmented(sub.tokens, item.tokens, targetLang, sub.text);
               const candidateSub = {
                 ...sub,
                 tokens: mergedTokens
