@@ -2,9 +2,9 @@
  * Language Gloss Strategies Registry
  * Provides language-tailored tokenization, offline dictionaries, and transliteration rules:
  * - Chinese (zh): Multi-character segmentation via Intl.Segmenter, tone-marked Pinyin above word, gloss below.
- * - Arabic (ar): Word tokenization preserving diacritics/tashkeel, phonetic transliteration above word, gloss below.
+ * - Arabic (ar): RTL script, preserves tashkeel, strictly NO transliteration, Spanish gloss below.
  * - Polish (pl): Latin word tokenization with Polish diacritics, NO transliteration (clean 2-tier layout), gloss below.
- * - Extensible defaults for Russian (ru), Dutch (nl), English (en), Spanish (es), German (de), French (fr), etc.
+ * - Extensible defaults for Russian (ru, Cyrillic without transliteration), Dutch (nl), English (en), Spanish (es), German (de), French (fr), etc.
  */
 
 export const PUNCTUATION_REGEX = /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]+$/;

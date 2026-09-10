@@ -83,21 +83,105 @@ export function TextReaderPage({
     }
   }, [document]);
 
-  // Synchronize targetLang change: if document language differs, re-evaluate offline tokens
+  // Active document language (falls back to selected targetLang if editing/new)
+  const activeDocLang = (document && !isEditing && document.targetLang) ? document.targetLang : targetLang;
+
+  // Initial sync: if draft document exists with its own targetLang, synchronize targetLang once on mount
   useEffect(() => {
-    if (document && document.targetLang !== targetLang) {
-      const retokenizedParagraphs = splitTextIntoParagraphs(document.rawText, targetLang);
+    if (document?.targetLang && setTargetLang && document.targetLang !== targetLang) {
+      setTargetLang(document.targetLang);
+    }
+  }, []);
+
+  // Change target language safely without silently deleting user manual glosses
+  const handleLanguageChange = useCallback((newLang) => {
+    if (!newLang) return;
+
+    if (document && !isEditing) {
+      if (newLang === document.targetLang) return;
+
+      // Check if document contains user manual glosses
+      const hasManual = document.paragraphs?.some(p =>
+        Array.isArray(p.tokens) && p.tokens.some(t => t.glossSource === 'manual' && t.gloss)
+      );
+
+      if (hasManual) {
+        const newMeta = getLanguageMeta(newLang);
+        const confirmed = window.confirm(
+          `El documento actual contiene glosas manuales.\n\nAl cambiar el idioma a "${newMeta.name}", el texto se retokenizará para ese idioma pero se conservarán automáticamente todas las glosas manuales de las palabras coincidentes.\n\n¿Deseas cambiar el idioma del documento?`
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      // 1. Collect all manual glosses from existing document
+      const globalManualMap = new Map();
+      document.paragraphs.forEach(p => {
+        if (Array.isArray(p.tokens)) {
+          p.tokens.forEach(tok => {
+            if (tok.glossSource === 'manual' && tok.gloss) {
+              const w = (tok.word || tok.text || '').trim();
+              if (w) {
+                globalManualMap.set(w, tok.gloss);
+                globalManualMap.set(w.toLowerCase(), tok.gloss);
+              }
+            }
+          });
+        }
+      });
+
+      // 2. Generate new paragraphs for new language
+      const retokenized = splitTextIntoParagraphs(document.rawText, newLang);
+
+      // 3. Remap preserved manual glosses to matching tokens
+      const preservedParagraphs = retokenized.map((p, pIdx) => {
+        const oldPara = document.paragraphs[pIdx];
+        const oldParaMap = new Map();
+        if (oldPara && Array.isArray(oldPara.tokens)) {
+          oldPara.tokens.forEach(tok => {
+            if (tok.glossSource === 'manual' && tok.gloss) {
+              const w = (tok.word || tok.text || '').trim();
+              if (w) {
+                oldParaMap.set(w, tok.gloss);
+                oldParaMap.set(w.toLowerCase(), tok.gloss);
+              }
+            }
+          });
+        }
+
+        const remappedTokens = p.tokens.map(tok => {
+          if (tok.isPunctuation) return tok;
+          const w = (tok.word || tok.text || '').trim();
+          const preserved = oldParaMap.get(w) || oldParaMap.get(w.toLowerCase()) || globalManualMap.get(w) || globalManualMap.get(w.toLowerCase());
+          if (preserved) {
+            return {
+              ...tok,
+              gloss: preserved,
+              glossSource: 'manual'
+            };
+          }
+          return tok;
+        });
+
+        return {
+          ...p,
+          tokens: remappedTokens
+        };
+      });
+
       const updatedDoc = {
         ...document,
-        targetLang,
-        paragraphs: retokenizedParagraphs
+        targetLang: newLang,
+        paragraphs: preservedParagraphs
       };
       setDocument(updatedDoc);
       saveActiveDocumentDraft(updatedDoc);
-      // Trigger glossing for the new language
-      triggerGlossing(retokenizedParagraphs, targetLang);
+      if (setTargetLang) setTargetLang(newLang);
+    } else {
+      if (setTargetLang) setTargetLang(newLang);
     }
-  }, [targetLang]);
+  }, [document, isEditing, setTargetLang]);
 
   // Handle single-paragraph TTS playback
   const handlePlayParagraph = useCallback((paragraph) => {
@@ -112,8 +196,8 @@ export function TextReaderPage({
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
 
-    const langMeta = getLanguageMeta(targetLang);
-    const speechCode = langMeta?.speechCode || 'zh-CN';
+    const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
+    const speechCode = paragraph.tts?.speechCode || getLanguageMeta(docLang)?.speechCode || 'zh-CN';
     const cleanText = paragraph.text.replace(/<[^>]*>/g, '').trim();
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
@@ -358,8 +442,8 @@ export function TextReaderPage({
           {/* Target Language Dropdown */}
           <div className="bg-[#1a0c07] rounded-xl border border-[#482015] p-0.5">
             <LanguageSelectDropdown
-              value={targetLang}
-              onChange={(newLang) => setTargetLang && setTargetLang(newLang)}
+              value={activeDocLang}
+              onChange={handleLanguageChange}
               options={languages}
               variant="header"
               align="right"
@@ -580,7 +664,7 @@ export function TextReaderPage({
               <TextParagraphItem
                 key={paragraph.id}
                 paragraph={paragraph}
-                targetLang={targetLang}
+                targetLang={activeDocLang}
                 fontSize={fontSize}
                 interlinearMode={interlinearMode}
                 isPlaying={playingParagraphId === paragraph.id}
