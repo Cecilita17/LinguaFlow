@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FileText,
   Sparkles,
@@ -1031,22 +1032,57 @@ export function TextReaderPage({
     setFontSize(order[nextIdx]);
   };
 
-  // Contextual actions menu state for top bar
+  // Contextual actions menu state for top bar (rendered via portal to escape header overflow:hidden)
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [actionsMenuCoords, setActionsMenuCoords] = useState(null);
   const actionsMenuRef = useRef(null);
+  const actionsMenuPopoverRef = useRef(null);
+
+  const updateActionsMenuCoords = useCallback(() => {
+    if (!actionsMenuRef.current) return;
+    const rect = actionsMenuRef.current.getBoundingClientRect();
+    const menuWidth = 180;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placeAbove = spaceBelow < 180 && rect.top > spaceBelow;
+    const top = placeAbove ? undefined : (rect.bottom + 6);
+    const bottom = placeAbove ? (window.innerHeight - rect.top + 6) : undefined;
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    setActionsMenuCoords({
+      top: top !== undefined ? `${top}px` : 'auto',
+      bottom: bottom !== undefined ? `${bottom}px` : 'auto',
+      left: `${left}px`
+    });
+  }, []);
+
+  const toggleActionsMenu = useCallback(() => {
+    setIsActionsMenuOpen(prev => {
+      const next = !prev;
+      if (next) {
+        updateActionsMenuCoords();
+      }
+      return next;
+    });
+  }, [updateActionsMenuCoords]);
 
   useEffect(() => {
     if (!isActionsMenuOpen) return;
     const handleClickOutside = (e) => {
-      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target)) {
+      const isOutsideTrigger = actionsMenuRef.current && !actionsMenuRef.current.contains(e.target);
+      const isOutsidePopover = actionsMenuPopoverRef.current && !actionsMenuPopoverRef.current.contains(e.target);
+      if (isOutsideTrigger && isOutsidePopover) {
         setIsActionsMenuOpen(false);
       }
     };
     window.document.addEventListener('pointerdown', handleClickOutside);
+    window.addEventListener('resize', updateActionsMenuCoords);
+    window.addEventListener('scroll', updateActionsMenuCoords, true);
     return () => {
       window.document.removeEventListener('pointerdown', handleClickOutside);
+      window.removeEventListener('resize', updateActionsMenuCoords);
+      window.removeEventListener('scroll', updateActionsMenuCoords, true);
     };
-  }, [isActionsMenuOpen]);
+  }, [isActionsMenuOpen, updateActionsMenuCoords]);
 
   // Audio toggle helper for top bar "A" button
   const isPlayingAnyAudio = Boolean(playingParagraphId);
@@ -1207,7 +1243,7 @@ export function TextReaderPage({
               <div className="relative" ref={actionsMenuRef}>
                 <button
                   type="button"
-                  onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+                  onClick={toggleActionsMenu}
                   title="Más opciones"
                   aria-label="Más opciones"
                   aria-expanded={isActionsMenuOpen}
@@ -1220,9 +1256,20 @@ export function TextReaderPage({
                   <MoreVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
 
-                {/* Contextual dropdown popup */}
-                {isActionsMenuOpen && (
-                  <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[175px] py-1.5 px-1 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-xl backdrop-blur-md animate-fade-in text-xs font-medium text-[var(--text-primary)]">
+                {/* Contextual dropdown popup rendered via portal to prevent overflow clipping */}
+                {isActionsMenuOpen && actionsMenuCoords && typeof window !== 'undefined' && createPortal(
+                  <div
+                    ref={actionsMenuPopoverRef}
+                    style={{
+                      position: 'fixed',
+                      top: actionsMenuCoords.top,
+                      bottom: actionsMenuCoords.bottom,
+                      left: actionsMenuCoords.left,
+                      width: '180px',
+                      zIndex: 99999
+                    }}
+                    className="py-1.5 px-1 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl backdrop-blur-md animate-fade-in text-xs font-medium text-[var(--text-primary)]"
+                  >
                     {/* ✏️ Editar título */}
                     <button
                       type="button"
@@ -1254,7 +1301,8 @@ export function TextReaderPage({
                       <span className="text-sm leading-none">📚</span>
                       <span>Librería</span>
                     </button>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             </div>
@@ -1445,10 +1493,10 @@ export function TextReaderPage({
           /* ============================================================ */
           /* 2. READER VIEW (Párrafos con audio alineado y glosado)       */
           /* ============================================================ */
-          <div className="space-y-4 sm:space-y-5 animate-fade-in pb-16">
-            {/* EPUB Top Chapter Navigation Bar */}
+          <div className="flex-1 flex flex-col animate-fade-in">
+            {/* EPUB Top Chapter Navigation Bar: Sticky flush top inside reader view */}
             {isEpub && chapters.length > 1 && (
-              <div className="sticky top-0 z-10 py-2 px-3 sm:px-4 mb-4 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm backdrop-blur-md flex items-center justify-between gap-2 sm:gap-3 transition-colors">
+              <div className="sticky top-0 z-20 -mx-4 px-4 py-2.5 mb-5 bg-[var(--surface-primary)] border-b border-[var(--border-primary)] shadow-sm flex items-center justify-between gap-2 sm:gap-3 transition-colors">
                 <button
                   type="button"
                   disabled={currentChapterIndex === 0}
@@ -1504,44 +1552,46 @@ export function TextReaderPage({
               </div>
             )}
 
-            {visibleParagraphs.map((paragraph, pIdx) => {
-              const isChapterHeading = paragraph.isChapterStart && paragraph.chapterTitle;
-              return (
-                <React.Fragment key={paragraph.id}>
-                  {isChapterHeading && (
-                    <div className="pt-6 pb-2 border-b border-[var(--border-subtle)] mb-4 flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
-                        <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] tracking-wide">
-                          {paragraph.chapterTitle}
-                        </h3>
+            <div className="space-y-4 sm:space-y-5">
+              {visibleParagraphs.map((paragraph, pIdx) => {
+                const isChapterHeading = paragraph.isChapterStart && paragraph.chapterTitle;
+                return (
+                  <React.Fragment key={paragraph.id}>
+                    {isChapterHeading && (
+                      <div className="pt-6 pb-2 border-b border-[var(--border-subtle)] mb-4 flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+                          <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] tracking-wide">
+                            {paragraph.chapterTitle}
+                          </h3>
+                        </div>
+                        {document.author && pIdx === 0 && (
+                          <span className="text-xs text-[var(--text-muted)] italic">
+                            de {document.author}
+                          </span>
+                        )}
                       </div>
-                      {document.author && pIdx === 0 && (
-                        <span className="text-xs text-[var(--text-muted)] italic">
-                          de {document.author}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <TextParagraphItem
-                    paragraph={paragraph}
-                    targetLang={activeDocLang}
-                    fontSize={fontSize}
-                    interlinearMode={interlinearMode}
-                    isPlaying={playingParagraphId === paragraph.id}
-                    isAudioError={audioErrorId === paragraph.id}
-                    isGlossing={glossingParagraphIds.has(paragraph.id)}
-                    hasGloss={isGlossComplete(paragraph, activeDocLang)}
-                    isLastAudioPosition={lastAudioParagraphId === paragraph.id}
-                    onPlay={handlePlayParagraph}
-                    onStop={handleStopAudio}
-                    onWordClick={onWordClick}
-                    onGloss={handleGlossParagraph}
-                    onGlossParagraph={handleGlossParagraph}
-                  />
-                </React.Fragment>
-              );
-            })}
+                    )}
+                    <TextParagraphItem
+                      paragraph={paragraph}
+                      targetLang={activeDocLang}
+                      fontSize={fontSize}
+                      interlinearMode={interlinearMode}
+                      isPlaying={playingParagraphId === paragraph.id}
+                      isAudioError={audioErrorId === paragraph.id}
+                      isGlossing={glossingParagraphIds.has(paragraph.id)}
+                      hasGloss={isGlossComplete(paragraph, activeDocLang)}
+                      isLastAudioPosition={lastAudioParagraphId === paragraph.id}
+                      onPlay={handlePlayParagraph}
+                      onStop={handleStopAudio}
+                      onWordClick={onWordClick}
+                      onGloss={handleGlossParagraph}
+                      onGlossParagraph={handleGlossParagraph}
+                    />
+                  </React.Fragment>
+                );
+              })}
+            </div>
 
             {/* EPUB Bottom Chapter Navigation Footer Card */}
             {isEpub && chapters.length > 1 && (
@@ -1573,22 +1623,20 @@ export function TextReaderPage({
               </div>
             )}
 
+            {/* FOOTER: Placed at the end of the text inside scroll container, never fixed/sticky */}
+            <footer className="mt-10 py-6 border-t border-[var(--border-subtle)] text-center text-xs text-[var(--text-muted)] flex items-center justify-center space-x-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
+              <span className="truncate">
+                {isEpub && chapters.length > 1
+                  ? `Capítulo ${currentChapterIndex + 1} de ${chapters.length} • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación`
+                  : 'Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación'}
+              </span>
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
+            </footer>
+
           </div>
         )}
       </main>
-
-      {/* FOOTER: Fixed to the bottom of the visible area, never scrolls with the text */}
-      {!isEditing && document && (
-        <footer className="relative z-20 shrink-0 px-4 py-2.5 bg-[var(--header-bg)] border-t border-[var(--header-border)] text-center text-xs text-[var(--text-muted)] flex items-center justify-center space-x-2 shadow-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
-          <span className="truncate">
-            {isEpub && chapters.length > 1
-              ? `Capítulo ${currentChapterIndex + 1} de ${chapters.length} • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación`
-              : 'Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación'}
-          </span>
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
-        </footer>
-      )}
 
       {/* Loading Overlay during EPUB import */}
       {isImporting && (

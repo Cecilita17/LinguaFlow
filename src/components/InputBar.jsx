@@ -192,7 +192,7 @@ export function InputBar({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex items-center space-x-2.5">
+        <form onSubmit={handleSubmit} autoComplete="off" className="flex items-center space-x-2.5">
           {/* Push-to-Talk Microphone Button (Press & Hold to Record, Release to Send) */}
           <div className="relative flex-shrink-0">
             <button
@@ -242,6 +242,10 @@ export function InputBar({
             <input
               ref={inputRef}
               type="text"
+              name="chat-msg"
+              autoComplete="off"
+              data-lpignore="true"
+              data-form-type="other"
               dir={isArabic ? 'rtl' : 'ltr'}
               value={text}
               onChange={(e) => setText(e.target.value)}
