@@ -611,7 +611,23 @@ const activeModel = getSanitizedGroqModel();
 Analyze each subtitle line in language "${targetLang}" and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLang}".
 
 CRITICAL REQUIREMENTS:
-${hasSpecificUnknowns ? `- HYBRID CONTEXTUAL GLOSSING:
+${isChinese ? `- CHINESE LEXICAL SEGMENTATION (MANDATORY):
+  * Analyze the FULL SENTENCE and segment it into meaningful LEXICAL WORDS, NOT individual Hanzi characters.
+  * Multi-character Chinese words MUST remain as a SINGLE TOKEN. Compound words MUST NOT be split into individual characters.
+  * CORRECT EXAMPLES:
+    - 喜欢 → one token { word: "喜欢", auxiliary: "xǐhuan", gloss: "gustar" }  — NOT 喜 + 欢 separately
+    - 学习 → one token { word: "学习", auxiliary: "xuéxí", gloss: "aprender" } — NOT 学 + 习 separately
+    - 中文 → one token { word: "中文", auxiliary: "zhōngwén", gloss: "idioma chino" } — NOT 中 + 文 separately
+    - 朋友 → one token { word: "朋友", auxiliary: "péngyou", gloss: "amigo" }
+    - 今天 → one token { word: "今天", auxiliary: "jīntiān", gloss: "hoy" }
+    - 学校 → one token { word: "学校", auxiliary: "xuéxiào", gloss: "escuela" }
+  * Use sentence context to determine correct word boundaries.
+  * Return EXACTLY one token per meaningful lexical unit (word/phrase), not per character.
+  * The "auxiliary" field MUST contain tone-marked Pinyin for the COMPLETE multi-character word.
+  * The "gloss" field MUST contain the meaning of the COMPLETE multi-character word.
+  * IGNORE any pre-segmented word list — perform fresh lexical analysis from the sentence text.
+  * Single-character words that are genuinely independent (e.g., 我, 的, 很, 了, 在, 也, 和) stay as single tokens.` :
+  hasSpecificUnknowns ? `- HYBRID CONTEXTUAL GLOSSING:
   * For lines with "ONLY generate tokens for these unknown words", analyze the full sentence context to understand the exact contextual meaning, but ONLY output tokens and glosses for the requested unknown words!
   * Do NOT generate tokens for words outside the unknown list. This saves tokens and preserves local dictionary resolutions.` : `- PRESERVE PRE-SEGMENTED WORDS: You MUST preserve the exact pre-segmented word units. DO NOT break multi-character words into individual characters!
   * Complete glossing: Provide an accurate gloss for all substantive words.`}
@@ -632,7 +648,7 @@ Return STRICTLY valid JSON with no markdown formatting:
       "tokens": [
         {
           "word": "string (exact word unit)",
-          "auxiliary": ${isChinese ? '"string with tone-marked Pinyin"' : 'null'},
+          "auxiliary": ${isChinese ? '"string with tone-marked Pinyin for the COMPLETE word"' : 'null'},
           "gloss": "string (direct concise meaning in ${nativeLang})"
         }
       ]

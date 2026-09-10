@@ -70,6 +70,13 @@ export function TextReaderPage({
   const [playingParagraphId, setPlayingParagraphId] = useState(null);
   const [audioErrorId, setAudioErrorId] = useState(null);
 
+  // Last audio position bookmark — persisted in document.lastAudioPosition
+  const [lastAudioParagraphId, setLastAudioParagraphId] = useState(
+    () => loadActiveDocumentDraft()?.lastAudioPosition?.paragraphId || null
+  );
+  // Scheduling a scroll: set to a paragraphId, cleared after scroll fires
+  const [pendingScrollParagraphId, setPendingScrollParagraphId] = useState(null);
+
   // Glossing progress & controller
   const [glossingProgress, setGlossingProgress] = useState({
     total: 0,
@@ -125,6 +132,21 @@ export function TextReaderPage({
       }
     }
   }, [document, refreshLibraryCount]);
+
+  // Scroll to last audio position when a document is opened from library
+  // (pendingScrollParagraphId is set by handleSelectSavedDocument)
+  useEffect(() => {
+    if (!pendingScrollParagraphId) return;
+    // Small delay to allow: modal close animation + React render of paragraphs
+    const timer = setTimeout(() => {
+      const el = window.document.querySelector(`[data-paragraph-id="${pendingScrollParagraphId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      setPendingScrollParagraphId(null);
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [pendingScrollParagraphId]);
 
   // Active document language (falls back to selected targetLang if editing/new)
   const activeDocLang = (document && !isEditing && document.targetLang) ? document.targetLang : targetLang;
@@ -257,13 +279,27 @@ export function TextReaderPage({
     if (!paragraph || !paragraph.text) return;
     if (!window.speechSynthesis) {
       setAudioErrorId(paragraph.id);
-      return;
+      return; // No position saved — TTS not available
     }
 
     // Cancel any current utterance
     window.speechSynthesis.cancel();
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
+
+    // Save last audio position immediately (before speak(), so it persists even if page closes)
+    setLastAudioParagraphId(paragraph.id);
+    setDocument(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        lastAudioPosition: {
+          paragraphId: paragraph.id,
+          paragraphIndex: (prev.paragraphs || []).findIndex(p => p.id === paragraph.id),
+          updatedAt: Date.now()
+        }
+      };
+    });
 
     const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
     const speechCode = paragraph.tts?.speechCode || getLanguageMeta(docLang)?.speechCode || 'zh-CN';
@@ -496,6 +532,14 @@ export function TextReaderPage({
     setIsEditing(false);
     saveActiveDocumentDraft(doc);
 
+    // Sync last audio position bookmark from the loaded document
+    const savedPosId = doc.lastAudioPosition?.paragraphId || null;
+    setLastAudioParagraphId(savedPosId);
+    // Schedule one-time scroll to that paragraph (fires after render + modal close)
+    if (savedPosId) {
+      setPendingScrollParagraphId(savedPosId);
+    }
+
     if (setTargetLang && doc.targetLang) {
       setTargetLang(doc.targetLang);
     }
@@ -528,6 +572,8 @@ export function TextReaderPage({
       }
       setIsAutoGlossing(false);
       setLoadingParagraphIds(new Set());
+      setLastAudioParagraphId(null);
+      setPendingScrollParagraphId(null);
       clearActiveDocumentDraft();
       setDocument(null);
       setInputText('');
@@ -914,6 +960,7 @@ export function TextReaderPage({
                 isAudioError={audioErrorId === paragraph.id}
                 isGlossing={glossingParagraphIds.has(paragraph.id)}
                 hasGloss={isGlossComplete(paragraph, activeDocLang)}
+                isLastAudioPosition={lastAudioParagraphId === paragraph.id}
                 onPlay={handlePlayParagraph}
                 onStop={handleStopAudio}
                 onWordClick={onWordClick}

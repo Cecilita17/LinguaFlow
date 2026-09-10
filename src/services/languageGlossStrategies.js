@@ -460,77 +460,17 @@ export class ChineseGlossStrategy {
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
-    // 1. Primary: Intl.Segmenter with word granularity
-    try {
-      if (typeof Intl !== 'undefined' && Intl.Segmenter) {
-        const segmenter = new Intl.Segmenter('zh-CN', { granularity: 'word' });
-        const segments = [...segmenter.segment(cleanStr)];
-
-        const rawItems = [];
-        let hadSpaceBefore = false;
-        for (const seg of segments) {
-          if (seg.segment.trim() === '') {
-            hadSpaceBefore = true;
-            continue;
-          }
-          const w = seg.segment.trim();
-          const isPunct = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
-          rawItems.push({ text: w, isPunctuation: isPunct, hadSpaceBefore });
-          hadSpaceBefore = false;
-        }
-
-        // 2. Local dictionary compound refinement:
-        // Merge consecutive segments into single lexical units if in dictionary (e.g. 早上好, 明天见, 好久不见, 子轩)
-        // Strictly avoid merging if items were intentionally separated by spaces or punctuation!
-        const refinedItems = [];
-        for (let i = 0; i < rawItems.length; i++) {
-          if (rawItems[i].isPunctuation) {
-            refinedItems.push(rawItems[i]);
-            continue;
-          }
-
-          let merged = false;
-          for (let len = Math.min(4, rawItems.length - i); len >= 2; len--) {
-            let canMerge = true;
-            let combined = '';
-            for (let k = 0; k < len; k++) {
-              const item = rawItems[i + k];
-              if (item.isPunctuation) { canMerge = false; break; }
-              if (k > 0 && item.hadSpaceBefore) { canMerge = false; break; }
-              combined += item.text;
-            }
-            if (canMerge && this.lookupOffline(combined)) {
-              refinedItems.push({ text: combined, isPunctuation: false });
-              i += len - 1;
-              merged = true;
-              break;
-            }
-          }
-          if (!merged) {
-            refinedItems.push(rawItems[i]);
-          }
-        }
-
-        const tokens = [];
-        for (const item of refinedItems) {
-          const entry = item.isPunctuation ? null : this.lookupOffline(item.text);
-          tokens.push({
-            text: item.text,
-            word: item.text,
-            auxiliary: item.isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
-            pinyin: item.isPunctuation ? null : (entry?.auxiliary || entry?.pinyin || null),
-            gloss: item.isPunctuation ? null : (entry?.gloss || null),
-            isPunctuation: item.isPunctuation
-          });
-        }
-        if (tokens.length > 0) return tokens;
-      }
-    } catch (e) {
-      console.warn('Intl.Segmenter fallback in ChineseGlossStrategy:', e);
-    }
-
-    // 3. Robust Fallback (Only if Intl.Segmenter is absent):
-    // Longest prefix match against dictionary + single CJK characters (never arbitrary 4-character slicing)
+    // PRIMARY: Dictionary-first longest-prefix-match segmentation.
+    //
+    // Intl.Segmenter('zh-CN') is intentionally NOT used as primary here because:
+    // 1. It produces inconsistent results across browsers and Node.js environments.
+    // 2. In Chromium and many environments, it returns individual CJK characters as
+    //    separate isWordLike=true segments, breaking compound words like 喜欢 → [喜, 欢].
+    // 3. The offline dict covers HSK 1-3 high-frequency words reliably.
+    //
+    // Strategy: longest-prefix dict match first (greedy, up to 6 chars), then single CJK char.
+    // Result: offline compound words (喜欢, 学习, 中文, 朋友, etc.) are always correctly grouped.
+    // Unknown chars → single tokens provisionally, AI re-segments them correctly.
     return this.tokenizeFallback(cleanStr);
   }
 

@@ -110,6 +110,34 @@ export function isGlossComplete(sub, targetLang = 'zh') {
     if (rawChineseChars.length >= 6 && substantiveTokens.length <= 1) {
       return false;
     }
+
+    // Detect suspicious single-char tokenization: if two adjacent single-char Chinese tokens
+    // form a known compound word in the offline dict, the segmentation is defective.
+    // This triggers re-glossing for old documents saved with char-by-char tokenization.
+    const zhStrategy = getLanguageGlossStrategy('zh');
+    for (let i = 0; i < substantiveTokens.length - 1; i++) {
+      const w1 = (substantiveTokens[i].text || substantiveTokens[i].word || '').trim();
+      const w2 = (substantiveTokens[i + 1].text || substantiveTokens[i + 1].word || '').trim();
+      // Both must be exactly one CJK character
+      if (
+        w1.length === 1 && w2.length === 1 &&
+        /[\u4e00-\u9fa5]/.test(w1) && /[\u4e00-\u9fa5]/.test(w2) &&
+        zhStrategy.lookupOffline(w1 + w2)
+      ) {
+        return false; // Adjacent chars form a compound word → segmentation needs correction
+      }
+      // Also check 3-char compounds with the following token
+      if (i + 2 < substantiveTokens.length) {
+        const w3 = (substantiveTokens[i + 2].text || substantiveTokens[i + 2].word || '').trim();
+        if (
+          w1.length === 1 && w2.length === 1 && w3.length === 1 &&
+          /[\u4e00-\u9fa5]/.test(w3) &&
+          zhStrategy.lookupOffline(w1 + w2 + w3)
+        ) {
+          return false;
+        }
+      }
+    }
   }
 
   return true;
@@ -130,6 +158,20 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
 
   const payload = {
     lines: lines.map(l => {
+      // For Chinese: send empty words/unknownTokens so the backend performs fresh
+      // lexical segmentation from the full sentence text. This is necessary because
+      // client-side pre-segmentation for Chinese is unreliable (single chars vs compounds),
+      // and telling the AI to "preserve pre-segmented words" perpetuates bad segmentation.
+      if (targetLang === 'zh') {
+        return {
+          id: l.id,
+          text: l.text,
+          words: [],
+          unknownTokens: []
+        };
+      }
+
+      // For other languages: send pre-segmented tokens to save API tokens (hybrid mode)
       const words = (l.tokens || [])
         .filter(t => !t.isPunctuation && (t.text || t.word))
         .map(t => t.text || t.word);
@@ -288,9 +330,17 @@ export function findMatchingSubtitleIndex(subtitlesList, chunkList, aiItem, item
 
 /**
  * Safely merge AI tokens onto pre-segmented client tokens.
- * NEVER breaks or splits client word units!
- * Preserves locally resolved tokens and enriches unresolved ones.
- * Strictly enforces that ONLY Chinese (zh) receives an auxiliary (Pinyin with tones).
+ *
+ * For Chinese (zh): RESEGMENTATION MODE
+ *   - AI tokens are used as the authoritative segmentation (multi-char compound words).
+ *   - Validates that AI token chars exactly reproduce original token chars.
+ *   - If valid: reconstructs the token array from AI words, preserving punctuation.
+ *   - If validation fails: falls back to map-based merge (safe fallback, zero data loss).
+ *
+ * For all other languages: MAP-BASED MERGE (unchanged behavior)
+ *   - NEVER breaks or splits client word units.
+ *   - Preserves locally resolved tokens and enriches unresolved ones.
+ *   - Strictly enforces that ONLY Chinese (zh) receives an auxiliary (Pinyin with tones).
  */
 export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], targetLang = 'zh') {
   if (!Array.isArray(aiTokens) || aiTokens.length === 0) {
@@ -299,7 +349,21 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
 
   const isChinese = targetLang === 'zh';
 
-  // Create lookup map by exact word, lowercase, and normalized Arabic
+  // ============================================================
+  // CHINESE RESEGMENTATION MODE
+  // ============================================================
+  if (isChinese) {
+    const resegmented = tryChineseResegmentation(originalTokens, aiTokens);
+    if (resegmented !== null) {
+      return resegmented;
+    }
+    // Validation failed: fall through to map-based merge as safe fallback
+    console.warn('[ChineseMerge] Resegmentation validation failed — falling back to map-based merge');
+  }
+
+  // ============================================================
+  // MAP-BASED MERGE (original behavior for all non-Chinese)
+  // ============================================================
   const aiMap = new Map();
   aiTokens.forEach(item => {
     const w = (item.word || item.text || '').trim();
@@ -341,7 +405,6 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     if (match) {
       // 1. TIER 1: MANUAL GLOSS PRIORITY - NEVER OVERWRITE orig.gloss
       if (isManual) {
-        // AI can only complete missing auxiliary (e.g. Chinese pinyin) if orig had none
         const completedAuxiliary = isChinese
           ? (orig.auxiliary || orig.pinyin || match.auxiliary || match.pinyin || null)
           : null;
@@ -391,6 +454,111 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     };
   });
 }
+
+/**
+ * Attempts to reconstruct Chinese token array using AI lexical segmentation.
+ *
+ * Algorithm:
+ * 1. Extracts non-punctuation Chinese chars from both original and AI tokens.
+ * 2. Validates that AI char sequence === original char sequence (exact match).
+ * 3. If valid: iterates original tokens in order, consuming AI tokens greedily
+ *    by character count. Pushes an AI token once enough original chars have been
+ *    consumed to complete it. Punctuation tokens pass through unchanged.
+ * 4. Returns the new token array, or null if validation fails.
+ *
+ * Example:
+ *   original: [我(1), 喜(1), 欢(1), 学(1), 习(1), 中(1), 文(1), 。(punct)]
+ *   AI:       [我(1), 喜欢(2), 学习(2), 中文(2)]
+ *   result:   [我, 喜欢, 学习, 中文, 。]
+ *
+ * @param {Array} originalTokens - Client-side pre-segmented tokens
+ * @param {Array} aiTokens - AI-returned tokens with lexical grouping
+ * @returns {Array|null} New token array, or null if validation fails
+ */
+function tryChineseResegmentation(originalTokens, aiTokens) {
+  const CJK_REGEX = /[\u4e00-\u9fff\u3400-\u4dbf\u20000-\u2a6df\u2a700-\u2b73f\uff01-\uff60]/;
+
+  // Filter AI tokens: only non-punctuation Chinese word tokens
+  const aiNonPunct = aiTokens.filter(t => {
+    const w = (t.word || t.text || '').trim();
+    return w && !PUNCTUATION_REGEX.test(w) && CJK_REGEX.test(w);
+  });
+
+  if (aiNonPunct.length === 0) return null;
+
+  // Get original non-punctuation tokens (could be single chars or multi-char if already from dict)
+  const origNonPunct = originalTokens.filter(t => {
+    if (t.isPunctuation) return false;
+    const w = (t.text || t.word || '').trim();
+    return w && !PUNCTUATION_REGEX.test(w) && CJK_REGEX.test(w);
+  });
+
+  // Build char strings for validation
+  const originalChars = origNonPunct
+    .map(t => (t.text || t.word || '').replace(/\s/g, ''))
+    .join('');
+  const aiChars = aiNonPunct
+    .map(t => (t.word || t.text || '').replace(/\s/g, ''))
+    .join('');
+
+  // CRITICAL VALIDATION: AI chars must exactly reproduce original chars
+  // If AI hallucinated or omitted characters, refuse the resegmentation
+  if (aiChars !== originalChars || originalChars.length === 0) {
+    return null;
+  }
+
+  // Build result by iterating original tokens in sequence order
+  const result = [];
+  let aiNonPunctIdx = 0;  // Current position in AI non-punct token list
+  let charsConsumed = 0;  // Chars consumed from origNonPunct toward current AI token
+
+  for (const orig of originalTokens) {
+    const origWord = (orig.text || orig.word || '').replace(/\s/g, '');
+
+    // Punctuation and non-CJK tokens pass through unchanged
+    if (orig.isPunctuation || PUNCTUATION_REGEX.test(origWord) || !CJK_REGEX.test(origWord)) {
+      result.push(orig);
+      continue;
+    }
+
+    // Consume characters toward the current AI token
+    if (aiNonPunctIdx >= aiNonPunct.length) {
+      // Safety: shouldn't happen if validation passed, but keep orig to avoid data loss
+      result.push(orig);
+      continue;
+    }
+
+    charsConsumed += origWord.length;
+    const aiToken = aiNonPunct[aiNonPunctIdx];
+    const aiWord = (aiToken.word || aiToken.text || '').replace(/\s/g, '');
+
+    if (charsConsumed >= aiWord.length) {
+      // We've consumed enough original chars to complete this AI token — emit it
+      const aux = aiToken.auxiliary || aiToken.pinyin || null;
+      result.push({
+        text: aiWord,
+        word: aiWord,
+        auxiliary: aux,
+        pinyin: aux,
+        translit: null,
+        gloss: aiToken.gloss || null,
+        isPunctuation: false,
+        glossSource: 'ai'
+      });
+      aiNonPunctIdx++;
+      charsConsumed = 0;
+    }
+    // else: still accumulating chars for this AI token — skip pushing until done
+  }
+
+  // Safety: if we couldn't place all AI tokens, something went wrong — fallback
+  if (aiNonPunctIdx < aiNonPunct.length) {
+    return null;
+  }
+
+  return result.length > 0 ? result : null;
+}
+
 
 /**
  * Gloss a single subtitle line on demand with AI.

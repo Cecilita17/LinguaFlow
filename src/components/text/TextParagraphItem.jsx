@@ -24,6 +24,7 @@ export function TextParagraphItem({
   isAudioError = false,
   isGlossing = false,
   hasGloss = false,
+  isLastAudioPosition = false,
   onPlay = null,
   onStop = null,
   onWordClick = null,
@@ -57,12 +58,21 @@ export function TextParagraphItem({
 
   return (
     <div
+      data-paragraph-id={paragraph.id}
       className={`group/para relative p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl transition-all border select-text ${
         isPlaying
           ? 'bg-gradient-to-r from-rose-950/80 via-[#3a180e]/90 to-[#2c120a] border-rose-500/80 shadow-lg shadow-rose-950/40 ring-2 ring-rose-500/30 text-white'
           : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border-[var(--border-primary)] hover:border-rose-500/50 shadow-sm shadow-black/5 dark:shadow-black/20 text-[var(--text-primary)]'
       }`}
     >
+      {/* LAST AUDIO POSITION BOOKMARK — small dot in top-right corner */}
+      {isLastAudioPosition && !isPlaying && (
+        <span
+          aria-label="Última posición de audio"
+          title="Último párrafo reproducido"
+          className="absolute top-3 right-3 w-2 h-2 rounded-full bg-rose-500/80 ring-2 ring-rose-500/20 dark:ring-rose-500/30 shadow-sm shadow-rose-600/40 pointer-events-none"
+        />
+      )}
       <div
         className="flex items-start justify-between gap-2.5 sm:gap-3.5 w-full"
         dir={textDirection}

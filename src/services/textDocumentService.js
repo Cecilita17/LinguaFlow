@@ -281,6 +281,7 @@ export function normalizeDocument(rawDoc) {
     paragraphsCount: paragraphs.length,
     paragraphs,
     languageStates,
+    lastAudioPosition: rawDoc.lastAudioPosition || null,
     createdAt: rawDoc.createdAt || now,
     updatedAt: rawDoc.updatedAt || now
   };
