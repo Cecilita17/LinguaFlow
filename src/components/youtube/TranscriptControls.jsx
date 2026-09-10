@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, RotateCcw, ArrowDown, Clock, ZoomIn, ZoomOut, X } from 'lucide-react';
+import { Search, RotateCcw, ArrowDown, Clock, ZoomIn, ZoomOut, X, Languages } from 'lucide-react';
 
 export function TranscriptControls({
   searchQuery = '',
@@ -10,7 +10,9 @@ export function TranscriptControls({
   fontSize = 'base', // 'sm' | 'base' | 'lg' | 'xl'
   onChangeFontSize,
   showTimestamps = true,
-  onToggleTimestamps
+  onToggleTimestamps,
+  interlinearMode = true,
+  onToggleInterlinearMode
 }) {
   const fontSizes = ['sm', 'base', 'lg', 'xl'];
 
@@ -53,6 +55,26 @@ export function TranscriptControls({
 
       {/* Action Buttons Group */}
       <div className="flex flex-wrap items-center gap-1.5">
+        {/* Interlinear Mode Toggle (Palabras + Pinyin + Glosa vs Texto Normal) */}
+        {onToggleInterlinearMode && (
+          <button
+            type="button"
+            onClick={onToggleInterlinearMode}
+            title={interlinearMode ? "Cambiar a subtítulos tradicionales (texto plano)" : "Activar desglose interlineal (Pinyin + glosa por palabra)"}
+            className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
+              interlinearMode
+                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white border-rose-400 shadow-xs'
+                : 'bg-[#3b1e15] text-rose-200/60 border-[#5a2e20] hover:text-rose-200'
+            }`}
+          >
+            <Languages className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Interlineal</span>
+            <span className={`text-[9px] px-1 rounded ${interlinearMode ? 'bg-rose-900/80 text-white font-bold' : 'bg-[#1e0f0a] text-rose-300/50'}`}>
+              {interlinearMode ? 'ON' : 'OFF'}
+            </span>
+          </button>
+        )}
+
         {/* Rewind to start */}
         <button
           type="button"

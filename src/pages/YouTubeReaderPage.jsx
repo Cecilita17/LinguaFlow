@@ -26,6 +26,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl'
   const [showTimestamps, setShowTimestamps] = useState(true);
+  const [interlinearMode, setInterlinearMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
 
@@ -60,6 +61,9 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
           if (typeof parsed.preferences.showTimestamps === 'boolean') {
             setShowTimestamps(parsed.preferences.showTimestamps);
           }
+          if (typeof parsed.preferences.interlinearMode === 'boolean') {
+            setInterlinearMode(parsed.preferences.interlinearMode);
+          }
         }
       }
     } catch (e) {
@@ -80,14 +84,15 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
         preferences: {
           autoScroll,
           fontSize,
-          showTimestamps
+          showTimestamps,
+          interlinearMode
         }
       };
       localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
     } catch (e) {
       console.warn('Failed to save YouTube Reader session to storage:', e);
     }
-  }, [videoId, videoUrl, videoLanguage, subtitles, subtitleFormat, subtitleSource, autoScroll, fontSize, showTimestamps]);
+  }, [videoId, videoUrl, videoLanguage, subtitles, subtitleFormat, subtitleSource, autoScroll, fontSize, showTimestamps, interlinearMode]);
 
   // Handlers
   const handleImportVideo = (newVideoId, newUrl) => {
@@ -238,6 +243,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
             onChangeFontSize={setFontSize}
             showTimestamps={showTimestamps}
             onToggleTimestamps={() => setShowTimestamps(!showTimestamps)}
+            interlinearMode={interlinearMode}
+            onToggleInterlinearMode={() => setInterlinearMode(!interlinearMode)}
           />
         )}
       </div>
@@ -253,6 +260,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
             fontSize={fontSize}
             showTimestamps={showTimestamps}
             searchQuery={searchQuery}
+            interlinearMode={interlinearMode}
           />
         </div>
       )}

@@ -9,7 +9,8 @@ export function Transcript({
   autoScroll = true,
   fontSize = 'base',
   showTimestamps = true,
-  searchQuery = ''
+  searchQuery = '',
+  interlinearMode = true
 }) {
   const containerRef = useRef(null);
   const activeLineRef = useRef(null);
@@ -123,6 +124,7 @@ export function Transcript({
               fontSize={fontSize}
               showTimestamps={showTimestamps}
               searchQuery={searchQuery}
+              interlinearMode={interlinearMode}
             />
           </div>
         );

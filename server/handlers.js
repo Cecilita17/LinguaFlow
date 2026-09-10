@@ -563,24 +563,36 @@ export async function handleBatchGloss(req, res) {
       (req.headers['x-api-key'] || '')
     ).trim().replace(/^["']|["']$/g, '');
 
-    const activeModel = getSanitizedGroqModel();
+const activeModel = getSanitizedGroqModel();
 
     if (effectiveApiKey) {
       console.log(`Analyzing batch gloss with Groq (${activeModel}) for ${lines.length} lines (lang: ${targetLang} -> ${nativeLang})`);
       const linesFormatted = lines
-        .map((l, i) => `[ID: ${l.id || `line_${i + 1}`}]: "${(l.text || '').trim()}"`)
+        .map((l, i) => {
+          const id = l.id || `line_${i + 1}`;
+          const text = (l.text || '').trim();
+          const wordsStr = Array.isArray(l.words) && l.words.length > 0
+            ? ` | Pre-segmented words: [${l.words.map(w => `"${w}"`).join(', ')}]`
+            : '';
+          return `[ID: ${id}]: "${text}"${wordsStr}`;
+        })
         .join('\n');
 
       const prompt = `You are a master linguistic professor and vocabulary glossing engine.
 Analyze each subtitle line in language "${targetLang}" and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLang}".
 
 CRITICAL REQUIREMENTS:
-- Segment multi-character words/compounds as single units (e.g. for Chinese: "欢迎", "收听", "今天", "这", "封", "写给", "自己", "的", "信"). DO NOT break multi-character words into individual characters!
+- PRESERVE PRE-SEGMENTED WORDS: If pre-segmented words are provided, you MUST use those exact units. DO NOT break multi-character words into individual characters! For example:
+  * "欢迎" must remain a single unit "欢迎"
+  * "收听" must remain a single unit "收听"
+  * "今天" must remain a single unit "今天"
+  * "写给" must remain a single unit "写给"
+  * "自己" must remain a single unit "自己"
 - For each token provide:
   * "word": the exact word/compound in "${targetLang}"
-  * "pinyin": Pinyin with tone marks for Chinese (e.g. "huānyíng", "jīntiān", "zìjǐ", "de"), or romanization for Arabic/Russian, or null for Latin scripts.
-  * "gloss": accurate, direct, concise definition/translation of this specific word in "${nativeLang}" (e.g. "bienvenido", "hoy", "uno mismo", "de", "carta"). DO NOT output the whole sentence as the gloss!
-- Omit isolated punctuation from glosses or give them null gloss.
+  * "pinyin": Pinyin with tone marks for Chinese (e.g. "huānyíng", "shōutīng", "jīntiān", "zìjǐ", "de"), or transliteration for Arabic/Russian, or null for Latin scripts.
+  * "gloss": accurate, direct, concise definition/translation of this specific word in "${nativeLang}" (e.g. "bienvenido", "escuchar", "hoy", "uno mismo", "de", "carta"). DO NOT output the whole sentence as the gloss!
+- Omit punctuation marks or give them null gloss.
 
 Subtitle lines to process:
 ${linesFormatted}
@@ -592,9 +604,9 @@ Return STRICTLY valid JSON with no markdown formatting:
       "id": "line ID matching the input",
       "tokens": [
         {
-          "word": "string",
-          "pinyin": "string or null",
-          "gloss": "string"
+          "word": "string (exact word unit)",
+          "pinyin": "string with tones or null",
+          "gloss": "string (direct meaning in ${nativeLang})"
         }
       ]
     }
