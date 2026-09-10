@@ -317,11 +317,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
   return originalTokens.map(orig => {
     if (orig.isPunctuation) return orig;
 
-    // Never overwrite user-defined manual glosses!
-    if (orig.glossSource === 'manual') {
-      return orig;
-    }
-
+    const isManual = orig.glossSource === 'manual';
     const w = (orig.text || orig.word || '').trim();
     let match = aiMap.get(w) || aiMap.get(w.toLowerCase());
 
@@ -343,6 +339,23 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     }
 
     if (match) {
+      // 1. TIER 1: MANUAL GLOSS PRIORITY - NEVER OVERWRITE orig.gloss
+      if (isManual) {
+        // AI can only complete missing auxiliary (e.g. Chinese pinyin) if orig had none
+        const completedAuxiliary = isChinese
+          ? (orig.auxiliary || orig.pinyin || match.auxiliary || match.pinyin || null)
+          : null;
+        return {
+          ...orig,
+          auxiliary: completedAuxiliary,
+          pinyin: completedAuxiliary,
+          translit: null,
+          gloss: orig.gloss, // Strictly preserved!
+          glossSource: 'manual' // Strictly preserved!
+        };
+      }
+
+      // 2. TIER 2: AI GLOSS COMPLETION
       // ONLY Chinese gets auxiliary (Pinyin with tones). All others are strictly null!
       const auxiliary = isChinese ? (match.auxiliary || match.pinyin || orig.auxiliary || orig.pinyin || null) : null;
       let gloss = match.gloss || orig.gloss;
@@ -366,7 +379,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
         pinyin: auxiliary,
         translit: null,
         gloss,
-        glossSource: orig.glossSource || (gloss ? 'ai' : null)
+        glossSource: 'ai'
       };
     }
 

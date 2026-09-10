@@ -13,15 +13,20 @@ import {
   Loader2,
   ChevronDown,
   Type,
-  Maximize2
+  Maximize2,
+  BookOpen
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
+import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { getLanguageMeta } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import {
   splitTextIntoParagraphs,
   createTextDocument,
+  saveDocument,
+  getAllDocuments,
+  deleteDocument,
   saveActiveDocumentDraft,
   loadActiveDocumentDraft,
   clearActiveDocumentDraft
@@ -48,6 +53,11 @@ export function TextReaderPage({
   const [inputTitle, setInputTitle] = useState(() => loadActiveDocumentDraft()?.title || '');
   const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl'
   const [interlinearMode, setInterlinearMode] = useState(true);
+
+  // Saved documents library modal
+  const [showSavedModal, setShowSavedModal] = useState(false);
+  const [savedDocsCount, setSavedDocsCount] = useState(() => getAllDocuments().length);
+
 
   // Audio TTS states
   const [playingParagraphId, setPlayingParagraphId] = useState(null);
@@ -93,14 +103,42 @@ export function TextReaderPage({
     }
   }, []);
 
-  // Change target language safely without silently deleting user manual glosses
+  // Change target language safely without silently deleting user manual glosses or prior language states
   const handleLanguageChange = useCallback((newLang) => {
     if (!newLang) return;
 
     if (document && !isEditing) {
       if (newLang === document.targetLang) return;
 
-      // Check if document contains user manual glosses
+      const currentDocLang = document.targetLang || 'zh';
+      const currentStates = (document.languageStates && typeof document.languageStates === 'object')
+        ? { ...document.languageStates }
+        : {};
+
+      // Snapshot current language paragraphs into languageStates
+      currentStates[currentDocLang] = {
+        targetLang: currentDocLang,
+        paragraphs: document.paragraphs,
+        updatedAt: new Date().toISOString()
+      };
+
+      // 1. If this document ALREADY has a saved state for newLang, restore it directly!
+      // This immediately recovers previous AI glosses, manual glosses, and pinyin ($0 Groq cost, 0ms latency)
+      if (currentStates[newLang] && Array.isArray(currentStates[newLang].paragraphs) && currentStates[newLang].paragraphs.length > 0) {
+        const restoredDoc = {
+          ...document,
+          targetLang: newLang,
+          paragraphs: currentStates[newLang].paragraphs,
+          languageStates: currentStates
+        };
+        const saved = saveDocument(restoredDoc);
+        setDocument(saved);
+        setSavedDocsCount(getAllDocuments().length);
+        if (setTargetLang) setTargetLang(newLang);
+        return;
+      }
+
+      // 2. Otherwise, retokenize for newLang while preserving manual glosses
       const hasManual = document.paragraphs?.some(p =>
         Array.isArray(p.tokens) && p.tokens.some(t => t.glossSource === 'manual' && t.gloss)
       );
@@ -115,7 +153,7 @@ export function TextReaderPage({
         }
       }
 
-      // 1. Collect all manual glosses from existing document
+      // Collect all manual glosses from current document
       const globalManualMap = new Map();
       document.paragraphs.forEach(p => {
         if (Array.isArray(p.tokens)) {
@@ -131,10 +169,10 @@ export function TextReaderPage({
         }
       });
 
-      // 2. Generate new paragraphs for new language
+      // Retokenize for new language
       const retokenized = splitTextIntoParagraphs(document.rawText, newLang);
 
-      // 3. Remap preserved manual glosses to matching tokens
+      // Remap preserved manual glosses to matching tokens
       const preservedParagraphs = retokenized.map((p, pIdx) => {
         const oldPara = document.paragraphs[pIdx];
         const oldParaMap = new Map();
@@ -170,13 +208,21 @@ export function TextReaderPage({
         };
       });
 
+      currentStates[newLang] = {
+        targetLang: newLang,
+        paragraphs: preservedParagraphs,
+        updatedAt: new Date().toISOString()
+      };
+
       const updatedDoc = {
         ...document,
         targetLang: newLang,
-        paragraphs: preservedParagraphs
+        paragraphs: preservedParagraphs,
+        languageStates: currentStates
       };
-      setDocument(updatedDoc);
-      saveActiveDocumentDraft(updatedDoc);
+      const saved = saveDocument(updatedDoc);
+      setDocument(saved);
+      setSavedDocsCount(getAllDocuments().length);
       if (setTargetLang) setTargetLang(newLang);
     } else {
       if (setTargetLang) setTargetLang(newLang);
@@ -246,8 +292,9 @@ export function TextReaderPage({
         ...prev,
         paragraphs: nextParagraphs
       };
-      saveActiveDocumentDraft(nextDoc);
-      return nextDoc;
+      const saved = saveDocument(nextDoc);
+      setSavedDocsCount(getAllDocuments().length);
+      return saved;
     });
   }, []);
 
@@ -274,8 +321,8 @@ export function TextReaderPage({
             ...prev,
             paragraphs: updatedParagraphs
           };
-          saveActiveDocumentDraft(nextDoc);
-          return nextDoc;
+          const saved = saveDocument(nextDoc);
+          return saved;
         });
       },
       onProgress: (prog) => {
@@ -327,13 +374,52 @@ export function TextReaderPage({
       paragraphs
     });
 
-    setDocument(newDoc);
+    const saved = saveDocument(newDoc);
+    setDocument(saved);
     setIsEditing(false);
-    saveActiveDocumentDraft(newDoc);
+    setSavedDocsCount(getAllDocuments().length);
 
     // Automatically begin glossing
     triggerGlossing(paragraphs, targetLang);
   };
+
+  // Open / select document from saved library modal
+  const handleSelectSavedDocument = useCallback((doc) => {
+    if (!doc) return;
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setPlayingParagraphId(null);
+    setAudioErrorId(null);
+    setDocument(doc);
+    setInputText(doc.rawText || '');
+    setInputTitle(doc.title || '');
+    setIsEditing(false);
+    saveActiveDocumentDraft(doc);
+
+    if (setTargetLang && doc.targetLang) {
+      setTargetLang(doc.targetLang);
+    }
+
+    const complete = isGlossComplete(doc.paragraphs);
+    setGlossingProgress({
+      total: doc.paragraphs?.length || 0,
+      completed: doc.paragraphs?.filter(p => Array.isArray(p.tokens) && p.tokens.some(t => t.gloss)).length || 0,
+      isGlossing: false,
+      isPaused: false,
+      isComplete: complete,
+      failed: 0
+    });
+  }, [setTargetLang]);
+
+  // Start new document from modal
+  const handleNewDocumentFromModal = useCallback(() => {
+    handleClearDocument();
+  }, []);
 
   // File Upload handler (.txt)
   const handleFileUpload = (e) => {
@@ -439,6 +525,22 @@ export function TextReaderPage({
 
         {/* Right: Language Dropdown, AI Glossing button, Font Size, Edit / New Controls */}
         <div className="flex items-center flex-wrap gap-2">
+          {/* Saved Documents Library Button */}
+          <button
+            type="button"
+            onClick={() => setShowSavedModal(true)}
+            title={t('saved_documents') || 'Biblioteca de textos guardados'}
+            className="px-2.5 py-1.5 rounded-xl bg-[#2a130b] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden sm:inline">Textos</span>
+            {savedDocsCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-950/80 text-rose-300 border border-rose-800/60 font-mono">
+                {savedDocsCount}
+              </span>
+            )}
+          </button>
+
           {/* Target Language Dropdown */}
           <div className="bg-[#1a0c07] rounded-xl border border-[#482015] p-0.5">
             <LanguageSelectDropdown
@@ -685,6 +787,15 @@ export function TextReaderPage({
           </div>
         )}
       </div>
+
+      {/* Saved Documents Library Modal */}
+      <SavedDocumentsModal
+        isOpen={showSavedModal}
+        onClose={() => setShowSavedModal(false)}
+        onSelectDocument={handleSelectSavedDocument}
+        onNewDocument={handleNewDocumentFromModal}
+        currentDocumentId={document?.id || ''}
+      />
     </div>
   );
 }

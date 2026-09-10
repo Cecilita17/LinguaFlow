@@ -1,15 +1,18 @@
 /**
  * Text Document Service
- * Handles data structures, paragraph segmentation, and active draft persistence
- * for the standalone Text Reader in LinguaFlow.
- * 
- * Note: Database and library persistence (IndexedDB/remote) are reserved for a future command.
+ * Handles data structures, paragraph segmentation, active draft, and
+ * persistent library storage for the standalone Text Reader in LinguaFlow.
  */
 
 import { getLanguageMeta } from '../constants/languages.js';
 import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
 
-const ACTIVE_DOC_STORAGE_KEY = 'linguaflow_active_text_doc_v1';
+export const ACTIVE_DOC_STORAGE_KEY = 'linguaflow_active_text_doc_v1';
+export const LIBRARY_DOCS_STORAGE_KEY = 'linguaflow_text_library_v1';
+
+// In-memory fallback if localStorage is unavailable or disabled
+const memoryDocStore = new Map();
+let memoryActiveDraft = null;
 
 /**
  * Helper: Splits a single block of text by terminal punctuation boundaries
@@ -216,7 +219,57 @@ export function splitTextIntoParagraphs(rawText, targetLang = 'zh') {
 }
 
 /**
- * Creates a normalized text document structure ready for future library persistence.
+ * Normalizes a document object to guarantee all required properties exist,
+ * including id, title, rawText, targetLang, nativeLang, paragraphs, languageStates,
+ * createdAt, and updatedAt.
+ * 
+ * @param {object} rawDoc
+ * @returns {object|null}
+ */
+export function normalizeDocument(rawDoc) {
+  if (!rawDoc || typeof rawDoc !== 'object') return null;
+  const now = new Date().toISOString();
+  const id = rawDoc.id || `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const targetLang = rawDoc.targetLang || 'zh';
+  const nativeLang = rawDoc.nativeLang || 'es';
+  const rawText = typeof rawDoc.rawText === 'string' ? rawDoc.rawText : '';
+  const paragraphs = Array.isArray(rawDoc.paragraphs) ? rawDoc.paragraphs : splitTextIntoParagraphs(rawText, targetLang);
+
+  let title = (rawDoc.title || '').trim();
+  if (!title && paragraphs.length > 0) {
+    const firstLine = paragraphs[0].text.trim();
+    title = firstLine.slice(0, 40) + (firstLine.length > 40 ? '...' : '');
+  }
+  if (!title) title = 'Texto sin título';
+
+  const languageStates = (rawDoc.languageStates && typeof rawDoc.languageStates === 'object')
+    ? { ...rawDoc.languageStates }
+    : {};
+
+  if (!languageStates[targetLang] || !Array.isArray(languageStates[targetLang].paragraphs)) {
+    languageStates[targetLang] = {
+      targetLang,
+      paragraphs,
+      updatedAt: rawDoc.updatedAt || now
+    };
+  }
+
+  return {
+    id,
+    title,
+    rawText,
+    targetLang,
+    nativeLang,
+    paragraphsCount: paragraphs.length,
+    paragraphs,
+    languageStates,
+    createdAt: rawDoc.createdAt || now,
+    updatedAt: rawDoc.updatedAt || now
+  };
+}
+
+/**
+ * Creates a normalized text document structure.
  * 
  * @param {object} params
  * @param {string} [params.id]
@@ -225,6 +278,8 @@ export function splitTextIntoParagraphs(rawText, targetLang = 'zh') {
  * @param {string} params.targetLang
  * @param {string} params.nativeLang
  * @param {Array} [params.paragraphs]
+ * @param {object} [params.languageStates]
+ * @param {string} [params.createdAt]
  * @returns {object} Normalized document object
  */
 export function createTextDocument({
@@ -233,7 +288,9 @@ export function createTextDocument({
   rawText = '',
   targetLang = 'zh',
   nativeLang = 'es',
-  paragraphs = null
+  paragraphs = null,
+  languageStates = null,
+  createdAt = null
 }) {
   const now = new Date().toISOString();
   const effectiveParagraphs = paragraphs && Array.isArray(paragraphs) && paragraphs.length > 0
@@ -250,6 +307,18 @@ export function createTextDocument({
     derivedTitle = 'Texto sin título';
   }
 
+  const initialStates = (languageStates && typeof languageStates === 'object')
+    ? { ...languageStates }
+    : {};
+
+  if (!initialStates[targetLang]) {
+    initialStates[targetLang] = {
+      targetLang,
+      paragraphs: effectiveParagraphs,
+      updatedAt: now
+    };
+  }
+
   return {
     id: id || `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     title: derivedTitle,
@@ -258,60 +327,218 @@ export function createTextDocument({
     nativeLang,
     paragraphsCount: effectiveParagraphs.length,
     paragraphs: effectiveParagraphs,
-    createdAt: now,
+    languageStates: initialStates,
+    createdAt: createdAt || now,
     updatedAt: now
   };
 }
 
 /**
- * Save active document draft to localStorage so user doesn't lose text/glosses on tab switch.
+ * Internal helper to read the library collection from localStorage with memory fallback.
  * 
- * @param {object|null} doc
+ * @returns {Array<object>}
  */
-export function saveActiveDocumentDraft(doc) {
+function getStorageLibrary() {
   try {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    if (!doc) {
-      localStorage.removeItem(ACTIVE_DOC_STORAGE_KEY);
-      return;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = localStorage.getItem(LIBRARY_DOCS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const list = parsed.map(normalizeDocument).filter(Boolean);
+          list.forEach(doc => memoryDocStore.set(doc.id, doc));
+          return list;
+        }
+      }
     }
-    const serialized = JSON.stringify({
-      ...doc,
-      updatedAt: new Date().toISOString()
-    });
-    localStorage.setItem(ACTIVE_DOC_STORAGE_KEY, serialized);
   } catch (e) {
-    console.warn('Failed to save active text document draft:', e);
+    console.warn('Failed to read text document library from localStorage:', e);
+  }
+  return Array.from(memoryDocStore.values());
+}
+
+/**
+ * Internal helper to persist the library collection to localStorage and memory.
+ * 
+ * @param {Array<object>} docs
+ */
+function setStorageLibrary(docs) {
+  const normalizedDocs = (Array.isArray(docs) ? docs : []).map(normalizeDocument).filter(Boolean);
+  memoryDocStore.clear();
+  normalizedDocs.forEach(d => memoryDocStore.set(d.id, d));
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(LIBRARY_DOCS_STORAGE_KEY, JSON.stringify(normalizedDocs));
+    }
+  } catch (e) {
+    console.warn('Failed to write text document library to localStorage:', e);
   }
 }
 
 /**
- * Load active document draft from localStorage.
+ * Retrieves all saved text documents, sorted newest first by updatedAt.
+ * 
+ * @returns {Array<object>}
+ */
+export function getAllDocuments() {
+  const docs = getStorageLibrary();
+  return docs.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+}
+
+/**
+ * Retrieves a single document by its unique id.
+ * 
+ * @param {string} id
+ * @returns {object|null}
+ */
+export function getDocumentById(id) {
+  if (!id) return null;
+  const docs = getStorageLibrary();
+  return docs.find(d => d.id === id) || memoryDocStore.get(id) || null;
+}
+
+/**
+ * Saves or updates a document in persistent storage and marks active draft.
+ * Preserves stable ID and createdAt, updates updatedAt, and syncs languageStates.
+ * 
+ * @param {object} doc
+ * @returns {object} Saved normalized document
+ */
+export function saveDocument(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  const now = new Date().toISOString();
+  const existing = doc.id ? getDocumentById(doc.id) : null;
+
+  const targetLang = doc.targetLang || 'zh';
+  const effectiveParagraphs = Array.isArray(doc.paragraphs) ? doc.paragraphs : [];
+
+  const existingStates = (doc.languageStates && typeof doc.languageStates === 'object')
+    ? { ...doc.languageStates }
+    : (existing?.languageStates ? { ...existing.languageStates } : {});
+
+  existingStates[targetLang] = {
+    targetLang,
+    paragraphs: effectiveParagraphs,
+    updatedAt: now
+  };
+
+  const toSave = normalizeDocument({
+    ...doc,
+    createdAt: existing?.createdAt || doc.createdAt || now,
+    updatedAt: now,
+    languageStates: existingStates
+  });
+
+  const docs = getStorageLibrary();
+  const idx = docs.findIndex(d => d.id === toSave.id);
+  if (idx >= 0) {
+    docs[idx] = toSave;
+  } else {
+    docs.unshift(toSave);
+  }
+
+  setStorageLibrary(docs);
+  saveActiveDocumentDraft(toSave);
+  return toSave;
+}
+
+/**
+ * Deletes a document by id from storage. If it matches the active draft,
+ * the draft is cleared as well.
+ * 
+ * @param {string} id
+ * @returns {boolean}
+ */
+export function deleteDocument(id) {
+  if (!id) return false;
+  const docs = getStorageLibrary();
+  const filtered = docs.filter(d => d.id !== id);
+  setStorageLibrary(filtered);
+  memoryDocStore.delete(id);
+
+  try {
+    const activeDraft = loadActiveDocumentDraft();
+    if (activeDraft && activeDraft.id === id) {
+      clearActiveDocumentDraft();
+    }
+  } catch (e) {}
+
+  return true;
+}
+
+/**
+ * Save active document draft to localStorage (with in-memory fallback)
+ * so user doesn't lose text/glosses on tab switch.
+ * 
+ * @param {object|null} doc
+ */
+export function saveActiveDocumentDraft(doc) {
+  if (!doc) {
+    memoryActiveDraft = null;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem(ACTIVE_DOC_STORAGE_KEY);
+      }
+    } catch (e) {}
+    return;
+  }
+
+  const normalized = normalizeDocument(doc);
+  memoryActiveDraft = normalized;
+
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(ACTIVE_DOC_STORAGE_KEY, JSON.stringify(normalized));
+    }
+  } catch (e) {
+    console.warn('Failed to save active text document draft to localStorage:', e);
+  }
+}
+
+/**
+ * Load active document draft from localStorage (with in-memory fallback).
+ * Gracefully migrates legacy drafts to library.
  * 
  * @returns {object|null}
  */
 export function loadActiveDocumentDraft() {
   try {
-    if (typeof window === 'undefined' || !window.localStorage) return null;
-    const raw = localStorage.getItem(ACTIVE_DOC_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.paragraphs)) {
-      return parsed;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = localStorage.getItem(ACTIVE_DOC_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.paragraphs)) {
+          const normalized = normalizeDocument(parsed);
+          if (normalized && normalized.id) {
+            memoryActiveDraft = normalized;
+            // Ensure library also has this draft
+            const docs = getStorageLibrary();
+            if (!docs.some(d => d.id === normalized.id)) {
+              docs.unshift(normalized);
+              setStorageLibrary(docs);
+            }
+          }
+          return normalized;
+        }
+      }
     }
   } catch (e) {
-    console.warn('Failed to load active text document draft:', e);
+    console.warn('Failed to load active text document draft from localStorage:', e);
   }
-  return null;
+
+  return memoryActiveDraft;
 }
 
 /**
- * Clears active document draft from localStorage.
+ * Clears active document draft from localStorage and in-memory cache.
  */
 export function clearActiveDocumentDraft() {
+  memoryActiveDraft = null;
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       localStorage.removeItem(ACTIVE_DOC_STORAGE_KEY);
     }
   } catch (e) {}
 }
+
+
