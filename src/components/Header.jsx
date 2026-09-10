@@ -14,7 +14,8 @@ import {
   MessageSquare,
   Youtube,
   Home,
-  Globe
+  Globe,
+  FileText
 } from 'lucide-react';
 import { LanguageSelectDropdown } from './LanguageSelectDropdown.jsx';
 import { SiteLanguageToggle } from './SiteLanguageToggle.jsx';
@@ -162,6 +163,18 @@ export function Header({
             >
               <span>🎥</span>
               <span>{t('nav_youtube')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab && setActiveTab('text')}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                activeTab === 'text'
+                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
+                  : 'text-rose-200/70 hover:text-white'
+              }`}
+            >
+              <span>📖</span>
+              <span>{t('nav_text_reader') || 'Importar texto'}</span>
             </button>
           </div>
 
@@ -355,7 +368,7 @@ export function Header({
               <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
                 {t('mobile_navigation')}
               </h3>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -409,6 +422,26 @@ export function Header({
                   </div>
                   <span className="text-xs font-semibold text-center leading-tight">
                     YouTube<br />Reader
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (setActiveTab) setActiveTab('text');
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all ${
+                    activeTab === 'text'
+                      ? 'bg-[#3f1c14] border-rose-500/70 text-white shadow-md shadow-rose-950/40'
+                      : 'bg-[#200f0a] border-[#3d190f] text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold text-center leading-tight">
+                    Importar<br />Texto
                   </span>
                 </button>
               </div>

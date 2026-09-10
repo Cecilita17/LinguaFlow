@@ -5,7 +5,8 @@ import {
   Sparkles,
   ArrowRight,
   CheckCircle2,
-  ChevronDown
+  ChevronDown,
+  FileText
 } from 'lucide-react';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
@@ -82,58 +83,58 @@ export default function HomePage({
           </div>
         </div>
 
-        {/* 2 Big Interactive Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-4xl mx-auto w-full mb-10">
+        {/* 3 Big Interactive Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto w-full mb-10">
           
           {/* CARD 1: CHAT TUTOR */}
           <div
             onClick={() => onSelectMode('chat')}
-            className="group relative p-6 sm:p-8 rounded-3xl bg-[#241009]/95 hover:bg-[#2e150d] border border-[#4a2216] hover:border-rose-500/80 transition-all duration-300 shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-rose-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform hover:-translate-y-1"
+            className="group relative p-6 rounded-3xl bg-[#241009]/95 hover:bg-[#2e150d] border border-[#4a2216] hover:border-rose-500/80 transition-all duration-300 shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-rose-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform hover:-translate-y-1"
           >
             {/* Top decorative gradient glow */}
             <div className="absolute -top-16 -right-16 w-36 h-36 bg-rose-500/15 rounded-full blur-2xl group-hover:bg-rose-500/25 transition-all" />
 
             <div>
               {/* Header Icon + Tag */}
-              <div className="flex items-center justify-between mb-5">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/60 group-hover:scale-105 transition-transform">
-                  <MessageSquare className="w-7 h-7" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/60 group-hover:scale-105 transition-transform">
+                  <MessageSquare className="w-6 h-6" />
                 </div>
-                <span className="text-[11px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-rose-950/80 text-rose-300 border border-rose-800/70">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-rose-950/80 text-rose-300 border border-rose-800/70">
                   ✦ {t('home_chat_tag')}
                 </span>
               </div>
 
               {/* Title & Description */}
-              <h2 className="text-xl sm:text-2xl font-bold text-white group-hover:text-rose-200 transition-colors">
+              <h2 className="text-xl font-bold text-white group-hover:text-rose-200 transition-colors">
                 {t('home_chat_title')}
               </h2>
-              <p className="mt-2 text-xs sm:text-sm text-stone-300 leading-relaxed">
+              <p className="mt-2 text-xs text-stone-300 leading-relaxed">
                 {t('home_chat_desc')}
               </p>
 
               {/* Features List */}
-              <ul className="mt-5 space-y-2.5 text-xs text-rose-100/80">
-                <li className="flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <ul className="mt-4 space-y-2 text-xs text-rose-100/80">
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
                   <span>{t('home_chat_f1')}</span>
                 </li>
-                <li className="flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
                   <span>{t('home_chat_f2')}</span>
                 </li>
-                <li className="flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
                   <span>{t('home_chat_f3')}</span>
                 </li>
               </ul>
             </div>
 
             {/* CTA Button */}
-            <div className="mt-8 pt-4 border-t border-[#411c12]">
+            <div className="mt-6 pt-4 border-t border-[#411c12]">
               <button
                 type="button"
-                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-sm shadow-lg shadow-rose-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-rose-900/80"
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-xs shadow-lg shadow-rose-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-rose-900/80"
               >
                 <span>{t('home_chat_btn')}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -144,54 +145,110 @@ export default function HomePage({
           {/* CARD 2: YOUTUBE READER */}
           <div
             onClick={() => onSelectMode('youtube')}
-            className="group relative p-6 sm:p-8 rounded-3xl bg-[#241009]/95 hover:bg-[#2e150d] border border-[#4a2216] hover:border-amber-500/80 transition-all duration-300 shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-amber-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform hover:-translate-y-1"
+            className="group relative p-6 rounded-3xl bg-[#241009]/95 hover:bg-[#2e150d] border border-[#4a2216] hover:border-amber-500/80 transition-all duration-300 shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-amber-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform hover:-translate-y-1"
           >
             {/* Top decorative gradient glow */}
             <div className="absolute -top-16 -right-16 w-36 h-36 bg-amber-500/15 rounded-full blur-2xl group-hover:bg-amber-500/25 transition-all" />
 
             <div>
               {/* Header Icon + Tag */}
-              <div className="flex items-center justify-between mb-5">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-950/60 group-hover:scale-105 transition-transform">
-                  <Youtube className="w-7 h-7" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-950/60 group-hover:scale-105 transition-transform">
+                  <Youtube className="w-6 h-6" />
                 </div>
-                <span className="text-[11px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/70">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/70">
                   ✦ {t('home_yt_tag')}
                 </span>
               </div>
 
               {/* Title & Description */}
-              <h2 className="text-xl sm:text-2xl font-bold text-white group-hover:text-amber-200 transition-colors">
+              <h2 className="text-xl font-bold text-white group-hover:text-amber-200 transition-colors">
                 {t('home_yt_title')}
               </h2>
-              <p className="mt-2 text-xs sm:text-sm text-stone-300 leading-relaxed">
+              <p className="mt-2 text-xs text-stone-300 leading-relaxed">
                 {t('home_yt_desc')}
               </p>
 
               {/* Features List */}
-              <ul className="mt-5 space-y-2.5 text-xs text-rose-100/80">
-                <li className="flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <ul className="mt-4 space-y-2 text-xs text-rose-100/80">
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                   <span>{t('home_yt_f1')}</span>
                 </li>
-                <li className="flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                   <span>{t('home_yt_f2')}</span>
                 </li>
-                <li className="flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                   <span>{t('home_yt_f3')}</span>
                 </li>
               </ul>
             </div>
 
             {/* CTA Button */}
-            <div className="mt-8 pt-4 border-t border-[#411c12]">
+            <div className="mt-6 pt-4 border-t border-[#411c12]">
               <button
                 type="button"
-                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-600 via-rose-600 to-red-600 hover:from-amber-500 hover:to-rose-500 text-white font-bold text-sm shadow-lg shadow-amber-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-amber-900/80"
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-600 via-rose-600 to-red-600 hover:from-amber-500 hover:to-rose-500 text-white font-bold text-xs shadow-lg shadow-amber-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-amber-900/80"
               >
                 <span>{t('home_yt_btn')}</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          </div>
+
+          {/* CARD 3: TEXT READER */}
+          <div
+            onClick={() => onSelectMode('text')}
+            className="group relative p-6 rounded-3xl bg-[#241009]/95 hover:bg-[#2e150d] border border-[#4a2216] hover:border-pink-500/80 transition-all duration-300 shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-pink-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform hover:-translate-y-1"
+          >
+            {/* Top decorative gradient glow */}
+            <div className="absolute -top-16 -right-16 w-36 h-36 bg-pink-500/15 rounded-full blur-2xl group-hover:bg-pink-500/25 transition-all" />
+
+            <div>
+              {/* Header Icon + Tag */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-pink-950/60 group-hover:scale-105 transition-transform">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-pink-950/80 text-pink-300 border border-pink-800/70">
+                  ✦ {t('home_text_tag') || 'LECTOR DE TEXTOS'}
+                </span>
+              </div>
+
+              {/* Title & Description */}
+              <h2 className="text-xl font-bold text-white group-hover:text-pink-200 transition-colors">
+                {t('home_text_title') || 'Importar Texto'}
+              </h2>
+              <p className="mt-2 text-xs text-stone-300 leading-relaxed">
+                {t('home_text_desc') || 'Pega o importa cualquier texto sin video. Lee párrafos con audio individual y glosado inteligente.'}
+              </p>
+
+              {/* Features List */}
+              <ul className="mt-4 space-y-2 text-xs text-rose-100/80">
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
+                  <span>{t('home_text_f1') || 'Lectura independiente sin video'}</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
+                  <span>{t('home_text_f2') || 'Audio TTS por párrafo individual'}</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
+                  <span>{t('home_text_f3') || 'Glosado interlineal por palabras'}</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* CTA Button */}
+            <div className="mt-6 pt-4 border-t border-[#411c12]">
+              <button
+                type="button"
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-pink-600 via-rose-500 to-amber-600 hover:from-pink-500 hover:to-amber-500 text-white font-bold text-xs shadow-lg shadow-pink-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-pink-900/80"
+              >
+                <span>{t('home_text_btn') || 'Abrir Lector de Texto'}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>

@@ -6,6 +6,7 @@ import { InputBar } from './components/InputBar';
 import { SettingsModal } from './components/SettingsModal';
 import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
 import { YouTubeReaderPage } from './pages/YouTubeReaderPage';
+import { TextReaderPage } from './pages/TextReaderPage';
 import HomePage from './pages/HomePage';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
@@ -694,6 +695,17 @@ export default function App() {
       ) : activeTab === 'youtube' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
           <YouTubeReaderPage targetLang={targetLang} nativeLang={nativeLang} apiKey={config?.apiKey} />
+        </main>
+      ) : activeTab === 'text' ? (
+        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
+          <TextReaderPage
+            targetLang={targetLang}
+            setTargetLang={handleTargetLangChange}
+            nativeLang={nativeLang}
+            languages={languages}
+            apiKey={config?.apiKey}
+            onWordClick={handleWordClick}
+          />
         </main>
       ) : (
         <>
