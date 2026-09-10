@@ -337,12 +337,92 @@ export function findMatchingSubtitleIndex(subtitlesList, chunkList, aiItem, item
  *   - Preserves all punctuation in exact positions (whether returned by AI or in source text).
  *   - Preserves any user manual glosses for words.
  *   - If validation passes: returns the new authoritative lexical token array.
- *   - If validation fails: falls back to map-based merge (safe fallback, zero data loss).
+ * /**
+ * Validates whether the given AI tokens accurately and completely cover the original Chinese text:
+ * - No characters omitted
+ * - No characters invented or duplicated
+ * - Order is preserved exactly
+ * - Ignores harmless whitespace differences
+ *
+ * @param {string} originalText
+ * @param {Array} aiTokens
+ * @returns {boolean} True if coverage is 100% valid
+ */
+export function validateChineseAiSegmentation(originalText, aiTokens) {
+  if (!originalText || typeof originalText !== 'string' || !Array.isArray(aiTokens) || aiTokens.length === 0) {
+    return false;
+  }
+
+  const cleanOriginal = originalText.replace(/\s+/g, '');
+  if (!cleanOriginal) return false;
+
+  // 1. Check if direct concatenation of all AI tokens matches cleanOriginal
+  const cleanAiChars = aiTokens.map(t => (t.word || t.text || '').replace(/\s+/g, '')).join('');
+  if (cleanAiChars === cleanOriginal) {
+    return true;
+  }
+
+  // 2. Check if AI tokens covered all non-punctuation characters in exact order
+  // (AI often omits or reformats punctuation like trailing 。or quotes)
+  const PUNCT_STRIP_REGEX = /[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]/g;
+  const nonPunctOrig = cleanOriginal.replace(PUNCT_STRIP_REGEX, '');
+  const nonPunctAi = cleanAiChars.replace(PUNCT_STRIP_REGEX, '');
+  if (nonPunctOrig.length > 0 && nonPunctAi === nonPunctOrig) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Merges Chinese AI tokens by coverage, making AI lexical segmentation authoritative.
+ * Preserves original punctuation positions and any user manual glosses.
+ *
+ * @param {Array} originalTokens - Client provisional tokens
+ * @param {Array} aiTokens - AI lexical tokens
+ * @param {string} [originalText=''] - Raw original sentence text
+ * @returns {Array} Final lexical tokens, or safe fallback if validation fails
+ */
+export function mergeChineseAiTokensByCoverage(originalTokens = [], aiTokens = [], originalText = '') {
+  if (!Array.isArray(aiTokens) || aiTokens.length === 0) {
+    return originalTokens;
+  }
+
+  const authoritativeText = (typeof originalText === 'string' && originalText.trim())
+    ? originalText.trim()
+    : (Array.isArray(originalTokens) ? originalTokens.map(t => t.text || t.word || '').join('').trim() : '');
+
+  if (!authoritativeText) {
+    return originalTokens;
+  }
+
+  // 1. Validate coverage
+  const isValid = validateChineseAiSegmentation(authoritativeText, aiTokens);
+  if (!isValid) {
+    console.warn('[ChineseMerge] AI tokens failed coverage validation against original text. Using provisional fallback.');
+    return originalTokens;
+  }
+
+  // 2. Resegment by coverage
+  const resegmented = tryChineseResegmentation(originalTokens, aiTokens, authoritativeText);
+  if (resegmented !== null && resegmented.length > 0) {
+    return resegmented;
+  }
+
+  return originalTokens;
+}
+
+/**
+ * Merges AI-generated gloss tokens with client-side segmented tokens.
+ *
+ * For Chinese (zh): EXCLUSIVE COVERAGE-BASED BRANCH
+ *   - Local tokenization is strictly provisional.
+ *   - AI word-level tokenization is authoritative when validated by text coverage.
+ *   - Multi-character words (e.g. 喜欢, 学习, 中文) replace individual Hanzi characters.
  *
  * For all other languages: MAP-BASED MERGE (unchanged behavior)
  *   - NEVER breaks or splits client word units.
  *   - Preserves locally resolved tokens and enriches unresolved ones.
- *   - Strictly enforces that ONLY Chinese (zh) receives an auxiliary (Pinyin with tones).
  *
  * @param {Array} originalTokens - Client-side provisional tokens
  * @param {Array} aiTokens - AI-returned tokens with lexical groupings
@@ -355,18 +435,11 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     return originalTokens;
   }
 
-  const isChinese = targetLang === 'zh';
-
   // ============================================================
-  // CHINESE RESEGMENTATION MODE (Coverage-based lexical merge)
+  // EXCLUSIVE CHINESE BRANCH (Coverage-based lexical merge)
   // ============================================================
-  if (isChinese) {
-    const resegmented = tryChineseResegmentation(originalTokens, aiTokens, originalText);
-    if (resegmented !== null) {
-      return resegmented;
-    }
-    // Validation failed: fall through to map-based merge as safe fallback
-    console.warn('[ChineseMerge] Resegmentation coverage validation failed — falling back to map-based merge');
+  if (targetLang === 'zh') {
+    return mergeChineseAiTokensByCoverage(originalTokens, aiTokens, originalText);
   }
 
   // ============================================================
@@ -398,66 +471,30 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       match = aiMap.get(stripped);
     }
 
-    // If compound Chinese word had no direct match, check if AI returned constituent characters
-    if (!match && isChinese && w.length > 1 && /[\u4E00-\u9FFF]/.test(w)) {
-      const chars = [...w];
-      const subMatches = chars.map(c => aiMap.get(c)).filter(Boolean);
-      if (subMatches.length === chars.length) {
-        match = {
-          auxiliary: subMatches.map(m => m.auxiliary || m.pinyin).filter(Boolean).join(' '),
-          gloss: subMatches.map(m => m.gloss).filter(Boolean).join(' ')
-        };
-      }
-    }
-
     if (match) {
       // 1. TIER 1: MANUAL GLOSS PRIORITY - NEVER OVERWRITE orig.gloss
       if (isManual) {
-        const completedAuxiliary = isChinese
-          ? (orig.auxiliary || orig.pinyin || match.auxiliary || match.pinyin || null)
-          : null;
         return {
           ...orig,
-          auxiliary: completedAuxiliary,
-          pinyin: completedAuxiliary,
-          translit: null,
-          gloss: orig.gloss, // Strictly preserved!
-          glossSource: 'manual' // Strictly preserved!
+          glossSource: 'manual'
         };
       }
 
       // 2. TIER 2: AI GLOSS COMPLETION
-      // ONLY Chinese gets auxiliary (Pinyin with tones). All others are strictly null!
-      const auxiliary = isChinese ? (match.auxiliary || match.pinyin || orig.auxiliary || orig.pinyin || null) : null;
-      let gloss = match.gloss || orig.gloss;
-
-      // Sanitize: never allow gloss to duplicate auxiliary or the word itself
-      if (gloss && isChinese && auxiliary && gloss === auxiliary) {
-        gloss = orig.gloss && orig.gloss !== auxiliary ? orig.gloss : null;
-      }
-      if (gloss && (gloss.toLowerCase() === w.toLowerCase() && w !== 'de' && w !== '的')) {
-        gloss = orig.gloss || null;
-      }
-
-      // If AI returned Arabic word with diacritics/tashkeel, use that word
-      const wordToUse = (match.word && /[\u064B-\u065F\u0670]/.test(match.word)) ? match.word : (orig.word || orig.text || w);
-
       return {
         ...orig,
-        word: wordToUse,
-        text: wordToUse,
-        auxiliary,
-        pinyin: auxiliary,
+        auxiliary: null,
+        pinyin: null,
         translit: null,
-        gloss,
+        gloss: match.gloss || orig.gloss || null,
         glossSource: 'ai'
       };
     }
 
     return {
       ...orig,
-      auxiliary: isChinese ? (orig.auxiliary || orig.pinyin || null) : null,
-      pinyin: isChinese ? (orig.auxiliary || orig.pinyin || null) : null,
+      auxiliary: null,
+      pinyin: null,
       translit: null
     };
   });
@@ -514,6 +551,30 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
     }
   }
 
+  // Helper to match an AI word at textIdx, skipping whitespace in both
+  function matchWordAt(text, startIdx, word) {
+    let tIdx = startIdx;
+    let wIdx = 0;
+    while (wIdx < word.length) {
+      if (/\s/.test(word[wIdx])) {
+        wIdx++;
+        while (tIdx < text.length && /\s/.test(text[tIdx])) {
+          tIdx++;
+        }
+        continue;
+      }
+      while (tIdx < text.length && /\s/.test(text[tIdx])) {
+        tIdx++;
+      }
+      if (tIdx >= text.length || text[tIdx] !== word[wIdx]) {
+        return -1;
+      }
+      tIdx++;
+      wIdx++;
+    }
+    return tIdx;
+  }
+
   // Punctuation run matcher for Chinese & Western punctuation
   const PUNCT_RUN_REGEX = /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]+/;
 
@@ -532,8 +593,9 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
     const remainingText = fullOriginalText.slice(textIdx);
     const currentAiToken = aiIdx < cleanAiTokens.length ? cleanAiTokens[aiIdx] : null;
 
-    // Check if current AI token matches directly at textIdx
-    if (currentAiToken && remainingText.startsWith(currentAiToken.word)) {
+    // Check if current AI token matches at textIdx (with whitespace tolerance)
+    const endIdx = currentAiToken ? matchWordAt(fullOriginalText, textIdx, currentAiToken.word) : -1;
+    if (endIdx > -1) {
       const isPunct = PUNCTUATION_REGEX.test(currentAiToken.word);
       const isManual = manualGlossMap.has(currentAiToken.word);
       const aux = isPunct ? null : (currentAiToken.auxiliary || currentAiToken.pinyin || null);
@@ -552,7 +614,7 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
         glossSource: isManual ? 'manual' : (isPunct ? undefined : 'ai')
       });
 
-      textIdx += currentAiToken.word.length;
+      textIdx = endIdx;
       aiIdx++;
       continue;
     }
@@ -578,6 +640,11 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
 
     // Mismatch: AI tokens do not accurately match or cover the original text
     return null;
+  }
+
+  // Skip any trailing whitespace
+  while (textIdx < textLen && /\s/.test(fullOriginalText[textIdx])) {
+    textIdx++;
   }
 
   // Verification: All AI tokens must be consumed, and all text must be covered
@@ -639,7 +706,7 @@ export async function glossSingleSubtitleLine({
     if (Array.isArray(aiResults) && aiResults.length > 0) {
       const match = aiResults[0];
       if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
-        const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang, preparedSub.text || rawSub.text);
+        const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang, preparedSub.text || sub.text || '');
         return {
           ...preparedSub,
           tokens: mergedTokens,
@@ -692,6 +759,16 @@ export function enrichSubtitlesWithGlosses({
 
   // Phase 1: Apply offline tokenization & merge cached AI tokens if available
   const prepared = subtitles.map(sub => {
+    // If valid Chinese cache exists, restore authoritative lexical tokens directly
+    if (targetLang === 'zh' && cache[sub.id] && Array.isArray(cache[sub.id]) && cache[sub.id].length > 0) {
+      if (validateChineseAiSegmentation(sub.text, cache[sub.id])) {
+        return {
+          ...sub,
+          tokens: cache[sub.id]
+        };
+      }
+    }
+
     const offlineTokens = tokenizeAndGlossLineOffline(sub.text, targetLang);
 
     if (cache[sub.id] && Array.isArray(cache[sub.id]) && cache[sub.id].length > 0) {
@@ -768,6 +845,12 @@ export function enrichSubtitlesWithGlosses({
         currentSubtitles = currentSubtitles.map(sub => {
           const matching = savedRecord.subtitles.find(s => s.id === sub.id || (s.startTime && Math.abs(s.startTime - sub.startTime) < 0.1));
           if (matching && matching.tokens && matching.tokens.length > 0) {
+            if (targetLang === 'zh' && validateChineseAiSegmentation(sub.text, matching.tokens)) {
+              return {
+                ...sub,
+                tokens: matching.tokens
+              };
+            }
             return {
               ...sub,
               tokens: mergeAiTokensWithSegmented(sub.tokens, matching.tokens, targetLang, sub.text)
