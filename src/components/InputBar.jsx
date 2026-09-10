@@ -243,7 +243,11 @@ export function InputBar({
               ref={inputRef}
               type="text"
               name="chat-msg"
+              id="chat-input"
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="sentences"
+              spellCheck={false}
               data-lpignore="true"
               data-form-type="other"
               dir={isArabic ? 'rtl' : 'ltr'}
