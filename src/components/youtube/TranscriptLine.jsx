@@ -1,8 +1,6 @@
 import React from 'react';
-import { formatTimestamp } from '../../services/subtitleService.js';
 import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
-import { Play, Volume2 } from 'lucide-react';
 
 export function TranscriptLine({
   line,
@@ -61,26 +59,6 @@ export function TranscriptLine({
           : 'bg-[#24120c]/60 hover:bg-[#2b160f] border-transparent hover:border-[#482519]'
       }`}
     >
-      {/* Timestamp / Jump Button */}
-      {showTimestamps && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleLineClick();
-          }}
-          className={`flex-shrink-0 px-2 py-1 rounded-lg text-[11px] font-mono font-bold transition-all flex items-center gap-1 ${
-            isActive
-              ? 'bg-rose-600 text-white shadow-xs'
-              : 'bg-[#180c07] text-rose-300/70 group-hover/line:text-rose-200 group-hover/line:bg-[#32170f]'
-          }`}
-          title={`Saltar al segundo ${Math.round(startTime)}`}
-        >
-          <Play className="w-2.5 h-2.5 fill-current" />
-          <span>{formatTimestamp(startTime)}</span>
-        </button>
-      )}
-
       {/* Main Text Content */}
       <div className="flex-1 min-w-0" dir={textDirection}>
         {interlinearMode && tokens && tokens.length > 0 ? (

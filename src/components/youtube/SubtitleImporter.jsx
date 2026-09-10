@@ -10,10 +10,14 @@ export function SubtitleImporter({
   onClearSubtitles,
   glossProgress = null,
   onStopOrPauseGlossing = null,
-  onResumeGlossing = null
+  onResumeGlossing = null,
+  isExpanded: controlledExpanded = null,
+  onToggleExpand = null
 }) {
   const { isSpanish } = useSiteLanguage();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = controlledExpanded !== null ? controlledExpanded : internalExpanded;
+  const setIsExpanded = onToggleExpand || setInternalExpanded;
   const [tab, setTab] = useState('paste'); // 'paste' | 'file'
   const [pastedText, setPastedText] = useState('');
   const [error, setError] = useState(null);
@@ -94,70 +98,9 @@ export function SubtitleImporter({
     reader.readAsText(file, 'UTF-8');
   };
 
-  // If subtitles are loaded and not manually expanded, show a slim, single-line compact bar
+  // When subtitles are already loaded and not expanded, eliminate the intermediate bar
   if (subtitlesCount > 0 && !isExpanded) {
-    return (
-      <div className="px-3 py-1.5 rounded-xl bg-[#200d07] border border-[#482015] shadow-xs flex items-center justify-between text-xs transition-all">
-        <div className="flex items-center space-x-2 text-stone-200 truncate">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="font-semibold text-emerald-300 text-xs truncate">
-            {isSpanish ? 'Subtítulos cargados' : 'Subtitles loaded'}
-          </span>
-          <span className="text-stone-400 text-[11px] font-mono shrink-0">
-            ({subtitlesCount} {isSpanish ? 'líneas' : 'lines'}{currentFormat ? ` · ${currentFormat.toUpperCase()}` : ''})
-          </span>
-
-          {/* Pause / Stop glossing in subtitle bar */}
-          {glossProgress && glossProgress.isGlossing && onStopOrPauseGlossing && (
-            <button
-              type="button"
-              onClick={onStopOrPauseGlossing}
-              title={isSpanish ? 'Pausar / Detener glosado IA' : 'Pause / Stop AI glossing'}
-              className="px-2 py-0.5 rounded-md bg-amber-950/90 hover:bg-amber-900 border border-amber-600 text-amber-200 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs animate-pulse"
-            >
-              <Pause className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
-              <span>{isSpanish ? 'Pausar glosado' : 'Pause glossing'}</span>
-            </button>
-          )}
-
-          {/* Resume glossing in subtitle bar */}
-          {glossProgress && (glossProgress.isPaused || (!glossProgress.isGlossing && !glossProgress.isComplete && glossProgress.completed < glossProgress.total)) && onResumeGlossing && (
-            <button
-              type="button"
-              onClick={onResumeGlossing}
-              title={isSpanish ? 'Reanudar glosado IA' : 'Resume AI glossing'}
-              className="px-2 py-0.5 rounded-md bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-600 text-emerald-200 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
-            >
-              <Play className="w-2.5 h-2.5 fill-emerald-300 text-emerald-300" />
-              <span>{isSpanish ? 'Reanudar glosado' : 'Resume glossing'}</span>
-              <span className="opacity-80 font-mono text-[9px]">({glossProgress.completed}/{glossProgress.total})</span>
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center space-x-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => setIsExpanded(true)}
-            className="px-2.5 py-1 rounded-lg bg-[#2e130a] hover:bg-[#3e190d] border border-[#4e2215] text-rose-200 hover:text-white font-medium text-[11px] transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-          >
-            <FileCode className="w-3 h-3 text-rose-400" />
-            <span>{isSpanish ? 'Cambiar / Importar otros' : 'Change / Import other'}</span>
-          </button>
-
-          {onClearSubtitles && (
-            <button
-              type="button"
-              onClick={onClearSubtitles}
-              title={isSpanish ? 'Borrar subtítulos' : 'Clear subtitles'}
-              className="p-1 rounded-lg text-rose-300/60 hover:text-rose-200 hover:bg-[#381a11] transition-colors cursor-pointer"
-            >
-              <RotateCcw className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (

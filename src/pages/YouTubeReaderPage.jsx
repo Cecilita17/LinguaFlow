@@ -6,6 +6,7 @@ import { Transcript } from '../components/youtube/Transcript.jsx';
 import { TranscriptControls } from '../components/youtube/TranscriptControls.jsx';
 import { SavedTranscriptsModal } from '../components/youtube/SavedTranscriptsModal.jsx';
 import { enrichSubtitlesWithGlosses } from '../services/subtitleGlossService.js';
+import { parseSubtitlesAuto } from '../services/subtitleService.js';
 import {
   getSavedTranscriptsCount,
   findTranscriptsByVideoId
@@ -222,6 +223,24 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     setSubtitleFormat(format);
     setSubtitleSource(sourceName);
     startGlossing(newSubtitles, sourceName);
+  };
+
+  const handleFileUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result;
+        if (typeof content !== 'string') return;
+        const { format, subtitles: newSubs } = parseSubtitlesAuto(content, file.name);
+        if (newSubs && newSubs.length > 0) {
+          handleSubtitlesLoaded(newSubs, format, file.name);
+        }
+      } catch (err) {
+        console.warn('Error reading subtitle file:', err);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
   };
 
   const handleLoadFromLibrary = (record) => {
@@ -479,7 +498,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         </div>
       )}
 
-      {/* 6. Remaining controls placed BELOW the transcript */}
+      {/* 6. Controls placed BELOW the transcript */}
       {subtitles.length > 0 && (
         <div className="flex-shrink-0 pt-1.5">
           <TranscriptControls
@@ -490,8 +509,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             onToggleAutoScroll={() => setAutoScroll(!autoScroll)}
             fontSize={fontSize}
             onChangeFontSize={setFontSize}
-            showTimestamps={showTimestamps}
-            onToggleTimestamps={() => setShowTimestamps(!showTimestamps)}
+            onFileUpload={handleFileUpload}
           />
         </div>
       )}

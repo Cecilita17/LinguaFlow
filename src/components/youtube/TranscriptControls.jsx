@@ -1,5 +1,6 @@
-import React from 'react';
-import { Search, RotateCcw, ArrowDown, Clock, ZoomIn, ZoomOut, X, Languages } from 'lucide-react';
+import React, { useRef } from 'react';
+import { Search, RotateCcw, ArrowDown, ZoomIn, ZoomOut, X, Upload } from 'lucide-react';
+import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 export function TranscriptControls({
   searchQuery = '',
@@ -9,10 +10,21 @@ export function TranscriptControls({
   onToggleAutoScroll,
   fontSize = 'base', // 'sm' | 'base' | 'lg' | 'xl'
   onChangeFontSize,
+  onFileUpload,
   showTimestamps = true,
   onToggleTimestamps
 }) {
+  const { isSpanish } = useSiteLanguage();
+  const fileInputRef = useRef(null);
   const fontSizes = ['sm', 'base', 'lg', 'xl'];
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file && onFileUpload) {
+      onFileUpload(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleZoomIn = () => {
     const idx = fontSizes.indexOf(fontSize);
@@ -37,7 +49,7 @@ export function TranscriptControls({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar en el transcript..."
+          placeholder={isSpanish ? "Buscar en el transcript..." : "Search transcript..."}
           className="w-full bg-[#140603] text-white text-xs pl-8 pr-7 py-1.5 rounded-lg border border-[#482015] placeholder-rose-300/30 focus:outline-none focus:ring-1 focus:ring-rose-500"
         />
         {searchQuery && (
@@ -57,18 +69,18 @@ export function TranscriptControls({
         <button
           type="button"
           onClick={onResetToStart}
-          title="Volver al inicio del vídeo y transcript"
+          title={isSpanish ? "Volver al inicio del vídeo y transcript" : "Rewind to video & transcript start"}
           className="p-1.5 rounded-lg bg-[#2e130a] hover:bg-[#3e190d] text-rose-200 border border-[#4e2215] transition-colors flex items-center gap-1 cursor-pointer"
         >
           <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
-          <span className="hidden sm:inline text-[11px] font-medium">Inicio</span>
+          <span className="hidden sm:inline text-[11px] font-medium">{isSpanish ? "Inicio" : "Start"}</span>
         </button>
 
         {/* Auto-scroll Toggle */}
         <button
           type="button"
           onClick={onToggleAutoScroll}
-          title={autoScroll ? "Desactivar desplazamiento automático" : "Activar desplazamiento automático hacia la línea activa"}
+          title={autoScroll ? (isSpanish ? "Desactivar desplazamiento automático" : "Disable auto-scroll") : (isSpanish ? "Activar desplazamiento automático hacia la línea activa" : "Enable auto-scroll to active line")}
           className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
             autoScroll
               ? 'bg-rose-600/90 text-white border-rose-500 shadow-xs'
@@ -82,20 +94,25 @@ export function TranscriptControls({
           </span>
         </button>
 
-        {/* Timestamps Toggle */}
-        <button
-          type="button"
-          onClick={onToggleTimestamps}
-          title={showTimestamps ? "Ocultar marcas de tiempo" : "Mostrar marcas de tiempo"}
-          className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
-            showTimestamps
-              ? 'bg-[#3b1e15] text-rose-200 border-[#5a2e20]'
-              : 'bg-[#1e0f0a] text-rose-300/40 border-[#3b1e15]'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5 text-rose-400" />
-          <span className="hidden md:inline">Tiempo</span>
-        </button>
+        {/* Cambiar archivo Button */}
+        <div className="relative inline-flex items-center">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title={isSpanish ? "Cambiar archivo de subtítulos (.srt, .vtt, .txt)" : "Change subtitle file (.srt, .vtt, .txt)"}
+            className="px-2.5 py-1.5 rounded-xl bg-[#2e130a] hover:bg-[#3e190d] text-rose-200 hover:text-white border border-[#4e2215] hover:border-rose-500/60 text-[11px] font-semibold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+          >
+            <Upload className="w-3.5 h-3.5 text-rose-400" />
+            <span>{isSpanish ? "Cambiar archivo" : "Change file"}</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".srt,.vtt,.txt,text/plain"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </div>
 
         {/* Font Size Adjusters */}
         <div className="flex items-center bg-[#1c0e09] rounded-xl border border-[#482519] p-0.5">
