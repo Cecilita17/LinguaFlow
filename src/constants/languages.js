@@ -195,3 +195,30 @@ export function getLanguageMeta(code) {
   };
 }
 
+/**
+ * Known Right-to-Left (RTL) language codes.
+ * Prepared for Arabic (ar), Hebrew (he), Persian/Farsi (fa), Urdu (ur).
+ */
+export const RTL_LANG_CODES = new Set(['ar', 'he', 'fa', 'ur']);
+
+/**
+ * Check if a language code represents a Right-to-Left (RTL) script.
+ * @param {string} code
+ * @returns {boolean}
+ */
+export function isRtlLanguage(code) {
+  if (!code) return false;
+  const clean = String(code).toLowerCase().split('-')[0].trim();
+  return RTL_LANG_CODES.has(clean) || Boolean(LANGUAGE_METADATA[clean]?.rtl);
+}
+
+/**
+ * Get the CSS/HTML text direction for a given language code ('rtl' or 'ltr').
+ * @param {string} code
+ * @returns {'rtl'|'ltr'}
+ */
+export function getTextDirection(code) {
+  return isRtlLanguage(code) ? 'rtl' : 'ltr';
+}
+
+

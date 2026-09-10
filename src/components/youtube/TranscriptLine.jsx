@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatTimestamp } from '../../services/subtitleService.js';
 import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
+import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { Play, Volume2 } from 'lucide-react';
 
 export function TranscriptLine({
@@ -15,6 +16,8 @@ export function TranscriptLine({
   onWordClick = null // Prepared for future word-level glossary lookup
 }) {
   const { startTime, text, tokens = [], glosses = [] } = line;
+  const isRtl = isRtlLanguage(targetLang);
+  const textDirection = getTextDirection(targetLang);
 
   // Font size classes
   const fontClassMap = {
@@ -79,13 +82,19 @@ export function TranscriptLine({
       )}
 
       {/* Main Text Content */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0" dir={textDirection}>
         {interlinearMode && tokens && tokens.length > 0 ? (
           (() => {
             const isChinese = targetLang === 'zh';
 
             return (
-              <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2.5 gap-y-2 leading-tight break-words max-w-full">
+              <div
+                dir={textDirection}
+                style={{ direction: textDirection }}
+                className={`flex flex-wrap items-center gap-x-1.5 sm:gap-x-2.5 gap-y-2 leading-tight break-words max-w-full ${
+                  isRtl ? 'justify-start text-right' : 'justify-start text-left'
+                }`}
+              >
                 {tokens.map((tokenObj, idx) => {
                   const word = typeof tokenObj === 'string' ? tokenObj : (tokenObj.word || tokenObj.text);
                   const auxiliary = isChinese ? (tokenObj.auxiliary || tokenObj.pinyin || null) : null;
@@ -102,7 +111,8 @@ export function TranscriptLine({
                     return (
                       <span
                         key={idx}
-                        className="text-stone-400 font-medium px-0.5 select-text self-center text-base sm:text-lg"
+                        dir={textDirection}
+                        className="text-stone-400 font-medium px-0.5 select-text self-center text-base sm:text-lg isolate [unicode-bidi:isolate]"
                       >
                         {word}
                       </span>
@@ -112,13 +122,14 @@ export function TranscriptLine({
                   return (
                     <div
                       key={idx}
+                      dir={textDirection}
                       onClick={(e) => {
                         if (onWordClick) {
                           e.stopPropagation();
                           onWordClick(word, { word, auxiliary, gloss: cleanGloss });
                         }
                       }}
-                      className="inline-flex flex-col items-center justify-center px-1 py-0.5 rounded-lg hover:bg-white/10 transition-colors group/token max-w-full"
+                      className="inline-flex flex-col items-center justify-center px-1 py-0.5 rounded-lg hover:bg-white/10 transition-colors group/token max-w-full isolate [unicode-bidi:isolate]"
                     >
                       {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
                       {isChinese && auxiliary && (
@@ -127,8 +138,9 @@ export function TranscriptLine({
                         </span>
                       )}
 
-                      {/* Tier 2 (CENTER): Word (Arabic with diacritics/tashkeel, Russian/Polish/Latin scripts) */}
+                      {/* Tier 2 (CENTER): Word (Arabic with diacritics/tashkeel in RTL, Russian/Polish/Latin scripts in LTR) */}
                       <span
+                        dir={textDirection}
                         className={`font-semibold tracking-wide ${
                           isActive ? 'text-white font-bold drop-shadow-xs' : 'text-stone-100'
                         } ${fontClass}`}
@@ -136,11 +148,12 @@ export function TranscriptLine({
                         {renderHighlightedText(word)}
                       </span>
 
-                      {/* Tier 3 (BOTTOM): Gloss in student's native language */}
+                      {/* Tier 3 (BOTTOM): Gloss in student's native language (STRICTLY LTR) */}
                       {cleanGloss && (
                         <span
+                          dir="ltr"
                           title={cleanGloss}
-                          className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/line:text-stone-200 font-normal leading-tight mt-1 max-w-[120px] truncate text-center select-text"
+                          className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/line:text-stone-200 font-normal leading-tight mt-1 max-w-[120px] truncate text-center select-text isolate [unicode-bidi:isolate]"
                         >
                           {cleanGloss}
                         </span>
@@ -154,7 +167,9 @@ export function TranscriptLine({
         ) : (
           /* Normal Subtitle View Mode (Traditional Subtitles) */
           <p
-            className={`${fontClass} ${
+            dir={textDirection}
+            style={{ direction: textDirection }}
+            className={`${fontClass} ${isRtl ? 'text-right' : 'text-left'} ${
               isActive
                 ? 'text-white font-semibold drop-shadow-xs'
                 : 'text-rose-100/90 group-hover/line:text-white'

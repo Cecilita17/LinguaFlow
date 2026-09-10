@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Square, AlertCircle, Volume2 } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
+import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 
 /**
  * TextParagraphItem
@@ -8,6 +9,7 @@ import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
  * 1. Interlinear tokens (Chinese Pinyin above word, Arabic tashkeel without Latin transliteration, Polish/Russian words + gloss)
  * 2. Dedicated right-aligned audio button (Play / Playing / Stop / Error)
  * 3. Interactive word click for dictionary definition lookup
+ * 4. Authentic RTL support for Arabic, Hebrew, etc.
  */
 export function TextParagraphItem({
   paragraph,
@@ -22,6 +24,8 @@ export function TextParagraphItem({
 }) {
   const { id, text, tokens = [] } = paragraph;
   const isChinese = targetLang === 'zh';
+  const isRtl = isRtlLanguage(targetLang);
+  const textDirection = getTextDirection(targetLang);
 
   // Responsive font size classes
   const fontClassMap = {
@@ -50,9 +54,15 @@ export function TextParagraphItem({
       }`}
     >
       {/* LEFT: Text Content / Interlinear Glosses */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0" dir={textDirection}>
         {interlinearMode && Array.isArray(tokens) && tokens.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-2.5 leading-tight break-words max-w-full">
+          <div
+            dir={textDirection}
+            style={{ direction: textDirection }}
+            className={`flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-2.5 leading-tight break-words max-w-full ${
+              isRtl ? 'justify-start text-right' : 'justify-start text-left'
+            }`}
+          >
             {tokens.map((tokenObj, idx) => {
               const word = typeof tokenObj === 'string' ? tokenObj : (tokenObj.word || tokenObj.text);
               const auxiliary = isChinese ? (tokenObj.auxiliary || tokenObj.pinyin || null) : null;
@@ -71,7 +81,8 @@ export function TextParagraphItem({
                 return (
                   <span
                     key={idx}
-                    className="text-stone-400 font-medium px-0.5 select-text self-center text-base sm:text-lg"
+                    dir={textDirection}
+                    className="text-stone-400 font-medium px-0.5 select-text self-center text-base sm:text-lg isolate [unicode-bidi:isolate]"
                   >
                     {word}
                   </span>
@@ -81,6 +92,7 @@ export function TextParagraphItem({
               return (
                 <div
                   key={idx}
+                  dir={textDirection}
                   onClick={(e) => {
                     if (onWordClick) {
                       e.stopPropagation();
@@ -89,7 +101,7 @@ export function TextParagraphItem({
                   }}
                   role={onWordClick ? 'button' : undefined}
                   tabIndex={onWordClick ? 0 : undefined}
-                  className="inline-flex flex-col items-center justify-center px-1.5 py-1 rounded-xl hover:bg-white/10 active:bg-rose-900/40 transition-colors cursor-pointer group/token max-w-full"
+                  className="inline-flex flex-col items-center justify-center px-1.5 py-1 rounded-xl hover:bg-white/10 active:bg-rose-900/40 transition-colors cursor-pointer group/token max-w-full isolate [unicode-bidi:isolate]"
                   title={cleanGloss ? `"${word}": ${cleanGloss}` : word}
                 >
                   {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
@@ -99,8 +111,9 @@ export function TextParagraphItem({
                     </span>
                   )}
 
-                  {/* Tier 2 (CENTER): Word (Arabic with tashkīl, Russian, Polish, Latin scripts) */}
+                  {/* Tier 2 (CENTER): Word (Arabic with tashkīl in RTL, Russian, Polish, Latin scripts in LTR) */}
                   <span
+                    dir={textDirection}
                     className={`font-semibold tracking-wide select-text ${
                       isPlaying ? 'text-white font-bold drop-shadow-xs' : 'text-stone-100'
                     } ${fontClass}`}
@@ -108,10 +121,11 @@ export function TextParagraphItem({
                     {word}
                   </span>
 
-                  {/* Tier 3 (BOTTOM): Gloss in student's native language */}
+                  {/* Tier 3 (BOTTOM): Gloss in student's native language (STRICTLY LTR) */}
                   {cleanGloss && (
                     <span
-                      className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/token:text-rose-200 font-normal leading-tight mt-1 max-w-[140px] truncate text-center select-text"
+                      dir="ltr"
+                      className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/token:text-rose-200 font-normal leading-tight mt-1 max-w-[140px] truncate text-center select-text isolate [unicode-bidi:isolate]"
                     >
                       {cleanGloss}
                     </span>
@@ -123,7 +137,9 @@ export function TextParagraphItem({
         ) : (
           /* Normal paragraph text */
           <p
-            className={`${fontClass} select-text ${
+            dir={textDirection}
+            style={{ direction: textDirection }}
+            className={`${fontClass} ${isRtl ? 'text-right' : 'text-left'} select-text ${
               isPlaying
                 ? 'text-white font-semibold drop-shadow-xs'
                 : 'text-stone-100 group-hover/para:text-white'

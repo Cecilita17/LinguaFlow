@@ -170,17 +170,19 @@ export function parseVtt(content) {
   return results;
 }
 
+import { splitTextIntoNaturalSegments } from './textDocumentService.js';
+
 /**
- * Parses plain text (.txt) transcript content.
+ * Parses plain text (.txt) transcript content using centralized natural segmentation.
  * If no timestamps exist, assigns sequential spacing for reading.
  * @param {string} content - Raw plain text
+ * @param {string} [targetLang='zh'] - Language code for segmentation hints
  * @returns {Array} List of normalized subtitle objects
  */
-export function parseTxt(content) {
+export function parseTxt(content, targetLang = 'zh') {
   if (!content || typeof content !== 'string') return [];
 
-  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const rawLines = normalized.split('\n').map(l => l.trim()).filter(Boolean);
+  const rawLines = splitTextIntoNaturalSegments(content, targetLang);
   const results = [];
 
   rawLines.forEach((line, idx) => {
@@ -202,9 +204,10 @@ export function parseTxt(content) {
  * Auto-detects format (SRT, VTT, or TXT) and parses the content.
  * @param {string} content - Raw transcript content
  * @param {string} [fileName=''] - Optional file name for extension hint
+ * @param {string} [targetLang='zh'] - Language code for segmentation hints
  * @returns {{ format: string, subtitles: Array }}
  */
-export function parseSubtitlesAuto(content, fileName = '') {
+export function parseSubtitlesAuto(content, fileName = '', targetLang = 'zh') {
   if (!content || typeof content !== 'string') {
     return { format: 'unknown', subtitles: [] };
   }
@@ -225,6 +228,6 @@ export function parseSubtitlesAuto(content, fileName = '') {
   }
 
   // 3. Plain TXT
-  const subs = parseTxt(content);
+  const subs = parseTxt(content, targetLang);
   return { format: 'txt', subtitles: subs };
 }
