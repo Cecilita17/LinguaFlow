@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { parseSubtitlesAuto } from '../../services/subtitleService.js';
-import { FileText, Upload, CheckCircle2, RotateCcw, AlertCircle, FileCode } from 'lucide-react';
+import { FileText, Upload, CheckCircle2, RotateCcw, AlertCircle, FileCode, Pause, Play } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 export function SubtitleImporter({
@@ -8,7 +8,9 @@ export function SubtitleImporter({
   subtitlesCount = 0,
   currentFormat = null,
   onClearSubtitles,
-  glossProgress = null
+  glossProgress = null,
+  onStopOrPauseGlossing = null,
+  onResumeGlossing = null
 }) {
   const { isSpanish } = useSiteLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -104,6 +106,33 @@ export function SubtitleImporter({
           <span className="text-stone-400 text-[11px] font-mono shrink-0">
             ({subtitlesCount} {isSpanish ? 'líneas' : 'lines'}{currentFormat ? ` · ${currentFormat.toUpperCase()}` : ''})
           </span>
+
+          {/* Pause / Stop glossing in subtitle bar */}
+          {glossProgress && glossProgress.isGlossing && onStopOrPauseGlossing && (
+            <button
+              type="button"
+              onClick={onStopOrPauseGlossing}
+              title={isSpanish ? 'Pausar / Detener glosado IA' : 'Pause / Stop AI glossing'}
+              className="px-2 py-0.5 rounded-md bg-amber-950/90 hover:bg-amber-900 border border-amber-600 text-amber-200 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs animate-pulse"
+            >
+              <Pause className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
+              <span>{isSpanish ? 'Pausar glosado' : 'Pause glossing'}</span>
+            </button>
+          )}
+
+          {/* Resume glossing in subtitle bar */}
+          {glossProgress && (glossProgress.isPaused || (!glossProgress.isGlossing && !glossProgress.isComplete && glossProgress.completed < glossProgress.total)) && onResumeGlossing && (
+            <button
+              type="button"
+              onClick={onResumeGlossing}
+              title={isSpanish ? 'Reanudar glosado IA' : 'Resume AI glossing'}
+              className="px-2 py-0.5 rounded-md bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-600 text-emerald-200 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+            >
+              <Play className="w-2.5 h-2.5 fill-emerald-300 text-emerald-300" />
+              <span>{isSpanish ? 'Reanudar glosado' : 'Resume glossing'}</span>
+              <span className="opacity-80 font-mono text-[9px]">({glossProgress.completed}/{glossProgress.total})</span>
+            </button>
+          )}
         </div>
 
         <div className="flex items-center space-x-1.5 shrink-0">

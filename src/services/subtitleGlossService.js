@@ -119,8 +119,9 @@ export function isGlossComplete(sub, targetLang = 'zh') {
  * Call backend batch gloss endpoint to enrich a set of lines with AI glosses.
  * Crucially passes client pre-segmented words, specific UNRESOLVED unknown tokens, and effective API key.
  */
-export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang = 'es', apiKey = '') {
+export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang = 'es', apiKey = '', abortSignal = null) {
   if (!Array.isArray(lines) || lines.length === 0) return [];
+  if (abortSignal?.aborted) return [];
 
   const url = `${API_BASE_URL}/api/batch-gloss`;
   const fallbackUrl = `${API_BASE_URL}/batch-gloss`;
@@ -149,9 +150,14 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
   };
 
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (abortSignal?.aborted) return [];
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 28000);
+      const onParentAbort = () => controller.abort();
+      if (abortSignal) {
+        abortSignal.addEventListener('abort', onParentAbort, { once: true });
+      }
 
       const headers = { 'Content-Type': 'application/json' };
       if (effectiveKey) {
@@ -175,6 +181,9 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
       }
 
       clearTimeout(timeoutId);
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', onParentAbort);
+      }
 
       if (res.ok) {
         const data = await res.json();
@@ -383,6 +392,7 @@ export function enrichSubtitlesWithGlosses({
   videoTitle = '',
   videoUrl = '',
   sourceType = 'srt',
+  abortSignal = null,
   onUpdate = null,
   onProgress = null
 }) {
@@ -422,6 +432,27 @@ export function enrichSubtitlesWithGlosses({
 
   (async () => {
     let currentSubtitles = [...prepared];
+
+    const checkAborted = () => {
+      if (abortSignal && abortSignal.aborted) {
+        console.log('[LinguaFlow Gloss Engine] Glossing paused/stopped by user.');
+        if (onProgress) {
+          const nowComp = getCompletedCount(currentSubtitles);
+          onProgress({
+            total: totalSubtitles,
+            completed: nowComp,
+            isGlossing: false,
+            isPaused: true,
+            isComplete: nowComp === totalSubtitles,
+            failed: 0
+          });
+        }
+        return true;
+      }
+      return false;
+    };
+
+    if (checkAborted()) return;
 
     // Check persistent library (IndexedDB)
     let savedRecord = null;
@@ -552,9 +583,11 @@ export function enrichSubtitlesWithGlosses({
     // Helper to process a single batch of lines
     const processBatch = async (batch) => {
       if (!Array.isArray(batch) || batch.length === 0) return [];
+      if (checkAborted()) return [];
 
       actualAiRequestsCount++;
-      const aiResults = await fetchBatchGlossesApi(batch, targetLang, nativeLang, apiKey);
+      const aiResults = await fetchBatchGlossesApi(batch, targetLang, nativeLang, apiKey, abortSignal);
+      if (checkAborted()) return [];
       let hasNewData = false;
 
       if (Array.isArray(aiResults) && aiResults.length > 0) {
@@ -634,7 +667,9 @@ export function enrichSubtitlesWithGlosses({
 
     // Pass 1: Process initial chunks of 5 lines
     for (const chunk of initialChunks) {
+      if (checkAborted()) return;
       const incomplete = await processBatch(chunk);
+      if (checkAborted()) return;
       for (const sub of incomplete) {
         const attempts = (retryCountMap.get(sub.id) || 0) + 1;
         retryCountMap.set(sub.id, attempts);
@@ -647,8 +682,10 @@ export function enrichSubtitlesWithGlosses({
 
     // Pass 2 & 3: Retry missing or incomplete lines in smaller batches of 3
     while (pendingRetries.length > 0) {
+      if (checkAborted()) return;
       const retryBatch = pendingRetries.splice(0, 3);
       const incomplete = await processBatch(retryBatch);
+      if (checkAborted()) return;
       for (const sub of incomplete) {
         const attempts = (retryCountMap.get(sub.id) || 0) + 1;
         retryCountMap.set(sub.id, attempts);

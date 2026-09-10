@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { YouTubePlayer } from '../components/youtube/YouTubePlayer.jsx';
 import { YouTubeImporter } from '../components/youtube/YouTubeImporter.jsx';
 import { SubtitleImporter } from '../components/youtube/SubtitleImporter.jsx';
@@ -16,7 +16,9 @@ import {
   FileText,
   CheckCircle2,
   RotateCcw,
-  BookOpen
+  BookOpen,
+  Pause,
+  Play
 } from 'lucide-react';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
@@ -50,6 +52,9 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   const [searchQuery, setSearchQuery] = useState('');
   const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
 
+  // Abort controller ref to stop / pause glossing
+  const glossAbortControllerRef = useRef(null);
+
   // Refresh saved transcripts count
   const refreshLibraryCount = useCallback(async () => {
     try {
@@ -59,6 +64,61 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       console.warn('Failed to get library count:', e);
     }
   }, []);
+
+  // Cleanup in-flight glossing on unmount
+  useEffect(() => {
+    return () => {
+      if (glossAbortControllerRef.current) {
+        glossAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Start or resume glossing with abortable controller
+  const startGlossing = useCallback((subtitlesToGloss, sourceName = subtitleSource) => {
+    if (!Array.isArray(subtitlesToGloss) || subtitlesToGloss.length === 0) return;
+
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    glossAbortControllerRef.current = controller;
+
+    const enriched = enrichSubtitlesWithGlosses({
+      subtitles: subtitlesToGloss,
+      targetLang,
+      nativeLang,
+      apiKey,
+      videoId,
+      videoTitle,
+      videoUrl,
+      sourceType: sourceName || 'srt',
+      abortSignal: controller.signal,
+      onUpdate: (updated) => {
+        setSubtitles(updated);
+        refreshLibraryCount();
+      },
+      onProgress: (p) => setGlossProgress(p)
+    });
+
+    setSubtitles(enriched);
+    refreshLibraryCount();
+  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount]);
+
+  // Stop / Pause glossing
+  const handleStopOrPauseGlossing = useCallback(() => {
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+      glossAbortControllerRef.current = null;
+    }
+    setGlossProgress(prev => prev ? ({ ...prev, isGlossing: false, isPaused: true }) : null);
+  }, []);
+
+  // Resume glossing
+  const handleResumeGlossing = useCallback(() => {
+    if (!subtitles || subtitles.length === 0) return;
+    startGlossing(subtitles, subtitleSource);
+  }, [subtitles, subtitleSource, startGlossing]);
 
   // 1. Restore previous session on initial mount
   useEffect(() => {
@@ -137,6 +197,10 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
 
   // Handlers
   const handleImportVideo = (newVideoId, newUrl) => {
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+      glossAbortControllerRef.current = null;
+    }
     setVideoId(newVideoId);
     setVideoUrl(newUrl);
     setCurrentTime(0);
@@ -157,27 +221,15 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   const handleSubtitlesLoaded = (newSubtitles, format, sourceName) => {
     setSubtitleFormat(format);
     setSubtitleSource(sourceName);
-    const enriched = enrichSubtitlesWithGlosses({
-      subtitles: newSubtitles,
-      targetLang,
-      nativeLang,
-      apiKey,
-      videoId,
-      videoTitle,
-      videoUrl,
-      sourceType: sourceName,
-      onUpdate: (updated) => {
-        setSubtitles(updated);
-        refreshLibraryCount();
-      },
-      onProgress: (p) => setGlossProgress(p)
-    });
-    setSubtitles(enriched);
-    refreshLibraryCount();
+    startGlossing(newSubtitles, sourceName);
   };
 
   const handleLoadFromLibrary = (record) => {
     if (!record) return;
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+      glossAbortControllerRef.current = null;
+    }
     if (record.videoId) setVideoId(record.videoId);
     if (record.videoUrl) setVideoUrl(record.videoUrl);
     if (record.videoTitle) setVideoTitle(record.videoTitle);
@@ -211,6 +263,10 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   };
 
   const handleClearSubtitles = () => {
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+      glossAbortControllerRef.current = null;
+    }
     setSubtitles([]);
     setSubtitleFormat(null);
     setSubtitleSource('');
@@ -218,6 +274,10 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   };
 
   const handleResetSession = () => {
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+      glossAbortControllerRef.current = null;
+    }
     setVideoId('');
     setVideoTitle('');
     setVideoUrl('');
@@ -242,7 +302,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
 
   return (
     <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-white">
-      {/* 1. Header: YouTube Reader + AI Glossing Control + Saved Transcripts Library */}
+      {/* 1. Header: YouTube Reader + AI Glossing Control + Stop/Pause + Saved Transcripts Library */}
       <div className="flex-shrink-0 space-y-2 pb-1">
         <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#200d07] rounded-xl border border-[#482015] shadow-xs text-xs">
           {/* Left: Brand & Target Language */}
@@ -258,7 +318,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             </span>
           </div>
 
-          {/* Right: Library Button + AI Glossing Toggle + Video Controls */}
+          {/* Right: Library Button + AI Glossing Toggle + Pause/Resume + Video Controls */}
           <div className="flex items-center space-x-1.5 shrink-0">
             {/* SAVED TRANSCRIPTS LIBRARY BUTTON */}
             <button
@@ -311,6 +371,35 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
                 </span>
               )}
             </button>
+
+            {/* STOP / PAUSE BUTTON (shown while actively glossing) */}
+            {glossProgress && glossProgress.isGlossing && (
+              <button
+                type="button"
+                onClick={handleStopOrPauseGlossing}
+                title={isSpanish ? 'Pausar / Detener glosado IA' : 'Pause / Stop AI glossing'}
+                className="px-2 py-1 rounded-lg bg-amber-950/90 hover:bg-amber-900 border border-amber-500 text-amber-200 hover:text-white text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs animate-pulse"
+              >
+                <Pause className="w-3 h-3 fill-amber-300 text-amber-300" />
+                <span>{isSpanish ? 'Pausar' : 'Pause'}</span>
+              </button>
+            )}
+
+            {/* RESUME BUTTON (shown when paused or stopped with incomplete lines) */}
+            {glossProgress && (glossProgress.isPaused || (!glossProgress.isGlossing && !glossProgress.isComplete && glossProgress.completed < glossProgress.total)) && (
+              <button
+                type="button"
+                onClick={handleResumeGlossing}
+                title={isSpanish ? 'Reanudar glosado IA' : 'Resume AI glossing'}
+                className="px-2 py-1 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500 text-emerald-200 hover:text-white text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+              >
+                <Play className="w-3 h-3 fill-emerald-300 text-emerald-300" />
+                <span>{isSpanish ? 'Reanudar' : 'Resume'}</span>
+                {glossProgress.total > 0 && (
+                  <span className="text-[9px] opacity-80 font-mono">({glossProgress.completed}/{glossProgress.total})</span>
+                )}
+              </button>
+            )}
 
             {/* Video Link Toggle (if video loaded) */}
             {videoId && (
@@ -367,6 +456,9 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
           subtitlesCount={subtitles.length}
           currentFormat={subtitleFormat}
           onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
+          glossProgress={glossProgress}
+          onStopOrPauseGlossing={handleStopOrPauseGlossing}
+          onResumeGlossing={handleResumeGlossing}
         />
       </div>
 
