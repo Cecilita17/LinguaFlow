@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Square, AlertCircle, Volume2, Edit3, Check, X } from 'lucide-react';
+import { Play, Square, AlertCircle, Volume2, Languages, Check, X } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getTextDirection, isRtlLanguage, getLanguageMeta } from '../../constants/languages.js';
 import { tokenizeAndGlossLineOffline } from '../../services/subtitleGlossService.js';
@@ -142,7 +142,7 @@ export function TextParagraphItem({
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#3e1b11]">
             <div className="flex items-center space-x-2">
               <span className="px-2.5 py-1 rounded-xl bg-rose-950/90 border border-rose-700/70 text-rose-300 text-xs font-bold flex items-center space-x-1.5">
-                <Edit3 className="w-3.5 h-3.5" />
+                <Languages className="w-3.5 h-3.5" />
                 <span>Glosado manual</span>
               </span>
               <span className="text-xs text-stone-300 font-medium">
@@ -421,16 +421,15 @@ export function TextParagraphItem({
               )}
             </button>
 
-            {/* Debajo del botón de audio: ✎ Glosar manualmente */}
+            {/* Debajo del botón de audio: Glosar manualmente */}
             <button
               type="button"
               onClick={handleOpenManualGloss}
               aria-label="Glosar manualmente"
-              title="✎ Glosar manualmente este segmento"
-              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-[#2a130b] hover:bg-[#38190e] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white text-xs font-medium transition-all shadow-xs cursor-pointer text-center"
+              title="Glosar manualmente este segmento"
+              className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer bg-[#2a130b] hover:bg-[#38190e] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white"
             >
-              <Edit3 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-              <span className="text-[11px] leading-tight">✎ Glosar manualmente</span>
+              <Languages className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />
             </button>
           </div>
         </div>
