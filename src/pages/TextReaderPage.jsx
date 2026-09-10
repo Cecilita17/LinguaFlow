@@ -590,9 +590,9 @@ export function TextReaderPage({
   const currentLangMeta = getLanguageMeta(targetLang);
 
   return (
-    <div className="flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)]">
+    <div className="h-full flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)] min-h-0">
       {/* TOP HEADER CONTROLS BAR */}
-      <div className="px-4 py-3 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <header className="relative z-30 px-4 py-3 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] flex flex-wrap items-center justify-between gap-3 shrink-0">
         {/* Left: Section Title & Editable Doc Title */}
         <div className="flex items-center space-x-3 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0">
@@ -744,10 +744,10 @@ export function TextReaderPage({
             </>
           )}
         </div>
-      </div>
+      </header>
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto flex flex-col">
+      <main className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto flex flex-col min-h-0">
         {isEditing ? (
           /* ============================================================ */
           /* 1. INPUT / IMPORT VIEW (Escribir, Pegar, Importar archivo)     */
@@ -894,15 +894,18 @@ export function TextReaderPage({
               />
             ))}
 
-            {/* End of Document Footer Note */}
-            <div className="pt-8 pb-4 text-center text-xs text-rose-200/50 flex items-center justify-center space-x-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500/40"></span>
-              <span>Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500/40"></span>
-            </div>
           </div>
         )}
-      </div>
+      </main>
+
+      {/* FOOTER: Fixed to the bottom of the visible area, never scrolls with the text */}
+      {!isEditing && document && (
+        <footer className="relative z-20 shrink-0 px-4 py-2.5 bg-[var(--header-bg)] border-t border-[var(--header-border)] text-center text-xs text-[var(--text-muted)] flex items-center justify-center space-x-2 shadow-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
+          <span className="truncate">Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
+        </footer>
+      )}
 
       {/* Saved Documents Library Modal */}
       <SavedDocumentsModal
