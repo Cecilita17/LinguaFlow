@@ -59,7 +59,7 @@ export function Header({
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#23120b]/95 backdrop-blur-md border-b border-[#3d190f] px-4 py-2.5 md:py-3 shadow-lg shadow-black/25 text-white transition-colors">
+      <header className="sticky top-0 z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] px-4 py-2.5 md:py-3 shadow-lg shadow-black/10 dark:shadow-black/25 text-[var(--text-primary)] transition-colors">
         {/* MOBILE TOP BAR (< md) */}
         <div className="flex md:hidden items-center justify-between w-full">
           {/* Left: Brand Logo & Titles */}
@@ -74,7 +74,7 @@ export function Header({
               <Sparkles className="w-5 h-5 fill-white text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-white text-[17px] leading-tight tracking-wide group-hover:text-rose-200 transition-colors">
+              <h1 className="font-bold text-[var(--text-primary)] text-[17px] leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
                 LinguaFlow
               </h1>
             </div>
@@ -99,7 +99,7 @@ export function Header({
               type="button"
               onClick={() => setIsMobileDrawerOpen(true)}
               aria-label="Abrir opciones de LinguaFlow"
-              className="w-9 h-9 rounded-xl bg-[#2d140d] border border-[#482015] flex items-center justify-center text-stone-200 hover:text-white transition-colors"
+              className="w-9 h-9 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -120,21 +120,21 @@ export function Header({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-bold text-white text-lg leading-tight tracking-wide group-hover:text-rose-200 transition-colors">
+              <h1 className="font-bold text-[var(--text-primary)] text-lg leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
                 LinguaFlow
               </h1>
             </div>
           </div>
 
           {/* Navigation Tabs (Inicio vs Chat vs YouTube Reader) */}
-          <div className="flex items-center p-1 bg-[#1e0f0a]/90 rounded-xl border border-[#482519] text-xs font-bold">
+          <div className="flex items-center p-1 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border-primary)] text-xs font-bold">
             <button
               type="button"
               onClick={() => setActiveTab && setActiveTab('home')}
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 activeTab === 'home'
                   ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                  : 'text-rose-200/70 hover:text-white'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               <span>🏠</span>
@@ -146,7 +146,7 @@ export function Header({
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 activeTab === 'chat'
                   ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                  : 'text-rose-200/70 hover:text-white'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               <span>💬</span>
@@ -158,7 +158,7 @@ export function Header({
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 activeTab === 'youtube'
                   ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                  : 'text-rose-200/70 hover:text-white'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               <span>🎥</span>
@@ -170,7 +170,7 @@ export function Header({
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 activeTab === 'text'
                   ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                  : 'text-rose-200/70 hover:text-white'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               <span>📖</span>
@@ -180,7 +180,7 @@ export function Header({
 
           {/* Aesthetic Language Selectors */}
           <div
-            className="flex items-center space-x-1.5 p-1 rounded-2xl border border-[#482519] shadow-md text-xs bg-[#180904]"
+            className="flex items-center space-x-1.5 p-1 rounded-2xl border border-[var(--border-primary)] shadow-md text-xs bg-[var(--surface-tertiary)]"
           >
             <LanguageSelectDropdown
               value={targetLang}
@@ -190,7 +190,7 @@ export function Header({
               align="left"
             />
 
-            <span className="text-[#5a2e20] font-light">|</span>
+            <span className="text-[var(--border-primary)] font-light">|</span>
 
             <LanguageSelectDropdown
               value={nativeLang}
@@ -214,12 +214,12 @@ export function Header({
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-xs border ${
                 showTransliteration
                   ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500 shadow-rose-900/40'
-                  : 'bg-[#3b1e15] text-rose-200/80 border-[#5a2e20] hover:bg-[#482519]'
+                  : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-hover)]'
               }`}
             >
               <Type className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Transliteración</span>
-              <span className={`text-[10px] px-1 rounded ${showTransliteration ? 'bg-rose-800 text-rose-100' : 'bg-[#24120c] text-rose-300/60'}`}>
+              <span className={`text-[10px] px-1 rounded ${showTransliteration ? 'bg-rose-800 text-rose-100' : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)]'}`}>
                 {showTransliteration ? 'ON' : 'OFF'}
               </span>
             </button>
@@ -232,7 +232,7 @@ export function Header({
               className={`relative flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-xs border ${
                 handsFree
                   ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white border-rose-400 shadow-rose-900/50'
-                  : 'bg-[#3b1e15] text-rose-200/90 border-[#5a2e20] hover:bg-[#482519]'
+                  : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-hover)]'
               }`}
             >
               {handsFree ? (
@@ -246,7 +246,7 @@ export function Header({
                 </>
               ) : (
                 <>
-                  <MicOff className="w-3.5 h-3.5 text-rose-300/50" />
+                  <MicOff className="w-3.5 h-3.5 text-rose-500 dark:text-rose-300/50" />
                   <span className="hidden sm:inline">Manos Libres</span>
                 </>
               )}
@@ -283,7 +283,7 @@ export function Header({
                 type="button"
                 onClick={onResetChat}
                 title="Reiniciar chat en este idioma"
-                className="p-2 rounded-xl bg-[#3b1e15] border border-[#5a2e20] text-rose-200 hover:text-white hover:bg-[#482519] shadow-xs transition-colors"
+                className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shadow-xs transition-colors"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
@@ -294,7 +294,7 @@ export function Header({
               type="button"
               onClick={onOpenSettings}
               title="Ajustes de API y Voz"
-              className="p-2 rounded-xl bg-[#3b1e15] border border-[#5a2e20] text-rose-200 hover:text-white hover:bg-[#482519] shadow-xs transition-colors"
+              className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shadow-xs transition-colors"
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -342,21 +342,21 @@ export function Header({
 
           {/* Drawer container */}
           <div
-            className="relative w-[86%] max-w-[340px] h-full bg-[#180b06] border-l border-[#3d190f] flex flex-col p-4 overflow-y-auto shadow-2xl z-10"
+            className="relative w-[86%] max-w-[340px] h-full bg-[var(--surface-primary)] border-l border-[var(--border-primary)] flex flex-col p-4 overflow-y-auto shadow-2xl z-10 text-[var(--text-primary)]"
             role="dialog"
             aria-modal="true"
             aria-label="Opciones de LinguaFlow"
           >
             {/* Header: Title + Close Button */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#3d190f]/60">
-              <h2 className="text-base font-bold text-white tracking-wide">
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-primary)]">
+              <h2 className="text-base font-bold text-[var(--text-primary)] tracking-wide">
                 Opciones de LinguaFlow
               </h2>
               <button
                 type="button"
                 onClick={() => setIsMobileDrawerOpen(false)}
                 aria-label="Cerrar opciones"
-                className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/5 transition-colors"
+                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -364,7 +364,7 @@ export function Header({
 
             {/* 1. Modo de Práctica Actual */}
             <div className="mt-4">
-              <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
+              <h3 className="text-xs font-bold text-[var(--text-primary)] mb-2">
                 {t('mobile_navigation')}
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -376,8 +376,8 @@ export function Header({
                   }}
                   className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all ${
                     activeTab === 'home'
-                      ? 'bg-[#3f1c14] border-rose-500/70 text-white shadow-md shadow-rose-950/40'
-                      : 'bg-[#200f0a] border-[#3d190f] text-stone-400 hover:text-stone-200'
+                      ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-rose-300 shadow-md shadow-rose-950/20'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                   }`}
                 >
                   <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
@@ -394,8 +394,8 @@ export function Header({
                   }}
                   className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all ${
                     activeTab === 'chat'
-                      ? 'bg-[#3f1c14] border-rose-500/70 text-white shadow-md shadow-rose-950/40'
-                      : 'bg-[#200f0a] border-[#3d190f] text-stone-400 hover:text-stone-200'
+                      ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-rose-300 shadow-md shadow-rose-950/20'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                   }`}
                 >
                   <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
@@ -412,8 +412,8 @@ export function Header({
                   }}
                   className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all ${
                     activeTab === 'youtube'
-                      ? 'bg-[#3f1c14] border-rose-500/70 text-white shadow-md shadow-rose-950/40'
-                      : 'bg-[#200f0a] border-[#3d190f] text-stone-400 hover:text-stone-200'
+                      ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-rose-300 shadow-md shadow-rose-950/20'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                   }`}
                 >
                   <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
@@ -432,8 +432,8 @@ export function Header({
                   }}
                   className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all ${
                     activeTab === 'text'
-                      ? 'bg-[#3f1c14] border-rose-500/70 text-white shadow-md shadow-rose-950/40'
-                      : 'bg-[#200f0a] border-[#3d190f] text-stone-400 hover:text-stone-200'
+                      ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-rose-300 shadow-md shadow-rose-950/20'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                   }`}
                 >
                   <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
@@ -449,15 +449,15 @@ export function Header({
             {/* 2. Idioma del Sitio Web (ES / EN) */}
             <div className="mt-5">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="text-xs font-semibold text-rose-100/90 flex items-center space-x-1.5">
-                  <Globe className="w-3.5 h-3.5 text-rose-400" />
+                <h3 className="text-xs font-bold text-[var(--text-primary)] flex items-center space-x-1.5">
+                  <Globe className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
                   <span>{t('site_language_title')}</span>
                 </h3>
-                <span className="text-[10px] text-rose-300/70 font-medium bg-rose-950/70 px-2 py-0.5 rounded-full border border-rose-800/60">
+                <span className="text-[10px] text-rose-600 dark:text-rose-300 font-bold bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
                   ES / EN
                 </span>
               </div>
-              <p className="text-[11px] text-stone-400 font-medium mb-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] font-medium mb-2.5">
                 {t('site_language_desc')}
               </p>
               <SiteLanguageToggle variant="segmented" />
@@ -466,15 +466,15 @@ export function Header({
             {/* 3. Configuración de Idioma */}
             <div className="mt-5">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="text-xs font-semibold text-rose-100/90 flex items-center space-x-1.5">
-                  <Languages className="w-3.5 h-3.5 text-rose-400" />
+                <h3 className="text-xs font-bold text-[var(--text-primary)] flex items-center space-x-1.5">
+                  <Languages className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
                   <span>{t('mobile_lang_settings')}</span>
                 </h3>
-                <span className="text-[10px] text-rose-300/70 font-medium bg-rose-950/70 px-2 py-0.5 rounded-full border border-rose-800/60">
+                <span className="text-[10px] text-rose-600 dark:text-rose-300 font-bold bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
                   Banderas
                 </span>
               </div>
-              <p className="text-[11px] text-stone-400 font-medium mb-3">
+              <p className="text-[11px] text-[var(--text-muted)] font-medium mb-3">
                 {t('mobile_lang_desc')}
               </p>
 
@@ -507,17 +507,17 @@ export function Header({
 
             {/* 4. Herramientas de Voz e IA */}
             <div className="mt-5">
-              <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
+              <h3 className="text-xs font-bold text-[var(--text-primary)] mb-2">
                 {t('voice_ai_tools')}
               </h3>
               <div className="space-y-2">
                 {/* Transliteración */}
-                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[#200f0a] border border-[#3d190f]">
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
                   <div className="flex items-center space-x-3">
-                    <div className="w-7 h-7 rounded-full bg-[#2d140d] border border-[#482015] flex items-center justify-center text-rose-300 font-serif font-bold text-xs">
+                    <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-600 dark:text-rose-300 font-serif font-bold text-xs">
                       T
                     </div>
-                    <span className="text-xs font-medium text-stone-200">
+                    <span className="text-xs font-semibold text-[var(--text-primary)]">
                       {t('transliteration')}
                     </span>
                   </div>
@@ -528,7 +528,7 @@ export function Header({
                     className={`w-12 h-6 rounded-full transition-all flex items-center px-0.5 ${
                       showTransliteration
                         ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end pr-1.5'
-                        : 'bg-[#2d160e] border border-[#482015] justify-start pl-0.5'
+                        : 'bg-[var(--surface-tertiary)] border border-[var(--border-primary)] justify-start pl-0.5'
                     }`}
                   >
                     {showTransliteration ? (
@@ -540,12 +540,12 @@ export function Header({
                 </div>
 
                 {/* Manos Libres */}
-                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[#200f0a] border border-[#3d190f]">
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
                   <div className="flex items-center space-x-3">
-                    <div className="w-7 h-7 rounded-full bg-[#2d140d] border border-[#482015] flex items-center justify-center text-rose-300">
+                    <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-600 dark:text-rose-300">
                       <Mic className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-medium text-stone-200">
+                    <span className="text-xs font-semibold text-[var(--text-primary)]">
                       {t('hands_free')}
                     </span>
                   </div>
@@ -556,7 +556,7 @@ export function Header({
                     className={`w-12 h-6 rounded-full transition-all flex items-center px-0.5 ${
                       handsFree
                         ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end pr-1.5'
-                        : 'bg-[#2d160e] border border-[#482015] justify-start pl-0.5'
+                        : 'bg-[var(--surface-tertiary)] border border-[var(--border-primary)] justify-start pl-0.5'
                     }`}
                   >
                     {handsFree ? (
@@ -574,24 +574,24 @@ export function Header({
                     onOpenSettings();
                     setIsMobileDrawerOpen(false);
                   }}
-                  className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-[#200f0a] border border-[#3d190f] hover:bg-[#28130c] transition-colors"
+                  className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:bg-[var(--surface-hover)] transition-colors"
                 >
                   <div className="flex items-center space-x-3 truncate">
-                    <div className="w-7 h-7 rounded-full bg-[#2d140d] border border-[#482015] flex items-center justify-center text-teal-400 shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0">
                       <Sparkles className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-medium text-stone-200 truncate">
+                    <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
                       Groq AI (openai/gpt-oss-120b)
                     </span>
                   </div>
-                  <ChevronDown className="w-4 h-4 text-stone-400 shrink-0 ml-1" />
+                  <ChevronDown className="w-4 h-4 text-[var(--text-muted)] shrink-0 ml-1" />
                 </button>
               </div>
             </div>
 
             {/* 5. Acciones */}
             <div className="mt-5">
-              <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
+              <h3 className="text-xs font-bold text-[var(--text-primary)] mb-2">
                 {t('conv_actions')}
               </h3>
               <button
@@ -600,10 +600,10 @@ export function Header({
                   if (onResetChat) onResetChat();
                   setIsMobileDrawerOpen(false);
                 }}
-                className="w-full bg-[#200f0a] border border-[#3d190f] rounded-2xl p-3 flex items-center space-x-3 text-left hover:bg-[#28130c] transition-colors"
+                className="w-full bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-2xl p-3 flex items-center space-x-3 text-left hover:bg-[var(--surface-hover)] transition-colors"
               >
-                <RotateCcw className="w-4 h-4 text-rose-300 shrink-0" />
-                <span className="text-xs font-medium text-stone-200">
+                <RotateCcw className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
                   {t('reset_conv')}
                 </span>
               </button>
@@ -611,7 +611,7 @@ export function Header({
 
             {/* 6. Cuenta y Ajustes */}
             <div className="mt-5">
-              <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
+              <h3 className="text-xs font-bold text-[var(--text-primary)] mb-2">
                 {t('account_settings')}
               </h3>
               <button
@@ -620,17 +620,17 @@ export function Header({
                   onOpenSettings();
                   setIsMobileDrawerOpen(false);
                 }}
-                className="w-full bg-[#200f0a] border border-[#3d190f] rounded-2xl p-3 flex items-center space-x-3 text-left hover:bg-[#28130c] transition-colors"
+                className="w-full bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-2xl p-3 flex items-center space-x-3 text-left hover:bg-[var(--surface-hover)] transition-colors"
               >
-                <Settings className="w-4 h-4 text-rose-300 shrink-0" />
-                <span className="text-xs font-medium text-stone-200">
+                <Settings className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
                   {t('advanced_settings')}
                 </span>
               </button>
             </div>
 
             {/* Bottom decorative star */}
-            <div className="mt-6 mb-2 flex items-center justify-center text-stone-500/40">
+            <div className="mt-6 mb-2 flex items-center justify-center text-[var(--border-primary)]">
               <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
                 <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
               </svg>

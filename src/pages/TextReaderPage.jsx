@@ -590,9 +590,9 @@ export function TextReaderPage({
   const currentLangMeta = getLanguageMeta(targetLang);
 
   return (
-    <div className="flex-1 overflow-hidden w-full flex flex-col bg-gradient-to-b from-[#190904] via-[#210c06] to-[#150602] text-stone-100">
+    <div className="flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)]">
       {/* TOP HEADER CONTROLS BAR */}
-      <div className="px-4 py-3 bg-[#231109]/95 backdrop-blur-md border-b border-[#3d1a10] shadow-md shadow-black/30 flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <div className="px-4 py-3 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] flex flex-wrap items-center justify-between gap-3 shrink-0">
         {/* Left: Section Title & Editable Doc Title */}
         <div className="flex items-center space-x-3 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0">
@@ -600,11 +600,11 @@ export function TextReaderPage({
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-2">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-rose-950/90 text-rose-300 border border-rose-800/60">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
                 📖 {t('text_reader_title') || 'Importador de Textos'}
               </span>
               {document && !isEditing && (
-                <span className="text-xs text-stone-400 font-medium hidden sm:inline">
+                <span className="text-xs text-[var(--text-muted)] font-medium hidden sm:inline">
                   • {document.paragraphs?.length || 0} párrafos
                 </span>
               )}
@@ -614,12 +614,12 @@ export function TextReaderPage({
             {document && !isEditing ? (
               <h2
                 title="Título del documento"
-                className="text-base sm:text-lg font-bold text-white truncate leading-tight max-w-[240px] sm:max-w-md mt-0.5"
+                className="text-base sm:text-lg font-bold text-[var(--text-primary)] truncate leading-tight max-w-[240px] sm:max-w-md mt-0.5"
               >
                 {document.title}
               </h2>
             ) : (
-              <h2 className="text-sm sm:text-base font-bold text-white leading-tight mt-0.5">
+              <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] leading-tight mt-0.5">
                 {t('home_text_title') || 'Lector Independiente'}
               </h2>
             )}
@@ -633,19 +633,19 @@ export function TextReaderPage({
             type="button"
             onClick={() => setShowSavedModal(true)}
             title={t('saved_documents') || 'Biblioteca de textos guardados'}
-            className="px-2.5 py-1.5 rounded-xl bg-[#2a130b] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+            className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
           >
-            <BookOpen className="w-3.5 h-3.5 text-rose-400" />
+            <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
             <span className="hidden sm:inline">Biblioteca</span>
             {savedDocsCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-950/80 text-rose-300 border border-rose-800/60 font-mono">
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-mono font-bold">
                 {savedDocsCount}
               </span>
             )}
           </button>
 
           {/* Target Language Dropdown */}
-          <div className="bg-[#1a0c07] rounded-xl border border-[#482015] p-0.5">
+          <div className="bg-[var(--surface-tertiary)] rounded-xl border border-[var(--border-primary)] p-0.5">
             <LanguageSelectDropdown
               value={activeDocLang}
               onChange={handleLanguageChange}
@@ -670,16 +670,16 @@ export function TextReaderPage({
                 className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
                   isAutoGlossing
                     ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
-                    : 'bg-[#2a130b] hover:bg-[#38190e] text-stone-200 border-[#482015]'
+                    : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border-[var(--border-primary)]'
                 }`}
               >
-                <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-400'}`} />
+                <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
                 <span className="font-semibold">Auto-Glosado</span>
                 <span
                   className={`text-[9px] px-1 py-0.2 rounded font-bold ${
                     isAutoGlossing
                       ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
-                      : 'bg-[#180803] text-stone-400 border border-[#3e1b10]'
+                      : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)] border border-[var(--border-primary)]'
                   }`}
                 >
                   {isAutoGlossing ? 'ON' : 'OFF'}
@@ -690,7 +690,7 @@ export function TextReaderPage({
                   <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
                     isAutoGlossing
                       ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
-                      : 'text-stone-400 bg-black/30 border-stone-700/50'
+                      : 'text-[var(--text-muted)] bg-[var(--surface-tertiary)] border-[var(--border-primary)]'
                   }`}>
                     {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
                     <span>{completedParagraphsCount}/{document.paragraphs.length}</span>
@@ -706,7 +706,7 @@ export function TextReaderPage({
                 className={`p-2 rounded-xl border text-xs font-semibold transition-all shadow-xs cursor-pointer ${
                   interlinearMode
                     ? 'bg-rose-600 border-rose-400 text-white shadow-rose-900/40'
-                    : 'bg-[#2a130b] border-[#482015] text-rose-200/80 hover:text-white'
+                    : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                 }`}
               >
                 <Type className="w-4 h-4" />
@@ -717,7 +717,7 @@ export function TextReaderPage({
                 type="button"
                 onClick={cycleFontSize}
                 title={`Tamaño de fuente: ${fontSize.toUpperCase()}`}
-                className="px-2.5 py-1.5 rounded-xl bg-[#2a130b] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
               >
                 A{fontSize === 'xl' ? '++' : fontSize === 'lg' ? '+' : fontSize === 'sm' ? '-' : ''}
               </button>
@@ -727,7 +727,7 @@ export function TextReaderPage({
                 type="button"
                 onClick={() => setIsEditing(true)}
                 title="Editar o cambiar el texto"
-                className="p-2 rounded-xl bg-[#2a130b] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white transition-all shadow-xs cursor-pointer"
+                className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
               >
                 <Edit3 className="w-4 h-4" />
               </button>
@@ -737,7 +737,7 @@ export function TextReaderPage({
                 type="button"
                 onClick={handleClearDocument}
                 title="Nuevo texto / Limpiar documento"
-                className="p-2 rounded-xl bg-[#2a130b] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-rose-300 transition-all shadow-xs cursor-pointer"
+                className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-rose-500 transition-all shadow-xs cursor-pointer hover:bg-[var(--surface-hover)]"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -753,18 +753,18 @@ export function TextReaderPage({
           /* 1. INPUT / IMPORT VIEW (Escribir, Pegar, Importar archivo)     */
           /* ============================================================ */
           <div className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full animate-fade-in my-auto">
-            <div className="p-6 sm:p-8 rounded-3xl bg-[#220f09]/95 border border-[#461f14] shadow-2xl shadow-black/40">
+            <div className="p-6 sm:p-8 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl text-[var(--text-primary)]">
               {/* Header Title inside card */}
-              <div className="flex items-center justify-between mb-5 pb-4 border-b border-[#3d190f]">
+              <div className="flex items-center justify-between mb-5 pb-4 border-b border-[var(--border-primary)]">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/60">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white leading-tight">
+                    <h3 className="text-lg font-bold text-[var(--text-primary)] leading-tight">
                       {t('text_importer_heading') || 'Importar o escribir texto'}
                     </h3>
-                    <p className="text-xs text-rose-200/70 mt-0.5">
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
                       {t('text_importer_subheading') || 'Pega cualquier lectura. Se dividirá automáticamente en párrafos con audio y glosado.'}
                     </p>
                   </div>
@@ -775,9 +775,9 @@ export function TextReaderPage({
                     <button
                       type="button"
                       onClick={() => setShowSavedModal(true)}
-                      className="px-3 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 text-rose-300 hover:text-white text-xs font-semibold flex items-center space-x-1.5 cursor-pointer transition-all shadow-xs"
+                      className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer transition-all shadow-xs"
                     >
-                      <BookOpen className="w-3.5 h-3.5 text-rose-400" />
+                      <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
                       <span>Biblioteca ({savedDocsCount})</span>
                     </button>
                   )}
@@ -786,7 +786,7 @@ export function TextReaderPage({
                     <button
                       type="button"
                       onClick={() => setIsEditing(false)}
-                      className="px-3 py-1.5 rounded-xl bg-[#2d140d] border border-[#4c2217] text-stone-300 hover:text-white text-xs font-semibold cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold cursor-pointer hover:bg-[var(--surface-hover)]"
                     >
                       Volver a lectura
                     </button>
@@ -796,7 +796,7 @@ export function TextReaderPage({
 
               {/* Title Input */}
               <div className="mb-4">
-                <label className="block text-xs font-bold uppercase tracking-wider text-rose-200 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
                   Título del texto (opcional)
                 </label>
                 <input
@@ -804,17 +804,17 @@ export function TextReaderPage({
                   value={inputTitle}
                   onChange={(e) => setInputTitle(e.target.value)}
                   placeholder="Ej: Mi primer día de clases / 我的学校..."
-                  className="w-full px-4 py-2.5 rounded-2xl bg-[#190b06] border border-[#441e13] focus:border-rose-500 focus:outline-hidden text-stone-100 placeholder-stone-500 text-sm transition-all"
+                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm transition-all"
                 />
               </div>
 
               {/* Textarea for raw text */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-rose-200">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                     Contenido del texto
                   </label>
-                  <span className="text-[11px] text-stone-400">
+                  <span className="text-[11px] text-[var(--text-muted)]">
                     {inputText.trim() ? `${splitTextIntoParagraphs(inputText, targetLang).length} párrafos detectados` : 'Escribe o pega aquí'}
                   </span>
                 </div>
@@ -823,7 +823,7 @@ export function TextReaderPage({
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder="Pega o escribe tu texto aquí en cualquier idioma (chino, árabe, polaco, ruso, etc.). Cada salto de línea o espacio en blanco formará un párrafo independiente."
-                  className="w-full p-4 rounded-2xl bg-[#180b06] border border-[#441e13] focus:border-rose-500 focus:outline-hidden text-stone-100 placeholder-stone-500 text-sm leading-relaxed transition-all resize-y"
+                  className="w-full p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm leading-relaxed transition-all resize-y"
                 />
               </div>
 
@@ -834,15 +834,15 @@ export function TextReaderPage({
                   <button
                     type="button"
                     onClick={handlePasteClipboard}
-                    className="px-3.5 py-2 rounded-xl bg-[#2d140d] hover:bg-[#3d1a10] border border-[#4c2217] text-stone-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
                   >
-                    <Clipboard className="w-4 h-4 text-rose-400" />
+                    <Clipboard className="w-4 h-4 text-rose-500 dark:text-rose-400" />
                     <span>Pegar texto</span>
                   </button>
 
                   {/* File Upload Button (.txt) */}
-                  <label className="px-3.5 py-2 rounded-xl bg-[#2d140d] hover:bg-[#3d1a10] border border-[#4c2217] text-stone-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
-                    <Upload className="w-4 h-4 text-amber-400" />
+                  <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
+                    <Upload className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                     <span>Cargar archivo .txt</span>
                     <input
                       type="file"
@@ -861,7 +861,7 @@ export function TextReaderPage({
                   className={`py-3 px-6 rounded-2xl font-bold text-sm shadow-lg flex items-center space-x-2 transition-all cursor-pointer ${
                     inputText.trim()
                       ? 'bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/70 hover:shadow-rose-900/90 active:scale-95'
-                      : 'bg-[#2b160e] text-stone-500 border border-[#3f1e14] cursor-not-allowed opacity-60'
+                      : 'bg-[var(--surface-secondary)] text-[var(--text-muted)] border border-[var(--border-primary)] cursor-not-allowed opacity-60'
                   }`}
                 >
                   <span>Comenzar a leer</span>

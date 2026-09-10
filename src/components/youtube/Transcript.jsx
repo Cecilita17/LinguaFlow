@@ -49,11 +49,13 @@ export function Transcript({
 
   // 2. Filter subtitles based on search query
   const filteredSubtitles = useMemo(() => {
+    if (!subtitles || !Array.isArray(subtitles)) return [];
+    const valid = subtitles.filter(Boolean);
     if (!searchQuery || !searchQuery.trim()) {
-      return subtitles;
+      return valid;
     }
     const query = searchQuery.toLowerCase().trim();
-    return subtitles.filter((sub) => (sub.text || '').toLowerCase().includes(query));
+    return valid.filter((sub) => (sub.text || '').toLowerCase().includes(query));
   }, [subtitles, searchQuery]);
 
   // 3. Smooth auto-scroll strictly within the transcript container (no page scrolling)

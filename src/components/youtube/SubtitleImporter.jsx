@@ -104,11 +104,11 @@ export function SubtitleImporter({
   }
 
   return (
-    <div className="p-3.5 sm:p-4 rounded-2xl bg-[#200d07] border border-[#482015] shadow-lg shadow-black/30">
+    <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-lg text-[var(--text-primary)]">
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <div className="flex items-center space-x-2">
-          <FileCode className="w-4 h-4 text-rose-400" />
-          <h3 className="text-sm font-bold text-white tracking-wide">
+          <FileCode className="w-4 h-4 text-rose-500 dark:text-rose-400" />
+          <h3 className="text-sm font-bold text-[var(--text-primary)] tracking-wide">
             {isSpanish ? 'Subtítulos / Transcripción' : 'Subtitles / Transcript'}
           </h3>
         </div>
@@ -122,7 +122,7 @@ export function SubtitleImporter({
             <button
               type="button"
               onClick={() => setIsExpanded(false)}
-              className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-stone-300 hover:text-white bg-[#2e130a] hover:bg-[#3e190d] border border-[#4e2215] cursor-pointer"
+              className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] cursor-pointer"
             >
               {isSpanish ? '✕ Cerrar' : '✕ Close'}
             </button>
@@ -131,14 +131,14 @@ export function SubtitleImporter({
       </div>
 
       {/* Tabs */}
-      <div className="flex p-1 bg-[#1e0f0a] rounded-xl border border-[#482519] text-xs font-semibold mb-3 max-w-xs">
+      <div className="flex p-1 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border-primary)] text-xs font-semibold mb-3 max-w-xs">
         <button
           type="button"
           onClick={() => { setTab('paste'); setError(null); }}
           className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             tab === 'paste'
               ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-              : 'text-rose-200/70 hover:text-white'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
@@ -150,7 +150,7 @@ export function SubtitleImporter({
           className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             tab === 'file'
               ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-              : 'text-rose-200/70 hover:text-white'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
           <Upload className="w-3.5 h-3.5" />
@@ -166,11 +166,11 @@ export function SubtitleImporter({
             value={pastedText}
             onChange={(e) => setPastedText(e.target.value)}
             placeholder="Pega aquí el texto plano o el contenido de un archivo .srt o .vtt...&#10;Ejemplo:&#10;1&#10;00:00:01,000 --> 00:00:03,000&#10;Hello, how are you?"
-            className="w-full bg-[#1e0f0a] text-white text-xs font-mono rounded-xl p-3 border border-[#5a2e20] placeholder-rose-300/30 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-inner resize-y"
+            className="w-full bg-[var(--input-bg)] text-[var(--text-primary)] text-xs font-mono rounded-xl p-3 border border-[var(--input-border)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-inner resize-y"
           />
 
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-rose-300/60">
+            <span className="text-[11px] text-[var(--text-muted)]">
               Detecta automáticamente SRT, WebVTT o texto simple línea por línea.
             </span>
             <button
@@ -190,14 +190,14 @@ export function SubtitleImporter({
         <div>
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-[#5a2e20] hover:border-rose-500/80 bg-[#1e0f0a]/60 hover:bg-[#1e0f0a] rounded-2xl p-5 text-center cursor-pointer transition-all group"
+            className="border-2 border-dashed border-[var(--border-primary)] hover:border-rose-500/80 bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] rounded-2xl p-5 text-center cursor-pointer transition-all group"
           >
-            <Upload className="w-7 h-7 mx-auto text-rose-400 group-hover:scale-110 transition-transform mb-2" />
-            <p className="text-xs font-bold text-rose-200 mb-0.5">
+            <Upload className="w-7 h-7 mx-auto text-rose-500 dark:text-rose-400 group-hover:scale-110 transition-transform mb-2" />
+            <p className="text-xs font-bold text-[var(--text-primary)] mb-0.5">
               Haz clic para seleccionar o arrastra tu archivo aquí
             </p>
-            <p className="text-[11px] text-rose-300/60">
-              Formatos soportados: <span className="font-semibold text-rose-300">.srt</span>, <span className="font-semibold text-rose-300">.vtt</span>, <span className="font-semibold text-rose-300">.txt</span> (codificación UTF-8)
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Formatos soportados: <span className="font-semibold text-rose-600 dark:text-rose-300">.srt</span>, <span className="font-semibold text-rose-600 dark:text-rose-300">.vtt</span>, <span className="font-semibold text-rose-600 dark:text-rose-300">.txt</span> (codificación UTF-8)
             </p>
           </div>
 

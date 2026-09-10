@@ -57,8 +57,8 @@ export function TextParagraphItem({
     <div
       className={`group/para relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl transition-all border select-text ${
         isPlaying
-          ? 'bg-gradient-to-r from-rose-950/80 via-[#3a180e]/90 to-[#2c120a] border-rose-500/80 shadow-lg shadow-rose-950/40 ring-2 ring-rose-500/30'
-          : 'bg-[#24110a]/80 hover:bg-[#2c150d] border-[#441f14] hover:border-[#5a2a1c] shadow-md shadow-black/20'
+          ? 'bg-gradient-to-r from-rose-950/80 via-[#3a180e]/90 to-[#2c120a] border-rose-500/80 shadow-lg shadow-rose-950/40 ring-2 ring-rose-500/30 text-white'
+          : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border-[var(--border-primary)] hover:border-rose-500/50 shadow-md shadow-black/5 dark:shadow-black/20 text-[var(--text-primary)]'
       }`}
     >
       <div className="flex items-start justify-between gap-3 sm:gap-4 w-full">
@@ -91,7 +91,7 @@ export function TextParagraphItem({
                       <span
                         key={idx}
                         dir={textDirection}
-                        className="text-stone-400 font-medium px-0.5 select-text self-center text-base sm:text-lg isolate [unicode-bidi:isolate]"
+                        className="text-[var(--text-muted)] font-medium px-0.5 select-text self-center text-base sm:text-lg isolate [unicode-bidi:isolate]"
                       >
                         {word}
                       </span>
@@ -110,12 +110,12 @@ export function TextParagraphItem({
                       }}
                       role={onWordClick ? 'button' : undefined}
                       tabIndex={onWordClick ? 0 : undefined}
-                      className="inline-flex flex-col items-center justify-center px-1.5 py-1 rounded-xl hover:bg-white/10 active:bg-rose-900/40 transition-colors cursor-pointer group/token max-w-full isolate [unicode-bidi:isolate]"
+                      className="inline-flex flex-col items-center justify-center px-1.5 py-1 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 active:bg-rose-500/20 transition-colors cursor-pointer group/token max-w-full isolate [unicode-bidi:isolate]"
                       title={cleanGloss ? `"${word}": ${cleanGloss}` : word}
                     >
                       {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
                       {isChinese && auxiliary && (
-                        <span className="text-[11px] sm:text-xs text-rose-300 font-mono tracking-tight leading-none mb-1 select-text">
+                        <span className="text-[11px] sm:text-xs text-rose-600 dark:text-rose-300 font-mono font-semibold tracking-tight leading-none mb-1 select-text">
                           {auxiliary}
                         </span>
                       )}
@@ -124,7 +124,7 @@ export function TextParagraphItem({
                       <span
                         dir={textDirection}
                         className={`font-semibold tracking-wide select-text ${
-                          isPlaying ? 'text-white font-bold drop-shadow-xs' : 'text-stone-100'
+                          isPlaying ? 'text-white font-bold drop-shadow-xs' : 'text-[var(--text-primary)]'
                         } ${fontClass}`}
                       >
                         {word}
@@ -134,7 +134,7 @@ export function TextParagraphItem({
                       {cleanGloss && (
                         <span
                           dir="ltr"
-                          className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/token:text-rose-200 font-normal leading-tight mt-1 max-w-[140px] truncate text-center select-text isolate [unicode-bidi:isolate]"
+                          className="text-[10px] sm:text-[11px] text-[var(--text-muted)] group-hover/token:text-rose-600 dark:group-hover/token:text-rose-300 font-normal leading-tight mt-1 max-w-[140px] truncate text-center select-text isolate [unicode-bidi:isolate]"
                         >
                           {cleanGloss}
                         </span>
@@ -151,7 +151,7 @@ export function TextParagraphItem({
                 className={`${fontClass} ${isRtl ? 'text-right' : 'text-left'} select-text ${
                   isPlaying
                     ? 'text-white font-semibold drop-shadow-xs'
-                    : 'text-stone-100 group-hover/para:text-white'
+                    : 'text-[var(--text-primary)]'
                 }`}
               >
                 {text}
@@ -184,7 +184,7 @@ export function TextParagraphItem({
                   ? 'bg-amber-900/80 border border-amber-500/80 text-amber-200 hover:bg-amber-800'
                   : isPlaying
                   ? 'bg-gradient-to-tr from-pink-600 to-rose-600 text-white border border-rose-400/90 shadow-rose-900/60 ring-2 ring-rose-400/40'
-                  : 'bg-[#2f150d] hover:bg-[#3d1c12] border border-[#522518] text-rose-300 hover:text-white group-hover/para:border-rose-700/60'
+                  : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-rose-600 dark:text-rose-300 hover:text-rose-700 dark:hover:text-white group-hover/para:border-rose-500/60'
               }`}
             >
               {isAudioError ? (
@@ -222,13 +222,13 @@ export function TextParagraphItem({
                   ? 'bg-amber-950/80 text-amber-300 border border-amber-500/60 cursor-wait'
                   : isComplete
                   ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-600/50 hover:bg-emerald-900/60 cursor-default'
-                  : 'bg-[#2a130b] hover:bg-[#38190e] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white'
+                  : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               {isGlossing ? (
                 <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
               ) : (
-                <Languages className={`w-4 h-4 sm:w-5 sm:h-5 ${isComplete ? 'text-emerald-400' : 'text-rose-400'}`} />
+                <Languages className={`w-4 h-4 sm:w-5 sm:h-5 ${isComplete ? 'text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`} />
               )}
             </button>
           </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { YouTubePlayer } from '../components/youtube/YouTubePlayer.jsx';
 import { YouTubeImporter } from '../components/youtube/YouTubeImporter.jsx';
 import { SubtitleImporter } from '../components/youtube/SubtitleImporter.jsx';
@@ -438,19 +438,19 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   };
 
   return (
-    <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-white">
+    <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-[var(--text-primary)]">
       {/* 1. Header: YouTube Reader + AI Glossing Control + Stop/Pause + Saved Transcripts Library */}
       <div className="flex-shrink-0 space-y-2 pb-1">
-        <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#200d07] rounded-xl border border-[#482015] shadow-xs text-xs">
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border-primary)] shadow-xs text-xs">
           {/* Left: Brand & Target Language */}
           <div className="flex items-center space-x-2 truncate">
             <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-rose-600 to-pink-500 flex items-center justify-center text-white shadow-xs shrink-0">
               <Youtube className="w-3.5 h-3.5" />
             </div>
-            <h2 className="font-bold text-white tracking-wide text-xs sm:text-sm truncate">
+            <h2 className="font-bold text-[var(--text-primary)] tracking-wide text-xs sm:text-sm truncate">
               YouTube Reader
             </h2>
-            <span className="text-[10px] bg-[#140603] text-rose-300 px-1.5 py-0.5 rounded border border-[#482015] font-mono shrink-0">
+            <span className="text-[10px] bg-[var(--surface-tertiary)] text-rose-600 dark:text-rose-300 px-1.5 py-0.5 rounded border border-[var(--border-primary)] font-mono shrink-0">
               {targetLang === 'zh' ? '🇨🇳 Chino' : targetLang.toUpperCase()}
             </span>
           </div>
@@ -462,12 +462,12 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
               type="button"
               onClick={() => setIsLibraryOpen(true)}
               title={isSpanish ? 'Abrir biblioteca de transcripciones guardadas' : 'Open saved transcripts library'}
-              className="px-2 py-1 rounded-lg bg-[#2a1209] hover:bg-[#38180d] border border-[#4a2014] text-rose-200 hover:text-white text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
+              className="px-2 py-1 rounded-lg bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-primary)] text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
             >
-              <BookOpen className="w-3.5 h-3.5 text-rose-400" />
+              <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
               <span className="hidden sm:inline">{isSpanish ? 'Biblioteca' : 'Library'}</span>
               {libraryCount > 0 && (
-                <span className="text-[9px] px-1.5 py-0.2 bg-rose-950 text-rose-300 rounded-full font-bold border border-rose-800">
+                <span className="text-[9px] px-1.5 py-0.2 bg-rose-500/15 text-rose-600 dark:text-rose-300 rounded-full font-bold border border-rose-500/30">
                   {libraryCount}
                 </span>
               )}
@@ -485,16 +485,16 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
               className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
                 isAutoGlossing
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
-                  : 'bg-[#2a1209] hover:bg-[#38180d] text-stone-300 border-[#4a2014]'
+                  : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border-[var(--border-primary)]'
               }`}
             >
-              <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-400'}`} />
+              <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
               <span className="font-semibold">{isSpanish ? 'Glosado Auto' : 'Auto Gloss'}</span>
               <span
                 className={`text-[9px] px-1 py-0.2 rounded font-bold ${
                   isAutoGlossing
                     ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
-                    : 'bg-[#180803] text-stone-400 border border-[#3e1b10]'
+                    : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)] border border-[var(--border-primary)]'
                 }`}
               >
                 {isAutoGlossing ? 'ON' : 'OFF'}
@@ -505,7 +505,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
                 <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
                   isAutoGlossing
                     ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
-                    : 'text-stone-400 bg-black/30 border-stone-700/50'
+                    : 'text-[var(--text-muted)] bg-[var(--surface-tertiary)] border-[var(--border-primary)]'
                 }`}>
                   {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
                   <span>{completedLinesCount}/{subtitles.length}</span>
@@ -518,7 +518,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
               <button
                 type="button"
                 onClick={() => setIsUrlImporterOpen(!isUrlImporterOpen)}
-                className="px-2 py-1 rounded-lg bg-[#2a1209] hover:bg-[#38180d] border border-[#4a2014] text-rose-200 text-[11px] font-medium transition-colors cursor-pointer"
+                className="px-2 py-1 rounded-lg bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-medium transition-colors cursor-pointer"
               >
                 {isUrlImporterOpen
                   ? (isSpanish ? 'Ocultar link' : 'Hide link')
@@ -532,7 +532,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
                 type="button"
                 onClick={handleResetSession}
                 title={isSpanish ? 'Reiniciar lector' : 'Reset reader'}
-                className="p-1.5 text-rose-300/60 hover:text-white hover:bg-[#38180d] rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-lg transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>

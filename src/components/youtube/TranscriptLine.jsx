@@ -20,7 +20,8 @@ export function TranscriptLine({
   targetLang = 'zh',
   onWordClick = null // Prepared for future word-level glossary lookup
 }) {
-  const { startTime, text, tokens = [], glosses = [] } = line;
+  if (!line) return null;
+  const { startTime = 0, text = '', tokens = [], glosses = [] } = line;
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
   const isComplete = hasGloss || isGlossComplete(line, targetLang);
@@ -66,7 +67,7 @@ export function TranscriptLine({
       className={`group/line relative p-3 sm:p-3.5 rounded-2xl transition-all cursor-pointer border flex items-start gap-3 select-text ${
         isActive
           ? 'bg-gradient-to-r from-rose-950/90 via-[#3d1a10] to-[#2e130b] border-rose-500/80 shadow-md shadow-rose-950/40 ring-2 ring-rose-500/30'
-          : 'bg-[#24120c]/60 hover:bg-[#2b160f] border-transparent hover:border-[#482519]'
+          : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border-[var(--border-primary)] shadow-xs text-[var(--text-primary)]'
       }`}
     >
       {/* Per-Paragraph Actions: 🎧 Audio + 🔤 Traducción */}
@@ -79,7 +80,7 @@ export function TranscriptLine({
           className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
             isActive
               ? 'bg-rose-600 text-white shadow-xs'
-              : 'bg-[#180c07] text-rose-300/70 hover:text-white hover:bg-[#32170f] border border-[#3d190f]'
+              : 'bg-[var(--surface-secondary)] text-rose-600 dark:text-rose-300 hover:text-rose-700 dark:hover:text-white hover:bg-[var(--surface-hover)] border border-[var(--border-primary)]'
           }`}
         >
           <Volume2 className="w-3.5 h-3.5" />
@@ -107,7 +108,7 @@ export function TranscriptLine({
               ? 'bg-amber-950/80 text-amber-300 border border-amber-500/60 cursor-wait'
               : isComplete
               ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-600/50 cursor-default'
-              : 'bg-[#180c07] text-rose-300/70 hover:text-white hover:bg-[#32170f] border border-[#3d190f]'
+              : 'bg-[var(--surface-secondary)] text-rose-600 dark:text-rose-300 hover:text-rose-700 dark:hover:text-white hover:bg-[var(--surface-hover)] border border-[var(--border-primary)]'
           }`}
         >
           {glossing ? (
@@ -170,7 +171,7 @@ export function TranscriptLine({
                     >
                       {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
                       {isChinese && auxiliary && (
-                        <span className="text-[11px] sm:text-xs text-rose-300 font-mono tracking-tight leading-none mb-1 select-text">
+                        <span className="text-[11px] sm:text-xs text-rose-600 dark:text-rose-300 font-mono font-semibold tracking-tight leading-none mb-1 select-text">
                           {auxiliary}
                         </span>
                       )}
@@ -179,7 +180,7 @@ export function TranscriptLine({
                       <span
                         dir={textDirection}
                         className={`font-semibold tracking-wide ${
-                          isActive ? 'text-white font-bold drop-shadow-xs' : 'text-stone-100'
+                          isActive ? 'text-white font-bold drop-shadow-xs' : 'text-[var(--text-primary)]'
                         } ${fontClass}`}
                       >
                         {renderHighlightedText(word)}
@@ -190,7 +191,7 @@ export function TranscriptLine({
                         <span
                           dir="ltr"
                           title={cleanGloss}
-                          className="text-[10px] sm:text-[11px] text-stone-300/80 group-hover/line:text-stone-200 font-normal leading-tight mt-1 max-w-[120px] truncate text-center select-text isolate [unicode-bidi:isolate]"
+                          className="text-[10px] sm:text-[11px] text-[var(--text-muted)] group-hover/line:text-[var(--text-secondary)] font-normal leading-tight mt-1 max-w-[120px] truncate text-center select-text isolate [unicode-bidi:isolate]"
                         >
                           {cleanGloss}
                         </span>
@@ -209,7 +210,7 @@ export function TranscriptLine({
             className={`${fontClass} ${isRtl ? 'text-right' : 'text-left'} ${
               isActive
                 ? 'text-white font-semibold drop-shadow-xs'
-                : 'text-rose-100/90 group-hover/line:text-white'
+                : 'text-[var(--text-primary)]'
             }`}
           >
             {renderHighlightedText(text)}
