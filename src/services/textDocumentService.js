@@ -6,6 +6,25 @@
 
 import { getLanguageMeta } from '../constants/languages.js';
 import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
+import {
+  saveTextDocument,
+  getTextDocumentById,
+  getAllTextDocuments,
+  deleteTextDocument,
+  getTextDocumentsCount,
+  clearTextLibrary,
+  migrateFromLocalStorage
+} from './textLibraryStorage.js';
+
+export {
+  saveTextDocument,
+  getTextDocumentById,
+  getAllTextDocuments,
+  deleteTextDocument,
+  getTextDocumentsCount,
+  clearTextLibrary,
+  migrateFromLocalStorage
+};
 
 export const ACTIVE_DOC_STORAGE_KEY = 'linguaflow_active_text_doc_v1';
 export const LIBRARY_DOCS_STORAGE_KEY = 'linguaflow_text_library_v1';
@@ -439,6 +458,12 @@ export function saveDocument(doc) {
 
   setStorageLibrary(docs);
   saveActiveDocumentDraft(toSave);
+
+  // Sync to IndexedDB persistently
+  try {
+    saveTextDocument(toSave).catch(e => console.warn('[TextDocumentService] IndexedDB save notice:', e));
+  } catch (e) {}
+
   return toSave;
 }
 
@@ -455,6 +480,11 @@ export function deleteDocument(id) {
   const filtered = docs.filter(d => d.id !== id);
   setStorageLibrary(filtered);
   memoryDocStore.delete(id);
+
+  // Sync deletion to IndexedDB
+  try {
+    deleteTextDocument(id).catch(e => console.warn('[TextDocumentService] IndexedDB delete notice:', e));
+  } catch (e) {}
 
   try {
     const activeDraft = loadActiveDocumentDraft();

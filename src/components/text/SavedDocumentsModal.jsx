@@ -11,6 +11,10 @@ import {
   Layers
 } from 'lucide-react';
 import {
+  getAllTextDocuments,
+  deleteTextDocument
+} from '../../services/textLibraryStorage.js';
+import {
   getAllDocuments,
   deleteDocument
 } from '../../services/textDocumentService.js';
@@ -42,13 +46,17 @@ export function SavedDocumentsModal({
   const [loading, setLoading] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-  const loadDocuments = () => {
+  const loadDocuments = async () => {
     setLoading(true);
     try {
-      const items = getAllDocuments();
+      const items = await getAllTextDocuments();
       setDocuments(items);
     } catch (e) {
-      console.warn('Error loading saved text documents:', e);
+      console.warn('Error loading saved text documents from IndexedDB:', e);
+      try {
+        const fallback = getAllDocuments();
+        setDocuments(fallback);
+      } catch (err) {}
     } finally {
       setLoading(false);
     }
@@ -63,12 +71,13 @@ export function SavedDocumentsModal({
 
   if (!isOpen) return null;
 
-  const handleDelete = (id, e) => {
+  const handleDelete = async (id, e) => {
     e.stopPropagation();
     if (deleteConfirmId === id) {
+      await deleteTextDocument(id);
       deleteDocument(id);
       setDeleteConfirmId(null);
-      loadDocuments();
+      await loadDocuments();
     } else {
       setDeleteConfirmId(id);
       setTimeout(() => {
@@ -201,12 +210,12 @@ export function SavedDocumentsModal({
               <h4 className="text-sm font-bold text-rose-200 mb-1">
                 {searchQuery
                   ? (isSpanish ? 'Sin coincidencias' : 'No matches found')
-                  : (isSpanish ? 'Biblioteca vacía' : 'Library is empty')}
+                  : (isSpanish ? 'No tenés textos guardados todavía.' : 'No saved texts yet.')}
               </h4>
               <p className="text-xs text-rose-300/60 max-w-sm mb-4">
                 {searchQuery
                   ? (isSpanish ? 'No se encontraron textos con ese criterio de búsqueda.' : 'No saved texts matched your query.')
-                  : (isSpanish ? 'Los textos que importes y gloses se guardarán automáticamente aquí para que nunca pierdas tu trabajo.' : 'Texts you import and gloss will be saved here automatically.')}
+                  : (isSpanish ? 'Los textos que importes y gloses se guardarán automáticamente en tu biblioteca para que nunca pierdas tu trabajo.' : 'Texts you import and gloss will be saved in your library automatically.')}
               </p>
               {!searchQuery && (
                 <button
@@ -215,7 +224,7 @@ export function SavedDocumentsModal({
                   className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>{isSpanish ? 'Crear mi primer texto' : 'Create first text'}</span>
+                  <span>{isSpanish ? 'Importar texto' : 'Import text'}</span>
                 </button>
               )}
             </div>
@@ -243,7 +252,7 @@ export function SavedDocumentsModal({
                         {langMeta.flag}
                       </span>
                       <span className="text-xs font-semibold text-rose-300/90">
-                        {langMeta.name}
+                        {langMeta.name} {doc.nativeLang ? <span className="text-[11px] opacity-70 font-mono font-normal">→ {doc.nativeLang.toUpperCase()}</span> : null}
                       </span>
 
                       {savedLanguages.length > 1 && (

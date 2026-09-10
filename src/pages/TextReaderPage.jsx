@@ -32,6 +32,14 @@ import {
   clearActiveDocumentDraft
 } from '../services/textDocumentService.js';
 import {
+  saveTextDocument,
+  getTextDocumentById,
+  getAllTextDocuments,
+  deleteTextDocument,
+  getTextDocumentsCount,
+  migrateFromLocalStorage
+} from '../services/textLibraryStorage.js';
+import {
   enrichParagraphsWithGlosses,
   isGlossComplete
 } from '../services/textGlossService.js';
@@ -86,12 +94,34 @@ export function TextReaderPage({
     };
   }, []);
 
-  // Save active document state whenever document changes
+  // Refresh library count from IndexedDB
+  const refreshLibraryCount = useCallback(async () => {
+    try {
+      const count = await getTextDocumentsCount();
+      setSavedDocsCount(count);
+    } catch (e) {
+      console.warn('Failed to count saved documents in IndexedDB:', e);
+    }
+  }, []);
+
+  // On mount: run migration from legacy localStorage to IndexedDB and refresh count
+  useEffect(() => {
+    migrateFromLocalStorage().then(() => {
+      refreshLibraryCount();
+    }).catch(() => {});
+  }, [refreshLibraryCount]);
+
+  // Save active document state whenever document changes (syncs draft + IndexedDB)
   useEffect(() => {
     if (document) {
       saveActiveDocumentDraft(document);
+      if (document.id) {
+        saveTextDocument(document).then(() => {
+          refreshLibraryCount();
+        }).catch(() => {});
+      }
     }
-  }, [document]);
+  }, [document, refreshLibraryCount]);
 
   // Active document language (falls back to selected targetLang if editing/new)
   const activeDocLang = (document && !isEditing && document.targetLang) ? document.targetLang : targetLang;
@@ -548,7 +578,7 @@ export function TextReaderPage({
             className="px-2.5 py-1.5 rounded-xl bg-[#2a130b] border border-[#482015] hover:border-rose-500/60 text-stone-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
           >
             <BookOpen className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden sm:inline">Textos</span>
+            <span className="hidden sm:inline">Biblioteca</span>
             {savedDocsCount > 0 && (
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-950/80 text-rose-300 border border-rose-800/60 font-mono">
                 {savedDocsCount}
@@ -685,15 +715,28 @@ export function TextReaderPage({
                   </div>
                 </div>
 
-                {document && (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditing(false)}
-                    className="px-3 py-1.5 rounded-xl bg-[#2d140d] border border-[#4c2217] text-stone-300 hover:text-white text-xs font-semibold cursor-pointer"
-                  >
-                    Volver a lectura
-                  </button>
-                )}
+                <div className="flex items-center space-x-2">
+                  {savedDocsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSavedModal(true)}
+                      className="px-3 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 text-rose-300 hover:text-white text-xs font-semibold flex items-center space-x-1.5 cursor-pointer transition-all shadow-xs"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Biblioteca ({savedDocsCount})</span>
+                    </button>
+                  )}
+
+                  {document && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      className="px-3 py-1.5 rounded-xl bg-[#2d140d] border border-[#4c2217] text-stone-300 hover:text-white text-xs font-semibold cursor-pointer"
+                    >
+                      Volver a lectura
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Title Input */}
