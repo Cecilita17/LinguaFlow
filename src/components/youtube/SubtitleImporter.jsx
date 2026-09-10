@@ -6,7 +6,8 @@ export function SubtitleImporter({
   onSubtitlesLoaded,
   subtitlesCount = 0,
   currentFormat = null,
-  onClearSubtitles
+  onClearSubtitles,
+  glossProgress = null
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [tab, setTab] = useState('paste'); // 'paste' | 'file'
@@ -93,7 +94,7 @@ export function SubtitleImporter({
   if (subtitlesCount > 0 && !isExpanded) {
     return (
       <div className="px-3.5 py-2 rounded-xl bg-[#26120b]/90 border border-[#482015] shadow-xs flex items-center justify-between text-xs transition-all">
-        <div className="flex items-center space-x-2 text-stone-200">
+        <div className="flex flex-wrap items-center gap-2 text-stone-200">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span className="font-semibold text-emerald-300">
             {subtitlesCount} líneas cargadas
@@ -101,6 +102,19 @@ export function SubtitleImporter({
           <span className="text-stone-400 text-[11px] hidden sm:inline">
             ({currentFormat?.toUpperCase() || 'SRT'})
           </span>
+
+          {glossProgress && glossProgress.isGlossing && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-950/80 border border-rose-800 text-[10px] text-rose-300 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
+              <span>Glosando con IA: {glossProgress.completed} / {glossProgress.total}</span>
+            </div>
+          )}
+
+          {glossProgress && !glossProgress.isGlossing && glossProgress.completed > 0 && (
+            <span className="text-[10px] text-emerald-400 font-medium bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60">
+              ✓ Glosado completo
+            </span>
+          )}
         </div>
 
         <div className="flex items-center space-x-2">

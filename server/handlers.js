@@ -582,17 +582,19 @@ const activeModel = getSanitizedGroqModel();
 Analyze each subtitle line in language "${targetLang}" and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLang}".
 
 CRITICAL REQUIREMENTS:
-- PRESERVE PRE-SEGMENTED WORDS: If pre-segmented words are provided, you MUST use those exact units. DO NOT break multi-character words into individual characters! For example:
+- PRESERVE PRE-SEGMENTED WORDS: You MUST preserve the exact pre-segmented word units. DO NOT break multi-character words into individual characters! For example:
   * "欢迎" must remain a single unit "欢迎"
   * "收听" must remain a single unit "收听"
   * "今天" must remain a single unit "今天"
   * "写给" must remain a single unit "写给"
   * "自己" must remain a single unit "自己"
+- COMPLETE GLOSSING: You MUST provide an accurate gloss for EVERY SINGLE substantive word in each line. Do NOT skip any words!
 - For each token provide:
   * "word": the exact word/compound in "${targetLang}"
   * "pinyin": Pinyin with tone marks for Chinese (e.g. "huānyíng", "shōutīng", "jīntiān", "zìjǐ", "de"), or transliteration for Arabic/Russian, or null for Latin scripts.
   * "gloss": accurate, direct, concise definition/translation of this specific word in "${nativeLang}" (e.g. "bienvenido", "escuchar", "hoy", "uno mismo", "de", "carta"). DO NOT output the whole sentence as the gloss!
 - Omit punctuation marks or give them null gloss.
+- EXACT IDS: You MUST preserve and return the EXACT same line ID string for each line as provided in the input (e.g. "srt_1", "srt_2").
 
 Subtitle lines to process:
 ${linesFormatted}
@@ -601,12 +603,12 @@ Return STRICTLY valid JSON with no markdown formatting:
 {
   "lines": [
     {
-      "id": "line ID matching the input",
+      "id": "exact line ID from input",
       "tokens": [
         {
           "word": "string (exact word unit)",
           "pinyin": "string with tones or null",
-          "gloss": "string (direct meaning in ${nativeLang})"
+          "gloss": "string (direct concise meaning in ${nativeLang})"
         }
       ]
     }
@@ -615,7 +617,7 @@ Return STRICTLY valid JSON with no markdown formatting:
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
 
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -629,7 +631,7 @@ Return STRICTLY valid JSON with no markdown formatting:
             messages: [
               {
                 role: 'system',
-                content: 'You are an expert multilingual linguistic parser and vocabulary glossing engine. You always return strictly valid JSON matching the schema with 100% accurate per-word glosses and zero generic placeholder templates.'
+                content: 'You are an expert multilingual linguistic parser and vocabulary glossing engine. You always return strictly valid JSON matching the schema with 100% accurate per-word glosses for all words and zero generic placeholder templates.'
               },
               { role: 'user', content: prompt }
             ],
@@ -652,6 +654,9 @@ Return STRICTLY valid JSON with no markdown formatting:
               lines: parsed.lines
             });
           }
+        } else {
+          const errText = await response.text();
+          console.warn(`Groq batch gloss responded with HTTP ${response.status}:`, errText);
         }
       } catch (err) {
         console.warn('Batch gloss API notice:', err.message);

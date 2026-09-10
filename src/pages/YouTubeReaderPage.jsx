@@ -9,7 +9,7 @@ import { Youtube, Sparkles, FileText, CheckCircle2, RotateCcw, ChevronDown, Chev
 
 const SESSION_STORAGE_KEY = 'linguaflow_youtube_reader_session';
 
-export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
+export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey = '' }) {
   // Session state with localStorage persistence
   const [videoId, setVideoId] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
@@ -17,6 +17,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
   const [subtitles, setSubtitles] = useState([]);
   const [subtitleFormat, setSubtitleFormat] = useState(null);
   const [subtitleSource, setSubtitleSource] = useState('');
+  const [glossProgress, setGlossProgress] = useState(null);
 
   // Player & synchronization state
   const [currentTime, setCurrentTime] = useState(0);
@@ -44,8 +45,10 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
             subtitles: parsed.subtitles,
             targetLang,
             nativeLang,
+            apiKey,
             videoId: parsed.videoId,
-            onUpdate: (updated) => setSubtitles(updated)
+            onUpdate: (updated) => setSubtitles(updated),
+            onProgress: (p) => setGlossProgress(p)
           });
           setSubtitles(enriched);
         }
@@ -109,8 +112,10 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
       subtitles: newSubtitles,
       targetLang,
       nativeLang,
+      apiKey,
       videoId,
-      onUpdate: (updated) => setSubtitles(updated)
+      onUpdate: (updated) => setSubtitles(updated),
+      onProgress: (p) => setGlossProgress(p)
     });
     setSubtitles(enriched);
   };
@@ -119,6 +124,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
     setSubtitles([]);
     setSubtitleFormat(null);
     setSubtitleSource('');
+    setGlossProgress(null);
   };
 
   const handleResetSession = () => {
@@ -129,6 +135,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
     setSubtitleSource('');
     setCurrentTime(0);
     setSearchQuery('');
+    setGlossProgress(null);
     try {
       localStorage.removeItem(SESSION_STORAGE_KEY);
     } catch (e) {}
@@ -229,6 +236,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es' }) {
           subtitlesCount={subtitles.length}
           currentFormat={subtitleFormat}
           onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
+          glossProgress={glossProgress}
         />
 
         {/* 4. Controls Bar (compact) */}
