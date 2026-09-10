@@ -6,6 +6,7 @@ import { InputBar } from './components/InputBar';
 import { SettingsModal } from './components/SettingsModal';
 import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
 import { YouTubeReaderPage } from './pages/YouTubeReaderPage';
+import HomePage from './pages/HomePage';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
@@ -101,7 +102,7 @@ export default function App() {
   const [selectedWord, setSelectedWord] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'youtube'
+  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'chat' | 'youtube'
 
   const activeLangRef = useRef(targetLang);
 
@@ -689,7 +690,16 @@ export default function App() {
         setActiveTab={setActiveTab}
       />
 
-      {activeTab === 'youtube' ? (
+      {activeTab === 'home' ? (
+        <HomePage
+          onSelectMode={setActiveTab}
+          targetLang={targetLang}
+          setTargetLang={handleTargetLangChange}
+          nativeLang={nativeLang}
+          setNativeLang={handleNativeLangChange}
+          languages={languages}
+        />
+      ) : activeTab === 'youtube' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
           <YouTubeReaderPage targetLang={targetLang} nativeLang={nativeLang} apiKey={config?.apiKey} />
         </main>

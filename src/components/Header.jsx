@@ -12,7 +12,8 @@ import {
   X,
   ChevronDown,
   MessageSquare,
-  Youtube
+  Youtube,
+  Home
 } from 'lucide-react';
 
 const LANGUAGE_FLAGS = {
@@ -78,13 +79,19 @@ export function Header({
         {/* MOBILE TOP BAR (< md) */}
         <div className="flex md:hidden items-center justify-between w-full">
           {/* Left: Brand Logo & Titles */}
-          <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0">
+          <div
+            onClick={() => setActiveTab && setActiveTab('home')}
+            className="flex items-center space-x-2.5 cursor-pointer select-none group"
+            role="button"
+            tabIndex={0}
+            title="Ir al Inicio"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0 group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5 fill-white text-white" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="font-bold text-white text-[17px] leading-tight tracking-wide">
+                <h1 className="font-bold text-white text-[17px] leading-tight tracking-wide group-hover:text-rose-200 transition-colors">
                   LinguaFlow
                 </h1>
                 <span className="text-[10px] uppercase tracking-wider font-bold bg-rose-950/70 text-rose-300 px-2 py-0.5 rounded-full border border-rose-800/80">
@@ -134,13 +141,21 @@ export function Header({
         {/* DESKTOP HEADER (>= md) - PRESERVED EXACTLY AS BEFORE */}
         <div className="hidden md:flex max-w-4xl mx-auto items-center justify-between gap-3">
           {/* Logo & Title */}
-          <div className="flex items-center space-x-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-rose-900/40">
+          <div
+            onClick={() => setActiveTab && setActiveTab('home')}
+            className="flex items-center space-x-2.5 cursor-pointer select-none group"
+            role="button"
+            tabIndex={0}
+            title="Ir al Inicio"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-rose-900/40 group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="font-bold text-white text-lg leading-tight tracking-wide">LinguaFlow</h1>
+                <h1 className="font-bold text-white text-lg leading-tight tracking-wide group-hover:text-rose-200 transition-colors">
+                  LinguaFlow
+                </h1>
                 <span className="text-[10px] uppercase tracking-wider font-bold bg-rose-950/80 text-rose-300 px-2.5 py-0.5 rounded-full border border-rose-800/80">
                   AI Tutor
                 </span>
@@ -149,8 +164,20 @@ export function Header({
             </div>
           </div>
 
-          {/* Navigation Tabs (Chat vs YouTube Reader) */}
+          {/* Navigation Tabs (Inicio vs Chat vs YouTube Reader) */}
           <div className="flex items-center p-1 bg-[#1e0f0a]/90 rounded-xl border border-[#482519] text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setActiveTab && setActiveTab('home')}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                activeTab === 'home'
+                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
+                  : 'text-rose-200/70 hover:text-white'
+              }`}
+            >
+              <span>🏠</span>
+              <span>Inicio</span>
+            </button>
             <button
               type="button"
               onClick={() => setActiveTab && setActiveTab('chat')}
@@ -384,21 +411,39 @@ export function Header({
               <h3 className="text-xs font-semibold text-rose-100/90 mb-2">
                 Modo de Práctica Actual
               </h3>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (setActiveTab) setActiveTab('home');
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all ${
+                    activeTab === 'home'
+                      ? 'bg-[#3f1c14] border-rose-500/70 text-white shadow-md shadow-rose-950/40'
+                      : 'bg-[#200f0a] border-[#3d190f] text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
+                    <Home className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Inicio</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
                     if (setActiveTab) setActiveTab('chat');
                     setIsMobileDrawerOpen(false);
                   }}
-                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all ${
+                  className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all ${
                     activeTab === 'chat'
                       ? 'bg-[#3f1c14] border-rose-500/70 text-white shadow-md shadow-rose-950/40'
                       : 'bg-[#200f0a] border-[#3d190f] text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-1">
-                    <MessageSquare className="w-5 h-5" />
+                  <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
+                    <MessageSquare className="w-4 h-4" />
                   </div>
                   <span className="text-xs font-semibold">Chat</span>
                 </button>
@@ -409,14 +454,14 @@ export function Header({
                     if (setActiveTab) setActiveTab('youtube');
                     setIsMobileDrawerOpen(false);
                   }}
-                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all ${
+                  className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all ${
                     activeTab === 'youtube'
                       ? 'bg-[#3f1c14] border-rose-500/70 text-white shadow-md shadow-rose-950/40'
                       : 'bg-[#200f0a] border-[#3d190f] text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-1">
-                    <Youtube className="w-5 h-5" />
+                  <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-1">
+                    <Youtube className="w-4 h-4" />
                   </div>
                   <span className="text-xs font-semibold text-center leading-tight">
                     YouTube<br />Reader
