@@ -4,6 +4,7 @@ import App from './App.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import { SiteLanguageProvider } from './context/SiteLanguageContext.jsx';
 import { AudioSettingsProvider } from './context/AudioSettingsContext.jsx';
+import { SavedWordsProvider } from './context/SavedWordsContext.jsx';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ThemeProvider>
       <SiteLanguageProvider>
         <AudioSettingsProvider>
-          <App />
+          <SavedWordsProvider>
+            <App />
+          </SavedWordsProvider>
         </AudioSettingsProvider>
       </SiteLanguageProvider>
     </ThemeProvider>

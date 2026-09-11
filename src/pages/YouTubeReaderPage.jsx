@@ -70,7 +70,7 @@ function normalizeSubtitlesSafely(rawSubs, format = 'sub') {
   return normalized;
 }
 
-export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey = '' }) {
+export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey = '', onWordClick = null }) {
   const { isSpanish } = useSiteLanguage();
   // Session state with localStorage persistence
   const [videoId, setVideoId] = useState('');
@@ -943,6 +943,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             searchQuery={searchQuery}
             interlinearMode={interlinearMode}
             targetLang={targetLang}
+            onWordClick={onWordClick}
             pendingScrollSubtitleId={pendingScrollSubtitleId}
             onScrollComplete={() => setPendingScrollSubtitleId(null)}
           />

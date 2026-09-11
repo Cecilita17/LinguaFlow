@@ -1,10 +1,14 @@
 import React from 'react';
-import { X, Volume2, Snail, BookA } from 'lucide-react';
+import { X, Volume2, Snail, BookA, Star } from 'lucide-react';
+import { useSavedWords } from '../context/SavedWordsContext.jsx';
 
-export function WordModal({ wordData, onClose, onPronounceWord }) {
+export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWord }) {
   if (!wordData) return null;
 
+  const { isWordSaved, toggleSavedWord } = useSavedWords();
   const { word, meaning, part_of_speech, translit } = wordData;
+  const activeLang = targetLang || wordData.targetLang || 'zh';
+  const isSaved = isWordSaved(word, activeLang);
 
   const isArabic = /[\u0600-\u06FF]/.test(word || '');
 
@@ -27,7 +31,7 @@ export function WordModal({ wordData, onClose, onPronounceWord }) {
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+            className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -50,11 +54,26 @@ export function WordModal({ wordData, onClose, onPronounceWord }) {
           >
             {word}
           </h3>
-          {part_of_speech && (
-            <span className="inline-block mt-1.5 text-[11px] font-semibold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full capitalize">
-              {part_of_speech}
-            </span>
-          )}
+          <div className="flex items-center justify-center gap-2 mt-2">
+            {part_of_speech && (
+              <span className="inline-block text-[11px] font-semibold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full capitalize">
+                {part_of_speech}
+              </span>
+            )}
+            {/* Save / Delete Word Button */}
+            <button
+              type="button"
+              onClick={() => toggleSavedWord(word, activeLang)}
+              className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer border ${
+                isSaved
+                  ? 'bg-amber-300 text-stone-950 border-amber-400 shadow-xs ring-2 ring-amber-400/40'
+                  : 'bg-stone-100 hover:bg-amber-50 text-stone-700 hover:text-amber-900 border-stone-200 hover:border-amber-300'
+              }`}
+              title={isSaved ? 'Eliminar de palabras guardadas' : 'Guardar palabra'}
+            >
+              <span>{isSaved ? '★ Guardada' : '☆ Guardar'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Meaning Box */}

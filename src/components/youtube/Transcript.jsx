@@ -17,6 +17,7 @@ export function Transcript({
   searchQuery = '',
   interlinearMode = true,
   targetLang = 'zh',
+  onWordClick = null,
   pendingScrollSubtitleId = null,
   onScrollComplete = null
 }) {
@@ -169,6 +170,7 @@ export function Transcript({
               searchQuery={searchQuery}
               interlinearMode={interlinearMode}
               targetLang={targetLang}
+              onWordClick={onWordClick}
             />
           </div>
         );

@@ -3,6 +3,7 @@ import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'luc
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { CHINESE_OFFLINE_DICT } from '../services/languageGlossStrategies.js';
+import { useSavedWords } from '../context/SavedWordsContext.jsx';
 
 export function ChatMessage({
   message,
@@ -16,6 +17,7 @@ export function ChatMessage({
   onDeleteMessage
 }) {
   const { t, isSpanish } = useSiteLanguage();
+  const { isWordSaved } = useSavedWords();
   const [showTranslation, setShowTranslation] = useState(false);
   const [copied, setCopied] = useState(false);
   const [writingPracticeOpen, setWritingPracticeOpen] = useState(false);
@@ -89,6 +91,8 @@ export function ChatMessage({
         );
       }
 
+      const isSaved = isWordSaved(baseWord, targetLang);
+
       return (
         <React.Fragment key={key}>
           {showTransliteration && cleanTranslit ? (
@@ -96,10 +100,10 @@ export function ChatMessage({
               <rt dir="ltr" className="text-[12px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
                 {cleanTranslit}
               </rt>
-              <span dir="ltr" className="leading-relaxed">{baseWord}</span>
+              <span dir="ltr" className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
             </ruby>
           ) : (
-            <span dir="ltr">{baseWord}</span>
+            <span dir="ltr" className={isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}>{baseWord}</span>
           )}
           {punctuation && (
             <span className="text-white/90 text-[15px] sm:text-base font-normal select-text">
@@ -110,17 +114,18 @@ export function ChatMessage({
       );
     }
 
+    const isSaved = isWordSaved(word, targetLang);
     if (showTransliteration && translit) {
       return (
         <ruby key={key} className="user-ruby mx-0.5 inline-flex flex-col items-center">
           <rt dir="ltr" className="text-[12px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
             {translit}
           </rt>
-          <span dir={isArabic ? 'rtl' : 'ltr'} className="leading-relaxed">{word}</span>
+          <span dir={isArabic ? 'rtl' : 'ltr'} className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{word}</span>
         </ruby>
       );
     }
-    return <span key={key} dir={isArabic ? 'rtl' : 'ltr'}>{word}</span>;
+    return <span key={key} dir={isArabic ? 'rtl' : 'ltr'} className={isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}>{word}</span>;
   };
 
   // Common Chinese Pinyin lexicon for guaranteed fallback
@@ -547,6 +552,7 @@ export function ChatMessage({
               const tokenTranslit = resolveTranslit(tokenObj);
               const { baseWord, cleanTranslit, punctuation } = splitChineseWordAndPunctuation(wordStr, tokenTranslit);
               const cleanForLookup = clean || baseWord;
+              const isSaved = isWordSaved(cleanForLookup, targetLang) || isWordSaved(baseWord, targetLang);
 
               return (
                 <React.Fragment key={idx}>
@@ -556,7 +562,7 @@ export function ChatMessage({
                       dir="ltr"
                       onClick={() => onWordClick(cleanForLookup, message.vocabulary?.[cleanForLookup] || null)}
                       className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 transition-all cursor-pointer group/item text-left"
-                      title={`Clic para ver significado de "${cleanForLookup}"`}
+                      title={isSaved ? `Palabra guardada: "${cleanForLookup}"` : `Clic para ver significado de "${cleanForLookup}"`}
                     >
                       {showTransliteration && cleanTranslit ? (
                         <ruby className="inline-flex flex-col items-center">
@@ -565,7 +571,11 @@ export function ChatMessage({
                           </rt>
                           <span
                             dir="ltr"
-                            className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
+                            className={
+                              isSaved
+                                ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
+                                : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
+                            }
                           >
                             {baseWord}
                           </span>
@@ -573,7 +583,11 @@ export function ChatMessage({
                       ) : (
                         <span
                           dir="ltr"
-                          className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
+                          className={
+                            isSaved
+                              ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
+                              : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
+                          }
                         >
                           {baseWord}
                         </span>
@@ -590,6 +604,8 @@ export function ChatMessage({
             }
 
             const tokenTranslit = resolveTranslit(tokenObj);
+            const isSaved = isWordSaved(clean, targetLang) || isWordSaved(wordStr, targetLang);
+
             return (
               <button
                 key={idx}
@@ -597,7 +613,7 @@ export function ChatMessage({
                 dir={isArabic ? 'rtl' : 'ltr'}
                 onClick={() => onWordClick(clean, message.vocabulary?.[clean] || null)}
                 className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 transition-all cursor-pointer group/item"
-                title={`Clic para ver significado de "${clean}"`}
+                title={isSaved ? `Palabra guardada: "${clean}"` : `Clic para ver significado de "${clean}"`}
               >
                 {showTransliteration && tokenTranslit ? (
                   <ruby className="inline-flex flex-col items-center">
@@ -606,7 +622,11 @@ export function ChatMessage({
                     </rt>
                     <span
                       dir={isArabic ? 'rtl' : 'ltr'}
-                      className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
+                      className={
+                        isSaved
+                          ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
+                          : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
+                      }
                     >
                       {wordStr}
                     </span>
@@ -614,7 +634,11 @@ export function ChatMessage({
                 ) : (
                   <span
                     dir={isArabic ? 'rtl' : 'ltr'}
-                    className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
+                    className={
+                      isSaved
+                        ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
+                        : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
+                    }
                   >
                     {wordStr}
                   </span>

@@ -58,9 +58,14 @@ export function TextReaderPage({
   onWordClick = null
 }) {
   const { t } = useSiteLanguage();
-  const { speechRate } = useAudioSettings();
+  const { speechRate, autoPlayTextReader } = useAudioSettings();
   const speechRateRef = useRef(speechRate);
   speechRateRef.current = speechRate;
+  const autoPlayTextReaderRef = useRef(autoPlayTextReader);
+  autoPlayTextReaderRef.current = autoPlayTextReader;
+  const userStoppedRef = useRef(false);
+  const visibleParagraphsRef = useRef([]);
+  const handlePlayParagraphRef = useRef(null);
 
   // Load existing draft if available
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
@@ -110,6 +115,7 @@ export function TextReaderPage({
     }
     return document.paragraphs.filter(p => p.chapterId === currentChapter.id);
   }, [document, isEpub, chapters, currentChapter]);
+  visibleParagraphsRef.current = visibleParagraphs;
   const [isEditing, setIsEditing] = useState(() => !loadActiveDocumentDraft());
   const [inputText, setInputText] = useState(() => loadActiveDocumentDraft()?.rawText || '');
   const [inputTitle, setInputTitle] = useState(() => loadActiveDocumentDraft()?.title || '');
@@ -526,6 +532,8 @@ export function TextReaderPage({
       return; // No position saved — TTS not available
     }
 
+    userStoppedRef.current = false;
+
     // Cancel any current utterance
     window.speechSynthesis.cancel();
     setAudioErrorId(null);
@@ -572,18 +580,40 @@ export function TextReaderPage({
 
     utterance.onend = () => {
       setPlayingParagraphId(null);
+      // If Auto-play is ON and user did NOT manually pause/stop, advance to next paragraph
+      if (autoPlayTextReaderRef.current && !userStoppedRef.current) {
+        const paras = visibleParagraphsRef.current || [];
+        const currentIndex = paras.findIndex(p => p.id === paragraph.id);
+        if (currentIndex >= 0 && currentIndex < paras.length - 1) {
+          const nextPara = paras[currentIndex + 1];
+          if (nextPara && handlePlayParagraphRef.current) {
+            handlePlayParagraphRef.current(nextPara);
+            try {
+              const el = window.document.querySelector(`[data-paragraph-id="${nextPara.id}"]`);
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            } catch (scrollErr) {}
+          }
+        }
+      }
     };
 
     utterance.onerror = (e) => {
-      console.warn('TTS playback error for paragraph:', paragraph.id, e);
       setPlayingParagraphId(null);
-      setAudioErrorId(paragraph.id);
+      if (!userStoppedRef.current) {
+        console.warn('TTS playback error for paragraph:', paragraph.id, e);
+        setAudioErrorId(paragraph.id);
+      }
     };
 
     window.speechSynthesis.speak(utterance);
   }, [activeDocLang, refreshLibraryCount, speechRate]);
 
+  handlePlayParagraphRef.current = handlePlayParagraph;
+
   const handleStopAudio = useCallback(() => {
+    userStoppedRef.current = true;
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }

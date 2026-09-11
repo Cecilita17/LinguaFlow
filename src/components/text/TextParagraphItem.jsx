@@ -1,18 +1,19 @@
 import React from 'react';
-import { Play, Square, AlertCircle, Languages, Loader2, Headphones } from 'lucide-react';
+import { Play, Square, Pause, AlertCircle, Languages, Loader2, Headphones } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
+import { useSavedWords } from '../../context/SavedWordsContext.jsx';
 
 /**
  * TextParagraphItem
  * Renders an independent paragraph with:
  * 1. Interlinear tokens (Chinese Pinyin above word, Arabic tashkeel without Latin transliteration, Polish/Russian words + gloss)
  * 2. Dedicated vertical actions column (shrink-0, aligned at top):
- *    - Audio button on top (▶️ / ⏹️ / ⚠️) - plays ONLY this paragraph
+ *    - Audio button on top (▶️ / ⏸️ / ⚠️) - plays/pauses ONLY this paragraph
  *    - Gloss button below (🔤) - glosses ONLY this paragraph with AI
  * 3. Compact button dimensions (~w-8 h-8 / sm:w-9 sm:h-9) to maximize reading width
- * 4. Interactive word click for dictionary definition lookup
+ * 4. Interactive word click for dictionary definition lookup and saved words yellow highlighting
  * 5. Authentic RTL support for Arabic, Hebrew, etc.
  */
 export function TextParagraphItem({
@@ -31,6 +32,7 @@ export function TextParagraphItem({
   onGloss = null,
   onGlossParagraph = null
 }) {
+  const { isWordSaved } = useSavedWords();
   const { text, tokens = [] } = paragraph;
   const isChinese = targetLang === 'zh';
   const isRtl = isRtlLanguage(targetLang);
@@ -151,16 +153,25 @@ export function TextParagraphItem({
                     )}
 
                     {/* Tier 2 (CENTER): Word (Arabic with tashkīl in RTL, Russian, Polish, Latin scripts in LTR) */}
-                    <span
-                      dir={textDirection}
-                      className={`${
-                        isChinese ? 'font-medium tracking-normal' : 'font-semibold tracking-wide'
-                      } select-text leading-tight ${
-                        isPlaying ? 'text-white font-bold drop-shadow-xs' : 'text-[var(--text-primary)]'
-                      } ${fontClass}`}
-                    >
-                      {word}
-                    </span>
+                    {(() => {
+                      const isSaved = !isPunctuation && isWordSaved(word, targetLang);
+                      return (
+                        <span
+                          dir={textDirection}
+                          className={`${
+                            isChinese ? 'font-medium tracking-normal' : 'font-semibold tracking-wide'
+                          } select-text leading-tight ${
+                            isSaved
+                              ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
+                              : isPlaying
+                              ? 'text-white font-bold drop-shadow-xs'
+                              : 'text-[var(--text-primary)]'
+                          } ${fontClass}`}
+                        >
+                          {word}
+                        </span>
+                      );
+                    })()}
 
                     {/* Tier 3 (BOTTOM): Gloss in student's native language (STRICTLY LTR) */}
                     {cleanGloss && (
@@ -190,7 +201,28 @@ export function TextParagraphItem({
                   : 'text-[var(--text-primary)]'
               }`}
             >
-              {text}
+              {text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/).map((chunk, cIdx) => {
+                if (!chunk) return null;
+                const cleanWord = chunk.trim();
+                if (cleanWord && isWordSaved(cleanWord, targetLang)) {
+                  return (
+                    <span
+                      key={cIdx}
+                      onClick={(e) => {
+                        if (onWordClick) {
+                          e.stopPropagation();
+                          onWordClick(cleanWord, null);
+                        }
+                      }}
+                      className="bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs cursor-pointer inline-block ring-1 ring-amber-400/60"
+                      title={`Palabra guardada: "${cleanWord}"`}
+                    >
+                      {chunk}
+                    </span>
+                  );
+                }
+                return chunk;
+              })}
             </p>
           )}
         </div>
@@ -200,7 +232,7 @@ export function TextParagraphItem({
           dir="ltr"
           className="shrink-0 flex flex-col items-center gap-1.5 self-start pt-0.5"
         >
-          {/* Paragraph Audio Button (▶️ / ⏹️ / ⚠️) - Plays ONLY this paragraph */}
+          {/* Paragraph Audio Button (▶️ / ⏸️ / ⚠️) - Plays/pauses ONLY this paragraph */}
           <button
             type="button"
             onClick={handleAudioClick}
@@ -208,14 +240,14 @@ export function TextParagraphItem({
               isAudioError
                 ? 'Error de reproducción (clic para reintentar)'
                 : isPlaying
-                ? 'Detener reproducción de audio'
+                ? 'Pausar o detener reproducción de audio'
                 : 'Reproducir párrafo'
             }
             title={
               isAudioError
                 ? 'Error de TTS. Haz clic para reintentar.'
                 : isPlaying
-                ? 'Detener audio'
+                ? 'Pausar o detener audio'
                 : 'Reproducir párrafo'
             }
             className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer ${
@@ -231,7 +263,7 @@ export function TextParagraphItem({
             ) : isPlaying ? (
               <>
                 <span className="absolute -inset-1 rounded-xl border-2 border-rose-400/60 animate-ping pointer-events-none" />
-                <Square className="w-3.5 h-3.5 fill-white" />
+                <Pause className="w-3.5 h-3.5 fill-white" />
               </>
             ) : (
               <Play className="w-3.5 h-3.5 fill-current ml-0.5" />

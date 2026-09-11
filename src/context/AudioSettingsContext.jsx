@@ -1,16 +1,22 @@
 import React, { createContext, useContext, useState } from 'react';
 
-export const SPEECH_RATE_OPTIONS = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-export const DEFAULT_SPEECH_RATE = 1.0;
+export const SPEECH_RATE_OPTIONS = [
+  0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00,
+  1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50
+];
+export const DEFAULT_SPEECH_RATE = 1.00;
 
 export const STORAGE_KEY_RATE = 'linguaflow_global_speech_rate';
 export const STORAGE_KEY_AUTOPLAY = 'linguaflow_auto_play_ai';
+export const STORAGE_KEY_AUTOPLAY_READER = 'linguaflow_auto_play_text_reader';
 
 const AudioSettingsContext = createContext({
   speechRate: DEFAULT_SPEECH_RATE,
   setSpeechRate: () => {},
   autoPlayAi: false,
   setAutoPlayAi: () => {},
+  autoPlayTextReader: false,
+  setAutoPlayTextReader: () => {},
   speechRateOptions: SPEECH_RATE_OPTIONS
 });
 
@@ -42,6 +48,14 @@ export function AudioSettingsProvider({ children }) {
     }
   });
 
+  const [autoPlayTextReader, setAutoPlayTextReaderState] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY_AUTOPLAY_READER) === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
   const setSpeechRate = (newRate) => {
     const rateNum = parseFloat(newRate);
     if (!isNaN(rateNum) && SPEECH_RATE_OPTIONS.includes(rateNum)) {
@@ -68,6 +82,16 @@ export function AudioSettingsProvider({ children }) {
     });
   };
 
+  const setAutoPlayTextReader = (newVal) => {
+    setAutoPlayTextReaderState((prev) => {
+      const boolVal = typeof newVal === 'function' ? newVal(prev) : Boolean(newVal);
+      try {
+        localStorage.setItem(STORAGE_KEY_AUTOPLAY_READER, boolVal ? 'true' : 'false');
+      } catch (e) {}
+      return boolVal;
+    });
+  };
+
   return (
     <AudioSettingsContext.Provider
       value={{
@@ -75,6 +99,8 @@ export function AudioSettingsProvider({ children }) {
         setSpeechRate,
         autoPlayAi,
         setAutoPlayAi,
+        autoPlayTextReader,
+        setAutoPlayTextReader,
         speechRateOptions: SPEECH_RATE_OPTIONS
       }}
     >

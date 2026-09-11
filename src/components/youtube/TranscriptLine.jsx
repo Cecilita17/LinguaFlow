@@ -3,6 +3,7 @@ import { Volume2, Languages, Loader2 } from 'lucide-react';
 import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
+import { useSavedWords } from '../../context/SavedWordsContext.jsx';
 
 export function TranscriptLine({
   line,
@@ -18,8 +19,9 @@ export function TranscriptLine({
   searchQuery = '',
   interlinearMode = true,
   targetLang = 'zh',
-  onWordClick = null // Prepared for future word-level glossary lookup
+  onWordClick = null
 }) {
+  const { isWordSaved } = useSavedWords();
   if (!line || typeof line !== 'object') return null;
   const startTime = typeof line.startTime === 'number' && !isNaN(line.startTime) ? line.startTime : 0;
   const rawText = typeof line.text === 'string' ? line.text : (line.text != null ? String(line.text) : '');
@@ -210,16 +212,25 @@ export function TranscriptLine({
                       )}
 
                       {/* Tier 2 (CENTER): Word (Arabic with diacritics/tashkeel in RTL, Russian/Polish/Latin scripts in LTR) */}
-                      <span
-                        dir={textDirection}
-                        className={`${
-                          isChinese ? 'font-medium tracking-normal' : 'font-semibold tracking-wide'
-                        } ${
-                          isActive ? 'text-white font-bold drop-shadow-xs' : 'text-[var(--text-primary)]'
-                        } ${fontClass}`}
-                      >
-                        {renderHighlightedText(word)}
-                      </span>
+                      {(() => {
+                        const isSaved = !isPunctuation && isWordSaved(word, targetLang);
+                        return (
+                          <span
+                            dir={textDirection}
+                            className={`${
+                              isChinese ? 'font-medium tracking-normal' : 'font-semibold tracking-wide'
+                            } select-text leading-tight ${
+                              isSaved
+                                ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
+                                : isActive
+                                ? 'text-white font-bold drop-shadow-xs'
+                                : 'text-[var(--text-primary)]'
+                            } ${fontClass}`}
+                          >
+                            {renderHighlightedText(word)}
+                          </span>
+                        );
+                      })()}
 
                       {/* Tier 3 (BOTTOM): Gloss in student's native language (STRICTLY LTR) */}
                       {cleanGloss && (
@@ -252,7 +263,28 @@ export function TranscriptLine({
                 : 'text-[var(--text-primary)]'
             }`}
           >
-            {renderHighlightedText(text)}
+            {text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/).map((chunk, cIdx) => {
+              if (!chunk) return null;
+              const cleanWord = chunk.trim();
+              if (cleanWord && isWordSaved(cleanWord, targetLang)) {
+                return (
+                  <span
+                    key={cIdx}
+                    onClick={(e) => {
+                      if (onWordClick) {
+                        e.stopPropagation();
+                        onWordClick(cleanWord, null);
+                      }
+                    }}
+                    className="bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs cursor-pointer inline-block ring-1 ring-amber-400/60"
+                    title={`Palabra guardada: "${cleanWord}"`}
+                  >
+                    {chunk}
+                  </span>
+                );
+              }
+              return renderHighlightedText(chunk);
+            })}
           </p>
         )}
       </div>

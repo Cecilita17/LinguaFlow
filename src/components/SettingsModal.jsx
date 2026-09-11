@@ -10,7 +10,12 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
 
   const { siteLang, setSiteLang, isSpanish, t } = useSiteLanguage();
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const { speechRate: globalSpeechRate, setSpeechRate: setGlobalSpeechRate } = useAudioSettings();
+  const {
+    speechRate: globalSpeechRate,
+    setSpeechRate: setGlobalSpeechRate,
+    autoPlayTextReader,
+    setAutoPlayTextReader
+  } = useAudioSettings();
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [level, setLevel] = useState(config.level || 'A2/B1');
   const [speechRate, setSpeechRate] = useState(globalSpeechRate || config.speechRate || 1.0);
@@ -282,6 +287,38 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
             </select>
           </div>
 
+          {/* Auto-play Text Reader */}
+          <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-start space-x-2">
+                <Volume2 className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-stone-800 text-xs sm:text-sm">
+                    Auto-play Text Reader
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-0.5 leading-snug">
+                    Automatically play the next paragraph when the current paragraph finishes.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoPlayTextReader(!autoPlayTextReader)}
+                className={`w-12 h-6 rounded-full transition-all flex items-center px-0.5 shrink-0 ml-3 cursor-pointer ${
+                  autoPlayTextReader
+                    ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end pr-1.5'
+                    : 'bg-stone-300 justify-start pl-0.5'
+                }`}
+              >
+                {autoPlayTextReader ? (
+                  <span className="text-[10px] font-bold text-white tracking-wide">ON</span>
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-white shadow-xs" />
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* Speech Rate */}
           <div>
             <label className="block font-semibold text-stone-800 mb-1 flex items-center justify-between">
@@ -289,21 +326,21 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
                 <Volume2 className="w-4 h-4 text-rose-600" />
                 <span>{isSpanish ? 'Velocidad Global de Reproducción' : 'Global Playback Speed'}</span>
               </span>
-              <span className="text-rose-700 font-bold font-mono">{speechRate}×</span>
+              <span className="text-rose-700 font-bold font-mono">{Number(speechRate).toFixed(2)}×</span>
             </label>
-            <div className="grid grid-cols-6 gap-1.5 mt-2">
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-1 mt-2">
               {SPEECH_RATE_OPTIONS.map((rate) => (
                 <button
                   key={rate}
                   type="button"
                   onClick={() => setSpeechRate(rate)}
-                  className={`py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                    speechRate === rate
+                  className={`py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                    Math.abs(speechRate - rate) < 0.001
                       ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
                       : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100 hover:text-stone-900'
                   }`}
                 >
-                  {rate}×
+                  {rate.toFixed(2)}×
                 </button>
               ))}
             </div>

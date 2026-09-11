@@ -700,7 +700,7 @@ export default function App() {
         />
       ) : activeTab === 'youtube' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <YouTubeReaderPage targetLang={targetLang} nativeLang={nativeLang} apiKey={config?.apiKey} />
+          <YouTubeReaderPage targetLang={targetLang} nativeLang={nativeLang} apiKey={config?.apiKey} onWordClick={handleWordClick} />
         </main>
       ) : activeTab === 'text' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
@@ -828,6 +828,7 @@ export default function App() {
       {/* Word Definition Modal */}
       <WordModal
         wordData={selectedWord}
+        targetLang={targetLang}
         onClose={() => setSelectedWord(null)}
         onPronounceWord={handlePronounceWord}
       />
