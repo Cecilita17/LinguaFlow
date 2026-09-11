@@ -24,12 +24,19 @@ export function InputBar({
   const startCoordsRef = useRef(null);
   const isPointerActiveRef = useRef(false);
   const pointerIdRef = useRef(null);
+  const pressStartTimeRef = useRef(0);
+  const wasRecordingOnDownRef = useRef(false);
 
   const isArabic = targetLang === 'ar' || /[\u0600-\u06FF]/.test(text);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!text.trim() || isProcessing || isRecording || isTranscribingAudio) return;
+    if (isProcessing || isTranscribingAudio) return;
+    if (isRecording) {
+      onStopRecording();
+      return;
+    }
+    if (!text.trim()) return;
     onSendMessage(text.trim());
     setText('');
   };
@@ -58,13 +65,17 @@ export function InputBar({
     startCoordsRef.current = { x: e.clientX, y: e.clientY };
     isPointerActiveRef.current = true;
     pointerIdRef.current = e.pointerId;
+    pressStartTimeRef.current = Date.now();
+    wasRecordingOnDownRef.current = Boolean(isRecording);
     setIsDraggingCancel(false);
 
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch (err) {}
 
-    onStartRecording();
+    if (!isRecording) {
+      onStartRecording();
+    }
   };
 
   const handlePointerMove = (e) => {
@@ -96,7 +107,15 @@ export function InputBar({
     if (isDraggingCancel) {
       onCancelRecording();
     } else {
-      onStopRecording();
+      const pressDuration = Date.now() - (pressStartTimeRef.current || 0);
+      if (wasRecordingOnDownRef.current) {
+        // Tapped while already recording -> stop and send
+        onStopRecording();
+      } else if (pressDuration >= 350) {
+        // Held and released -> stop and send
+        onStopRecording();
+      }
+      // If tapped briefly while not recording, keep recording active (toggle mode)
     }
     setIsDraggingCancel(false);
   };
@@ -172,9 +191,15 @@ export function InputBar({
               ></div>
             </div>
 
-            <div className="flex justify-between text-[11px] text-rose-300/70 pt-0.5">
-              <span>{isDraggingCancel ? 'Suelta para cancelar la grabación' : 'Desliza hacia arriba para cancelar'}</span>
-              <span className="font-semibold text-rose-200">Suelta para enviar</span>
+            <div className="flex justify-between items-center text-[11px] text-rose-300/70 pt-0.5">
+              <span>{isDraggingCancel ? (isSpanish ? 'Suelta para cancelar' : 'Release to cancel') : (isSpanish ? 'Desliza hacia arriba para cancelar' : 'Swipe up to cancel')}</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onStopRecording(); }}
+                className="font-semibold text-rose-200 hover:text-white px-2.5 py-0.5 rounded-lg bg-rose-800/60 hover:bg-rose-700/80 border border-rose-600/50 cursor-pointer transition-colors shadow-xs"
+              >
+                {isSpanish ? 'Detener y enviar' : 'Stop & send'}
+              </button>
             </div>
           </div>
         )}
@@ -281,11 +306,11 @@ export function InputBar({
           {/* Send Button */}
           <button
             type="submit"
-            disabled={!text.trim() || isProcessing || isRecording || isTranscribingAudio}
-            title={isSpanish ? "Enviar mensaje" : "Send message"}
+            disabled={(!text.trim() && !isRecording) || isProcessing || isTranscribingAudio}
+            title={isRecording ? (isSpanish ? "Detener y enviar mensaje de voz" : "Stop and send voice message") : (isSpanish ? "Enviar mensaje" : "Send message")}
             className={`p-3 rounded-2xl transition-all shadow-md flex items-center justify-center flex-shrink-0 ${
-              text.trim() && !isProcessing && !isRecording && !isTranscribingAudio
-                ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/50 transform active:scale-95'
+              (text.trim() || isRecording) && !isProcessing && !isTranscribingAudio
+                ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/50 transform active:scale-95 cursor-pointer'
                 : 'bg-[#3b1e15] text-rose-300/40 border border-[#4a261a] cursor-not-allowed'
             }`}
           >

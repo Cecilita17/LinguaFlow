@@ -341,7 +341,7 @@ export async function handleTranscribe(req, res) {
       return res.status(400).json({ error: 'No hay GROQ_API_KEY configurada en el servidor para transcripción de audio.' });
     }
 
-    const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
+    const cleanBase64 = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
     let cleanMime = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
     if (!cleanMime || cleanMime === 'audio/x-m4a') cleanMime = 'audio/mp4';
 

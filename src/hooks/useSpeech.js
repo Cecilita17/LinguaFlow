@@ -215,10 +215,15 @@ export function useSpeech({
           };
           mediaRecorderRef.current.stop();
         });
-        audioBlob = await stopPromise;
+        const timeoutPromise = new Promise(resolve => setTimeout(() => {
+          const blob = new Blob(audioChunksRef.current, { type: mimeTypeRef.current });
+          resolve(blob);
+        }, 600));
+        audioBlob = await Promise.race([stopPromise, timeoutPromise]);
       } catch (err) {
         console.warn('Error stopping MediaRecorder:', err);
       }
+      mediaRecorderRef.current = null;
     } else if (audioChunksRef.current.length > 0) {
       audioBlob = new Blob(audioChunksRef.current, { type: mimeTypeRef.current });
     }
@@ -242,7 +247,7 @@ export function useSpeech({
     // High-precision Groq Whisper Multilingual Transcription (for code-switching & accents)
     let finalTranscribedText = localTranscript;
 
-    if (audioBlob && audioBlob.size > 400) {
+    if (audioBlob && audioBlob.size > 150) {
       try {
         setIsTranscribingAudio(true);
         const aiTranscript = await transcribeAudioApi({
@@ -356,20 +361,13 @@ export function useSpeech({
     }
   }, [isProcessing, targetLangCode, stopRecordingInternal]);
 
-  // Stop Push-to-Talk Recording (Called on PointerUp)
+  // Stop Push-to-Talk or Click-to-Talk Recording
   const stopRecording = useCallback(() => {
-    const elapsed = startTimeRef.current ? (Date.now() - startTimeRef.current) : 0;
-    // If held for less than 250ms with zero words, consider it an accidental tap
-    if (elapsed < 250 && !fullTranscriptRef.current && !interimTranscript && audioChunksRef.current.length === 0) {
-      stopRecordingInternal(false);
-      return;
-    }
-
     // Allow a tiny 150ms buffer to finalize the last syllables
     setTimeout(() => {
       stopRecordingInternal(true);
     }, 150);
-  }, [interimTranscript, stopRecordingInternal]);
+  }, [stopRecordingInternal]);
 
   // Cancel Recording (Called on drag off or cancel gesture)
   const cancelRecording = useCallback(() => {

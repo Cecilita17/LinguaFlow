@@ -59,6 +59,8 @@ export function TextReaderPage({
 }) {
   const { t } = useSiteLanguage();
   const { speechRate } = useAudioSettings();
+  const speechRateRef = useRef(speechRate);
+  speechRateRef.current = speechRate;
 
   // Load existing draft if available
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
@@ -559,7 +561,7 @@ export function TextReaderPage({
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = speechCode;
-    utterance.rate = speechRate || 1.0;
+    utterance.rate = speechRateRef.current || speechRate || 1.0;
 
     // Select suitable voice if available
     const voices = window.speechSynthesis.getVoices();
@@ -579,7 +581,7 @@ export function TextReaderPage({
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [activeDocLang, refreshLibraryCount]);
+  }, [activeDocLang, refreshLibraryCount, speechRate]);
 
   const handleStopAudio = useCallback(() => {
     if (window.speechSynthesis) {
@@ -1262,63 +1264,6 @@ export function TextReaderPage({
           </div>
         ) : null}
       </header>
-{isEpub && chapters.length > 1 && (
-  <div className="sticky top-0 z-20 -mx-4 px-4 py-2.5 mb-5 bg-[var(--surface-primary)] border-b border-[var(--border-primary)] shadow-sm flex items-center justify-between gap-2 sm:gap-3 transition-colors">
-    <button
-      type="button"
-      disabled={currentChapterIndex === 0}
-      onClick={() => handleNavigateChapter(currentChapterIndex - 1)}
-      className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1 sm:space-x-1.5 transition-all ${
-        currentChapterIndex === 0
-          ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
-          : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
-      }`}
-      title="Capítulo anterior"
-    >
-      <ChevronLeft className="w-4 h-4" />
-      <span className="hidden sm:inline">Anterior</span>
-    </button>
-
-    <div className="flex-1 min-w-0 max-w-sm sm:max-w-md mx-auto text-center">
-      <div className="relative inline-block w-full">
-        <select
-          value={currentChapterIndex}
-          onChange={(e) => handleNavigateChapter(Number(e.target.value))}
-          className="w-full text-xs font-bold text-[var(--text-primary)] bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-xl py-1.5 px-3 pr-8 truncate appearance-none cursor-pointer text-center hover:border-rose-500/50 transition-colors focus:outline-none focus:ring-1 focus:ring-rose-500"
-        >
-          {chapters.map((ch, idx) => {
-            const hasCustomTitle = ch.title && !/^cap[ií]tulo\s+\d+$/i.test(ch.title.trim()) && !/^chapter\s+\d+$/i.test(ch.title.trim());
-            const label = hasCustomTitle
-              ? `Capítulo ${idx + 1} de ${chapters.length}: ${ch.title}`
-              : `Capítulo ${idx + 1} de ${chapters.length}`;
-            return (
-              <option key={ch.id || idx} value={idx}>
-                {label}
-              </option>
-            );
-          })}
-        </select>
-        <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]" />
-      </div>
-    </div>
-
-    <button
-      type="button"
-      disabled={currentChapterIndex === chapters.length - 1}
-      onClick={() => handleNavigateChapter(currentChapterIndex + 1)}
-      className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1 sm:space-x-1.5 transition-all ${
-        currentChapterIndex === chapters.length - 1
-          ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
-          : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
-      }`}
-      title="Capítulo siguiente"
-    >
-      <span className="hidden sm:inline">Siguiente</span>
-      <ChevronRight className="w-4 h-4" />
-    </button>
-  </div>
-)}
-
 
       {/* MAIN CONTENT AREA */}
       <main
@@ -1458,7 +1403,62 @@ export function TextReaderPage({
           /* ============================================================ */
           <div className="flex-1 flex flex-col animate-fade-in">
             {/* EPUB Top Chapter Navigation Bar: Sticky flush top inside reader view */}
-            
+            {isEpub && chapters.length > 1 && (
+              <div className="sticky top-0 z-20 py-2.5 px-3 sm:px-4 mb-4 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm backdrop-blur-md flex items-center justify-between gap-2 sm:gap-3 transition-colors">
+                <button
+                  type="button"
+                  disabled={currentChapterIndex === 0}
+                  onClick={() => handleNavigateChapter(currentChapterIndex - 1)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+                    currentChapterIndex === 0
+                      ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
+                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
+                  }`}
+                  title="Capítulo anterior"
+                >
+                  <ChevronLeft className="w-4 h-4 shrink-0" />
+                  <span>Capítulo anterior</span>
+                </button>
+
+                <div className="flex-1 min-w-0 max-w-sm sm:max-w-md mx-auto text-center">
+                  <div className="relative inline-block w-full">
+                    <select
+                      value={currentChapterIndex}
+                      onChange={(e) => handleNavigateChapter(Number(e.target.value))}
+                      className="w-full text-xs font-bold text-[var(--text-primary)] bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-xl py-1.5 px-3 pr-8 truncate appearance-none cursor-pointer text-center hover:border-rose-500/50 transition-colors focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    >
+                      {chapters.map((ch, idx) => {
+                        const hasCustomTitle = ch.title && !/^cap[ií]tulo\s+\d+$/i.test(ch.title.trim()) && !/^chapter\s+\d+$/i.test(ch.title.trim());
+                        const label = hasCustomTitle
+                          ? `Capítulo ${idx + 1} de ${chapters.length}: ${ch.title}`
+                          : `Capítulo ${idx + 1} de ${chapters.length}`;
+                        return (
+                          <option key={ch.id || idx} value={idx}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]" />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={currentChapterIndex === chapters.length - 1}
+                  onClick={() => handleNavigateChapter(currentChapterIndex + 1)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+                    currentChapterIndex === chapters.length - 1
+                      ? 'opacity-40 cursor-not-allowed bg-[var(--surface-secondary)] text-[var(--text-muted)]'
+                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] cursor-pointer active:scale-95'
+                  }`}
+                  title="Siguiente capítulo"
+                >
+                  <span>Siguiente capítulo</span>
+                  <ChevronRight className="w-4 h-4 shrink-0" />
+                </button>
+              </div>
+            )}
 
             <div className="space-y-4 sm:space-y-5">
               {visibleParagraphs.map((paragraph, pIdx) => {
