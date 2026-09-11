@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-// import { createPortal } from 'react-dom'; // removed unused import
 import {
   FileText,
   Sparkles,
@@ -181,6 +180,9 @@ export function TextReaderPage({
         // Scrolling UP -> show entire header immediately
         setIsHeaderHidden(false);
       }
+
+      // Close contextual actions menu if open on scroll
+      setIsActionsMenuOpen(false);
 
       previousScrollTopRef.current = currentScrollTop;
 
@@ -1037,7 +1039,11 @@ export function TextReaderPage({
   const actionsMenuRef = useRef(null);
 
   // Toggle menu visibility
-  const toggleActionsMenu = useCallback(() => {
+  const toggleActionsMenu = useCallback((e) => {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
     setIsActionsMenuOpen(prev => !prev);
   }, []);
 
@@ -1049,8 +1055,12 @@ export function TextReaderPage({
         setIsActionsMenuOpen(false);
       }
     };
-    window.addEventListener('pointerdown', handleClickOutside);
+    // Delay event listener registration so opening tap/click does not immediately close the menu
+    const timer = setTimeout(() => {
+      window.addEventListener('pointerdown', handleClickOutside);
+    }, 0);
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('pointerdown', handleClickOutside);
     };
   }, [isActionsMenuOpen]);
@@ -1121,16 +1131,17 @@ export function TextReaderPage({
   }, []);
 
   const currentLangMeta = getLanguageMeta(targetLang);
+  const isHeaderCurrentlyHidden = isHeaderHidden && !isEditing && !isActionsMenuOpen;
 
   return (
     <div className="h-full flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)] min-h-0">
       {/* TOP HEADER CONTROLS BAR: FULL AUTO-HIDE ON SCROLL DOWN */}
       <header
         className={`reader-full-header relative z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] shrink-0 transition-colors ${
-          isHeaderHidden && !isEditing ? 'is-hidden' : ''
+          isHeaderCurrentlyHidden ? 'is-hidden' : 'overflow-visible'
         }`}
-        inert={isHeaderHidden && !isEditing ? '' : undefined}
-        aria-hidden={isHeaderHidden && !isEditing}
+        inert={isHeaderCurrentlyHidden ? '' : undefined}
+        aria-hidden={isHeaderCurrentlyHidden}
       >
         {document && !isEditing ? (
           /* ============================================================ */
@@ -1216,36 +1227,36 @@ export function TextReaderPage({
                   <MoreVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
 
-                {/* Contextual dropdown popup rendered via portal to prevent overflow clipping */}
+                {/* Contextual dropdown popup */}
                 {isActionsMenuOpen && (
-  <div className="absolute right-0 top-full mt-2 z-20 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)]">
-    <button
-      type="button"
-      onClick={handleEditTitle}
-      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-    >
-      <span className="text-sm leading-none">✏️</span>
-      <span>Editar título</span>
-    </button>
-    <button
-      type="button"
-      onClick={handleDeleteText}
-      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-    >
-      <span className="text-sm leading-none">🗑️</span>
-      <span>Eliminar</span>
-    </button>
-    <div className="my-1 border-t border-[var(--border-subtle)]/60" />
-    <button
-      type="button"
-      onClick={handleOpenLibrary}
-      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-    >
-      <span className="text-sm leading-none">📚</span>
-      <span>Librería</span>
-    </button>
-  </div>
-)}
+                  <div className="absolute right-0 top-full mt-2 z-[100] w-48 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)]">
+                    <button
+                      type="button"
+                      onClick={handleEditTitle}
+                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                    >
+                      <span className="text-sm leading-none">✏️</span>
+                      <span>Editar título</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteText}
+                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                    >
+                      <span className="text-sm leading-none">🗑️</span>
+                      <span>Eliminar</span>
+                    </button>
+                    <div className="my-1 border-t border-[var(--border-subtle)]/60" />
+                    <button
+                      type="button"
+                      onClick={handleOpenLibrary}
+                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                    >
+                      <span className="text-sm leading-none">📚</span>
+                      <span>Librería</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
