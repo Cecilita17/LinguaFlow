@@ -16,7 +16,10 @@ import {
   getSavedTranscriptsCount,
   findTranscriptsByVideoId,
   saveTranscriptToLibrary,
-  computeSubtitleHash
+  getTranscriptFromLibrary,
+  computeSubtitleHash,
+  updateTranscriptPlaybackPosition,
+  getLibraryKey
 } from '../services/transcriptLibraryStorage.js';
 import {
   Youtube,
@@ -87,6 +90,10 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   const [currentTime, setCurrentTime] = useState(0);
   const [seekToTime, setSeekToTime] = useState(null);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [currentRecordId, setCurrentRecordId] = useState('');
+  const [pendingScrollSubtitleId, setPendingScrollSubtitleId] = useState(null);
+  const latestPositionRef = useRef({ time: 0, subId: null });
+  const saveThrottlerRef = useRef({ lastSavedTime: 0, timer: null });
 
   // Transcript view preferences
   const [autoScroll, setAutoScroll] = useState(true);
@@ -234,6 +241,9 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     setIsAutoGlossing(false);
     setGlossProgress(null);
     setCurrentTime(0);
+    setCurrentRecordId('');
+    setPendingScrollSubtitleId(null);
+    latestPositionRef.current = { time: 0, subId: null };
     try {
       localStorage.removeItem(SESSION_STORAGE_KEY);
     } catch (e) {}
@@ -368,12 +378,25 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         if (parsed.videoTitle) setVideoTitle(parsed.videoTitle);
         if (parsed.videoUrl) setVideoUrl(parsed.videoUrl);
         if (parsed.videoLanguage) setVideoLanguage(parsed.videoLanguage);
+        if (parsed.currentRecordId) setCurrentRecordId(parsed.currentRecordId);
         if (Array.isArray(parsed.subtitles) && parsed.subtitles.length > 0) {
           const normalized = normalizeSubtitlesSafely(parsed.subtitles, parsed.subtitleFormat || 'sub');
           launchProgressiveTokenization(normalized, targetLang);
         }
         if (parsed.subtitleFormat) setSubtitleFormat(parsed.subtitleFormat);
         if (parsed.subtitleSource) setSubtitleSource(parsed.subtitleSource);
+
+        if (typeof parsed.lastPlaybackTime === 'number' && parsed.lastPlaybackTime > 0) {
+          const savedTime = parsed.lastPlaybackTime;
+          setCurrentTime(savedTime);
+          setSeekToTime({ time: savedTime, autoPlay: false });
+          latestPositionRef.current.time = savedTime;
+        }
+        if (parsed.lastSubtitleId) {
+          setPendingScrollSubtitleId(parsed.lastSubtitleId);
+          latestPositionRef.current.subId = parsed.lastSubtitleId;
+        }
+
         if (parsed.preferences) {
           if (typeof parsed.preferences.autoScroll === 'boolean') {
             setAutoScroll(parsed.preferences.autoScroll);
@@ -417,6 +440,9 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         videoTitle,
         videoUrl,
         videoLanguage,
+        currentRecordId,
+        lastPlaybackTime: latestPositionRef.current?.time ?? currentTime,
+        lastSubtitleId: latestPositionRef.current?.subId ?? pendingScrollSubtitleId,
         subtitles: safeSubtitles,
         subtitleFormat,
         subtitleSource,
@@ -431,10 +457,89 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     } catch (e) {
       console.warn('Failed to save YouTube Reader session to storage:', e);
     }
-  }, [videoId, videoTitle, videoUrl, videoLanguage, subtitles, subtitleFormat, subtitleSource, autoScroll, fontSize, showTimestamps, interlinearMode]);
+  }, [videoId, videoTitle, videoUrl, videoLanguage, currentRecordId, currentTime, pendingScrollSubtitleId, subtitles, subtitleFormat, subtitleSource, autoScroll, fontSize, showTimestamps, interlinearMode]);
 
-  // Handlers
+  // Throttled playback position persistence:
+  // Saves current time and active subtitle ID every 1.5s to 2s without freezing or overloading IndexedDB.
+  const flushPlaybackPosition = useCallback(() => {
+    if (saveThrottlerRef.current.timer) {
+      clearTimeout(saveThrottlerRef.current.timer);
+      saveThrottlerRef.current.timer = null;
+    }
+    const { time, subId } = latestPositionRef.current;
+    if (currentRecordId && typeof time === 'number') {
+      updateTranscriptPlaybackPosition(currentRecordId, time, subId).catch(err => {
+        console.warn('Failed to flush playback position:', err);
+      });
+      saveThrottlerRef.current.lastSavedTime = Date.now();
+    }
+  }, [currentRecordId]);
+
+  const handleTimeUpdate = useCallback((newTime) => {
+    setCurrentTime(newTime);
+    latestPositionRef.current.time = newTime;
+
+    // Identify active subtitle line ID for this timestamp
+    if (Array.isArray(subtitles) && subtitles.length > 0) {
+      const activeLine = subtitles.find(s => {
+        if (!s || typeof s.startTime !== 'number') return false;
+        const end = typeof s.endTime === 'number' && s.endTime > s.startTime ? s.endTime : s.startTime + 4.0;
+        return newTime >= s.startTime && newTime <= end;
+      });
+      if (activeLine?.id) {
+        latestPositionRef.current.subId = activeLine.id;
+      }
+    }
+
+    if (!currentRecordId) return;
+
+    const now = Date.now();
+    if (now - saveThrottlerRef.current.lastSavedTime >= 2000) {
+      // Throttle interval passed, save immediately
+      saveThrottlerRef.current.lastSavedTime = now;
+      updateTranscriptPlaybackPosition(
+        currentRecordId,
+        latestPositionRef.current.time,
+        latestPositionRef.current.subId
+      ).catch(() => {});
+    } else if (!saveThrottlerRef.current.timer) {
+      // Queue next throttled update
+      saveThrottlerRef.current.timer = setTimeout(() => {
+        saveThrottlerRef.current.timer = null;
+        saveThrottlerRef.current.lastSavedTime = Date.now();
+        if (currentRecordId) {
+          updateTranscriptPlaybackPosition(
+            currentRecordId,
+            latestPositionRef.current.time,
+            latestPositionRef.current.subId
+          ).catch(() => {});
+        }
+      }, 2000);
+    }
+  }, [currentRecordId, subtitles]);
+
+  // Flush position on pause (state 2) or end (state 0)
+  const handlePlayerStateChange = useCallback((state) => {
+    // 2 === PAUSED, 0 === ENDED
+    if (state === 2 || state === 0) {
+      flushPlaybackPosition();
+    }
+  }, [flushPlaybackPosition]);
+
+  // Flush position on beforeunload / tab close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushPlaybackPosition();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushPlaybackPosition();
+    };
+  }, [flushPlaybackPosition]);
+
   const handleImportVideo = (newVideoId, newUrl) => {
+    flushPlaybackPosition();
     if (glossAbortControllerRef.current) {
       glossAbortControllerRef.current.abort();
       glossAbortControllerRef.current = null;
@@ -446,6 +551,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     setVideoId(newVideoId);
     setVideoUrl(newUrl);
     setCurrentTime(0);
+    setCurrentRecordId('');
+    latestPositionRef.current = { time: 0, subId: null };
     setIsUrlImporterOpen(false);
 
     // Auto-check if a saved transcript exists in the library for this video
@@ -460,7 +567,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       .catch((err) => console.warn('Error checking saved transcripts for video:', err));
   };
 
-  const handleSubtitlesLoaded = useCallback((newSubtitles, format, sourceName) => {
+  const handleSubtitlesLoaded = useCallback(async (newSubtitles, format, sourceName) => {
+    flushPlaybackPosition();
     if (glossAbortControllerRef.current) {
       glossAbortControllerRef.current.abort();
       glossAbortControllerRef.current = null;
@@ -482,9 +590,43 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       return;
     }
 
+    const subHash = computeSubtitleHash(normalized);
+    const recId = getLibraryKey(videoId || 'novideo', subHash, targetLang);
+    setCurrentRecordId(recId);
+
+    // Check if transcript already exists in library ($0 Groq cost reuse)
+    try {
+      const existing = await getTranscriptFromLibrary(videoId || 'novideo', subHash, targetLang);
+      if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
+        handleLoadFromLibrary(existing);
+        return;
+      }
+    } catch (e) {
+      console.warn('Error checking library for existing transcript:', e);
+    }
+
     // Launch progressive non-blocking tokenization
     launchProgressiveTokenization(normalized, targetLang);
-  }, [targetLang, launchProgressiveTokenization]);
+
+    // Persist initial record in library with position 0
+    saveTranscriptToLibrary({
+      id: recId,
+      videoId: videoId || 'novideo',
+      videoTitle: videoTitle || `YouTube Video (${videoId || 'novideo'})`,
+      videoUrl: videoUrl || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : ''),
+      targetLanguage: targetLang,
+      nativeLanguage: nativeLang,
+      sourceType: sourceName || 'srt',
+      subtitleHash: subHash,
+      subtitlesCount: normalized.length,
+      completedLinesCount: 0,
+      isComplete: false,
+      format: format || 'srt',
+      subtitles: normalized,
+      lastPlaybackTime: 0,
+      lastSubtitleId: null
+    }).then(() => refreshLibraryCount()).catch(() => {});
+  }, [videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition]);
 
   const handleFileUpload = (file) => {
     if (!file) return;
@@ -506,15 +648,26 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
 
   const handleLoadFromLibrary = (record) => {
     if (!record) return;
+    flushPlaybackPosition();
     if (glossAbortControllerRef.current) {
       glossAbortControllerRef.current.abort();
       glossAbortControllerRef.current = null;
     }
+    if (progressiveTokenizeRef.current) {
+      progressiveTokenizeRef.current.abort();
+      progressiveTokenizeRef.current = null;
+    }
+
+    const subHash = record.subtitleHash || (Array.isArray(record.subtitles) ? computeSubtitleHash(record.subtitles) : '');
+    const recId = record.id || getLibraryKey(record.videoId, subHash, targetLang);
+    setCurrentRecordId(recId);
+
     if (record.videoId) setVideoId(record.videoId);
     if (record.videoUrl) setVideoUrl(record.videoUrl);
     if (record.videoTitle) setVideoTitle(record.videoTitle);
     if (record.sourceType) setSubtitleSource(record.sourceType);
     if (record.format) setSubtitleFormat(record.format);
+
     if (Array.isArray(record.subtitles)) {
       setSubtitles(record.subtitles);
       setGlossProgress({
@@ -525,8 +678,49 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         failed: 0
       });
     }
-    setCurrentTime(0);
+
+    // Restore saved playback position and subtitle marker
+    const savedTime = typeof record.lastPlaybackTime === 'number' && !isNaN(record.lastPlaybackTime)
+      ? Math.max(0, record.lastPlaybackTime)
+      : 0;
+    const savedSubId = record.lastSubtitleId || null;
+
+    setCurrentTime(savedTime);
+    setSeekToTime({ time: savedTime, autoPlay: false });
+    latestPositionRef.current = { time: savedTime, subId: savedSubId };
+
+    if (savedSubId) {
+      setPendingScrollSubtitleId(savedSubId);
+    } else {
+      setPendingScrollSubtitleId(null);
+    }
+
     refreshLibraryCount();
+  };
+
+  // Handle deletion of transcript from library
+  const handleTranscriptDeleted = (deletedId) => {
+    refreshLibraryCount();
+    if (currentRecordId === deletedId) {
+      if (glossAbortControllerRef.current) {
+        glossAbortControllerRef.current.abort();
+        glossAbortControllerRef.current = null;
+      }
+      if (progressiveTokenizeRef.current) {
+        progressiveTokenizeRef.current.abort();
+        progressiveTokenizeRef.current = null;
+      }
+      setSubtitles([]);
+      setSubtitleFormat(null);
+      setSubtitleSource('');
+      setCurrentRecordId('');
+      setCurrentTime(0);
+      setPendingScrollSubtitleId(null);
+      latestPositionRef.current = { time: 0, subId: null };
+      try {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+      } catch (e) {}
+    }
   };
 
   const handlePlayerReady = (player) => {
@@ -543,6 +737,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   };
 
   const handleClearSubtitles = () => {
+    flushPlaybackPosition();
     if (glossAbortControllerRef.current) {
       glossAbortControllerRef.current.abort();
       glossAbortControllerRef.current = null;
@@ -551,9 +746,13 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     setSubtitleFormat(null);
     setSubtitleSource('');
     setGlossProgress(null);
+    setCurrentRecordId('');
+    setPendingScrollSubtitleId(null);
+    latestPositionRef.current = { time: 0, subId: null };
   };
 
   const handleResetSession = () => {
+    flushPlaybackPosition();
     if (glossAbortControllerRef.current) {
       glossAbortControllerRef.current.abort();
       glossAbortControllerRef.current = null;
@@ -565,6 +764,9 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     setSubtitleFormat(null);
     setSubtitleSource('');
     setCurrentTime(0);
+    setCurrentRecordId('');
+    setPendingScrollSubtitleId(null);
+    latestPositionRef.current = { time: 0, subId: null };
     setSearchQuery('');
     setGlossProgress(null);
     try {
@@ -703,7 +905,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
           <div className="w-full max-w-2xl mx-auto rounded-2xl overflow-hidden shadow-xl shadow-black/40 border border-[#3d190f]">
             <YouTubePlayer
               videoId={videoId}
-              onTimeUpdate={setCurrentTime}
+              onTimeUpdate={handleTimeUpdate}
+              onPlayerStateChange={handlePlayerStateChange}
               onPlayerReady={handlePlayerReady}
               seekToTime={seekToTime}
               playbackRate={playbackRate}
@@ -740,6 +943,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             searchQuery={searchQuery}
             interlinearMode={interlinearMode}
             targetLang={targetLang}
+            pendingScrollSubtitleId={pendingScrollSubtitleId}
+            onScrollComplete={() => setPendingScrollSubtitleId(null)}
           />
         </div>
       )}
@@ -770,7 +975,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
           refreshLibraryCount();
         }}
         onLoadTranscript={handleLoadFromLibrary}
-        onDeleteTranscript={refreshLibraryCount}
+        onDeleteTranscript={handleTranscriptDeleted}
         currentVideoId={videoId}
       />
       </div>

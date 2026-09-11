@@ -16,7 +16,9 @@ export function Transcript({
   showTimestamps = true,
   searchQuery = '',
   interlinearMode = true,
-  targetLang = 'zh'
+  targetLang = 'zh',
+  pendingScrollSubtitleId = null,
+  onScrollComplete = null
 }) {
   const containerRef = useRef(null);
   const activeLineRef = useRef(null);
@@ -84,6 +86,27 @@ export function Transcript({
     }
   }, [activeIndex, autoScroll]);
 
+  // 4. Dedicated scroll to restored subtitle line (e.g. on library restoration)
+  useEffect(() => {
+    if (!pendingScrollSubtitleId || !containerRef.current) return;
+
+    const timer = setTimeout(() => {
+      const targetEl = containerRef.current?.querySelector(`[data-subtitle-id="${pendingScrollSubtitleId}"]`);
+      if (targetEl && containerRef.current) {
+        const container = containerRef.current;
+        const elemTop = targetEl.offsetTop - container.offsetTop;
+        const containerHeight = container.clientHeight;
+        container.scrollTo({
+          top: Math.max(0, elemTop - containerHeight / 3),
+          behavior: 'smooth'
+        });
+        if (onScrollComplete) onScrollComplete();
+      }
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [pendingScrollSubtitleId, subtitles, onScrollComplete]);
+
   // Detect manual user scroll to avoid fighting the user
   const handleScroll = () => {
     userInteractingRef.current = true;
@@ -129,6 +152,7 @@ export function Transcript({
         return (
           <div
             key={line.id || idx}
+            data-subtitle-id={line.id}
             ref={isCurrentActive ? activeLineRef : null}
           >
             <TranscriptLine

@@ -6,6 +6,7 @@ export function YouTubePlayer({
   videoId,
   onTimeUpdate,
   onPlayerReady,
+  onPlayerStateChange = null,
   seekToTime = null,
   playbackRate = 1
 }) {
@@ -55,6 +56,14 @@ export function YouTubePlayer({
                 event.target.setPlaybackRate(playbackRate);
               } catch (e) {}
             }
+            if (seekToTime !== null && typeof seekToTime.time === 'number' && typeof event.target.seekTo === 'function') {
+              try {
+                event.target.seekTo(seekToTime.time, true);
+                if (seekToTime.autoPlay && typeof event.target.playVideo === 'function') {
+                  event.target.playVideo();
+                }
+              } catch (e) {}
+            }
             if (onPlayerReady) onPlayerReady(event.target);
           },
           onStateChange: (event) => {
@@ -64,6 +73,7 @@ export function YouTubePlayer({
             } else {
               stopTrackingTime();
             }
+            if (onPlayerStateChange) onPlayerStateChange(event.data);
           },
           onError: (event) => {
             console.warn('YouTube Player error code:', event.data);

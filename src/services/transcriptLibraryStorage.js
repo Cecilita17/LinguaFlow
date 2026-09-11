@@ -106,6 +106,17 @@ export async function saveTranscriptToLibrary(record) {
   const subHash = record.subtitleHash || computeSubtitleHash(record.subtitles);
   const id = record.id || getLibraryKey(record.videoId, subHash, targetLang);
 
+  const existingMemory = memoryStore.get(id);
+
+  // Preserve existing lastPlaybackTime / lastSubtitleId if not specified in incoming record
+  const effectivePlaybackTime = typeof record.lastPlaybackTime === 'number' && !isNaN(record.lastPlaybackTime)
+    ? Math.max(0, record.lastPlaybackTime)
+    : (typeof existingMemory?.lastPlaybackTime === 'number' ? existingMemory.lastPlaybackTime : 0);
+
+  const effectiveSubtitleId = record.lastSubtitleId !== undefined
+    ? (record.lastSubtitleId ? String(record.lastSubtitleId) : null)
+    : (existingMemory?.lastSubtitleId || null);
+
   const cleanRecord = {
     id,
     videoId: record.videoId,
@@ -120,7 +131,10 @@ export async function saveTranscriptToLibrary(record) {
     isComplete: Boolean(record.isComplete),
     format: record.format || 'srt',
     subtitles: record.subtitles,
-    createdAt: record.createdAt || new Date().toISOString(),
+    lastPlaybackTime: effectivePlaybackTime,
+    lastSubtitleId: effectiveSubtitleId,
+    lastUpdatedAt: record.lastUpdatedAt || new Date().toISOString(),
+    createdAt: record.createdAt || existingMemory?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
@@ -143,6 +157,63 @@ export async function saveTranscriptToLibrary(record) {
       };
     } catch (err) {
       console.warn('[TranscriptLibrary] Exception saving to IndexedDB:', err);
+      resolve(false);
+    }
+  });
+}
+
+/**
+ * Fast, lightweight updater for last playback position and subtitle marker.
+ * Persists lastPlaybackTime and lastSubtitleId without modifying subtitle contents.
+ * 
+ * @param {string} id - Transcript record ID (e.g. videoId_hash_targetLang)
+ * @param {number} playbackTime - Current playback time in seconds
+ * @param {string|null} subtitleId - Active subtitle line ID
+ * @returns {Promise<boolean>}
+ */
+export async function updateTranscriptPlaybackPosition(id, playbackTime, subtitleId = null) {
+  if (!id) return false;
+  const time = typeof playbackTime === 'number' && !isNaN(playbackTime) ? Math.max(0, playbackTime) : 0;
+  const subId = subtitleId ? String(subtitleId) : null;
+  const now = new Date().toISOString();
+
+  // 1. Update memoryStore immediately
+  if (memoryStore.has(id)) {
+    const mem = memoryStore.get(id);
+    if (mem) {
+      mem.lastPlaybackTime = time;
+      mem.lastSubtitleId = subId;
+      mem.lastUpdatedAt = now;
+      mem.updatedAt = now;
+    }
+  }
+
+  // 2. Persist to IndexedDB
+  const db = await openDatabase();
+  if (!db) return true;
+
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const getReq = store.get(id);
+
+      getReq.onsuccess = (e) => {
+        const record = e.target.result;
+        if (record) {
+          record.lastPlaybackTime = time;
+          record.lastSubtitleId = subId;
+          record.lastUpdatedAt = now;
+          record.updatedAt = now;
+          store.put(record);
+        }
+      };
+
+      transaction.oncomplete = () => resolve(true);
+      transaction.onerror = () => resolve(false);
+      transaction.onabort = () => resolve(false);
+    } catch (err) {
+      console.warn('[TranscriptLibrary] Error updating playback position:', err);
       resolve(false);
     }
   });
