@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'lucide-react';
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+import { CHINESE_OFFLINE_DICT } from '../services/languageGlossStrategies.js';
 
 export function ChatMessage({
   message,
@@ -169,7 +170,21 @@ export function ChatMessage({
           )}
         </div>
 
-        <div className="max-w-[88%] sm:max-w-[78%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-2xl rounded-tr-xs px-4 py-3 shadow-lg shadow-black/30 border border-rose-400/30">
+        {/* User Message Row with Delete Button on the Left */}
+        <div className="flex items-center justify-end gap-2 w-full">
+          {onDeleteMessage && (
+            <button
+              type="button"
+              onClick={() => onDeleteMessage(message.id)}
+              className="p-1.5 text-stone-400 hover:text-rose-500 hover:bg-rose-50/50 dark:hover:bg-stone-800 rounded-lg transition-colors cursor-pointer shrink-0 opacity-70 hover:opacity-100"
+              title={t('delete_message')}
+              aria-label={t('delete_message')}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+
+          <div className="max-w-[88%] sm:max-w-[78%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-2xl rounded-tr-xs px-4 py-3 shadow-lg shadow-black/30 border border-rose-400/30">
           {/* Main text display with RTL support for Arabic and Ruby Pinyin for Chinese */}
           <div
             dir={isArabic ? 'rtl' : 'ltr'}
@@ -307,20 +322,10 @@ export function ChatMessage({
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-amber-200" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
-              {onDeleteMessage && (
-                <button
-                  type="button"
-                  onClick={() => onDeleteMessage(message.id)}
-                  className="p-1 hover:text-rose-200 hover:bg-white/20 rounded-md transition-colors cursor-pointer text-white/80"
-                  title={t('delete_message')}
-                  aria-label={t('delete_message')}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
           </div>
         </div>
+      </div>
 
         {/* Chinese Writing Practice Modal */}
         {writingPracticeOpen && (
@@ -340,6 +345,147 @@ export function ChatMessage({
   // BOT MESSAGE BUBBLE
   const tokens = message.tokens || [];
 
+  // Reconcile message.text with tokens to guarantee 100% full text rendering without truncation
+  const botSegments = useMemo(() => {
+    const rawText = message.text || '';
+    if (!rawText) return [];
+
+    const isChinese = targetLang === 'zh';
+    const result = [];
+    let pos = 0;
+    let tIdx = 0;
+    const len = rawText.length;
+
+    const matchesTokenAtPos = (token, p) => {
+      if (!token) return null;
+      const tokenObj = typeof token === 'string' ? { word: token } : token;
+      const word = (tokenObj.word || tokenObj.text || '').trim();
+      const clean = (tokenObj.clean_word || '').trim();
+
+      if (word && rawText.startsWith(word, p)) {
+        return { length: word.length, tokenObj };
+      }
+      if (clean && rawText.startsWith(clean, p)) {
+        return { length: clean.length, tokenObj };
+      }
+      return null;
+    };
+
+    while (pos < len) {
+      const remaining = rawText.slice(pos);
+
+      // 1. Whitespace
+      const spaceMatch = remaining.match(/^(\s+)/);
+      if (spaceMatch) {
+        result.push({
+          type: 'space',
+          text: spaceMatch[1]
+        });
+        pos += spaceMatch[1].length;
+        continue;
+      }
+
+      // 2. Try matching next token from tokens array if available
+      if (tIdx < tokens.length) {
+        const match = matchesTokenAtPos(tokens[tIdx], pos);
+        if (match) {
+          result.push({
+            type: 'word',
+            text: rawText.slice(pos, pos + match.length),
+            token: match.tokenObj,
+            matchedFromTokens: true
+          });
+          pos += match.length;
+          tIdx++;
+          continue;
+        }
+
+        // Check if leading punctuation is present in text before token
+        const punctMatch = remaining.match(/^([.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/);
+        if (punctMatch) {
+          const pStr = punctMatch[1];
+          const afterPunct = pos + pStr.length;
+          const matchAfterPunct = matchesTokenAtPos(tokens[tIdx], afterPunct);
+          if (matchAfterPunct) {
+            result.push({
+              type: 'punctuation',
+              text: pStr
+            });
+            pos += pStr.length;
+            result.push({
+              type: 'word',
+              text: rawText.slice(pos, pos + matchAfterPunct.length),
+              token: matchAfterPunct.tokenObj,
+              matchedFromTokens: true
+            });
+            pos += matchAfterPunct.length;
+            tIdx++;
+            continue;
+          }
+        }
+      }
+
+      // 3. Fallback segmenting from text directly
+      const punctMatch = remaining.match(/^([.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/);
+      if (punctMatch) {
+        result.push({
+          type: 'punctuation',
+          text: punctMatch[1]
+        });
+        pos += punctMatch[1].length;
+        continue;
+      }
+
+      if (isChinese) {
+        let matchedLen = 1;
+        let matchedDict = null;
+        for (let l = Math.min(6, remaining.length); l >= 2; l--) {
+          const cand = remaining.slice(0, l);
+          if (CHINESE_OFFLINE_DICT && CHINESE_OFFLINE_DICT[cand]) {
+            matchedLen = l;
+            matchedDict = CHINESE_OFFLINE_DICT[cand];
+            break;
+          }
+        }
+        const wordStr = remaining.slice(0, matchedLen);
+        result.push({
+          type: 'word',
+          text: wordStr,
+          token: {
+            word: wordStr,
+            clean_word: wordStr,
+            translit: matchedDict?.pinyin || PINYIN_LEXICON[wordStr] || null
+          },
+          matchedFromTokens: false
+        });
+        pos += matchedLen;
+      } else {
+        const wordMatch = remaining.match(/^[^\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+/);
+        if (wordMatch) {
+          const wordStr = wordMatch[0];
+          result.push({
+            type: 'word',
+            text: wordStr,
+            token: {
+              word: wordStr,
+              clean_word: wordStr.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '')
+            },
+            matchedFromTokens: false
+          });
+          pos += wordStr.length;
+        } else {
+          result.push({
+            type: 'text',
+            text: rawText[pos]
+          });
+          pos += 1;
+        }
+      }
+    }
+
+    return result;
+  }, [message.text, tokens, targetLang]);
+
   return (
     <div className="flex flex-col items-start my-4 animate-fade-in group">
       <div className="flex items-center space-x-1.5 mb-1 px-1">
@@ -356,130 +502,126 @@ export function ChatMessage({
           <span>{t('tap_word_meaning')}</span>
         </div>
 
-        {/* Bot Interactive Text with RTL support for Arabic */}
+        {/* Bot Interactive Text with RTL support for Arabic and wrapping safeguard */}
         <div
           dir={isArabic ? 'rtl' : 'ltr'}
           className={`${
             isArabic
               ? 'font-arabic text-right text-lg sm:text-xl leading-loose tracking-normal'
               : 'text-left text-[15px] sm:text-base leading-relaxed tracking-wide font-normal'
-          } text-stone-900 flex flex-wrap items-baseline gap-x-0.5 gap-y-0.5`}
+          } text-stone-900 flex flex-wrap items-baseline gap-x-0.5 gap-y-0.5 break-words [overflow-wrap:anywhere]`}
         >
-          {tokens && tokens.length > 0 ? (
-            tokens.map((token, idx) => {
-              if (!token) return null;
-              const tokenObj = typeof token === 'string' ? { word: token } : token;
-              const wordStr = tokenObj.word || tokenObj.text || tokenObj.clean_word || '';
-              if (!wordStr) return null;
-              const clean = tokenObj.clean_word || wordStr.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '');
-              const isPunctuation = /^[\s.,!?;:()¿¡'"“”‘’]+$/.test(wordStr);
-
-              if (isPunctuation) {
-                return (
-                  <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="text-stone-400 px-0.5">
-                    {wordStr}
-                  </span>
-                );
+          {botSegments.map((segment, idx) => {
+            if (segment.type === 'space') {
+              if (segment.text.includes('\n')) {
+                return <div key={idx} className="basis-full h-2" />;
               }
+              return (
+                <span key={idx} className="whitespace-pre-wrap select-text">
+                  {segment.text}
+                </span>
+              );
+            }
 
-              if (targetLang === 'zh') {
-                const tokenTranslit = resolveTranslit(tokenObj);
-                const { baseWord, cleanTranslit, punctuation } = splitChineseWordAndPunctuation(wordStr, tokenTranslit);
-                const cleanForLookup = clean || baseWord;
+            if (segment.type === 'punctuation') {
+              return (
+                <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="text-stone-400 px-0.5 select-text">
+                  {segment.text}
+                </span>
+              );
+            }
 
-                return (
-                  <React.Fragment key={idx}>
-                    {baseWord && (
-                      <button
-                        type="button"
-                        dir="ltr"
-                        onClick={() => onWordClick(cleanForLookup, message.vocabulary?.[cleanForLookup] || null)}
-                        className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 transition-all cursor-pointer group/item text-left"
-                        title={`Clic para ver significado de "${cleanForLookup}"`}
-                      >
-                        {showTransliteration && cleanTranslit ? (
-                          <ruby className="inline-flex flex-col items-center">
-                            <rt dir="ltr" className="text-[11px] sm:text-[12px] text-sky-700 font-bold leading-tight select-none">
-                              {cleanTranslit}
-                            </rt>
-                            <span
-                              dir="ltr"
-                              className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
-                            >
-                              {baseWord}
-                            </span>
-                          </ruby>
-                        ) : (
+            if (segment.type === 'text') {
+              return (
+                <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="select-text">
+                  {segment.text}
+                </span>
+              );
+            }
+
+            const tokenObj = segment.token || { word: segment.text };
+            const wordStr = segment.text;
+            const clean = tokenObj.clean_word || wordStr.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '').trim();
+
+            if (targetLang === 'zh') {
+              const tokenTranslit = resolveTranslit(tokenObj);
+              const { baseWord, cleanTranslit, punctuation } = splitChineseWordAndPunctuation(wordStr, tokenTranslit);
+              const cleanForLookup = clean || baseWord;
+
+              return (
+                <React.Fragment key={idx}>
+                  {baseWord && (
+                    <button
+                      type="button"
+                      dir="ltr"
+                      onClick={() => onWordClick(cleanForLookup, message.vocabulary?.[cleanForLookup] || null)}
+                      className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 transition-all cursor-pointer group/item text-left"
+                      title={`Clic para ver significado de "${cleanForLookup}"`}
+                    >
+                      {showTransliteration && cleanTranslit ? (
+                        <ruby className="inline-flex flex-col items-center">
+                          <rt dir="ltr" className="text-[11px] sm:text-[12px] text-sky-700 font-bold leading-tight select-none">
+                            {cleanTranslit}
+                          </rt>
                           <span
                             dir="ltr"
                             className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
                           >
                             {baseWord}
                           </span>
-                        )}
-                      </button>
-                    )}
-                    {punctuation && (
-                      <span className="text-stone-500 text-[15px] sm:text-base font-normal select-text">
-                        {punctuation}
-                      </span>
-                    )}
-                  </React.Fragment>
-                );
-              }
+                        </ruby>
+                      ) : (
+                        <span
+                          dir="ltr"
+                          className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
+                        >
+                          {baseWord}
+                        </span>
+                      )}
+                    </button>
+                  )}
+                  {punctuation && (
+                    <span className="text-stone-500 text-[15px] sm:text-base font-normal select-text">
+                      {punctuation}
+                    </span>
+                  )}
+                </React.Fragment>
+              );
+            }
 
-              const tokenTranslit = resolveTranslit(tokenObj);
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  dir={isArabic ? 'rtl' : 'ltr'}
-                  onClick={() => onWordClick(clean, message.vocabulary?.[clean] || null)}
-                  className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 transition-all cursor-pointer group/item"
-                  title={`Clic para ver significado de "${clean}"`}
-                >
-                  {showTransliteration && tokenTranslit ? (
-                    <ruby className="inline-flex flex-col items-center">
-                      <rt dir="ltr" className="text-[11px] sm:text-[12px] text-sky-700 font-bold leading-tight select-none">
-                        {tokenTranslit}
-                      </rt>
-                      <span
-                        dir={isArabic ? 'rtl' : 'ltr'}
-                        className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
-                      >
-                        {wordStr}
-                      </span>
-                    </ruby>
-                  ) : (
+            const tokenTranslit = resolveTranslit(tokenObj);
+            return (
+              <button
+                key={idx}
+                type="button"
+                dir={isArabic ? 'rtl' : 'ltr'}
+                onClick={() => onWordClick(clean, message.vocabulary?.[clean] || null)}
+                className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 transition-all cursor-pointer group/item"
+                title={`Clic para ver significado de "${clean}"`}
+              >
+                {showTransliteration && tokenTranslit ? (
+                  <ruby className="inline-flex flex-col items-center">
+                    <rt dir="ltr" className="text-[11px] sm:text-[12px] text-sky-700 font-bold leading-tight select-none">
+                      {tokenTranslit}
+                    </rt>
                     <span
                       dir={isArabic ? 'rtl' : 'ltr'}
                       className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
                     >
                       {wordStr}
                     </span>
-                  )}
-                </button>
-              );
-            })
-          ) : (
-            (message.text || '').split(/(\s+)/).map((segment, idx) => {
-              if (/^\s+$/.test(segment)) {
-                return <span key={idx}> </span>;
-              }
-              const clean = segment.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '');
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  dir={isArabic ? 'rtl' : 'ltr'}
-                  onClick={() => onWordClick(clean, message.vocabulary?.[clean] || null)}
-                  className="hover:bg-rose-100/70 hover:text-rose-950 rounded px-0.5 underline decoration-dotted decoration-stone-300 underline-offset-2 cursor-pointer font-medium"
-                >
-                  {segment}
-                </button>
-              );
-            })
-          )}
+                  </ruby>
+                ) : (
+                  <span
+                    dir={isArabic ? 'rtl' : 'ltr'}
+                    className="underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium"
+                  >
+                    {wordStr}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Translation Box (always LTR in native language) */}
