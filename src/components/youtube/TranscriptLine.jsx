@@ -20,8 +20,12 @@ export function TranscriptLine({
   targetLang = 'zh',
   onWordClick = null // Prepared for future word-level glossary lookup
 }) {
-  if (!line) return null;
-  const { startTime = 0, text = '', tokens = [], glosses = [] } = line;
+  if (!line || typeof line !== 'object') return null;
+  const startTime = typeof line.startTime === 'number' && !isNaN(line.startTime) ? line.startTime : 0;
+  const rawText = typeof line.text === 'string' ? line.text : (line.text != null ? String(line.text) : '');
+  const text = rawText;
+  const tokens = Array.isArray(line.tokens) ? line.tokens : [];
+  const glosses = Array.isArray(line.glosses) ? line.glosses : [];
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
   const isComplete = hasGloss || isGlossComplete(line, targetLang);
@@ -39,20 +43,25 @@ export function TranscriptLine({
 
   // Search highlighting helper
   const renderHighlightedText = (content) => {
-    if (!searchQuery || !searchQuery.trim()) return content;
-    const query = searchQuery.trim();
-    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    const parts = content.split(regex);
+    const str = content != null ? String(content) : '';
+    if (!searchQuery || !searchQuery.trim() || !str) return str;
+    try {
+      const query = searchQuery.trim();
+      const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      const parts = str.split(regex);
 
-    return parts.map((part, i) =>
-      regex.test(part) ? (
-        <mark key={i} className="bg-amber-400 text-stone-900 font-bold px-0.5 rounded">
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
+      return parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark key={i} className="bg-amber-400 text-stone-900 font-bold px-0.5 rounded">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      );
+    } catch {
+      return str;
+    }
   };
 
   const handleLineClick = () => {
@@ -138,16 +147,32 @@ export function TranscriptLine({
                 }`}
               >
                 {tokens.map((tokenObj, idx) => {
-                  const word = typeof tokenObj === 'string' ? tokenObj : (tokenObj.word || tokenObj.text);
-                  const auxiliary = isChinese ? (tokenObj.auxiliary || tokenObj.pinyin || null) : null;
-                  const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : (glosses && glosses[idx]);
-                  const isPunctuation = typeof tokenObj === 'object'
+                  if (!tokenObj) return null;
+                  const rawWord = typeof tokenObj === 'string'
+                    ? tokenObj
+                    : (tokenObj && typeof tokenObj === 'object' ? (tokenObj.word ?? tokenObj.text) : '');
+                  const word = rawWord != null ? String(rawWord) : '';
+                  if (!word) return null;
+
+                  const rawAux = isChinese && tokenObj && typeof tokenObj === 'object'
+                    ? (tokenObj.auxiliary ?? tokenObj.pinyin ?? null)
+                    : null;
+                  const auxiliary = rawAux != null ? String(rawAux).trim() : null;
+
+                  const rawGlossVal = tokenObj && typeof tokenObj === 'object'
+                    ? tokenObj.gloss
+                    : (glosses && glosses[idx]);
+                  const rawGloss = rawGlossVal != null ? String(rawGlossVal).trim() : null;
+
+                  const isPunctuation = tokenObj && typeof tokenObj === 'object' && typeof tokenObj.isPunctuation === 'boolean'
                     ? tokenObj.isPunctuation
                     : PUNCTUATION_REGEX.test(word);
 
                   // Never display auxiliary as gloss or word as gloss (except when gloss is a valid word like 'de')
-                  const isLegitSameWord = word === '的' && rawGloss?.toLowerCase() === 'de';
-                  const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameWord) && rawGloss.toLowerCase() !== word?.toLowerCase()) ? rawGloss : null;
+                  const wordLower = word.toLowerCase();
+                  const rawGlossLower = rawGloss ? rawGloss.toLowerCase() : null;
+                  const isLegitSameWord = word === '的' && rawGlossLower === 'de';
+                  const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameWord) && rawGlossLower !== wordLower) ? rawGloss : null;
 
                   if (isPunctuation) {
                     return (

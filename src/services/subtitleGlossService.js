@@ -74,8 +74,28 @@ export function tokenizeAndGlossLineOffline(rawText, targetLang = 'zh') {
   const text = rawText.trim();
   if (!text) return [];
 
-  const strategy = getLanguageGlossStrategy(targetLang);
-  return strategy.tokenize(text);
+  try {
+    const strategy = getLanguageGlossStrategy(targetLang);
+    if (!strategy || typeof strategy.tokenize !== 'function') return [];
+    const tokens = strategy.tokenize(text);
+    return Array.isArray(tokens) ? tokens : [];
+  } catch (err) {
+    console.warn(`[tokenizeAndGlossLineOffline] Fallback tokenization for lang "${targetLang}":`, err);
+    try {
+      const parts = text.split(/\s+/).filter(Boolean);
+      return parts.map(w => ({
+        text: w,
+        word: w,
+        auxiliary: null,
+        pinyin: null,
+        translit: null,
+        gloss: null,
+        isPunctuation: PUNCTUATION_REGEX.test(w)
+      }));
+    } catch {
+      return [];
+    }
+  }
 }
 
 /**

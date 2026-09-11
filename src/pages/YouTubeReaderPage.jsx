@@ -29,9 +29,43 @@ import {
   Pause,
   Play
 } from 'lucide-react';
+import { ErrorBoundary } from '../components/common/ErrorBoundary.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 const SESSION_STORAGE_KEY = 'linguaflow_youtube_reader_session';
+
+/**
+ * Normalizes an array of raw subtitle objects with safe defaults,
+ * filtering out any completely empty or invalid entries.
+ */
+function normalizeSubtitlesSafely(rawSubs, format = 'sub') {
+  if (!Array.isArray(rawSubs)) return [];
+  const normalized = [];
+  for (let i = 0; i < rawSubs.length; i++) {
+    const item = rawSubs[i];
+    if (!item || typeof item !== 'object') continue;
+    const rawText = typeof item.text === 'string' ? item.text : (item.text != null ? String(item.text) : '');
+    const text = rawText.trim();
+    if (!text) continue;
+
+    const startTime = typeof item.startTime === 'number' && !isNaN(item.startTime) && isFinite(item.startTime)
+      ? Math.max(0, item.startTime)
+      : i * 3.5;
+    const endTime = typeof item.endTime === 'number' && !isNaN(item.endTime) && isFinite(item.endTime)
+      ? Math.max(startTime, item.endTime)
+      : startTime + 3.0;
+
+    normalized.push({
+      id: item.id ? String(item.id) : `${format}_${i + 1}`,
+      startTime,
+      endTime,
+      text,
+      tokens: Array.isArray(item.tokens) && item.tokens.length > 0 ? item.tokens : [],
+      glosses: Array.isArray(item.glosses) ? item.glosses : []
+    });
+  }
+  return normalized;
+}
 
 export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey = '' }) {
   const { isSpanish } = useSiteLanguage();
@@ -74,6 +108,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
 
   // Abort controller ref to stop / pause glossing
   const glossAbortControllerRef = useRef(null);
+  const progressiveTokenizeRef = useRef(null);
 
   // Refresh saved transcripts count
   const refreshLibraryCount = useCallback(async () => {
@@ -85,13 +120,122 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     }
   }, []);
 
-  // Cleanup in-flight glossing on unmount
+  // Cleanup in-flight glossing and progressive tokenization on unmount
   useEffect(() => {
     return () => {
       if (glossAbortControllerRef.current) {
         glossAbortControllerRef.current.abort();
       }
+      if (progressiveTokenizeRef.current) {
+        progressiveTokenizeRef.current.abort();
+      }
     };
+  }, []);
+
+  // Progressive tokenization processor: tokenizes initial 50 lines for instant display,
+  // then enriches remaining lines in asynchronous non-blocking batches without freezing UI
+  const launchProgressiveTokenization = useCallback((normalizedList, lang) => {
+    if (progressiveTokenizeRef.current) {
+      progressiveTokenizeRef.current.abort();
+      progressiveTokenizeRef.current = null;
+    }
+
+    const INITIAL_SYNC_LIMIT = 50;
+    const CHUNK_SIZE = 100;
+
+    // Fast initial display: only tokenize the first 50 lines synchronously
+    const initialItems = normalizedList.map((sub, idx) => {
+      if (sub.tokens && sub.tokens.length > 0) return sub;
+      if (idx < INITIAL_SYNC_LIMIT) {
+        return {
+          ...sub,
+          tokens: tokenizeAndGlossLineOffline(sub.text, lang)
+        };
+      }
+      return sub;
+    });
+
+    setSubtitles(initialItems);
+
+    const completed = initialItems.filter(s => isGlossComplete(s, lang)).length;
+    setGlossProgress({
+      total: initialItems.length,
+      completed,
+      isGlossing: false,
+      isPaused: false,
+      isComplete: initialItems.length > 0 && completed === initialItems.length,
+      failed: 0
+    });
+
+    const needsTokenizing = initialItems.some((s, idx) => idx >= INITIAL_SYNC_LIMIT && (!s.tokens || s.tokens.length === 0));
+    if (!needsTokenizing) return;
+
+    const abortCtrl = { aborted: false };
+    progressiveTokenizeRef.current = {
+      abort: () => { abortCtrl.aborted = true; }
+    };
+
+    let currentIndex = INITIAL_SYNC_LIMIT;
+
+    const processNextChunk = () => {
+      if (abortCtrl.aborted) return;
+
+      const endIndex = Math.min(currentIndex + CHUNK_SIZE, initialItems.length);
+      const chunkResults = [];
+
+      for (let i = currentIndex; i < endIndex; i++) {
+        const sub = initialItems[i];
+        if (sub && (!sub.tokens || sub.tokens.length === 0)) {
+          chunkResults.push({
+            index: i,
+            tokens: tokenizeAndGlossLineOffline(sub.text, lang)
+          });
+        }
+      }
+
+      if (abortCtrl.aborted) return;
+
+      if (chunkResults.length > 0) {
+        setSubtitles(prev => {
+          if (!prev || prev.length === 0) return prev;
+          const updated = [...prev];
+          for (const { index, tokens } of chunkResults) {
+            if (updated[index]) {
+              updated[index] = { ...updated[index], tokens };
+            }
+          }
+          return updated;
+        });
+      }
+
+      currentIndex = endIndex;
+      if (currentIndex < initialItems.length && !abortCtrl.aborted) {
+        setTimeout(processNextChunk, 16);
+      }
+    };
+
+    setTimeout(processNextChunk, 32);
+  }, []);
+
+  // Safe reset reader action (e.g. on ErrorBoundary recovery or complete clear)
+  const handleResetReader = useCallback(() => {
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+      glossAbortControllerRef.current = null;
+    }
+    if (progressiveTokenizeRef.current) {
+      progressiveTokenizeRef.current.abort();
+      progressiveTokenizeRef.current = null;
+    }
+    setSubtitles([]);
+    setSubtitleFormat(null);
+    setSubtitleSource('');
+    setIsAutoGlossing(false);
+    setGlossProgress(null);
+    setCurrentTime(0);
+    try {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch (e) {}
   }, []);
 
   // Start or resume auto-glossing with abortable controller
@@ -224,25 +368,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         if (parsed.videoUrl) setVideoUrl(parsed.videoUrl);
         if (parsed.videoLanguage) setVideoLanguage(parsed.videoLanguage);
         if (Array.isArray(parsed.subtitles) && parsed.subtitles.length > 0) {
-          // Offline session restoration: load saved glosses directly with ZERO AI calls!
-          const prepared = parsed.subtitles.map(sub => {
-            if (Array.isArray(sub.tokens) && sub.tokens.length > 0) return sub;
-            return {
-              ...sub,
-              tokens: tokenizeAndGlossLineOffline(sub.text || '', targetLang)
-            };
-          });
-          setSubtitles(prepared);
-          const completed = prepared.filter(s => isGlossComplete(s, targetLang)).length;
-          setGlossProgress({
-            total: prepared.length,
-            completed,
-            isGlossing: false,
-            isPaused: false,
-            isComplete: prepared.length > 0 && completed === prepared.length,
-            failed: 0
-          });
-          setIsAutoGlossing(false);
+          const normalized = normalizeSubtitlesSafely(parsed.subtitles, parsed.subtitleFormat || 'sub');
+          launchProgressiveTokenization(normalized, targetLang);
         }
         if (parsed.subtitleFormat) setSubtitleFormat(parsed.subtitleFormat);
         if (parsed.subtitleSource) setSubtitleSource(parsed.subtitleSource);
@@ -264,17 +391,32 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     } catch (e) {
       console.warn('Failed to load YouTube Reader session from storage:', e);
     }
-  }, [targetLang, nativeLang, refreshLibraryCount]);
+  }, [targetLang, nativeLang, refreshLibraryCount, launchProgressiveTokenization]);
 
-  // 2. Persist session when critical state changes
+  // 2. Persist session when critical state changes (quota-safe)
   useEffect(() => {
     try {
+      // If subtitle count is very large, save a lightweight version to prevent exceeding localStorage quota
+      const safeSubtitles = (subtitles || []).map(s => {
+        if (subtitles.length > 1000 && (!s.tokens || !s.tokens.some(t => t && t.gloss))) {
+          return {
+            id: s.id,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            text: s.text,
+            tokens: [],
+            glosses: s.glosses || []
+          };
+        }
+        return s;
+      });
+
       const sessionData = {
         videoId,
         videoTitle,
         videoUrl,
         videoLanguage,
-        subtitles,
+        subtitles: safeSubtitles,
         subtitleFormat,
         subtitleSource,
         preferences: {
@@ -296,6 +438,10 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       glossAbortControllerRef.current.abort();
       glossAbortControllerRef.current = null;
     }
+    if (progressiveTokenizeRef.current) {
+      progressiveTokenizeRef.current.abort();
+      progressiveTokenizeRef.current = null;
+    }
     setVideoId(newVideoId);
     setVideoUrl(newUrl);
     setCurrentTime(0);
@@ -313,35 +459,31 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       .catch((err) => console.warn('Error checking saved transcripts for video:', err));
   };
 
-  const handleSubtitlesLoaded = (newSubtitles, format, sourceName) => {
+  const handleSubtitlesLoaded = useCallback((newSubtitles, format, sourceName) => {
     if (glossAbortControllerRef.current) {
       glossAbortControllerRef.current.abort();
       glossAbortControllerRef.current = null;
     }
+    if (progressiveTokenizeRef.current) {
+      progressiveTokenizeRef.current.abort();
+      progressiveTokenizeRef.current = null;
+    }
+
     setSubtitleFormat(format);
     setSubtitleSource(sourceName);
     setIsAutoGlossing(false);
 
-    // Prepare lines offline with local tokenization (ZERO AI calls on subtitle import)
-    const prepared = (newSubtitles || []).map(sub => {
-      if (Array.isArray(sub.tokens) && sub.tokens.length > 0) return sub;
-      return {
-        ...sub,
-        tokens: tokenizeAndGlossLineOffline(sub.text || '', targetLang)
-      };
-    });
+    // Normalize safely (filters invalid/empty items and ensures all properties exist)
+    const normalized = normalizeSubtitlesSafely(newSubtitles, format || 'sub');
+    if (normalized.length === 0) {
+      setSubtitles([]);
+      setGlossProgress(null);
+      return;
+    }
 
-    setSubtitles(prepared);
-    const completed = prepared.filter(s => isGlossComplete(s, targetLang)).length;
-    setGlossProgress({
-      total: prepared.length,
-      completed,
-      isGlossing: false,
-      isPaused: false,
-      isComplete: prepared.length > 0 && completed === prepared.length,
-      failed: 0
-    });
-  };
+    // Launch progressive non-blocking tokenization
+    launchProgressiveTokenization(normalized, targetLang);
+  }, [targetLang, launchProgressiveTokenization]);
 
   const handleFileUpload = (file) => {
     if (!file) return;
@@ -438,7 +580,12 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   };
 
   return (
-    <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-[var(--text-primary)]">
+    <ErrorBoundary
+      title={isSpanish ? 'Error en YouTube Transcript Reader' : 'Error in YouTube Transcript Reader'}
+      resetLabel={isSpanish ? 'Reiniciar lector' : 'Reset Reader'}
+      onReset={handleResetReader}
+    >
+      <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-[var(--text-primary)]">
       {/* 1. Header: YouTube Reader + AI Glossing Control + Stop/Pause + Saved Transcripts Library */}
       <div className="flex-shrink-0 space-y-2 pb-1">
         <div className="flex items-center justify-between px-2.5 py-1.5 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border-primary)] shadow-xs text-xs">
@@ -621,7 +768,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         onLoadTranscript={handleLoadFromLibrary}
         currentVideoId={videoId}
       />
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }
 

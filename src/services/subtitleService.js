@@ -54,12 +54,20 @@ export function formatTimestamp(totalSeconds) {
 }
 
 /**
- * Strips formatting HTML tags from subtitle text (e.g. <i>, <b>, <font>).
+ * Strips formatting HTML tags from subtitle text (e.g. <i>, <b>, <font>, {\an8})
+ * and decodes standard HTML entities.
  */
 function stripSubtitleTags(text) {
-  return (text || '')
+  if (!text || typeof text !== 'string') return '';
+  return text
     .replace(/<[^>]+>/g, '')
     .replace(/\{[^\}]+\}/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
     .trim();
 }
 
@@ -71,15 +79,16 @@ function stripSubtitleTags(text) {
 export function parseSrt(content) {
   if (!content || typeof content !== 'string') return [];
 
-  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const blocks = normalized.split(/\n\s*\n/);
+  const clean = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const blocks = clean.split(/\n\s*\n/);
   const results = [];
 
-  const timeRegex = /(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})/;
+  const timeRegex = /(\d+:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d+:\d{2}:\d{2}[,.]\d{1,3})/;
 
-  blocks.forEach((block, idx) => {
+  for (let idx = 0; idx < blocks.length; idx++) {
+    const block = blocks[idx];
     const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-    if (lines.length === 0) return;
+    if (lines.length === 0) continue;
 
     let timeLineIdx = -1;
     let match = null;
@@ -100,16 +109,16 @@ export function parseSrt(content) {
 
       if (text) {
         results.push({
-          id: `srt_${idx + 1}`,
-          startTime,
-          endTime,
+          id: `srt_${results.length + 1}`,
+          startTime: typeof startTime === 'number' && !isNaN(startTime) ? Math.max(0, startTime) : 0,
+          endTime: typeof endTime === 'number' && !isNaN(endTime) && endTime > startTime ? endTime : startTime + 3.0,
           text,
           tokens: [],
           glosses: []
         });
       }
     }
-  });
+  }
 
   return results;
 }
@@ -122,19 +131,20 @@ export function parseSrt(content) {
 export function parseVtt(content) {
   if (!content || typeof content !== 'string') return [];
 
-  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const blocks = normalized.split(/\n\s*\n/);
+  const clean = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const blocks = clean.split(/\n\s*\n/);
   const results = [];
 
-  const timeRegex = /((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{1,3})/;
+  const timeRegex = /((?:\d+:)?\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*((?:\d+:)?\d{2}:\d{2}[,.]\d{1,3})/;
 
-  blocks.forEach((block, idx) => {
+  for (let idx = 0; idx < blocks.length; idx++) {
+    const block = blocks[idx];
     const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-    if (lines.length === 0) return;
+    if (lines.length === 0) continue;
 
     // Skip WEBVTT header
     if (lines[0].toUpperCase().startsWith('WEBVTT') && lines.length === 1) {
-      return;
+      continue;
     }
 
     let timeLineIdx = -1;
@@ -156,16 +166,16 @@ export function parseVtt(content) {
 
       if (text) {
         results.push({
-          id: `vtt_${idx + 1}`,
-          startTime,
-          endTime,
+          id: `vtt_${results.length + 1}`,
+          startTime: typeof startTime === 'number' && !isNaN(startTime) ? Math.max(0, startTime) : 0,
+          endTime: typeof endTime === 'number' && !isNaN(endTime) && endTime > startTime ? endTime : startTime + 3.0,
           text,
           tokens: [],
           glosses: []
         });
       }
     }
-  });
+  }
 
   return results;
 }
@@ -182,20 +192,23 @@ import { splitTextIntoNaturalSegments } from './textDocumentService.js';
 export function parseTxt(content, targetLang = 'zh') {
   if (!content || typeof content !== 'string') return [];
 
-  const rawLines = splitTextIntoNaturalSegments(content, targetLang);
+  const clean = content.replace(/^\uFEFF/, '');
+  const rawLines = splitTextIntoNaturalSegments(clean, targetLang);
   const results = [];
 
-  rawLines.forEach((line, idx) => {
-    if (!line) return;
+  for (let idx = 0; idx < rawLines.length; idx++) {
+    const raw = rawLines[idx];
+    const line = stripSubtitleTags(raw);
+    if (!line) continue;
     results.push({
-      id: `txt_${idx + 1}`,
-      startTime: idx * 3.5,
-      endTime: idx * 3.5 + 3.0,
+      id: `txt_${results.length + 1}`,
+      startTime: results.length * 3.5,
+      endTime: results.length * 3.5 + 3.0,
       text: line,
       tokens: [],
       glosses: []
     });
-  });
+  }
 
   return results;
 }
@@ -212,22 +225,28 @@ export function parseSubtitlesAuto(content, fileName = '', targetLang = 'zh') {
     return { format: 'unknown', subtitles: [] };
   }
 
-  const lowerName = (fileName || '').toLowerCase();
-  const trimmed = content.trim();
+  try {
+    const cleanContent = content.replace(/^\uFEFF/, '');
+    const lowerName = (fileName || '').toLowerCase();
+    const trimmed = cleanContent.trim();
 
-  // 1. Check for WebVTT
-  if (lowerName.endsWith('.vtt') || trimmed.toUpperCase().startsWith('WEBVTT')) {
-    const subs = parseVtt(content);
-    if (subs.length > 0) return { format: 'vtt', subtitles: subs };
+    // 1. Check for WebVTT
+    if (lowerName.endsWith('.vtt') || trimmed.toUpperCase().startsWith('WEBVTT')) {
+      const subs = parseVtt(cleanContent);
+      if (subs.length > 0) return { format: 'vtt', subtitles: subs };
+    }
+
+    // 2. Check for SRT (contains --> with hh:mm:ss,ms)
+    if (lowerName.endsWith('.srt') || /-->/.test(cleanContent)) {
+      const subs = parseSrt(cleanContent);
+      if (subs.length > 0) return { format: 'srt', subtitles: subs };
+    }
+
+    // 3. Plain TXT
+    const subs = parseTxt(cleanContent, targetLang);
+    return { format: 'txt', subtitles: subs };
+  } catch (err) {
+    console.error('Error in parseSubtitlesAuto:', err);
+    return { format: 'unknown', subtitles: [] };
   }
-
-  // 2. Check for SRT (contains --> with hh:mm:ss,ms)
-  if (lowerName.endsWith('.srt') || /-->/.test(content)) {
-    const subs = parseSrt(content);
-    if (subs.length > 0) return { format: 'srt', subtitles: subs };
-  }
-
-  // 3. Plain TXT
-  const subs = parseTxt(content, targetLang);
-  return { format: 'txt', subtitles: subs };
 }

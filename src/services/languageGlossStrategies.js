@@ -557,8 +557,9 @@ export class ChineseGlossStrategy {
         continue;
       }
 
-      // Any remaining single character
-      const single = remaining[0];
+      // Any remaining character (handles surrogate pairs and special Unicode safely)
+      const codePoint = remaining.codePointAt(0);
+      const single = codePoint ? String.fromCodePoint(codePoint) : remaining[0];
       tokens.push({
         text: single,
         word: single,
@@ -567,7 +568,7 @@ export class ChineseGlossStrategy {
         gloss: null,
         isPunctuation: PUNCTUATION_REGEX.test(single)
       });
-      i += 1;
+      i += single.length;
     }
     return tokens;
   }

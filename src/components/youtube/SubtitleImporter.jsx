@@ -78,9 +78,16 @@ export function SubtitleImporter({
         }
 
         if (onSubtitlesLoaded) {
-          onSubtitlesLoaded(subtitles, format, file.name);
+          try {
+            onSubtitlesLoaded(subtitles, format, file.name);
+            setIsExpanded(false);
+          } catch (loadErr) {
+            console.error('Error in onSubtitlesLoaded:', loadErr);
+            setError('Error al procesar la transcripción: ' + (loadErr.message || 'Error desconocido'));
+          }
+        } else {
+          setIsExpanded(false);
         }
-        setIsExpanded(false);
       } catch (err) {
         setError('Error al parsear el archivo: ' + err.message);
       } finally {
@@ -98,8 +105,8 @@ export function SubtitleImporter({
     reader.readAsText(file, 'UTF-8');
   };
 
-  // When subtitles are already loaded and not expanded, eliminate the intermediate bar
-  if (subtitlesCount > 0 && !isExpanded) {
+  // When subtitles are already loaded and not expanded (and no error occurred), eliminate the intermediate bar
+  if (subtitlesCount > 0 && !isExpanded && !error) {
     return null;
   }
 

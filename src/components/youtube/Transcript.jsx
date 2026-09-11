@@ -25,19 +25,23 @@ export function Transcript({
 
   // 1. Identify active subtitle line based on currentTime
   const activeIndex = useMemo(() => {
-    if (!subtitles || subtitles.length === 0) return -1;
+    if (!subtitles || !Array.isArray(subtitles) || subtitles.length === 0) return -1;
+    const time = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
 
     // Direct interval match
-    const exactIdx = subtitles.findIndex(
-      (sub) => currentTime >= sub.startTime && currentTime <= (sub.endTime || sub.startTime + 4.0)
-    );
+    const exactIdx = subtitles.findIndex((sub) => {
+      if (!sub || typeof sub.startTime !== 'number') return false;
+      const end = typeof sub.endTime === 'number' && sub.endTime > sub.startTime ? sub.endTime : sub.startTime + 4.0;
+      return time >= sub.startTime && time <= end;
+    });
     if (exactIdx !== -1) return exactIdx;
 
     // Closest preceding line
     for (let i = subtitles.length - 1; i >= 0; i--) {
-      if (currentTime >= subtitles[i].startTime) {
+      const sub = subtitles[i];
+      if (sub && typeof sub.startTime === 'number' && time >= sub.startTime) {
         // Only if within 6 seconds
-        if (currentTime - subtitles[i].startTime <= 6.0) {
+        if (time - sub.startTime <= 6.0) {
           return i;
         }
         break;
@@ -50,7 +54,7 @@ export function Transcript({
   // 2. Filter subtitles based on search query
   const filteredSubtitles = useMemo(() => {
     if (!subtitles || !Array.isArray(subtitles)) return [];
-    const valid = subtitles.filter(Boolean);
+    const valid = subtitles.filter(s => s && typeof s === 'object' && s.text);
     if (!searchQuery || !searchQuery.trim()) {
       return valid;
     }
