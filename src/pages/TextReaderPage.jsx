@@ -1169,25 +1169,14 @@ export function TextReaderPage({
                 <span className="font-serif text-[13px] sm:text-sm font-bold leading-none select-none">T</span>
               </button>
 
-              {/* A — Audio */}
+              {/* A — Aumentar tamaño de fuente */}
               <button
                 type="button"
-                onClick={handleToggleAudio}
-                title={
-                  isPlayingAnyAudio
-                    ? "Detener reproducción de audio"
-                    : "Reproducir audio del texto"
-                }
-                aria-label="Audio"
-                className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 ${
-                  isPlayingAnyAudio
-                    ? 'bg-gradient-to-tr from-pink-600 to-rose-600 text-white border border-rose-400/90 shadow-rose-900/60 ring-2 ring-rose-400/40'
-                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
-                }`}
+                onClick={cycleFontSize}
+                title="Aumentar tamaño de texto"
+                aria-label="Aumentar texto"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
               >
-                {isPlayingAnyAudio && (
-                  <span className="absolute -inset-0.5 rounded-lg sm:rounded-xl border-2 border-rose-400/60 animate-ping pointer-events-none" />
-                )}
                 <span className="text-[13px] sm:text-sm font-bold leading-none select-none">A</span>
               </button>
 
