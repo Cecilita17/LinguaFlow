@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { TranscriptLine } from './TranscriptLine.jsx';
 import { FileText, SearchX } from 'lucide-react';
+import { isGlossComplete } from '../../services/subtitleGlossService.js';
 
 export function Transcript({
   subtitles = [],
