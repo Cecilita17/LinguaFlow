@@ -86,6 +86,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
   // Player & synchronization state
   const [currentTime, setCurrentTime] = useState(0);
   const [seekToTime, setSeekToTime] = useState(null);
+  const [playbackRate, setPlaybackRate] = useState(1);
 
   // Transcript view preferences
   const [autoScroll, setAutoScroll] = useState(true);
@@ -705,6 +706,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
               onTimeUpdate={setCurrentTime}
               onPlayerReady={handlePlayerReady}
               seekToTime={seekToTime}
+              playbackRate={playbackRate}
             />
           </div>
         )}
@@ -754,6 +756,8 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
             fontSize={fontSize}
             onChangeFontSize={setFontSize}
             onFileUpload={handleFileUpload}
+            playbackRate={playbackRate}
+            onChangePlaybackRate={setPlaybackRate}
           />
         </div>
       )}
@@ -766,6 +770,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
           refreshLibraryCount();
         }}
         onLoadTranscript={handleLoadFromLibrary}
+        onDeleteTranscript={refreshLibraryCount}
         currentVideoId={videoId}
       />
       </div>

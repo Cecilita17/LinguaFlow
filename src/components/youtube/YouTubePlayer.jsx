@@ -6,7 +6,8 @@ export function YouTubePlayer({
   videoId,
   onTimeUpdate,
   onPlayerReady,
-  seekToTime = null
+  seekToTime = null,
+  playbackRate = 1
 }) {
   const containerRef = useRef(null);
   const playerRef = useRef(null);
@@ -49,6 +50,11 @@ export function YouTubePlayer({
         events: {
           onReady: (event) => {
             playerRef.current = event.target;
+            if (typeof playbackRate === 'number' && typeof event.target.setPlaybackRate === 'function') {
+              try {
+                event.target.setPlaybackRate(playbackRate);
+              } catch (e) {}
+            }
             if (onPlayerReady) onPlayerReady(event.target);
           },
           onStateChange: (event) => {
@@ -118,6 +124,17 @@ export function YouTubePlayer({
       }
     }
   }, [seekToTime]);
+
+  // 4. Handle playback rate changes
+  useEffect(() => {
+    if (playerRef.current && typeof playerRef.current.setPlaybackRate === 'function') {
+      try {
+        playerRef.current.setPlaybackRate(playbackRate);
+      } catch (err) {
+        console.warn('Error setting playback rate:', err);
+      }
+    }
+  }, [playbackRate]);
 
   // Fallback if no video loaded
   if (!videoId) {

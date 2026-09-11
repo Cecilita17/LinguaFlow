@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Search, RotateCcw, ArrowDown, ZoomIn, ZoomOut, X, Upload } from 'lucide-react';
+import { Search, RotateCcw, ArrowDown, ZoomIn, ZoomOut, X, Upload, Gauge } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 export function TranscriptControls({
@@ -12,7 +12,9 @@ export function TranscriptControls({
   onChangeFontSize,
   onFileUpload,
   showTimestamps = true,
-  onToggleTimestamps
+  onToggleTimestamps,
+  playbackRate = 1,
+  onChangePlaybackRate
 }) {
   const { isSpanish } = useSiteLanguage();
   const fileInputRef = useRef(null);
@@ -113,6 +115,29 @@ export function TranscriptControls({
             className="hidden"
           />
         </div>
+
+        {/* Video Playback Speed Control (Cycles 1x -> 0.75x -> 0.5x -> 1x) */}
+        {onChangePlaybackRate && (
+          <button
+            type="button"
+            onClick={() => {
+              const nextRateMap = { 1: 0.75, 0.75: 0.5, 0.5: 1 };
+              const next = nextRateMap[playbackRate] || 1;
+              onChangePlaybackRate(next);
+            }}
+            title={isSpanish
+              ? `Velocidad del vídeo: ${playbackRate}x (clic para cambiar a 0.75x / 0.5x / 1x)`
+              : `Video playback speed: ${playbackRate}x (click to cycle 0.75x / 0.5x / 1x)`}
+            className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 ${
+              playbackRate < 1
+                ? 'bg-amber-600/90 hover:bg-amber-600 text-white border-amber-500 shadow-amber-950/30'
+                : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-primary)] hover:border-rose-500/60'
+            }`}
+          >
+            <Gauge className={`w-3.5 h-3.5 ${playbackRate < 1 ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
+            <span className="font-mono">{playbackRate}x</span>
+          </button>
+        )}
 
         {/* Font Size Adjusters */}
         <div className="flex items-center bg-[var(--surface-primary)] rounded-xl border border-[var(--border-primary)] p-0.5">

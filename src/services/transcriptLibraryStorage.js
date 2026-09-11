@@ -215,7 +215,7 @@ export async function findTranscriptsByVideoId(videoId, targetLang = null) {
 export async function getAllSavedTranscripts() {
   const db = await openDatabase();
   if (!db) {
-    return Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    return Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
   }
 
   return new Promise((resolve) => {
@@ -226,35 +226,41 @@ export async function getAllSavedTranscripts() {
 
       request.onsuccess = (event) => {
         const results = event.target.result || [];
-        const map = new Map();
-        results.forEach(r => map.set(r.id, r));
-        memoryStore.forEach((val, key) => {
-          if (!map.has(key)) map.set(key, val);
-        });
+        // Keep memoryStore strictly in sync with IndexedDB so deleted records are never resurrected
+        memoryStore.clear();
+        for (const item of results) {
+          if (item && item.id) {
+            memoryStore.set(item.id, item);
+          }
+        }
 
-        const list = Array.from(map.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        const list = [...results].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
         resolve(list);
       };
 
-      request.onerror = () => {
-        resolve(Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+      request.onerror = (e) => {
+        console.warn('[TranscriptLibrary] Error listing from IndexedDB:', e.target?.error);
+        resolve(Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)));
       };
     } catch (err) {
       console.warn('[TranscriptLibrary] Error listing from IndexedDB:', err);
-      resolve(Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+      resolve(Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)));
     }
   });
 }
 
 /**
  * Delete a specific transcript from the library by its ID.
+ * Waits for the IndexedDB transaction to fully complete before resolving.
  * 
  * @param {string} id
  * @returns {Promise<boolean>}
  */
 export async function deleteTranscriptFromLibrary(id) {
   if (!id) return false;
+  const cleanId = String(id);
   memoryStore.delete(id);
+  memoryStore.delete(cleanId);
 
   const db = await openDatabase();
   if (!db) return true;
@@ -263,12 +269,28 @@ export async function deleteTranscriptFromLibrary(id) {
     try {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.delete(id);
+      store.delete(id);
+      if (cleanId !== id) {
+        store.delete(cleanId);
+      }
 
-      request.onsuccess = () => resolve(true);
-      request.onerror = () => resolve(false);
+      transaction.oncomplete = () => {
+        memoryStore.delete(id);
+        memoryStore.delete(cleanId);
+        resolve(true);
+      };
+
+      transaction.onerror = (e) => {
+        console.warn('[TranscriptLibrary] Error deleting from IndexedDB:', e.target?.error);
+        resolve(false);
+      };
+
+      transaction.onabort = (e) => {
+        console.warn('[TranscriptLibrary] Transaction aborted deleting from IndexedDB:', e.target?.error);
+        resolve(false);
+      };
     } catch (err) {
-      console.warn('[TranscriptLibrary] Error deleting from IndexedDB:', err);
+      console.warn('[TranscriptLibrary] Exception deleting from IndexedDB:', err);
       resolve(false);
     }
   });

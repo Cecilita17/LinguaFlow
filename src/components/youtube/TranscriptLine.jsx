@@ -79,8 +79,8 @@ export function TranscriptLine({
           : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border-[var(--border-primary)] shadow-xs text-[var(--text-primary)]'
       }`}
     >
-      {/* Per-Paragraph Actions: 🎧 Audio + 🔤 Traducción */}
-      <div className="flex items-center space-x-1 shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
+      {/* Per-Paragraph Actions: 🎧 Audio (top) + 🔤 Traducción (bottom) */}
+      <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
         {/* 🎧 Audio Action: Plays/seeks this line in the video */}
         <button
           type="button"

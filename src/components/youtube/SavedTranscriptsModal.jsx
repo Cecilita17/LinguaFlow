@@ -32,6 +32,7 @@ export function SavedTranscriptsModal({
   isOpen,
   onClose,
   onLoadTranscript,
+  onDeleteTranscript,
   currentVideoId = ''
 }) {
   const { isSpanish } = useSiteLanguage();
@@ -67,6 +68,11 @@ export function SavedTranscriptsModal({
     if (deleteConfirmId === id) {
       await deleteTranscriptFromLibrary(id);
       setDeleteConfirmId(null);
+      // Immediately filter it out from local React state
+      setTranscripts(prev => prev.filter(t => t.id !== id && String(t.id) !== String(id)));
+      if (onDeleteTranscript) {
+        onDeleteTranscript(id);
+      }
       await loadList();
     } else {
       setDeleteConfirmId(id);
