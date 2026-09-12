@@ -179,7 +179,7 @@ export function TextParagraphItem({
                         dir="ltr"
                         className={`${
                           isChinese
-                            ? 'text-[9.5px] sm:text-[10px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/token:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
+                            ? 'text-[11px] sm:text-[12px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/token:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
                             : 'text-[10px] sm:text-[11px] text-[var(--text-muted)] group-hover/token:text-rose-600 dark:group-hover/token:text-rose-300 mt-1 max-w-[140px]'
                         } font-normal leading-tight truncate text-center select-text isolate [unicode-bidi:isolate] transition-colors`}
                       >
