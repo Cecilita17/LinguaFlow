@@ -206,7 +206,7 @@ export function TranscriptLine({
                     >
                       {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
                       {isChinese && auxiliary && (
-                        <span className="text-[10px] sm:text-[11px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
+                        <span className="text-[12px] sm:text-[13px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                           {auxiliary}
                         </span>
                       )}
@@ -239,7 +239,7 @@ export function TranscriptLine({
                           title={cleanGloss}
                           className={`${
                             isChinese
-                              ? 'text-[9.5px] sm:text-[10px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/line:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
+                              ? 'text-[12px] sm:text-[13px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/line:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
                               : 'text-[10px] sm:text-[11px] text-[var(--text-muted)] group-hover/line:text-[var(--text-secondary)] mt-1 max-w-[120px]'
                           } font-normal leading-tight truncate text-center select-text isolate [unicode-bidi:isolate] transition-colors`}
                         >
