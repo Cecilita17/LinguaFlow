@@ -147,7 +147,7 @@ export function TextParagraphItem({
                   >
                     {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
                     {isChinese && auxiliary && (
-                      <span className="text-[12px] sm:text-[13px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
+                      <span className="text-[14px] sm:text-[15px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                         {auxiliary}
                       </span>
                     )}
@@ -179,7 +179,7 @@ export function TextParagraphItem({
                         dir="ltr"
                         className={`${
                           isChinese
-                            ? 'text-[12px] sm:text-[13px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/token:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
+                            ? 'text-[14px] sm:text-[15px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/token:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
                             : 'text-[12px] sm:text-[13px] text-[var(--text-muted)] group-hover/token:text-rose-600 dark:group-hover/token:text-rose-300 mt-1 max-w-[140px]'
                         } font-normal leading-tight truncate text-center select-text isolate [unicode-bidi:isolate] transition-colors`}
                       >
