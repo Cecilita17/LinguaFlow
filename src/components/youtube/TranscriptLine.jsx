@@ -142,7 +142,7 @@ export function TranscriptLine({
                 style={{ direction: textDirection }}
                 className={`flex flex-wrap items-center ${
                   isChinese
-                    ? 'gap-x-1 sm:gap-x-1.5 gap-y-1'
+                    isChinese   ? 'gap-x-1 sm:gap-x-1.5 gap-y-3'
                     : 'gap-x-1.5 sm:gap-x-2.5 gap-y-2'
                 } leading-tight break-words max-w-full ${
                   isRtl ? 'justify-start text-right' : 'justify-start text-left'
