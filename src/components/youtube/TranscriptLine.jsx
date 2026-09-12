@@ -240,7 +240,7 @@ export function TranscriptLine({
                           className={`${
                             isChinese
                               ? 'text-[14px] sm:text-[15px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/line:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
-                              : 'text-[13px] sm:text-[14px] text-[var(--text-muted)] group-hover/line:text-[var(--text-secondary)] mt-1 max-w-[120px]'
+                              : 'text-[14px] sm:text-[15px] text-[var(--text-muted)] group-hover/line:text-[var(--text-secondary)] mt-1 max-w-[120px]'
                           } font-normal leading-tight truncate text-center select-text isolate [unicode-bidi:isolate] transition-colors`}
                         >
                           {cleanGloss}
