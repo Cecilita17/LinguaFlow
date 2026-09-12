@@ -92,7 +92,7 @@ export function TextParagraphItem({
               style={{ direction: textDirection }}
               className={`flex flex-wrap items-center ${
                 isChinese
-                  ? 'isChinese   ? 'gap-x-1 sm:gap-x-1.5 gap-y-3'
+                  ? 'gap-x-1 sm:gap-x-1.5 gap-y-3'
                   : 'gap-x-2 sm:gap-x-3 gap-y-2'
               } leading-tight break-words max-w-full ${
                 isRtl ? 'justify-start text-right' : 'justify-start text-left'
