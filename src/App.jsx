@@ -668,26 +668,28 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
-      {/* Header */}
-      <Header
-        languages={languages}
-        targetLang={targetLang}
-        setTargetLang={handleTargetLangChange}
-        nativeLang={nativeLang}
-        setNativeLang={handleNativeLangChange}
-        showTransliteration={showTransliteration}
-        setShowTransliteration={setShowTransliteration}
-        handsFree={handsFree}
-        setHandsFree={setHandsFree}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onResetChat={handleResetChat}
-        isListening={isRecording}
-        isSpeaking={isSpeaking}
-        hasApiKey={Boolean(config?.apiKey)}
-        apiWarning={apiWarning}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-      />
+      {/* Global Header — hidden in Text Reader because that page owns its own header */}
+      {activeTab !== 'text' && (
+        <Header
+          languages={languages}
+          targetLang={targetLang}
+          setTargetLang={handleTargetLangChange}
+          nativeLang={nativeLang}
+          setNativeLang={handleNativeLangChange}
+          showTransliteration={showTransliteration}
+          setShowTransliteration={setShowTransliteration}
+          handsFree={handsFree}
+          setHandsFree={setHandsFree}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onResetChat={handleResetChat}
+          isListening={isRecording}
+          isSpeaking={isSpeaking}
+          hasApiKey={Boolean(config?.apiKey)}
+          apiWarning={apiWarning}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+      )}
 
       {activeTab === 'home' ? (
         <HomePage
@@ -711,6 +713,7 @@ export default function App() {
             languages={languages}
             apiKey={config?.apiKey}
             onWordClick={handleWordClick}
+            setActiveTab={setActiveTab}
           />
         </main>
       ) : (
