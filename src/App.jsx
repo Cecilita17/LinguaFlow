@@ -876,7 +876,13 @@ export default function App() {
         />
       ) : activeTab === 'youtube' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <YouTubeReaderPage targetLang={targetLang} nativeLang={nativeLang} apiKey={config?.apiKey} onWordClick={handleWordClick} />
+          <YouTubeReaderPage
+            targetLang={targetLang}
+            nativeLang={nativeLang}
+            apiKey={config?.apiKey}
+            onWordClick={handleWordClick}
+            setActiveTab={setActiveTab}
+          />
         </main>
       ) : activeTab === 'text' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">

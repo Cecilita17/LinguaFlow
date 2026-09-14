@@ -5,6 +5,7 @@ import { SubtitleImporter } from '../components/youtube/SubtitleImporter.jsx';
 import { Transcript } from '../components/youtube/Transcript.jsx';
 import { TranscriptControls } from '../components/youtube/TranscriptControls.jsx';
 import { SavedTranscriptsModal } from '../components/youtube/SavedTranscriptsModal.jsx';
+import { YouTubeLibraryView } from '../components/youtube/YouTubeLibraryView.jsx';
 import {
   enrichSubtitlesWithGlosses,
   glossSingleSubtitleLine,
@@ -30,7 +31,9 @@ import {
   RotateCcw,
   BookOpen,
   Pause,
-  Play
+  Play,
+  ArrowLeft,
+  Plus
 } from 'lucide-react';
 import { ErrorBoundary } from '../components/common/ErrorBoundary.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
@@ -70,8 +73,13 @@ function normalizeSubtitlesSafely(rawSubs, format = 'sub') {
   return normalized;
 }
 
-export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey = '', onWordClick = null }) {
+export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey = '', onWordClick = null, setActiveTab = null }) {
   const { isSpanish } = useSiteLanguage();
+
+  // Navigation mode: 'library' | 'importer' | 'reader'
+  // Default to 'library' when entering YouTube Reader
+  const [viewMode, setViewMode] = useState('library');
+
   // Session state with localStorage persistence
   const [videoId, setVideoId] = useState('');
   const [videoTitle, setVideoTitle] = useState('');
@@ -538,6 +546,38 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     };
   }, [flushPlaybackPosition]);
 
+  // Navigation helper: change view mode and update browser history
+  const navigateToView = useCallback((newMode) => {
+    setViewMode(newMode);
+    try {
+      if (newMode === 'library') {
+        if (window.location.hash) {
+          window.history.pushState(null, '', window.location.pathname + window.location.search);
+        }
+      } else if (newMode === 'importer') {
+        window.history.pushState({ viewMode: 'importer' }, '', '#import');
+      } else if (newMode === 'reader') {
+        window.history.pushState({ viewMode: 'reader' }, '', '#reader');
+      }
+    } catch (e) {}
+  }, []);
+
+  // Listen to browser back/forward buttons (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash;
+      if (hash === '#reader' && (videoId || (subtitles && subtitles.length > 0))) {
+        setViewMode('reader');
+      } else if (hash === '#import') {
+        setViewMode('importer');
+      } else {
+        setViewMode('library');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [videoId, subtitles]);
+
   const handleImportVideo = (newVideoId, newUrl) => {
     flushPlaybackPosition();
     if (glossAbortControllerRef.current) {
@@ -599,6 +639,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       const existing = await getTranscriptFromLibrary(videoId || 'novideo', subHash, targetLang);
       if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
         handleLoadFromLibrary(existing);
+        navigateToView('library');
         return;
       }
     } catch (e) {
@@ -609,24 +650,32 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     launchProgressiveTokenization(normalized, targetLang);
 
     // Persist initial record in library with position 0
-    saveTranscriptToLibrary({
-      id: recId,
-      videoId: videoId || 'novideo',
-      videoTitle: videoTitle || `YouTube Video (${videoId || 'novideo'})`,
-      videoUrl: videoUrl || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : ''),
-      targetLanguage: targetLang,
-      nativeLanguage: nativeLang,
-      sourceType: sourceName || 'srt',
-      subtitleHash: subHash,
-      subtitlesCount: normalized.length,
-      completedLinesCount: 0,
-      isComplete: false,
-      format: format || 'srt',
-      subtitles: normalized,
-      lastPlaybackTime: 0,
-      lastSubtitleId: null
-    }).then(() => refreshLibraryCount()).catch(() => {});
-  }, [videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition]);
+    try {
+      await saveTranscriptToLibrary({
+        id: recId,
+        videoId: videoId || 'novideo',
+        videoTitle: videoTitle || `YouTube Video (${videoId || 'novideo'})`,
+        videoUrl: videoUrl || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : ''),
+        targetLanguage: targetLang,
+        nativeLanguage: nativeLang,
+        sourceType: sourceName || 'srt',
+        subtitleHash: subHash,
+        subtitlesCount: normalized.length,
+        completedLinesCount: 0,
+        isComplete: false,
+        format: format || 'srt',
+        subtitles: normalized,
+        lastPlaybackTime: 0,
+        lastSubtitleId: null
+      });
+      await refreshLibraryCount();
+    } catch (e) {
+      console.warn('Failed to save imported transcript to library:', e);
+    }
+
+    // Requirement 4: After successful import, navigate back to YouTube Library where it appears
+    navigateToView('library');
+  }, [videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition, navigateToView]);
 
   const handleFileUpload = (file) => {
     if (!file) return;
@@ -696,6 +745,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
     }
 
     refreshLibraryCount();
+    navigateToView('reader');
   };
 
   // Handle deletion of transcript from library
@@ -788,187 +838,239 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
       resetLabel={isSpanish ? 'Reiniciar lector' : 'Reset Reader'}
       onReset={handleResetReader}
     >
-      <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-[var(--text-primary)]">
-      {/* 1. Header: YouTube Reader + AI Glossing Control + Stop/Pause + Saved Transcripts Library */}
-      <div className="flex-shrink-0 space-y-2 pb-1">
-        <div className="flex items-center justify-between px-2.5 py-1.5 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border-primary)] shadow-xs text-xs">
-          {/* Left: Brand & Target Language */}
-          <div className="flex items-center space-x-2 truncate">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-rose-600 to-pink-500 flex items-center justify-center text-white shadow-xs shrink-0">
-              <Youtube className="w-3.5 h-3.5" />
-            </div>
-            <h2 className="font-bold text-[var(--text-primary)] tracking-wide text-xs sm:text-sm truncate">
-              YouTube Reader
+      {viewMode === 'library' ? (
+        /* =================== VIEW 1: DEDICATED YOUTUBE LIBRARY =================== */
+        <YouTubeLibraryView
+          onSelectVideo={handleLoadFromLibrary}
+          onAddNew={() => navigateToView('importer')}
+          onBackToHome={setActiveTab ? () => setActiveTab('home') : null}
+          currentVideoId={videoId}
+        />
+      ) : viewMode === 'importer' ? (
+        /* =================== VIEW 2: ADD / IMPORT VIDEO SCREEN =================== */
+        <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-3 sm:py-4 overflow-y-auto custom-scrollbar text-[var(--text-primary)]">
+          {/* Top Bar with Back to Library */}
+          <div className="flex-shrink-0 flex items-center justify-between pb-3 sm:pb-4 border-b border-[#441f15]/80 mb-4">
+            <button
+              type="button"
+              onClick={() => navigateToView('library')}
+              className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-rose-200 hover:text-white transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>{isSpanish ? 'Biblioteca' : 'Library'}</span>
+            </button>
+
+            <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <Plus className="w-4 h-4 text-rose-500" />
+              <span>{isSpanish ? 'Importar Vídeo y Subtítulos' : 'Import Video & Subtitles'}</span>
             </h2>
-            <span className="text-[10px] bg-[var(--surface-tertiary)] text-rose-600 dark:text-rose-300 px-1.5 py-0.5 rounded border border-[var(--border-primary)] font-mono shrink-0">
-              {targetLang === 'zh' ? '🇨🇳 Chino' : targetLang.toUpperCase()}
-            </span>
+
+            <div className="w-20" /> {/* Spacer for symmetry */}
           </div>
 
-          {/* Right: Library Button + AI Glossing Toggle + Pause/Resume + Video Controls */}
-          <div className="flex items-center space-x-1.5 shrink-0">
-            {/* SAVED TRANSCRIPTS LIBRARY BUTTON */}
-            <button
-              type="button"
-              onClick={() => setIsLibraryOpen(true)}
-              title={isSpanish ? 'Abrir biblioteca de transcripciones guardadas' : 'Open saved transcripts library'}
-              className="px-2 py-1 rounded-lg bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-primary)] text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-              <span className="hidden sm:inline">{isSpanish ? 'Biblioteca' : 'Library'}</span>
-              {libraryCount > 0 && (
-                <span className="text-[9px] px-1.5 py-0.2 bg-rose-500/15 text-rose-600 dark:text-rose-300 rounded-full font-bold border border-rose-500/30">
-                  {libraryCount}
-                </span>
-              )}
-            </button>
+          <div className="space-y-4 max-w-2xl mx-auto w-full">
+            <YouTubeImporter
+              onImportVideo={handleImportVideo}
+              initialUrl={videoUrl}
+              selectedLanguage={videoLanguage}
+              onLanguageChange={setVideoLanguage}
+            />
 
-            {/* GLOBAL AUTO-GLOSSING TOGGLE (Represented by Languages icon, ON/OFF, Green when ON, Progress badge) */}
-            <button
-              type="button"
-              onClick={handleToggleAutoGlossing}
-              title={
-                isAutoGlossing
-                  ? (isSpanish ? 'Glosado automático activo: clic para detener' : 'Auto-glossing active: click to stop')
-                  : (isSpanish ? 'Activar glosado automático global' : 'Enable global auto-glossing')
-              }
-              className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
-                isAutoGlossing
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
-                  : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border-[var(--border-primary)]'
-              }`}
-            >
-              <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
-              <span className="font-semibold">{isSpanish ? 'Glosado Auto' : 'Auto Gloss'}</span>
-              <span
-                className={`text-[9px] px-1 py-0.2 rounded font-bold ${
-                  isAutoGlossing
-                    ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
-                    : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)] border border-[var(--border-primary)]'
-                }`}
-              >
-                {isAutoGlossing ? 'ON' : 'OFF'}
-              </span>
-
-              {/* Live Auto-Glossing Progress Badge */}
-              {subtitles.length > 0 && (
-                <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
-                  isAutoGlossing
-                    ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
-                    : 'text-[var(--text-muted)] bg-[var(--surface-tertiary)] border-[var(--border-primary)]'
-                }`}>
-                  {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
-                  <span>{completedLinesCount}/{subtitles.length}</span>
-                </span>
-              )}
-            </button>
-
-            {/* Video Link Toggle (if video loaded) */}
-            {videoId && (
-              <button
-                type="button"
-                onClick={() => setIsUrlImporterOpen(!isUrlImporterOpen)}
-                className="px-2 py-1 rounded-lg bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-medium transition-colors cursor-pointer"
-              >
-                {isUrlImporterOpen
-                  ? (isSpanish ? 'Ocultar link' : 'Hide link')
-                  : (isSpanish ? 'Cambiar vídeo' : 'Change video')}
-              </button>
-            )}
-
-            {/* Reset Reader Button */}
-            {(videoId || subtitles.length > 0) && (
-              <button
-                type="button"
-                onClick={handleResetSession}
-                title={isSpanish ? 'Reiniciar lector' : 'Reset reader'}
-                className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-lg transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 2. YouTube Importer Input (shown when no video or when 'Cambiar vídeo' clicked) */}
-        {(!videoId || isUrlImporterOpen) && (
-          <YouTubeImporter
-            onImportVideo={handleImportVideo}
-            initialUrl={videoUrl}
-            selectedLanguage={videoLanguage}
-            onLanguageChange={setVideoLanguage}
-          />
-        )}
-
-        {/* 3. YouTube Video Player (Fixed at top) */}
-        {videoId && (
-          <div className="w-full max-w-2xl mx-auto rounded-2xl overflow-hidden shadow-xl shadow-black/40 border border-[#3d190f]">
-            <YouTubePlayer
-              videoId={videoId}
-              onTimeUpdate={handleTimeUpdate}
-              onPlayerStateChange={handlePlayerStateChange}
-              onPlayerReady={handlePlayerReady}
-              seekToTime={seekToTime}
-              playbackRate={playbackRate}
+            <SubtitleImporter
+              onSubtitlesLoaded={handleSubtitlesLoaded}
+              subtitlesCount={subtitles.length}
+              currentFormat={subtitleFormat}
+              onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
+              glossProgress={glossProgress}
+              onStopOrPauseGlossing={handleStopOrPauseGlossing}
+              onResumeGlossing={handleResumeGlossing}
             />
           </div>
-        )}
+        </div>
+      ) : (
+        /* =================== VIEW 3: READER & TRANSCRIPT SCREEN =================== */
+        /* Note: The logo/brand header bar is completely removed here per requirements */
+        <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 overflow-hidden text-[var(--text-primary)]">
+          {/* Minimal Reader Navigation Bar: Back to Library + Video Title + AI Glossing & Controls */}
+          <div className="flex-shrink-0 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border-primary)] shadow-xs text-xs mb-2">
+            {/* Left: Back to Library button + Title */}
+            <div className="flex items-center space-x-2 truncate min-w-0">
+              <button
+                type="button"
+                onClick={() => navigateToView('library')}
+                title={isSpanish ? 'Volver a la Biblioteca' : 'Back to Library'}
+                className="px-2.5 py-1 rounded-lg bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-rose-200 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0 active:scale-95 shadow-xs"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{isSpanish ? 'Biblioteca' : 'Library'}</span>
+              </button>
 
-        {/* 4. SubtitleImporter (compact 1-line when loaded, full when empty/expanded) */}
-        <SubtitleImporter
-          onSubtitlesLoaded={handleSubtitlesLoaded}
-          subtitlesCount={subtitles.length}
-          currentFormat={subtitleFormat}
-          onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
-          glossProgress={glossProgress}
-          onStopOrPauseGlossing={handleStopOrPauseGlossing}
-          onResumeGlossing={handleResumeGlossing}
-        />
-      </div>
+              <span className="text-[10px] bg-[var(--surface-tertiary)] text-rose-600 dark:text-rose-300 px-1.5 py-0.5 rounded border border-[var(--border-primary)] font-mono shrink-0">
+                {targetLang === 'zh' ? '🇨🇳 Chino' : targetLang.toUpperCase()}
+              </span>
 
-      {/* 5. Transcript / Subtítulos (Maximum vertical space with independent scroll) */}
-      {subtitles.length > 0 && (
-        <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden pt-1">
-          <Transcript
-            subtitles={subtitles}
-            currentTime={currentTime}
-            onSeek={handleSeek}
-            onGloss={handleGlossSingleLine}
-            onGlossLine={handleGlossSingleLine}
-            glossingLineIds={glossingLineIds}
-            loadingLineIds={loadingLineIds}
-            autoScroll={autoScroll}
-            fontSize={fontSize}
-            showTimestamps={showTimestamps}
-            searchQuery={searchQuery}
-            interlinearMode={interlinearMode}
-            targetLang={targetLang}
-            onWordClick={onWordClick}
-            pendingScrollSubtitleId={pendingScrollSubtitleId}
-            onScrollComplete={() => setPendingScrollSubtitleId(null)}
-          />
+              {videoTitle && (
+                <span className="font-semibold text-white/90 truncate text-xs hidden sm:inline" title={videoTitle}>
+                  {videoTitle}
+                </span>
+              )}
+            </div>
+
+            {/* Right: AI Glossing Toggle + Pause/Resume + Video Controls */}
+            <div className="flex items-center space-x-1.5 shrink-0">
+              {/* GLOBAL AUTO-GLOSSING TOGGLE */}
+              <button
+                type="button"
+                onClick={handleToggleAutoGlossing}
+                title={
+                  isAutoGlossing
+                    ? (isSpanish ? 'Glosado automático activo: clic para detener' : 'Auto-glossing active: click to stop')
+                    : (isSpanish ? 'Activar glosado automático global' : 'Enable global auto-glossing')
+                }
+                className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
+                  isAutoGlossing
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-emerald-950/40'
+                    : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border-[var(--border-primary)]'
+                }`}
+              >
+                <Languages className={`w-3.5 h-3.5 ${isAutoGlossing ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
+                <span className="font-semibold">{isSpanish ? 'Glosado Auto' : 'Auto Gloss'}</span>
+                <span
+                  className={`text-[9px] px-1 py-0.2 rounded font-bold ${
+                    isAutoGlossing
+                      ? 'bg-emerald-950 text-emerald-100 border border-emerald-400/40'
+                      : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)] border border-[var(--border-primary)]'
+                  }`}
+                >
+                  {isAutoGlossing ? 'ON' : 'OFF'}
+                </span>
+
+                {/* Live Auto-Glossing Progress Badge */}
+                {subtitles.length > 0 && (
+                  <span className={`flex items-center gap-1 ml-0.5 text-[9px] px-1.5 py-0.2 rounded-full border ${
+                    isAutoGlossing
+                      ? 'text-emerald-100 bg-black/40 border-emerald-300/40 animate-pulse'
+                      : 'text-[var(--text-muted)] bg-[var(--surface-tertiary)] border-[var(--border-primary)]'
+                  }`}>
+                    {isAutoGlossing && <span className="w-1 h-1 rounded-full bg-white animate-ping" />}
+                    <span>{completedLinesCount}/{subtitles.length}</span>
+                  </span>
+                )}
+              </button>
+
+              {/* Video Link Toggle */}
+              {videoId && (
+                <button
+                  type="button"
+                  onClick={() => setIsUrlImporterOpen(!isUrlImporterOpen)}
+                  className="px-2 py-1 rounded-lg bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-medium transition-colors cursor-pointer"
+                >
+                  {isUrlImporterOpen
+                    ? (isSpanish ? 'Ocultar link' : 'Hide link')
+                    : (isSpanish ? 'Cambiar vídeo' : 'Change video')}
+                </button>
+              )}
+
+              {/* Reset Reader Button */}
+              {(videoId || subtitles.length > 0) && (
+                <button
+                  type="button"
+                  onClick={handleResetSession}
+                  title={isSpanish ? 'Reiniciar lector' : 'Reset reader'}
+                  className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-lg transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* YouTube Importer Input (shown when 'Cambiar vídeo' clicked) */}
+          {isUrlImporterOpen && (
+            <div className="mb-2">
+              <YouTubeImporter
+                onImportVideo={handleImportVideo}
+                initialUrl={videoUrl}
+                selectedLanguage={videoLanguage}
+                onLanguageChange={setVideoLanguage}
+              />
+            </div>
+          )}
+
+          {/* YouTube Video Player */}
+          {videoId && (
+            <div className="w-full max-w-2xl mx-auto rounded-2xl overflow-hidden shadow-xl shadow-black/40 border border-[#3d190f] mb-2 shrink-0">
+              <YouTubePlayer
+                videoId={videoId}
+                onTimeUpdate={handleTimeUpdate}
+                onPlayerStateChange={handlePlayerStateChange}
+                onPlayerReady={handlePlayerReady}
+                seekToTime={seekToTime}
+                playbackRate={playbackRate}
+              />
+            </div>
+          )}
+
+          {/* SubtitleImporter (compact status line in reader) */}
+          {subtitles.length > 0 && (
+            <div className="shrink-0 mb-1">
+              <SubtitleImporter
+                onSubtitlesLoaded={handleSubtitlesLoaded}
+                subtitlesCount={subtitles.length}
+                currentFormat={subtitleFormat}
+                onClearSubtitles={handleClearSubtitles}
+                glossProgress={glossProgress}
+                onStopOrPauseGlossing={handleStopOrPauseGlossing}
+                onResumeGlossing={handleResumeGlossing}
+              />
+            </div>
+          )}
+
+          {/* Transcript / Subtítulos (Maximum vertical space with independent scroll) */}
+          {subtitles.length > 0 && (
+            <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden pt-1">
+              <Transcript
+                subtitles={subtitles}
+                currentTime={currentTime}
+                onSeek={handleSeek}
+                onGloss={handleGlossSingleLine}
+                onGlossLine={handleGlossSingleLine}
+                glossingLineIds={glossingLineIds}
+                loadingLineIds={loadingLineIds}
+                autoScroll={autoScroll}
+                fontSize={fontSize}
+                showTimestamps={showTimestamps}
+                searchQuery={searchQuery}
+                interlinearMode={interlinearMode}
+                targetLang={targetLang}
+                onWordClick={onWordClick}
+                pendingScrollSubtitleId={pendingScrollSubtitleId}
+                onScrollComplete={() => setPendingScrollSubtitleId(null)}
+              />
+            </div>
+          )}
+
+          {/* Controls placed BELOW the transcript */}
+          {subtitles.length > 0 && (
+            <div className="flex-shrink-0 pt-1.5">
+              <TranscriptControls
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onResetToStart={handleResetToStart}
+                autoScroll={autoScroll}
+                onToggleAutoScroll={() => setAutoScroll(!autoScroll)}
+                fontSize={fontSize}
+                onChangeFontSize={setFontSize}
+                onFileUpload={handleFileUpload}
+                playbackRate={playbackRate}
+                onChangePlaybackRate={setPlaybackRate}
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {/* 6. Controls placed BELOW the transcript */}
-      {subtitles.length > 0 && (
-        <div className="flex-shrink-0 pt-1.5">
-          <TranscriptControls
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            onResetToStart={handleResetToStart}
-            autoScroll={autoScroll}
-            onToggleAutoScroll={() => setAutoScroll(!autoScroll)}
-            fontSize={fontSize}
-            onChangeFontSize={setFontSize}
-            onFileUpload={handleFileUpload}
-            playbackRate={playbackRate}
-            onChangePlaybackRate={setPlaybackRate}
-          />
-        </div>
-      )}
-
-      {/* 7. Saved Transcripts Modal (IndexedDB persistent library) */}
+      {/* Saved Transcripts Modal (kept for backward compatibility or quick access) */}
       <SavedTranscriptsModal
         isOpen={isLibraryOpen}
         onClose={() => {
@@ -979,7 +1081,6 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         onDeleteTranscript={handleTranscriptDeleted}
         currentVideoId={videoId}
       />
-      </div>
     </ErrorBoundary>
   );
 }
