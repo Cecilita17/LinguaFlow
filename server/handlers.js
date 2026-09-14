@@ -256,19 +256,35 @@ export async function handleLookupWord(req, res) {
     const { word, targetLang, nativeLang, apiKey: clientApiKey } = body;
     const effectiveApiKey = (
       process.env.GROQ_API_KEY ||
-      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      clientApiKey ||
       (req.headers['x-api-key'] || '')
     ).trim().replace(/^["']|["']$/g, '');
 
     const activeModel = getSanitizedGroqModel();
+    const isChinese = targetLang === 'zh';
+    const isArabic = targetLang === 'ar';
+    const isRussian = targetLang === 'ru';
+    const hasTranslit = isChinese || isArabic || isRussian;
 
     if (word && effectiveApiKey) {
       console.log(`Groq model selected: ${activeModel}`);
       try {
-        const prompt = `Give definition for "${word}" in language "${targetLang}" translated to "${nativeLang}".
-Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeLang}", "part_of_speech": "noun/verb/adj", "translit": null}`;
+        const prompt = `You are an expert bilingual dictionary lexicographer.
+Provide a clear, precise definition for the word "${word}" (in language "${targetLang}") translated to the student's native language "${nativeLang}".
+${isChinese ? 'Provide the standard Pinyin with tone marks for this COMPLETE word in "translit" (e.g. "hěn gāoxìng", "nǐ hǎo").' : ''}
+${isArabic ? 'Provide Latin romanization in "translit" or null.' : ''}
+${isRussian ? 'Provide Latin romanization in "translit" or null.' : ''}
+${!hasTranslit ? 'Set "translit" to null.' : ''}
+
+Format strictly as valid JSON matching this schema:
+{
+  "word": "${word}",
+  "meaning": "concise clear definition in ${nativeLang}",
+  "part_of_speech": "grammatical category in ${nativeLang} (e.g. sustantivo, verbo, adjetivo, adverbio)",
+  "translit": ${hasTranslit ? '"phonetic pronunciation / Pinyin"' : 'null'}
+}`;
         const controller = new AbortController();
-        setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
 
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -279,33 +295,58 @@ Format strictly as JSON: {"word": "${word}", "meaning": "definition in ${nativeL
           signal: controller.signal,
           body: JSON.stringify({
             model: activeModel,
-            messages: [{ role: 'user', content: prompt }],
+            messages: [
+              {
+                role: 'system',
+                content: 'You are an authoritative multilingual dictionary. Provide concise definitions in the requested native language with accurate grammatical part of speech and phonetic transliteration when appropriate. Always return strictly valid JSON.'
+              },
+              { role: 'user', content: prompt }
+            ],
             response_format: { type: 'json_object' },
-            temperature: 0.2,
-            max_tokens: 300
+            temperature: 0.1,
+            max_tokens: 350
           })
         });
+
+        clearTimeout(timeoutId);
 
         if (response.ok) {
           const data = await response.json();
           const rawText = data?.choices?.[0]?.message?.content;
           const parsed = cleanAndParseJSON(rawText);
-          if (parsed) return res.status(200).json({ success: true, data: parsed });
+          if (parsed && (parsed.meaning || parsed.definition)) {
+            return res.status(200).json({
+              success: true,
+              data: {
+                word: parsed.word || word,
+                meaning: parsed.meaning || parsed.definition,
+                part_of_speech: parsed.part_of_speech || parsed.pos || null,
+                translit: parsed.translit || parsed.pinyin || null
+              }
+            });
+          }
+        } else {
+          const errText = await response.text();
+          console.warn(`Groq word lookup error HTTP ${response.status}:`, errText);
         }
       } catch (err) {
         console.warn('Groq word lookup notice:', err.message);
       }
     }
 
-    // Default dictionary fallback
+    if (!effectiveApiKey) {
+      return res.status(200).json({
+        success: false,
+        error: 'Para consultar la definición con IA, configura tu clave de Groq en Ajustes ⚙️.',
+        data: null
+      });
+    }
+
+    // Default error response if Groq failed
     res.status(200).json({
-      success: true,
-      data: {
-        word,
-        meaning: `Término en práctica: "${word}".`,
-        part_of_speech: 'término',
-        translit: null
-      }
+      success: false,
+      error: 'No se pudo obtener la definición en este momento. Inténtalo de nuevo.',
+      data: null
     });
   } catch (err) {
     res.status(500).json({ error: 'Error en la búsqueda de palabra' });

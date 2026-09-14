@@ -160,7 +160,7 @@ export async function sendChatMessage({
 export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '') {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const headers = { 'Content-Type': 'application/json' };
     const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
@@ -187,10 +187,19 @@ export async function lookupWordApi(word, targetLang, nativeLang, apiKey = '') {
         if (data && data.success && data.data) {
           return data.data;
         }
+        if (data && data.error) {
+          return { word, error: data.error };
+        }
       }
     }
   } catch (err) {
-    console.warn('Word lookup API error, using fallback:', err.message);
+    console.warn('Word lookup API error:', err.message);
+    return {
+      word,
+      error: err.name === 'AbortError'
+        ? 'Tiempo de espera agotado al consultar la definición.'
+        : 'Error de conexión con el servidor de definiciones.'
+    };
   }
   return null;
 }

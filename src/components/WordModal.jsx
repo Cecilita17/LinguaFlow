@@ -77,12 +77,24 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
         </div>
 
         {/* Meaning Box */}
-        <div className="bg-rose-50/70 border border-rose-200/80 rounded-xl p-3.5 mb-4 text-left">
-          <span className="text-[11px] font-bold text-rose-800 block uppercase tracking-wider mb-1">
-            Significado en tu idioma:
+        <div className={`border rounded-xl p-3.5 mb-4 text-left ${
+          wordData.error
+            ? 'bg-amber-50/80 border-amber-300/80'
+            : 'bg-rose-50/70 border border-rose-200/80'
+        }`}>
+          <span className={`text-[11px] font-bold block uppercase tracking-wider mb-1 ${
+            wordData.error ? 'text-amber-800' : 'text-rose-800'
+          }`}>
+            {wordData.error ? 'Aviso del diccionario:' : 'Significado en tu idioma:'}
           </span>
           <p className="text-stone-850 text-base font-medium leading-snug">
-            {meaning || 'Buscando definición...'}
+            {wordData.error ? (
+              <span className="text-xs text-amber-950 font-normal leading-relaxed block">
+                {wordData.error}
+              </span>
+            ) : (
+              meaning || 'Buscando definición...'
+            )}
           </p>
         </div>
 

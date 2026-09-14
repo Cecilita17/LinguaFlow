@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'lucide-react';
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
-import { CHINESE_OFFLINE_DICT, reconcileChineseTokens } from '../services/languageGlossStrategies.js';
+import { normalizeChineseMessageTokens } from '../services/chineseTokenNormalizer.js';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 
 export function ChatMessage({
@@ -373,9 +373,9 @@ export function ChatMessage({
       })();
       console.warn('[ChineseTokenDebug] Token coverage mismatch. First mismatch at index', firstMismatchIdx);
       try {
-        const corrected = reconcileChineseTokens(rawText, tokens);
+        const corrected = normalizeChineseMessageTokens(rawText, tokens);
         if (corrected) {
-          console.log('[ChineseTokenDebug] Reconciliation succeeded, using corrected token list');
+          console.log('[ChineseTokenDebug] Normalization succeeded, using normalized token list');
           tokens = corrected;
         }
       } catch (e) {
@@ -464,28 +464,16 @@ export function ChatMessage({
       }
 
       if (isChinese) {
-        let matchedLen = 1;
-        let matchedDict = null;
-        for (let l = Math.min(6, remaining.length); l >= 2; l--) {
-          const cand = remaining.slice(0, l);
-          if (CHINESE_OFFLINE_DICT && CHINESE_OFFLINE_DICT[cand]) {
-            matchedLen = l;
-            matchedDict = CHINESE_OFFLINE_DICT[cand];
-            break;
-          }
-        }
-        const wordStr = remaining.slice(0, matchedLen);
+        console.warn('[ChineseTokenDebug] Unexpected unmatched segment at position', pos);
+        // Prevent infinite loop by advancing one character with minimal token
         result.push({
           type: 'word',
-          text: wordStr,
-          token: {
-            word: wordStr,
-            clean_word: wordStr,
-            translit: matchedDict?.pinyin || PINYIN_LEXICON[wordStr] || null
-          },
+          text: rawText[pos],
+          token: { word: rawText[pos] },
           matchedFromTokens: false
         });
-        pos += matchedLen;
+        pos += 1;
+        continue;
       } else {
         const wordMatch = remaining.match(/^[^\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+/);
         if (wordMatch) {

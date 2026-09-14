@@ -31,6 +31,38 @@ const SUPPORTED_LANGUAGES = [
 const STORAGE_PREFIX = 'linguaflow_chat_';
 const TARGET_LANG_KEY = 'linguaflow_target_lang';
 const NATIVE_LANG_KEY = 'linguaflow_native_lang';
+const ACTIVE_TAB_KEY = 'linguaflow_active_tab';
+const VALID_TABS = ['home', 'chat', 'youtube', 'text'];
+
+function getActiveTabFromLocation() {
+  try {
+    if (typeof window !== 'undefined') {
+      // 1. Primary source of truth: URL Path (e.g. /youtube, /text, /chat, /home)
+      const path = window.location.pathname.replace(/^\/+/, '').split('/')[0].toLowerCase();
+      if (VALID_TABS.includes(path)) {
+        return path;
+      }
+
+      // 2. Secondary source of truth: URL Hash (e.g. #youtube, #/youtube, #text, #chat)
+      const hash = window.location.hash.replace(/^#\/?/, '').split('/')[0].toLowerCase();
+      if (VALID_TABS.includes(hash)) {
+        return hash;
+      }
+
+      // 3. If on root path ('/') without subpath or hash, the URL explicitly indicates Home
+      if (window.location.pathname === '/' || window.location.pathname === '') {
+        return 'home';
+      }
+
+      // 4. LocalStorage persistence fallback if accessed via generic non-matching path
+      const saved = localStorage.getItem(ACTIVE_TAB_KEY);
+      if (saved && VALID_TABS.includes(saved)) {
+        return saved;
+      }
+    }
+  } catch (e) {}
+  return 'home';
+}
 
 function getSavedChat(lang) {
   try {
@@ -110,14 +142,44 @@ export default function App() {
   const [selectedWord, setSelectedWord] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'chat' | 'youtube'
+  const [activeTab, setActiveTab] = useState(() => getActiveTabFromLocation());
+
+  // Synchronize activeTab to URL and localStorage
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(ACTIVE_TAB_KEY, activeTab);
+        const targetPath = activeTab === 'home' ? '/' : `/${activeTab}`;
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState({ tab: activeTab }, '', targetPath);
+        }
+      }
+    } catch (e) {}
+  }, [activeTab]);
+
+  // Handle browser Back / Forward buttons and URL changes
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const tab = getActiveTabFromLocation();
+      setActiveTab(tab);
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
 
   const activeLangRef = useRef(targetLang);
+  const isUserScrolledUpRef = useRef(false);
 
   // Switch target language and persist chat state per language
   const handleTargetLangChange = (newLangInput) => {
     const newLang = typeof newLangInput === 'string' ? newLangInput : (newLangInput?.code || newLangInput?.target?.value || 'pl');
     if (!newLang || newLang === targetLang) return;
+
+    isUserScrolledUpRef.current = false;
 
     // 1. Save current messages to active language before switching
     if (messages && messages.length > 0) {
@@ -511,19 +573,76 @@ export default function App() {
     }
   }, [messages, targetLang]);
 
-  // Auto-scroll chat to bottom
+  const handleChatScroll = () => {
+    const container = chatContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    // Mark as user scrolled up if more than 100px from the bottom
+    isUserScrolledUpRef.current = distanceFromBottom > 100;
+  };
+
+  // Robust chat auto-scroll on mount / tab switch to chat / language switch / conversation restoration:
+  // Immediately and across sequential animation frames, plus ResizeObserver to wait for async elements
+  // (Chinese tokens, Pinyin ruby annotations, translations, audio controls) to fully layout.
   useEffect(() => {
-    if (chatContainerRef.current) {
+    if (activeTab !== 'chat') return;
+    const container = chatContainerRef.current;
+    if (!container) return;
+
+    // Reset manual scroll-up flag when entering chat or changing language to guarantee viewing latest message
+    isUserScrolledUpRef.current = false;
+
+    const syncBottom = () => {
+      if (!isUserScrolledUpRef.current && chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    };
+
+    syncBottom();
+    let frameId1, frameId2;
+    frameId1 = requestAnimationFrame(() => {
+      syncBottom();
+      frameId2 = requestAnimationFrame(() => {
+        syncBottom();
+      });
+    });
+
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        if (!isUserScrolledUpRef.current) {
+          syncBottom();
+        }
+      });
+      resizeObserver.observe(container);
+      Array.from(container.children).slice(-15).forEach((el) => {
+        resizeObserver.observe(el);
+      });
+    }
+
+    return () => {
+      if (frameId1) cancelAnimationFrame(frameId1);
+      if (frameId2) cancelAnimationFrame(frameId2);
+      if (resizeObserver) resizeObserver.disconnect();
+    };
+  }, [activeTab, targetLang]);
+
+  // Smooth scroll to bottom when new messages arrive or processing state changes during active chat
+  useEffect(() => {
+    if (activeTab !== 'chat') return;
+    if (!isUserScrolledUpRef.current && chatContainerRef.current) {
       chatContainerRef.current.scrollTo({
         top: chatContainerRef.current.scrollHeight,
         behavior: 'smooth'
       });
     }
-  }, [messages, isProcessing]);
+  }, [messages, isProcessing, activeTab]);
 
   // Send message flow
   const handleSendMessage = async (text) => {
     if (!text || !text.trim() || isProcessing) return;
+
+    isUserScrolledUpRef.current = false;
 
     const tempUserId = `user-${Date.now()}`;
     const rawUserMsg = {
@@ -618,33 +737,76 @@ export default function App() {
     }
   };
 
-  // Word lookup on-click
-  const handleWordClick = async (word, vocabItem) => {
-    if (vocabItem) {
+  // Word lookup on-click: Works independently for YouTube Reader, Text Reader, and Chat
+  const handleWordClick = async (rawWord, tokenOrVocab) => {
+    if (!rawWord && !tokenOrVocab) return;
+
+    // 1. Clean the word for lookup, removing leading/trailing punctuation while preserving Unicode letters, marks, and numbers
+    const wordStr = String(rawWord || tokenOrVocab?.word || '').trim();
+    const cleanWord = wordStr.replace(/^[^\p{L}\p{N}\p{M}]+|[^\p{L}\p{N}\p{M}]+$/gu, '').trim() || wordStr;
+
+    // 2. Extract any pre-existing transliteration/pinyin from token if available
+    const existingTranslit = tokenOrVocab?.translit || tokenOrVocab?.auxiliary || null;
+
+    // 3. If a pre-computed dictionary definition with meaning is already available (e.g. Chat message vocabulary):
+    if (tokenOrVocab && typeof tokenOrVocab.meaning === 'string' && tokenOrVocab.meaning.trim()) {
       setSelectedWord({
-        word,
-        meaning: vocabItem.meaning,
-        part_of_speech: vocabItem.part_of_speech,
-        translit: vocabItem.translit
+        word: cleanWord,
+        meaning: tokenOrVocab.meaning,
+        part_of_speech: tokenOrVocab.part_of_speech || null,
+        translit: tokenOrVocab.translit || existingTranslit,
+        targetLang
       });
       return;
     }
 
+    // 4. Open WordModal immediately with loading state so user gets instantaneous visual feedback
+    setSelectedWord({
+      word: cleanWord,
+      meaning: null,
+      part_of_speech: null,
+      translit: existingTranslit,
+      isLoading: true,
+      targetLang
+    });
+
+    // 5. Query the backend definition lookup API independently of paragraph gloss
     try {
-      const lookupResult = await lookupWordApi(word, targetLang, nativeLang, config.apiKey, config.provider || 'groq');
+      const lookupResult = await lookupWordApi(cleanWord, targetLang, nativeLang, config?.apiKey);
       if (lookupResult) {
-        setSelectedWord(lookupResult);
+        if (lookupResult.error) {
+          setSelectedWord({
+            word: cleanWord,
+            meaning: null,
+            error: lookupResult.error,
+            part_of_speech: null,
+            translit: existingTranslit,
+            targetLang
+          });
+          return;
+        }
+
+        setSelectedWord({
+          word: lookupResult.word || cleanWord,
+          meaning: lookupResult.meaning,
+          part_of_speech: lookupResult.part_of_speech || null,
+          translit: lookupResult.translit || existingTranslit,
+          targetLang
+        });
         return;
       }
     } catch (err) {
-      console.warn('Word lookup fallback:', err);
+      console.warn('Word lookup error:', err);
     }
 
+    // 6. If lookup returned nothing or failed, show clear error state inside modal
     setSelectedWord({
-      word,
-      meaning: `Término en ${currentLangObj.name}: "${word}".`,
-      part_of_speech: 'término',
-      translit: null
+      word: cleanWord,
+      meaning: null,
+      error: 'No se pudo obtener la definición en este momento. Verifica tu conexión o clave de API.',
+      part_of_speech: null,
+      translit: existingTranslit,
+      targetLang
     });
   };
 
@@ -660,6 +822,7 @@ export default function App() {
 
   // Reset conversation for CURRENT language only
   const handleResetChat = () => {
+    isUserScrolledUpRef.current = false;
     const initialMsg = getInitialBotMsg(targetLang);
     setMessages([initialMsg]);
     saveChatToStorage(targetLang, [initialMsg]);
@@ -718,6 +881,7 @@ export default function App() {
           {/* Main Chat Scroll Area */}
           <main
             ref={chatContainerRef}
+            onScroll={handleChatScroll}
             className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
           >
             {/* API Error Warning Banner */}
