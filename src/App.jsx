@@ -843,8 +843,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
-      {/* Global Header — hidden in Text Reader because that page owns its own header */}
-      {activeTab !== 'text' && (
+      {/* Global Header — hidden in Text Reader & YouTube Reader because they own their own headers */}
+      {activeTab !== 'text' && activeTab !== 'youtube' && (
         <Header
           languages={languages}
           targetLang={targetLang}
