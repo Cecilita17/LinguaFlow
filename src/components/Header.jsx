@@ -97,8 +97,8 @@ export function Header({
         </div>
 
         {/* DESKTOP HEADER (>= md) */}
-        {activeTab === 'home' ? (
-          /* =================== HOME DESKTOP: SINGLE SIMPLE BAR (MATCHING MOBILE LAYOUT) =================== */
+        {activeTab === 'home' || activeTab === 'chat' || activeTab === 'settings' ? (
+          /* =================== HOME, CHAT & SETTINGS DESKTOP: SINGLE SIMPLE BAR (MATCHING MOBILE LAYOUT) =================== */
           <div className="hidden md:flex max-w-4xl mx-auto items-center justify-between w-full">
             {/* Left: Brand Logo & Title */}
             <div
