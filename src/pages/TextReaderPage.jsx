@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
+import { TextLibraryView } from '../components/text/TextLibraryView.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { getLanguageMeta } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
@@ -64,7 +65,7 @@ export function TextReaderPage({
   onWordClick = null,
   setActiveTab = null
 }) {
-  const { t } = useSiteLanguage();
+  const { t, isSpanish } = useSiteLanguage();
   const {
     speechRate,
     setSpeechRate,
@@ -129,9 +130,62 @@ export function TextReaderPage({
     return document.paragraphs.filter(p => p.chapterId === currentChapter.id);
   }, [document, isEpub, chapters, currentChapter]);
   visibleParagraphsRef.current = visibleParagraphs;
-  const [isEditing, setIsEditing] = useState(() => !loadActiveDocumentDraft());
+
+  // Navigation mode: 'library' | 'importer' | 'reader'
+  // Default to 'library' when entering Text Reader
+  const [viewMode, setViewMode] = useState('library');
+
+  // Navigation helper: change view mode and update browser history
+  const navigateToView = useCallback((newMode) => {
+    setViewMode(newMode);
+    try {
+      if (newMode === 'library') {
+        if (window.location.hash) {
+          window.history.pushState(null, '', window.location.pathname + window.location.search);
+        }
+      } else if (newMode === 'importer') {
+        window.history.pushState({ viewMode: 'importer' }, '', '#import');
+      } else if (newMode === 'reader') {
+        window.history.pushState({ viewMode: 'reader' }, '', '#reader');
+      }
+    } catch (e) {}
+  }, []);
+
+  // Listen to browser back/forward buttons (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash;
+      if (hash === '#reader' && document) {
+        setViewMode('reader');
+      } else if (hash === '#import') {
+        setViewMode('importer');
+      } else {
+        setViewMode('library');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [document]);
+
+  const isEditing = viewMode === 'importer';
+  const setIsEditing = (val) => navigateToView(val ? 'importer' : 'reader');
+
   const [inputText, setInputText] = useState(() => loadActiveDocumentDraft()?.rawText || '');
   const [inputTitle, setInputTitle] = useState(() => loadActiveDocumentDraft()?.title || '');
+
+  const handleAddNewDocument = useCallback(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setIsAutoGlossing(false);
+    setPlayingParagraphId(null);
+    setInputText('');
+    setInputTitle('');
+    navigateToView('importer');
+  }, [navigateToView]);
   const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl'
   const [interlinearMode, setInterlinearMode] = useState(true);
 
@@ -249,7 +303,7 @@ export function TextReaderPage({
     return () => {
       element.removeEventListener('scroll', handleScroll);
     };
-  }, [isEditing]);
+  }, [isEditing, viewMode]);
 
   // Navigate to another chapter (unmounts previous chapter, mounts new chapter, scrolls to top)
   const handleNavigateChapter = useCallback((newIndex) => {
@@ -900,9 +954,10 @@ export function TextReaderPage({
     });
     setIsAutoGlossing(false);
     setLoadingParagraphIds(new Set());
-  }, [setTargetLang]);
+    navigateToView('reader');
+  }, [setTargetLang, navigateToView]);
 
-  // Delete document handler from library modal
+  // Delete document handler from library modal / view
   const handleDeleteDocumentFromLibrary = useCallback(async (deletedId) => {
     if (document && document.id === deletedId) {
       if (window.speechSynthesis) {
@@ -919,7 +974,6 @@ export function TextReaderPage({
       setDocument(null);
       setInputText('');
       setInputTitle('');
-      setIsEditing(true);
       setGlossingProgress({
         total: 0,
         completed: 0,
@@ -928,9 +982,10 @@ export function TextReaderPage({
         isComplete: false,
         failed: 0
       });
+      navigateToView('library');
     }
     await refreshLibraryCount();
-  }, [document, refreshLibraryCount]);
+  }, [document, refreshLibraryCount, navigateToView]);
 
   // Start new document from modal
   const handleNewDocumentFromModal = useCallback(() => {
@@ -1169,14 +1224,15 @@ export function TextReaderPage({
         deleteTextDocument(document.id).then(() => refreshLibraryCount()).catch(() => {});
       }
       handleClearDocument();
+      navigateToView('library');
     }
-  }, [document?.id, handleClearDocument, refreshLibraryCount, t]);
+  }, [document?.id, handleClearDocument, refreshLibraryCount, t, navigateToView]);
 
   // Open library action from three-dots menu
   const handleOpenLibrary = useCallback(() => {
     setIsActionsMenuOpen(false);
-    setShowSavedModal(true);
-  }, []);
+    navigateToView('library');
+  }, [navigateToView]);
 
   // Go back to Home — reuses the existing setActiveTab from App.jsx
   const handleGoHome = useCallback(() => {
@@ -1204,18 +1260,195 @@ export function TextReaderPage({
 
   return (
     <div className="h-full flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)] min-h-0">
+      {viewMode === 'library' || (!document && viewMode === 'reader') ? (
+        /* =================== VIEW 1: DEDICATED TEXT LIBRARY =================== */
+        <TextLibraryView
+          onSelectDocument={handleSelectSavedDocument}
+          onAddNew={handleAddNewDocument}
+          onBackToHome={handleGoHome}
+          onDeleteDocument={handleDeleteDocumentFromLibrary}
+          currentDocumentId={document?.id || ''}
+        />
+      ) : viewMode === 'importer' ? (
+        /* =================== VIEW 2: ADD / IMPORT TEXT SCREEN =================== */
+        <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-y-auto custom-scrollbar text-[var(--text-primary)]">
+          {/* Top Bar with Back to Library */}
+          <div className="flex-shrink-0 flex items-center justify-between pb-3 sm:pb-4 border-b border-[var(--border-primary)] mb-4">
+            <button
+              type="button"
+              onClick={() => navigateToView('library')}
+              className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>{isSpanish ? 'Biblioteca' : 'Library'}</span>
+            </button>
+
+            <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+              <Plus className="w-4 h-4 text-rose-500" />
+              <span>{t('text_importer_heading') || (isSpanish ? 'Importar o escribir texto' : 'Import or write text')}</span>
+            </h2>
+
+            <div className="w-20" />
+          </div>
+
+          <div className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full animate-fade-in my-auto">
+            <div className="p-6 sm:p-8 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl text-[var(--text-primary)]">
+              {/* Header Title inside card */}
+              <div className="flex items-center justify-between mb-5 pb-4 border-b border-[var(--border-primary)]">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/60">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[var(--text-primary)] leading-tight">
+                      {t('text_importer_heading') || 'Importar o escribir texto'}
+                    </h3>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                      {t('text_importer_subheading') || 'Pega cualquier lectura. Se dividirá automáticamente en párrafos con audio y glosado.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  {savedDocsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => navigateToView('library')}
+                      className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer transition-all shadow-xs"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
+                      <span>{isSpanish ? `Biblioteca (${savedDocsCount})` : `Library (${savedDocsCount})`}</span>
+                    </button>
+                  )}
+
+                  {document && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsHeaderHidden(false);
+                        previousScrollTopRef.current = 0;
+                        navigateToView('reader');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold cursor-pointer hover:bg-[var(--surface-hover)]"
+                    >
+                      {isSpanish ? 'Volver a lectura' : 'Back to reading'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+
+              {/* Title Input */}
+              <div className="mb-4">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                  Título del texto (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={inputTitle}
+                  onChange={(e) => setInputTitle(e.target.value)}
+                  placeholder="Ej: Mi primer día de clases / 我的学校..."
+                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm transition-all shadow-xs"
+                />
+              </div>
+
+              {/* Language Selector (Idioma del texto) */}
+              <div className="mb-4">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                  {t('text_language') || 'Idioma del texto'}
+                </label>
+                <LanguageSelectDropdown
+                  value={targetLang}
+                  onChange={(newLang) => {
+                    if (setTargetLang) {
+                      setTargetLang(newLang);
+                    }
+                  }}
+                  options={languages}
+                  variant="card"
+                  align="left"
+                  className="w-full"
+                />
+              </div>
+
+              {/* Textarea for raw text */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    Contenido del texto
+                  </label>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {inputText.trim() ? `${splitTextIntoParagraphs(inputText, targetLang).length} párrafos detectados` : 'Escribe o pega aquí'}
+                  </span>
+                </div>
+                <textarea
+                  rows={8}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="Pega o escribe tu texto aquí en cualquier idioma (chino, árabe, polaco, ruso, etc.). Cada salto de línea o espacio en blanco formará un párrafo independiente."
+                  className="w-full p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm leading-relaxed transition-all resize-y"
+                />
+              </div>
+
+              {/* Action Buttons Strip (Paste clipboard, Upload .txt file, Start Reading) */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div className="flex items-center space-x-2">
+                  {/* Paste from Clipboard */}
+                  <button
+                    type="button"
+                    onClick={handlePasteClipboard}
+                    className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+                  >
+                    <Clipboard className="w-4 h-4 text-rose-500 dark:text-rose-400" />
+                    <span>Pegar texto</span>
+                  </button>
+
+                  {/* File Upload Button (.txt, .epub) */}
+                  <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
+                    <Upload className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                    <span>Cargar archivo (.txt, .epub)</span>
+                    <input
+                      type="file"
+                      accept=".txt,.epub,text/plain,application/epub+zip"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Submit / Start Reading CTA */}
+                <button
+                  type="button"
+                  disabled={!inputText.trim()}
+                  onClick={handleStartReading}
+                  className={`py-3 px-6 rounded-2xl font-bold text-sm shadow-lg flex items-center space-x-2 transition-all cursor-pointer ${
+                    inputText.trim()
+                      ? 'bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/70 hover:shadow-rose-900/90 active:scale-95'
+                      : 'bg-[var(--surface-secondary)] text-[var(--text-muted)] border border-[var(--border-primary)] cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  <span>Comenzar a leer</span>
+                  <Play className="w-4 h-4 fill-current ml-0.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* =================== VIEW 3: READER VIEW =================== */
+        <>
       {/* TOP HEADER: [← back] [TÍTULO] [☰] — stays visible on scroll */}
       <header
         className="reader-full-header relative z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] shrink-0 transition-colors overflow-visible"
       >
         {document && !isEditing ? (
           <div className="reader-main-bar px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 min-w-0">
-            {/* Back button — reuses existing setActiveTab('home') */}
+            {/* Back button — goes back to library */}
             <button
               type="button"
-              onClick={handleGoHome}
-              title={t('nav_home') || 'Inicio'}
-              aria-label={t('nav_home') || 'Inicio'}
+              onClick={() => navigateToView('library')}
+              title={isSpanish ? 'Volver a la Biblioteca' : 'Back to Library'}
+              aria-label={isSpanish ? 'Volver a la Biblioteca' : 'Back to Library'}
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shrink-0"
             >
               <ArrowLeft className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
@@ -1417,161 +1650,11 @@ export function TextReaderPage({
         ) : null}
       </header>
 
-      {/* MAIN CONTENT AREA */}
-      <main
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto flex flex-col min-h-0"
-      >
-        {isEditing ? (
-          /* ============================================================ */
-          /* 1. INPUT / IMPORT VIEW (Escribir, Pegar, Importar archivo)     */
-          /* ============================================================ */
-          <div className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full animate-fade-in my-auto">
-            <div className="p-6 sm:p-8 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl text-[var(--text-primary)]">
-              {/* Header Title inside card */}
-              <div className="flex items-center justify-between mb-5 pb-4 border-b border-[var(--border-primary)]">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/60">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-[var(--text-primary)] leading-tight">
-                      {t('text_importer_heading') || 'Importar o escribir texto'}
-                    </h3>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                      {t('text_importer_subheading') || 'Pega cualquier lectura. Se dividirá automáticamente en párrafos con audio y glosado.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  {savedDocsCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowSavedModal(true)}
-                      className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer transition-all shadow-xs"
-                    >
-                      <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-                      <span>Biblioteca ({savedDocsCount})</span>
-                    </button>
-                  )}
-
-                  {document && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsEditing(false);
-                        setIsHeaderHidden(false);
-                        previousScrollTopRef.current = 0;
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold cursor-pointer hover:bg-[var(--surface-hover)]"
-                    >
-                      Volver a lectura
-                    </button>
-                  )}
-                </div>
-              </div>
-
-
-              {/* Title Input */}
-              <div className="mb-4">
-                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
-                  Título del texto (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={inputTitle}
-                  onChange={(e) => setInputTitle(e.target.value)}
-                  placeholder="Ej: Mi primer día de clases / 我的学校..."
-                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm transition-all shadow-xs"
-                />
-              </div>
-
-              {/* Language Selector (Idioma del texto) */}
-              <div className="mb-4">
-                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
-                  {t('text_language') || 'Idioma del texto'}
-                </label>
-                <LanguageSelectDropdown
-                  value={targetLang}
-                  onChange={(newLang) => {
-                    if (setTargetLang) {
-                      setTargetLang(newLang);
-                    }
-                  }}
-                  options={languages}
-                  variant="card"
-                  align="left"
-                  className="w-full"
-                />
-              </div>
-
-              {/* Textarea for raw text */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    Contenido del texto
-                  </label>
-                  <span className="text-[11px] text-[var(--text-muted)]">
-                    {inputText.trim() ? `${splitTextIntoParagraphs(inputText, targetLang).length} párrafos detectados` : 'Escribe o pega aquí'}
-                  </span>
-                </div>
-                <textarea
-                  rows={8}
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Pega o escribe tu texto aquí en cualquier idioma (chino, árabe, polaco, ruso, etc.). Cada salto de línea o espacio en blanco formará un párrafo independiente."
-                  className="w-full p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm leading-relaxed transition-all resize-y"
-                />
-              </div>
-
-              {/* Action Buttons Strip (Paste clipboard, Upload .txt file, Start Reading) */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <div className="flex items-center space-x-2">
-                  {/* Paste from Clipboard */}
-                  <button
-                    type="button"
-                    onClick={handlePasteClipboard}
-                    className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
-                  >
-                    <Clipboard className="w-4 h-4 text-rose-500 dark:text-rose-400" />
-                    <span>Pegar texto</span>
-                  </button>
-
-                  {/* File Upload Button (.txt, .epub) */}
-                  <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
-                    <Upload className="w-4 h-4 text-amber-500 dark:text-amber-400" />
-                    <span>Cargar archivo (.txt, .epub)</span>
-                    <input
-                      type="file"
-                      accept=".txt,.epub,text/plain,application/epub+zip"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-
-                {/* Submit / Start Reading CTA */}
-                <button
-                  type="button"
-                  disabled={!inputText.trim()}
-                  onClick={handleStartReading}
-                  className={`py-3 px-6 rounded-2xl font-bold text-sm shadow-lg flex items-center space-x-2 transition-all cursor-pointer ${
-                    inputText.trim()
-                      ? 'bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/70 hover:shadow-rose-900/90 active:scale-95'
-                      : 'bg-[var(--surface-secondary)] text-[var(--text-muted)] border border-[var(--border-primary)] cursor-not-allowed opacity-60'
-                  }`}
-                >
-                  <span>Comenzar a leer</span>
-                  <Play className="w-4 h-4 fill-current ml-0.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* ============================================================ */
-          /* 2. READER VIEW (Párrafos con audio alineado y glosado)       */
-          /* ============================================================ */
+          {/* MAIN CONTENT AREA */}
+          <main
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto flex flex-col min-h-0"
+          >
           <div className="flex-1 flex flex-col animate-fade-in">
             {/* EPUB Top Chapter Navigation Bar: Sticky flush top inside reader view.
                 Hides on scroll DOWN and reappears on scroll UP — reuses the existing
@@ -1724,8 +1807,7 @@ export function TextReaderPage({
             </footer>
 
           </div>
-        )}
-      </main>
+          </main>
 
       {/* BOTTOM CONTROL BAR — compact icon controls; each button binds to the exact
           same state/handler used by the Configuraciones submenu. Single source of truth. */}
@@ -1807,6 +1889,8 @@ export function TextReaderPage({
           </div>
         </div>
       )}
+        </>
+      )}
 
       {/* Loading Overlay during EPUB import */}
       {isImporting && (
@@ -1841,3 +1925,4 @@ export function TextReaderPage({
 }
 
 export default TextReaderPage;
+
