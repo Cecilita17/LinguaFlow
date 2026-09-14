@@ -12,14 +12,18 @@ import {
   CheckCircle2,
   Loader2,
   ChevronDown,
+  ChevronUp,
   Type,
   Maximize2,
   BookOpen,
   Languages,
+  Menu,
   MoreVertical,
   ChevronLeft,
   ChevronRight,
-  Volume2,
+  ArrowLeft,
+  Home,
+  Settings,
   Gauge
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
@@ -57,10 +61,17 @@ export function TextReaderPage({
   nativeLang = 'es',
   languages = [],
   apiKey = '',
-  onWordClick = null
+  onWordClick = null,
+  setActiveTab = null
 }) {
   const { t } = useSiteLanguage();
-  const { speechRate, setSpeechRate, autoPlayTextReader, setAutoPlayTextReader, speechRateOptions } = useAudioSettings();
+  const {
+    speechRate,
+    setSpeechRate,
+    autoPlayTextReader,
+    setAutoPlayTextReader,
+    speechRateOptions
+  } = useAudioSettings();
   const speechRateRef = useRef(speechRate);
   speechRateRef.current = speechRate;
   const autoPlayTextReaderRef = useRef(autoPlayTextReader);
@@ -145,7 +156,6 @@ export function TextReaderPage({
 
   // Auto-hide entire reader header on scroll down
   const [isHeaderHidden, setIsHeaderHidden] = useState(false);
-  const [showChapterBar, setShowChapterBar] = useState(true);
   const scrollContainerRef = useRef(null);
   const previousScrollTopRef = useRef(0);
   const isProgrammaticScrollRef = useRef(false);
@@ -185,13 +195,11 @@ export function TextReaderPage({
 
       // 4. Detect scroll direction
       if (delta > 0) {
-        // Scrolling DOWN -> hide entire header and chapter bar
+        // Scrolling DOWN -> hide entire header
         setIsHeaderHidden(true);
-        setShowChapterBar(false);
       } else {
-        // Scrolling UP -> show entire header and chapter bar immediately
+        // Scrolling UP -> show entire header immediately
         setIsHeaderHidden(false);
-        setShowChapterBar(true);
       }
 
       // Close contextual actions menu if open on scroll
@@ -1071,17 +1079,12 @@ export function TextReaderPage({
     setFontSize(order[nextIdx]);
   };
 
-  // Speech rate cycle (uses same rates as Opciones de LinguaFlow)
-  const cycleSpeechRate = () => {
-    const rates = speechRateOptions || [0.75, 0.85, 1.0, 1.15, 1.25, 1.5];
-    const currentIdx = rates.findIndex(r => Math.abs(r - speechRate) < 0.001);
-    const nextIdx = (currentIdx + 1) % rates.length;
-    setSpeechRate(rates[nextIdx]);
-  };
-
   // Contextual actions menu state for top bar
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef(null);
+  // UI-only toggle to expand/collapse the "Configuraciones" submenu inside the hamburger menu.
+  // Purely presentational — does not persist and does not control any of the 5 configuration values.
+  const [isSettingsSubmenuOpen, setIsSettingsSubmenuOpen] = useState(false);
 
   // Toggle menu visibility
   const toggleActionsMenu = useCallback((e) => {
@@ -1175,76 +1178,241 @@ export function TextReaderPage({
     setShowSavedModal(true);
   }, []);
 
+  // Go back to Home — reuses the existing setActiveTab from App.jsx
+  const handleGoHome = useCallback(() => {
+    setIsActionsMenuOpen(false);
+    if (typeof setActiveTab === 'function') {
+      setActiveTab('home');
+    }
+  }, [setActiveTab]);
+
+  // Cycle to the next speech rate option, reusing the existing setSpeechRate
+  const cycleSpeechRate = useCallback(() => {
+    const options = Array.isArray(speechRateOptions) && speechRateOptions.length > 0
+      ? speechRateOptions
+      : [];
+    if (options.length === 0) return;
+    const currentIdx = options.findIndex(r => Math.abs(r - speechRate) < 0.001);
+    const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % options.length;
+    setSpeechRate(options[nextIdx]);
+  }, [speechRate, setSpeechRate, speechRateOptions]);
+
   const currentLangMeta = getLanguageMeta(targetLang);
-  const isHeaderCurrentlyHidden = isHeaderHidden && !isEditing && !isActionsMenuOpen;
+  // Reuses the existing scroll-direction detection but now applies to the chapter bar only.
+  // Header stays visible; only the chapter bar hides on scroll down and reappears on scroll up.
+  const isChapterBarHidden = isHeaderHidden && !isEditing && !isActionsMenuOpen;
 
   return (
     <div className="h-full flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)] min-h-0">
-      {/* TOP HEADER CONTROLS BAR: FULL AUTO-HIDE ON SCROLL DOWN */}
+      {/* TOP HEADER: [← back] [TÍTULO] [☰] — stays visible on scroll */}
       <header
-        className={`reader-full-header relative z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] shrink-0 transition-colors ${
-          isHeaderCurrentlyHidden ? 'is-hidden' : 'overflow-visible'
-        }`}
-        inert={isHeaderCurrentlyHidden ? '' : undefined}
-        aria-hidden={isHeaderCurrentlyHidden}
+        className="reader-full-header relative z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] shrink-0 transition-colors overflow-visible"
       >
         {document && !isEditing ? (
-          /* ============================================================ */
-          /* READING MODE: Single unified row: [Título]  [T] [A] [Auto-gloss] [⋮] */
-          /* ============================================================ */
-          <div className="reader-main-bar px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-3 min-w-0">
-            {/* Left: Título del texto (occupies all available space, truncates cleanly) */}
-            <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-1">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-xs shrink-0">
-                <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2
-                  title={document.title}
-                  className="text-xs sm:text-sm md:text-base font-bold text-[var(--text-primary)] truncate leading-snug"
-                >
-                  {document.title}
-                </h2>
-              </div>
+          <div className="reader-main-bar px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Back button — reuses existing setActiveTab('home') */}
+            <button
+              type="button"
+              onClick={handleGoHome}
+              title={t('nav_home') || 'Inicio'}
+              aria-label={t('nav_home') || 'Inicio'}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            </button>
+
+            {/* Título — centered, truncates cleanly */}
+            <div className="min-w-0 flex-1 text-center px-2">
+              <h2
+                title={document.title}
+                className="text-xs sm:text-sm md:text-base font-bold text-[var(--text-primary)] truncate leading-snug"
+              >
+                {document.title}
+              </h2>
             </div>
 
-              {/* Right: [⋮] Context Menu */}
-              <div className="flex items-center shrink-0">
-                {/* ⋮ menu */}
-                <div className="relative" ref={actionsMenuRef}>
+            {/* ☰ Hamburger menu — reuses existing isActionsMenuOpen / toggleActionsMenu / actionsMenuRef */}
+            <div className="relative shrink-0" ref={actionsMenuRef}>
+              <button
+                type="button"
+                onClick={toggleActionsMenu}
+                title="Menú"
+                aria-label="Menú"
+                aria-expanded={isActionsMenuOpen}
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                  isActionsMenuOpen
+                    ? 'bg-[var(--surface-hover)] text-[var(--text-primary)] border border-rose-500/50'
+                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                <Menu className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              </button>
+
+              {/* Dropdown: Inicio / Librería / Editar Título / ⚙️ Configuraciones (submenu) / Eliminar */}
+              {isActionsMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 z-[100] w-64 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)] max-h-[80vh] overflow-y-auto">
+                  {/* Inicio — reuses existing setActiveTab */}
                   <button
                     type="button"
-                    onClick={toggleActionsMenu}
-                    title="Más opciones"
-                    aria-label="Más opciones"
-                    aria-expanded={isActionsMenuOpen}
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
-                      isActionsMenuOpen
-                        ? 'bg-[var(--surface-hover)] text-[var(--text-primary)] border border-rose-500/50'
-                        : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
-                    }`}
+                    onClick={handleGoHome}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
                   >
-                    <MoreVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <Home className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
+                    <span>{t('nav_home') || 'Inicio'}</span>
                   </button>
-                  {isActionsMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 z-[100] w-48 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)]">
-                      <button type="button" onClick={handleEditTitle} className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]">
-                        <span className="text-sm leading-none">✏️</span>
-                        <span>Editar título</span>
+
+                  {/* Librería — reuses handleOpenLibrary */}
+                  <button
+                    type="button"
+                    onClick={handleOpenLibrary}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                  >
+                    <BookOpen className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
+                    <span>Librería</span>
+                  </button>
+
+                  {/* Editar Título — reuses handleEditTitle */}
+                  <button
+                    type="button"
+                    onClick={handleEditTitle}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                  >
+                    <Edit3 className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
+                    <span>Editar título</span>
+                  </button>
+
+                  {/* ⚙️ Configuraciones — UI-only submenu, reuses the same state/handlers as the bottom bar */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsSettingsSubmenuOpen(prev => !prev);
+                    }}
+                    aria-expanded={isSettingsSubmenuOpen}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                  >
+                    <span className="flex items-center space-x-2.5">
+                      <Settings className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
+                      <span>Configuraciones</span>
+                    </span>
+                    {isSettingsSubmenuOpen ? (
+                      <ChevronUp className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+                    )}
+                  </button>
+
+                  {isSettingsSubmenuOpen && (
+                    <div className="ml-3 pl-2 border-l border-[var(--border-subtle)]/60 space-y-0.5 mt-0.5">
+                      {/* Auto play textreader — same source of truth as bottom bar */}
+                      <button
+                        type="button"
+                        onClick={() => setAutoPlayTextReader(!autoPlayTextReader)}
+                        className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center space-x-2.5">
+                          <Play className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
+                          <span>Auto play</span>
+                        </span>
+                        <span
+                          className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
+                            autoPlayTextReader
+                              ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
+                              : 'bg-[var(--surface-secondary)] justify-start'
+                          }`}
+                        >
+                          <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                        </span>
                       </button>
-                      <button type="button" onClick={handleDeleteText} className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer">
-                        <span className="text-sm leading-none">🗑️</span>
-                        <span>Eliminar</span>
+
+                      {/* Playback speed — cycles through SPEECH_RATE_OPTIONS using setSpeechRate */}
+                      <button
+                        type="button"
+                        onClick={cycleSpeechRate}
+                        className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center space-x-2.5">
+                          <Gauge className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
+                          <span>Playback speed</span>
+                        </span>
+                        <span className="text-[11px] font-mono font-bold text-rose-600 dark:text-rose-300 shrink-0">
+                          {Number(speechRate).toFixed(2)}×
+                        </span>
                       </button>
-                      <div className="my-1 border-t border-[var(--border-subtle)]/60" />
-                      <button type="button" onClick={handleOpenLibrary} className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]">
-                        <span className="text-sm leading-none">📚</span>
-                        <span>Librería</span>
+
+                      {/* Transliterations — same setInterlinearMode as bottom bar */}
+                      <button
+                        type="button"
+                        onClick={() => setInterlinearMode(!interlinearMode)}
+                        className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center space-x-2.5">
+                          <span className="w-3.5 h-3.5 flex items-center justify-center font-serif font-bold text-[13px] leading-none text-rose-500 dark:text-rose-400 shrink-0">T</span>
+                          <span>Transliterations</span>
+                        </span>
+                        <span
+                          className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
+                            interlinearMode
+                              ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
+                              : 'bg-[var(--surface-secondary)] justify-start'
+                          }`}
+                        >
+                          <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                        </span>
+                      </button>
+
+                      {/* Text size — same cycleFontSize as bottom bar */}
+                      <button
+                        type="button"
+                        onClick={cycleFontSize}
+                        className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center space-x-2.5">
+                          <span className="w-3.5 h-3.5 flex items-center justify-center font-bold text-[13px] leading-none text-rose-500 dark:text-rose-400 shrink-0">A</span>
+                          <span>Text size</span>
+                        </span>
+                        <span className="text-[11px] font-mono font-bold uppercase text-rose-600 dark:text-rose-300 shrink-0">
+                          {fontSize}
+                        </span>
+                      </button>
+
+                      {/* Auto glossing — same handleToggleAutoGlossing as bottom bar */}
+                      <button
+                        type="button"
+                        onClick={handleToggleAutoGlossing}
+                        className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center space-x-2.5">
+                          <Sparkles className={`w-3.5 h-3.5 shrink-0 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500' : 'text-rose-500 dark:text-rose-400'}`} />
+                          <span>Auto glossing</span>
+                        </span>
+                        <span
+                          className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
+                            isAutoGlossing
+                              ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 justify-end'
+                              : 'bg-[var(--surface-secondary)] justify-start'
+                          }`}
+                        >
+                          <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                        </span>
                       </button>
                     </div>
                   )}
+
+                  <div className="my-1 border-t border-[var(--border-subtle)]/60" />
+
+                  {/* Eliminar — reuses handleDeleteText (kept to preserve existing functionality) */}
+                  <button
+                    type="button"
+                    onClick={handleDeleteText}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <span>Eliminar</span>
+                  </button>
                 </div>
-              </div>
+              )}
+            </div>
           </div>
         ) : null}
       </header>
@@ -1386,9 +1554,18 @@ export function TextReaderPage({
           /* 2. READER VIEW (Párrafos con audio alineado y glosado)       */
           /* ============================================================ */
           <div className="flex-1 flex flex-col animate-fade-in">
-            {/* EPUB Top Chapter Navigation Bar: Sticky flush top inside reader view */}
+            {/* EPUB Top Chapter Navigation Bar: Sticky flush top inside reader view.
+                Hides on scroll DOWN and reappears on scroll UP — reuses the existing
+                isHeaderHidden scroll-direction detection (now derived as isChapterBarHidden). */}
             {isEpub && chapters.length > 1 && (
-              <div className="sticky top-0 z-20 py-2.5 px-3 sm:px-4 mb-4 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm backdrop-blur-md flex items-center justify-between gap-2 sm:gap-3 transition-colors">
+              <div
+                className={`sticky top-0 z-20 py-2.5 px-3 sm:px-4 mb-4 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm backdrop-blur-md flex items-center justify-between gap-2 sm:gap-3 transition-all duration-200 ease-out ${
+                  isChapterBarHidden
+                    ? '-translate-y-4 opacity-0 pointer-events-none'
+                    : 'translate-y-0 opacity-100'
+                }`}
+                aria-hidden={isChapterBarHidden}
+              >
                 <button
                   type="button"
                   disabled={currentChapterIndex === 0}
@@ -1487,7 +1664,7 @@ export function TextReaderPage({
 
             {/* EPUB Bottom Chapter Navigation Footer Card */}
             {isEpub && chapters.length > 1 && (
-              <div className={`mt-8 pt-5 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-3 ${showChapterBar ? '' : 'hidden'}`}>
+              <div className="mt-8 pt-5 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-3">
                 <button
                   type="button"
                   disabled={currentChapterIndex === 0}
@@ -1529,6 +1706,87 @@ export function TextReaderPage({
           </div>
         )}
       </main>
+
+      {/* BOTTOM CONTROL BAR — compact icon controls; each button binds to the exact
+          same state/handler used by the Configuraciones submenu. Single source of truth. */}
+      {document && !isEditing && (
+        <div className="shrink-0 z-30 bg-[var(--header-bg)] backdrop-blur-md border-t border-[var(--header-border)] shadow-md">
+          <div className="px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-around gap-1 sm:gap-2 max-w-4xl mx-auto">
+            {/* Auto play — same autoPlayTextReader / setAutoPlayTextReader */}
+            <button
+              type="button"
+              onClick={() => setAutoPlayTextReader(!autoPlayTextReader)}
+              title={autoPlayTextReader ? 'Auto play activo (clic para desactivar)' : 'Activar Auto play'}
+              aria-label="Auto play"
+              aria-pressed={autoPlayTextReader}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                autoPlayTextReader
+                  ? 'bg-rose-600 text-white border border-rose-500 ring-1 ring-rose-400/30 shadow-rose-900/40'
+                  : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+              }`}
+            >
+              <Play className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            </button>
+
+            {/* Playback speed — cycles through SPEECH_RATE_OPTIONS via setSpeechRate */}
+            <button
+              type="button"
+              onClick={cycleSpeechRate}
+              title={`Velocidad de reproducción (${Number(speechRate).toFixed(2)}×) — clic para cambiar`}
+              aria-label="Playback speed"
+              className="min-w-9 h-9 sm:min-w-10 sm:h-10 px-1.5 rounded-lg sm:rounded-xl flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            >
+              <Gauge className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="text-[10px] sm:text-[11px] font-mono font-bold leading-none">
+                {Number(speechRate).toFixed(2)}×
+              </span>
+            </button>
+
+            {/* Transliterations — same interlinearMode / setInterlinearMode */}
+            <button
+              type="button"
+              onClick={() => setInterlinearMode(!interlinearMode)}
+              title={interlinearMode ? 'Desactivar transliteración' : 'Activar transliteración'}
+              aria-label="Transliterations"
+              aria-pressed={interlinearMode}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                interlinearMode
+                  ? 'bg-rose-600 text-white border border-rose-500 ring-1 ring-rose-400/30 shadow-rose-900/40'
+                  : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+              }`}
+            >
+              <span className="font-serif text-[13px] sm:text-sm font-bold leading-none select-none">T</span>
+            </button>
+
+            {/* Text size — same cycleFontSize */}
+            <button
+              type="button"
+              onClick={cycleFontSize}
+              title={`Tamaño de texto: ${fontSize} — clic para cambiar`}
+              aria-label="Text size"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            >
+              <span className="text-[13px] sm:text-sm font-bold leading-none select-none">A</span>
+            </button>
+
+            {/* Auto glossing — same isAutoGlossing / handleToggleAutoGlossing */}
+            <button
+              type="button"
+              onClick={handleToggleAutoGlossing}
+              title={isAutoGlossing ? 'Glosado automático activo (clic para pausar)' : 'Activar glosado automático'}
+              aria-label="Auto glossing"
+              aria-pressed={isAutoGlossing}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                isAutoGlossing
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 shadow-emerald-950/40'
+                  : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border-primary)]'
+              }`}
+            >
+              <Sparkles className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isAutoGlossing ? 'text-white fill-white' : ''}`} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Loading Overlay during EPUB import */}
       {isImporting && (

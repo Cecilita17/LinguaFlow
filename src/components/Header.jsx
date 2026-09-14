@@ -80,9 +80,12 @@ export function Header({
             tabIndex={0}
             title={t('nav_home')}
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50 shrink-0 group-hover:scale-105 transition-transform">
-              <Sparkles className="w-5 h-5 fill-white text-white" />
-            </div>
+            <img
+              src="/linguaflow-logo.svg"
+              alt="LinguaFlow"
+              className="w-9 h-9 shrink-0 group-hover:scale-105 transition-transform"
+              draggable="false"
+            />
             <div>
               <h1 className="font-bold text-[var(--text-primary)] text-[17px] leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
                 LinguaFlow
@@ -126,9 +129,12 @@ export function Header({
             tabIndex={0}
             title={t('nav_home')}
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-rose-900/40 group-hover:scale-105 transition-transform">
-              <Sparkles className="w-5 h-5" />
-            </div>
+            <img
+              src="/linguaflow-logo.svg"
+              alt="LinguaFlow"
+              className="w-10 h-10 group-hover:scale-105 transition-transform"
+              draggable="false"
+            />
             <div>
               <h1 className="font-bold text-[var(--text-primary)] text-lg leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
                 LinguaFlow

@@ -1,0 +1,19 @@
+<svg width="380" height="380" viewBox="0 0 380 380" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <linearGradient id="globeFillPink" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#D4537E"/>
+    <stop offset="100%" stop-color="#993556"/>
+  </linearGradient>
+</defs>
+<circle cx="180" cy="200" r="130" fill="url(#globeFillPink)"/>
+<ellipse cx="180" cy="200" rx="50" ry="130" stroke="#F4C0D1" stroke-width="1" fill="none" opacity="0.55"/>
+<ellipse cx="180" cy="200" rx="100" ry="130" stroke="#F4C0D1" stroke-width="1" fill="none" opacity="0.55"/>
+<path d="M 58 155 Q 180 135 302 155" stroke="#F4C0D1" stroke-width="1" fill="none" opacity="0.55"/>
+<path d="M 50 200 Q 180 200 310 200" stroke="#F4C0D1" stroke-width="1" fill="none" opacity="0.55"/>
+<path d="M 58 245 Q 180 265 302 245" stroke="#F4C0D1" stroke-width="1" fill="none" opacity="0.55"/>
+<circle cx="180" cy="200" r="130" fill="none" stroke="#ED93B1" stroke-width="2"/>
+<path fill="#FBEAF0" d="M 280 60 C 284 90, 300 106, 330 110 C 300 114, 284 130, 280 160 C 276 130, 260 114, 230 110 C 260 106, 276 90, 280 60 Z"/>
+<path fill="#FBEAF0" d="M 120 130 C 122 143, 129 150, 142 152 C 129 154, 122 161, 120 174 C 118 161, 111 154, 98 152 C 111 150, 118 143, 120 130 Z"/>
+<path fill="#FBEAF0" d="M 230 270 C 231 279, 236 284, 245 285 C 236 286, 231 291, 230 300 C 229 291, 224 286, 215 285 C 224 284, 229 279, 230 270 Z"/>
+<path fill="#FBEAF0" d="M 90 240 C 91 247, 95 251, 102 252 C 95 253, 91 257, 90 264 C 89 257, 85 253, 78 252 C 85 251, 89 247, 90 240 Z"/>
+</svg>
