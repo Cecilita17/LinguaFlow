@@ -4,6 +4,7 @@ import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
+import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 
 /**
  * TextParagraphItem
@@ -90,10 +91,10 @@ export function TextParagraphItem({
             <div
               dir={textDirection}
               style={{ direction: textDirection }}
-              className={`flex flex-wrap items-center ${
+              className={`flex flex-wrap items-start ${
                 isChinese
-                  ? 'gap-x-1 sm:gap-x-1.5 gap-y-3'
-                  : 'gap-x-2 sm:gap-x-3 gap-y-2'
+                  ? 'gap-x-1 sm:gap-x-1.5 gap-y-3 sm:gap-y-3.5'
+                  : 'gap-x-1.5 sm:gap-x-2 gap-y-2.5 sm:gap-y-3'
               } leading-tight break-words max-w-full ${
                 isRtl ? 'justify-start text-right' : 'justify-start text-left'
               }`}
@@ -118,8 +119,8 @@ export function TextParagraphItem({
                       key={idx}
                       dir={textDirection}
                       className={`text-[var(--text-muted)] font-medium ${
-                        isChinese ? 'px-0 text-sm sm:text-base -ml-0.5' : 'px-0.5 text-base sm:text-lg'
-                      } select-text self-center isolate [unicode-bidi:isolate]`}
+                        isChinese ? 'px-0 text-sm sm:text-base -ml-0.5 mt-3 sm:mt-3.5' : 'px-0.5 text-base sm:text-lg mt-0.5 sm:mt-1'
+                      } select-text self-start isolate [unicode-bidi:isolate]`}
                     >
                       {word}
                     </span>
@@ -138,10 +139,10 @@ export function TextParagraphItem({
                     }}
                     role={onWordClick ? 'button' : undefined}
                     tabIndex={onWordClick ? 0 : undefined}
-                    className={`inline-flex flex-col items-center justify-center transition-colors cursor-pointer group/token max-w-full isolate [unicode-bidi:isolate] ${
+                    className={`inline-flex flex-col items-center justify-start transition-colors cursor-pointer group/token max-w-full isolate [unicode-bidi:isolate] ${
                       isChinese
                         ? 'px-0.5 sm:px-1 py-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 active:bg-rose-500/15'
-                        : 'px-1.5 py-1 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 active:bg-rose-500/20'
+                        : 'px-1 sm:px-1.5 py-0.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 active:bg-rose-500/20'
                     }`}
                     title={cleanGloss ? `"${word}": ${cleanGloss}` : word}
                   >
@@ -173,18 +174,13 @@ export function TextParagraphItem({
                       );
                     })()}
 
-                    {/* Tier 3 (BOTTOM): Gloss in student's native language (STRICTLY LTR) */}
+                    {/* Tier 3 (BOTTOM): Gloss in student's native language */}
                     {cleanGloss && (
-                      <span
-                        dir="ltr"
-                        className={`${
-                          isChinese
-                            ? 'text-[14px] sm:text-[15px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/token:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
-                            : 'text-[14px] sm:text-[15px] text-[var(--text-muted)] group-hover/token:text-rose-600 dark:group-hover/token:text-rose-300 mt-1 max-w-[140px]'
-                        } font-normal leading-tight truncate text-center select-text isolate [unicode-bidi:isolate] transition-colors`}
-                      >
-                        {cleanGloss}
-                      </span>
+                      <InterlinearGloss
+                        gloss={cleanGloss}
+                        isChinese={isChinese}
+                        nativeLang={nativeLang}
+                      />
                     )}
                   </div>
                 );

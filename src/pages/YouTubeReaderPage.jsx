@@ -1324,6 +1324,7 @@ export function YouTubeReaderPage({
                   searchQuery={searchQuery}
                   interlinearMode={interlinearMode}
                   targetLang={targetLang}
+                  nativeLang={nativeLang}
                   onWordClick={onWordClick}
                   pendingScrollSubtitleId={pendingScrollSubtitleId}
                   onScrollComplete={() => setPendingScrollSubtitleId(null)}

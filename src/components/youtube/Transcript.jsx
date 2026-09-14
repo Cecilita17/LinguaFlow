@@ -17,6 +17,7 @@ export function Transcript({
   searchQuery = '',
   interlinearMode = true,
   targetLang = 'zh',
+  nativeLang = 'es',
   onWordClick = null,
   pendingScrollSubtitleId = null,
   onScrollComplete = null
@@ -170,6 +171,7 @@ export function Transcript({
               searchQuery={searchQuery}
               interlinearMode={interlinearMode}
               targetLang={targetLang}
+              nativeLang={nativeLang}
               onWordClick={onWordClick}
             />
           </div>

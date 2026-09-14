@@ -589,15 +589,29 @@ rt {
 /* Tier 3 (BOTTOM): Gloss in light mode (Clear stone-600, accessible and distinct) */
 [data-theme="light"] .group\/token .text-stone-300\/80,
 [data-theme="light"] .group\/line .text-stone-300\/80,
-[data-theme="light"] .group\/token span[dir="ltr"] {
+[data-theme="light"] .group\/token span[dir="ltr"],
+[data-theme="light"] .group\/token span[dir="rtl"],
+[data-theme="light"] .group\/token .interlinear-gloss,
+[data-theme="light"] .group\/line .interlinear-gloss {
   color: #57534e !important; /* stone-600 */
   font-weight: 500 !important;
 }
 
 [data-theme="light"] .group\/token:hover .text-stone-300\/80,
 [data-theme="light"] .group\/token:hover span[dir="ltr"],
+[data-theme="light"] .group\/token:hover span[dir="rtl"],
+[data-theme="light"] .group\/token:hover .interlinear-gloss,
 [data-theme="light"] .group\/token .group-hover\/token\:text-rose-200 {
   color: #9f1239 !important; /* rose-800 on token hover */
+}
+
+/* Universal Interlinear Gloss: Guaranteed full visibility, no ellipsis, responsive wrapping */
+.interlinear-gloss {
+  white-space: normal !important;
+  text-overflow: clip !important;
+  overflow: visible !important;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Punctuation tokens in light mode */

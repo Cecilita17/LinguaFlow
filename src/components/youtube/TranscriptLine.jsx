@@ -4,6 +4,7 @@ import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/lang
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
+import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 
 export function TranscriptLine({
   line,
@@ -19,6 +20,7 @@ export function TranscriptLine({
   searchQuery = '',
   interlinearMode = true,
   targetLang = 'zh',
+  nativeLang = 'es',
   onWordClick = null
 }) {
   const { isWordSaved } = useSavedWords();
@@ -140,10 +142,10 @@ export function TranscriptLine({
               <div
                 dir={textDirection}
                 style={{ direction: textDirection }}
-                className={`flex flex-wrap items-center ${
+                className={`flex flex-wrap items-start ${
                   isChinese
                     ? 'gap-x-1 sm:gap-x-1.5 gap-y-3'
-                    : 'gap-x-1.5 sm:gap-x-2.5 gap-y-2'
+                    : 'gap-x-1.5 sm:gap-x-2.5 gap-y-2.5'
                 } leading-tight break-words max-w-full ${
                   isRtl ? 'justify-start text-right' : 'justify-start text-left'
                 }`}
@@ -182,8 +184,8 @@ export function TranscriptLine({
                         key={idx}
                         dir={textDirection}
                         className={`text-stone-400 font-medium ${
-                          isChinese ? 'px-0 text-sm sm:text-base -ml-0.5' : 'px-0.5 text-base sm:text-lg'
-                        } select-text self-center isolate [unicode-bidi:isolate]`}
+                          isChinese ? 'px-0 text-sm sm:text-base -ml-0.5 mt-3 sm:mt-3.5' : 'px-0.5 text-base sm:text-lg mt-0.5 sm:mt-1'
+                        } select-text self-start isolate [unicode-bidi:isolate]`}
                       >
                         {word}
                       </span>
@@ -200,7 +202,7 @@ export function TranscriptLine({
                           onWordClick(word, { word, auxiliary, gloss: cleanGloss });
                         }
                       }}
-                      className={`inline-flex flex-col items-center justify-center rounded-md hover:bg-white/10 transition-colors group/token max-w-full isolate [unicode-bidi:isolate] cursor-pointer ${
+                      className={`inline-flex flex-col items-center justify-start rounded-md hover:bg-white/10 transition-colors group/token max-w-full isolate [unicode-bidi:isolate] cursor-pointer ${
                         isChinese ? 'px-0.5 sm:px-1 py-0.5' : 'px-1 py-0.5'
                       }`}
                     >
@@ -232,20 +234,12 @@ export function TranscriptLine({
                         );
                       })()}
 
-                      {/* Tier 3 (BOTTOM): Gloss in student's native language (STRICTLY LTR) */}
-                      {cleanGloss && (
-                        <span
-                          dir="ltr"
-                          title={cleanGloss}
-                          className={`${
-                            isChinese
-                              ? 'text-[14px] sm:text-[15px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/line:text-[var(--text-secondary)] mt-0.5 max-w-[90px]'
-                              : 'text-[14px] sm:text-[15px] text-[var(--text-muted)] group-hover/line:text-[var(--text-secondary)] mt-1 max-w-[120px]'
-                          } font-normal leading-tight truncate text-center select-text isolate [unicode-bidi:isolate] transition-colors`}
-                        >
-                          {cleanGloss}
-                        </span>
-                      )}
+                      {/* Tier 3 (BOTTOM): Gloss in student's native language (responsive wrapping, never truncated) */}
+                      <InterlinearGloss
+                        gloss={cleanGloss}
+                        isChinese={isChinese}
+                        nativeLang={nativeLang}
+                      />
                     </div>
                   );
                 })}
