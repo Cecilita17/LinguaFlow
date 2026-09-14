@@ -22,6 +22,7 @@ export function TextParagraphItem({
   targetLang = 'zh',
   fontSize = 'base',
   interlinearMode = true,
+  nativeLang = 'es',
   isPlaying = false,
   isAudioError = false,
   isGlossing = false,

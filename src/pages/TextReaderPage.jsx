@@ -1663,6 +1663,7 @@ export function TextReaderPage({
                     <TextParagraphItem
                       paragraph={paragraph}
                       targetLang={activeDocLang}
+                      nativeLang={nativeLang}
                       fontSize={fontSize}
                       interlinearMode={interlinearMode}
                       isPlaying={playingParagraphId === paragraph.id}
