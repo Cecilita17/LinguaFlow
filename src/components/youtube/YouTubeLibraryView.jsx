@@ -104,32 +104,32 @@ export function YouTubeLibraryView({
   return (
     <div className="flex flex-col h-full w-full max-w-5xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-hidden text-[var(--text-primary)]">
       {/* Top Header Bar */}
-      <div className="flex-shrink-0 flex items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-[#441f15]/80">
+      <div className="flex-shrink-0 flex items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-[var(--border-primary)]">
         <div className="flex items-center space-x-3">
           {onBackToHome && (
             <button
               type="button"
               onClick={onBackToHome}
               title={isSpanish ? 'Volver a Inicio' : 'Back to Home'}
-              className="p-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-stone-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs"
+              className="p-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">{isSpanish ? 'Inicio' : 'Home'}</span>
             </button>
           )}
 
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/50">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/40">
             <BookOpen className="w-5 h-5" />
           </div>
 
           <div>
-            <h1 className="text-base sm:text-lg font-bold text-white tracking-wide flex items-center gap-2">
+            <h1 className="text-base sm:text-lg font-bold text-[var(--text-primary)] tracking-wide flex items-center gap-2">
               <span>{isSpanish ? 'Biblioteca de YouTube' : 'YouTube Library'}</span>
-              <span className="text-[11px] bg-rose-950/80 text-rose-300 font-mono px-2 py-0.5 rounded-full border border-rose-800">
+              <span className="text-[11px] bg-rose-500/15 text-rose-600 dark:text-rose-300 font-mono px-2 py-0.5 rounded-full border border-rose-500/30">
                 {transcripts.length}
               </span>
             </h1>
-            <p className="text-[11px] sm:text-xs text-rose-300/70">
+            <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">
               {isSpanish
                 ? 'Tus vídeos y transcripciones guardadas con glosado instantáneo'
                 : 'Your saved videos and transcripts with instant glossing'}
@@ -141,7 +141,7 @@ export function YouTubeLibraryView({
         <button
           type="button"
           onClick={onAddNew}
-          className="px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg shadow-rose-950/50 active:scale-95 transition-all cursor-pointer shrink-0"
+          className="px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg shadow-rose-950/40 active:scale-95 transition-all cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
           <span>{isSpanish ? 'Añadir Vídeo' : 'Add Video'}</span>
@@ -151,19 +151,19 @@ export function YouTubeLibraryView({
       {/* Search & Stats Bar */}
       <div className="flex-shrink-0 pt-3 pb-3 flex items-center gap-3">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-rose-300/40" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={isSpanish ? 'Buscar por título, ID de vídeo o idioma...' : 'Search by title, video ID or language...'}
-            className="w-full bg-[#140603] text-white text-xs sm:text-sm pl-9 pr-8 py-2.5 rounded-xl border border-[#482015] placeholder-rose-300/30 focus:outline-none focus:ring-1 focus:ring-rose-500 transition-all"
+            className="w-full bg-[var(--input-bg)] text-[var(--text-primary)] text-xs sm:text-sm pl-9 pr-8 py-2.5 rounded-xl border border-[var(--input-border)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-rose-500 transition-all shadow-xs"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -174,21 +174,21 @@ export function YouTubeLibraryView({
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto pr-1 pb-4 custom-scrollbar min-h-0">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-rose-300/60 text-xs sm:text-sm">
+          <div className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)] text-xs sm:text-sm">
             <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin mb-3" />
             <span>{isSpanish ? 'Cargando biblioteca de vídeos...' : 'Loading video library...'}</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-[#441f15] bg-[#1d0b06]/50 flex flex-col items-center justify-center my-6">
-            <div className="w-14 h-14 rounded-2xl bg-rose-950/50 border border-rose-900/60 flex items-center justify-center mb-3 text-rose-400">
+          <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-[var(--border-primary)] bg-[var(--surface-secondary)] flex flex-col items-center justify-center my-6">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-3 text-rose-500 dark:text-rose-400">
               {searchQuery ? <Search className="w-7 h-7 opacity-70" /> : <Youtube className="w-7 h-7 opacity-70" />}
             </div>
-            <h3 className="text-base font-bold text-rose-200 mb-1">
+            <h3 className="text-base font-bold text-[var(--text-primary)] mb-1">
               {searchQuery
                 ? (isSpanish ? 'Sin coincidencias' : 'No matches found')
                 : (isSpanish ? 'Tu biblioteca de YouTube está vacía' : 'Your YouTube library is empty')}
             </h3>
-            <p className="text-xs sm:text-sm text-rose-300/60 max-w-md mb-5 leading-relaxed">
+            <p className="text-xs sm:text-sm text-[var(--text-muted)] max-w-md mb-5 leading-relaxed">
               {searchQuery
                 ? (isSpanish
                     ? 'No se encontraron vídeos con ese criterio de búsqueda. Prueba con otro título o idioma.'
@@ -201,7 +201,7 @@ export function YouTubeLibraryView({
               <button
                 type="button"
                 onClick={onAddNew}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg shadow-rose-950/60 active:scale-95 transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg shadow-rose-950/40 active:scale-95 transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>{isSpanish ? 'Importar mi primer vídeo' : 'Import my first video'}</span>
@@ -221,10 +221,10 @@ export function YouTubeLibraryView({
                 <div
                   key={item.id}
                   onClick={() => onSelectVideo(item)}
-                  className={`group relative rounded-2xl border transition-all cursor-pointer flex flex-col overflow-hidden bg-[#220e08] hover:bg-[#2b120a] hover:border-rose-600/70 hover:shadow-xl hover:shadow-rose-950/30 ${
+                  className={`group relative rounded-2xl border transition-all cursor-pointer flex flex-col overflow-hidden bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] hover:border-rose-500/70 hover:shadow-xl dark:bg-[#220e08] dark:hover:bg-[#2b120a] dark:border-[#441f15] ${
                     isCurrent
-                      ? 'border-rose-500 ring-1 ring-rose-500/50 shadow-md shadow-rose-950/40'
-                      : 'border-[#441f15]'
+                      ? 'border-rose-500 ring-1 ring-rose-500/50 shadow-md shadow-rose-950/20'
+                      : 'border-[var(--border-primary)]'
                   }`}
                 >
                   {/* Video Thumbnail Header */}
@@ -237,7 +237,7 @@ export function YouTubeLibraryView({
                         e.target.style.display = 'none';
                       }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#220e08] via-transparent to-black/30" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
 
                     {/* Language Badge */}
                     <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-xs border border-white/10 text-xs font-semibold text-rose-100 shadow-xs">
@@ -271,10 +271,10 @@ export function YouTubeLibraryView({
                   {/* Card Content */}
                   <div className="p-3.5 flex-1 flex flex-col justify-between">
                     <div>
-                      <h4 className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors line-clamp-2 leading-snug">
+                      <h4 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-rose-600 dark:group-hover:text-rose-200 transition-colors line-clamp-2 leading-snug">
                         {item.videoTitle || item.videoId}
                       </h4>
-                      <div className="flex items-center gap-2 text-[11px] text-rose-300/60 mt-1.5 font-mono">
+                      <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] mt-1.5 font-mono">
                         <span>ID: {item.videoId}</span>
                         <span>•</span>
                         <span>{item.subtitlesCount} {isSpanish ? 'líneas' : 'lines'}</span>
@@ -282,7 +282,7 @@ export function YouTubeLibraryView({
                     </div>
 
                     {/* Card Footer: Date + Actions */}
-                    <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#3a180f] text-[11px] text-rose-300/50">
+                    <div className="flex items-center justify-between pt-3 mt-2 border-t border-[var(--border-primary)] text-[11px] text-[var(--text-muted)]">
                       <span>{item.updatedAt ? formatDate(item.updatedAt) : ''}</span>
 
                       <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
@@ -293,7 +293,7 @@ export function YouTubeLibraryView({
                           className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                             deleteConfirmId === item.id
                               ? 'bg-red-700 text-white animate-pulse'
-                              : 'text-stone-400 hover:text-red-400 hover:bg-[#3a180f]'
+                              : 'text-[var(--text-muted)] hover:text-red-500 hover:bg-[var(--surface-hover)]'
                           }`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />

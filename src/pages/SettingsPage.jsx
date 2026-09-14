@@ -128,7 +128,7 @@ export function SettingsPage({
         <button
           type="button"
           onClick={onBack}
-          className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-stone-200 hover:text-white transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
+          className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{isSpanish ? 'Inicio' : 'Home'}</span>
@@ -138,7 +138,7 @@ export function SettingsPage({
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-rose-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-950/40">
             <SettingsIcon className="w-4 h-4" />
           </div>
-          <h1 className="text-base sm:text-lg font-bold text-white tracking-wide">
+          <h1 className="text-base sm:text-lg font-bold text-[var(--text-primary)] tracking-wide">
             {isSpanish ? 'Ajustes de LinguaFlow' : 'LinguaFlow Settings'}
           </h1>
         </div>
@@ -146,7 +146,7 @@ export function SettingsPage({
         {/* Auto-save notification badge */}
         <div className="w-20 flex justify-end">
           {savedNotice && (
-            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-700/60 px-2 py-0.5 rounded-full flex items-center gap-1 animate-fade-in">
+            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 animate-fade-in">
               <Check className="w-3 h-3" />
               {isSpanish ? 'Guardado' : 'Saved'}
             </span>
@@ -156,8 +156,8 @@ export function SettingsPage({
 
       <div className="space-y-6 pb-8">
         {/* SECTION 1: IDIOMA Y TEMA */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md shadow-black/20">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
+          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Globe className="w-4 h-4 text-rose-500" />
             <span>{isSpanish ? 'Idioma y Apariencia' : 'Language & Appearance'}</span>
           </h2>
@@ -209,7 +209,7 @@ export function SettingsPage({
                   <Palette className="w-3.5 h-3.5 text-rose-500" />
                   <span>{isSpanish ? 'Tema Visual' : 'Theme'}</span>
                 </span>
-                <span className="text-[11px] text-rose-300 font-mono">
+                <span className="text-[11px] text-rose-600 dark:text-rose-300 font-mono">
                   {theme === 'system' ? (isSpanish ? 'Sistema' : 'System') : theme === 'dark' ? (isSpanish ? 'Oscuro' : 'Dark') : (isSpanish ? 'Claro' : 'Light')}
                 </span>
               </label>
@@ -220,13 +220,13 @@ export function SettingsPage({
                   onClick={() => setTheme('light')}
                   className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                     theme === 'light'
-                      ? 'bg-rose-500/20 border-rose-500 text-white shadow-xs'
-                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-white'
+                      ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-white shadow-xs'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
                   <span>{isSpanish ? 'Claro' : 'Light'}</span>
-                  {theme === 'light' && <Check className="w-3 h-3 text-rose-400 ml-0.5" />}
+                  {theme === 'light' && <Check className="w-3 h-3 text-rose-500 dark:text-rose-400 ml-0.5" />}
                 </button>
 
                 <button
@@ -234,13 +234,13 @@ export function SettingsPage({
                   onClick={() => setTheme('dark')}
                   className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                     theme === 'dark'
-                      ? 'bg-rose-500/20 border-rose-500 text-white shadow-xs'
-                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-white'
+                      ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-white shadow-xs'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                  <Moon className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
                   <span>{isSpanish ? 'Oscuro' : 'Dark'}</span>
-                  {theme === 'dark' && <Check className="w-3 h-3 text-rose-400 ml-0.5" />}
+                  {theme === 'dark' && <Check className="w-3 h-3 text-rose-500 dark:text-rose-400 ml-0.5" />}
                 </button>
 
                 <button
@@ -248,13 +248,13 @@ export function SettingsPage({
                   onClick={() => setTheme('system')}
                   className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                     theme === 'system'
-                      ? 'bg-rose-500/20 border-rose-500 text-white shadow-xs'
-                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-white'
+                      ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-white shadow-xs'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  <Monitor className="w-3.5 h-3.5 text-stone-400" />
+                  <Monitor className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
                   <span>{isSpanish ? 'Sistema' : 'System'}</span>
-                  {theme === 'system' && <Check className="w-3 h-3 text-rose-400 ml-0.5" />}
+                  {theme === 'system' && <Check className="w-3 h-3 text-rose-500 dark:text-rose-400 ml-0.5" />}
                 </button>
               </div>
             </div>
@@ -262,8 +262,8 @@ export function SettingsPage({
         </div>
 
         {/* SECTION 2: VOZ Y REPRODUCCIÓN */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md shadow-black/20">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
+          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Volume2 className="w-4 h-4 text-rose-500" />
             <span>{isSpanish ? 'Voz y Reproducción' : 'Voice & Playback'}</span>
           </h2>
@@ -272,14 +272,14 @@ export function SettingsPage({
             {/* Transliteration */}
             <div className="flex items-center justify-between p-3 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
               <div className="flex items-center space-x-3">
-                <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-400 font-serif font-bold text-xs">
+                <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-500 dark:text-rose-400 font-serif font-bold text-xs">
                   T
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-white block">
+                  <span className="text-xs font-semibold text-[var(--text-primary)] block">
                     {t('transliteration')}
                   </span>
-                  <span className="text-[11px] text-rose-300/60">
+                  <span className="text-[11px] text-[var(--text-muted)]">
                     {isSpanish ? 'Pinyin / Romaji sobre palabras' : 'Pinyin / Romaji above words'}
                   </span>
                 </div>
@@ -304,14 +304,14 @@ export function SettingsPage({
             {/* Hands Free */}
             <div className="flex items-center justify-between p-3 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
               <div className="flex items-center space-x-3">
-                <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-400">
+                <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-500 dark:text-rose-400">
                   <Mic className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-white block">
+                  <span className="text-xs font-semibold text-[var(--text-primary)] block">
                     {t('hands_free')}
                   </span>
-                  <span className="text-[11px] text-rose-300/60">
+                  <span className="text-[11px] text-[var(--text-muted)]">
                     {isSpanish ? 'Conversación por voz continua sin pulsar botones' : 'Continuous speech without pressing buttons'}
                   </span>
                 </div>
@@ -336,14 +336,14 @@ export function SettingsPage({
             {/* Auto Play AI Responses */}
             <div className="flex items-center justify-between p-3 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
               <div className="flex items-center space-x-3 pr-2">
-                <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-400 shrink-0">
+                <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-500 dark:text-rose-400 shrink-0">
                   <Volume2 className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-white block leading-snug">
+                  <span className="text-xs font-semibold text-[var(--text-primary)] block leading-snug">
                     {t('auto_play_ai_title')}
                   </span>
-                  <span className="text-[11px] text-rose-300/60">
+                  <span className="text-[11px] text-[var(--text-muted)]">
                     {t('auto_play_ai_desc')}
                   </span>
                 </div>
@@ -368,14 +368,14 @@ export function SettingsPage({
             {/* Auto Play Text Reader */}
             <div className="flex items-center justify-between p-3 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
               <div className="flex items-center space-x-3 pr-2">
-                <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-400 shrink-0">
+                <div className="w-7 h-7 rounded-full bg-[var(--surface-tertiary)] border border-[var(--border-primary)] flex items-center justify-center text-rose-500 dark:text-rose-400 shrink-0">
                   <Volume2 className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-white block leading-snug">
+                  <span className="text-xs font-semibold text-[var(--text-primary)] block leading-snug">
                     Auto-play Text Reader
                   </span>
-                  <span className="text-[11px] text-rose-300/60">
+                  <span className="text-[11px] text-[var(--text-muted)]">
                     {isSpanish
                       ? 'Reproducir automáticamente el siguiente párrafo al terminar el actual.'
                       : 'Automatically play the next paragraph when current finishes.'}
@@ -402,11 +402,11 @@ export function SettingsPage({
             {/* Speech Rate Selector */}
             <div className="p-3 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-                  <Gauge className="w-3.5 h-3.5 text-rose-400" />
+                <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                  <Gauge className="w-3.5 h-3.5 text-rose-500" />
                   <span>{t('speech_playback_speed')}</span>
                 </span>
-                <span className="text-xs font-bold text-rose-400 font-mono">
+                <span className="text-xs font-bold text-rose-600 dark:text-rose-400 font-mono">
                   {Number(speechRate).toFixed(2)}×
                 </span>
               </div>
@@ -419,7 +419,7 @@ export function SettingsPage({
                     className={`py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       Math.abs(speechRate - rate) < 0.001
                         ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                        : 'bg-[var(--surface-tertiary)] text-[var(--text-secondary)] hover:text-white'
+                        : 'bg-[var(--surface-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                     }`}
                   >
                     {rate.toFixed(2)}×
@@ -431,8 +431,8 @@ export function SettingsPage({
         </div>
 
         {/* SECTION 3: INTELIGENCIA ARTIFICIAL Y BACKEND */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md shadow-black/20">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
+          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-rose-500" />
             <span>{isSpanish ? 'Inteligencia Artificial y Conexión' : 'AI & Backend'}</span>
           </h2>
@@ -441,38 +441,38 @@ export function SettingsPage({
             {/* Active Model */}
             <div className="p-3 bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-2xl flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
-                <Zap className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />
+                <Zap className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0" />
                 <div>
-                  <div className="text-xs font-bold text-white">Groq Cloud AI</div>
-                  <div className="text-[11px] text-rose-300 font-mono">openai/gpt-oss-120b</div>
+                  <div className="text-xs font-bold text-[var(--text-primary)]">Groq Cloud AI</div>
+                  <div className="text-[11px] text-rose-600 dark:text-rose-300 font-mono">openai/gpt-oss-120b</div>
                 </div>
               </div>
-              <span className="text-[10px] bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 px-2.5 py-0.5 rounded-full font-bold">
+              <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
                 ⚡ {isSpanish ? 'Ultra Rápido' : 'Ultra Fast'}
               </span>
             </div>
 
             {/* Proficiency Level */}
             <div>
-              <label className="block text-xs font-semibold text-white mb-1.5 flex items-center gap-1.5">
+              <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1.5 flex items-center gap-1.5">
                 <Gauge className="w-3.5 h-3.5 text-rose-500" />
                 <span>{isSpanish ? 'Nivel de Dificultad del Tutor' : 'Tutor Proficiency Level'}</span>
               </label>
               <select
                 value={level}
                 onChange={(e) => handleLevelChange(e.target.value)}
-                className="w-full bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-xl px-3 py-2 text-xs sm:text-sm text-white outline-none focus:ring-1 focus:ring-rose-500 font-medium cursor-pointer"
+                className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl px-3 py-2 text-xs sm:text-sm text-[var(--text-primary)] outline-none focus:ring-1 focus:ring-rose-500 font-medium cursor-pointer shadow-xs"
               >
                 <option value="A1">{isSpanish ? 'A1 - Principiante (frases muy simples y cortas)' : 'A1 - Beginner (simple, short sentences)'}</option>
                 <option value="A2/B1">{isSpanish ? 'A2 / B1 - Intermedio cotidiano (Recomendado)' : 'A2 / B1 - Everyday Intermediate (Recommended)'}</option>
-                <option value="B2/C1">{isSpanish ? 'B2 / C1 - Avanzado y fluido' : 'B2 / C1 - Advanced and fluent'}</option>
+                <option value="B2/C1">{isSpanish ? 'B2 / C1 - Advanced and fluent' : 'B2 / C1 - Advanced and fluent'}</option>
               </select>
             </div>
 
             {/* Backend Status Check */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
                   <Server className="w-3.5 h-3.5 text-rose-500" />
                   <span>{isSpanish ? 'Estado del Backend' : 'Backend Status'}</span>
                 </span>
@@ -480,7 +480,7 @@ export function SettingsPage({
                   type="button"
                   onClick={handleTestConnection}
                   disabled={testingConnection}
-                  className="text-xs text-rose-400 hover:text-rose-300 font-semibold underline disabled:opacity-50 cursor-pointer"
+                  className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-semibold underline disabled:opacity-50 cursor-pointer"
                 >
                   {testingConnection ? (isSpanish ? 'Comprobando...' : 'Checking...') : (isSpanish ? 'Verificar conexión' : 'Test connection')}
                 </button>
@@ -490,8 +490,8 @@ export function SettingsPage({
                 <div
                   className={`p-2.5 rounded-xl text-xs flex items-start space-x-2 border mb-2 ${
                     connectionStatus.success
-                      ? 'bg-emerald-950/80 text-emerald-200 border-emerald-700/60'
-                      : 'bg-rose-950/80 text-rose-200 border-rose-700/60'
+                      ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 border-emerald-500/30'
+                      : 'bg-rose-500/10 text-rose-800 dark:text-rose-200 border-rose-500/30'
                   }`}
                 >
                   <span className="mt-0.5">{connectionStatus.success ? '✅' : '⚠️'}</span>
@@ -499,14 +499,14 @@ export function SettingsPage({
                 </div>
               )}
 
-              <div className="flex items-start space-x-2 text-xs text-stone-300 bg-[var(--surface-secondary)] p-3 rounded-2xl border border-[var(--border-primary)]">
-                <Info className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex items-start space-x-2 text-xs text-[var(--text-secondary)] bg-[var(--surface-secondary)] p-3 rounded-2xl border border-[var(--border-primary)]">
+                <Info className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                 <div className="space-y-1 text-[11px] leading-relaxed">
                   <p>
-                    <strong className="text-white">{isSpanish ? 'Seguridad:' : 'Security:'}</strong> {isSpanish ? 'La clave' : 'The'} <code className="bg-black/40 px-1 py-0.5 rounded border border-[#52271a] text-rose-300 font-mono">GROQ_API_KEY</code> {isSpanish ? 'se administra exclusivamente en el servidor backend para proteger tus credenciales.' : 'is managed securely on the backend server.'}
+                    <strong className="text-[var(--text-primary)]">{isSpanish ? 'Seguridad:' : 'Security:'}</strong> {isSpanish ? 'La clave' : 'The'} <code className="bg-[var(--surface-tertiary)] px-1 py-0.5 rounded border border-[var(--border-primary)] text-rose-600 dark:text-rose-300 font-mono">GROQ_API_KEY</code> {isSpanish ? 'se administra exclusivamente en el servidor backend para proteger tus credenciales.' : 'is managed securely on the backend server.'}
                   </p>
-                  <p className="text-rose-300/70">
-                    {isSpanish ? 'Modelo activo:' : 'Active model:'} <code className="font-mono text-rose-300 font-semibold">openai/gpt-oss-120b</code> {isSpanish ? 'con transcripción Whisper V3.' : 'with Whisper V3 multilingual transcription.'}
+                  <p className="text-[var(--text-muted)]">
+                    {isSpanish ? 'Modelo activo:' : 'Active model:'} <code className="font-mono text-rose-600 dark:text-rose-300 font-semibold">openai/gpt-oss-120b</code> {isSpanish ? 'con transcripción Whisper V3.' : 'with Whisper V3 multilingual transcription.'}
                   </p>
                 </div>
               </div>
@@ -515,8 +515,8 @@ export function SettingsPage({
         </div>
 
         {/* SECTION 4: ACCIONES */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md shadow-black/20">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
+          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
             <RotateCcw className="w-4 h-4 text-rose-500" />
             <span>{isSpanish ? 'Acciones' : 'Actions'}</span>
           </h2>
@@ -531,10 +531,10 @@ export function SettingsPage({
           >
             <RotateCcw className="w-4 h-4 text-rose-500 shrink-0" />
             <div>
-              <span className="text-xs sm:text-sm font-bold text-white block">
+              <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] block">
                 {t('reset_conv')}
               </span>
-              <span className="text-[11px] text-rose-300/60">
+              <span className="text-[11px] text-[var(--text-muted)]">
                 {isSpanish ? 'Reinicia la conversación del chat para el idioma seleccionado' : 'Reset chat conversation for the selected language'}
               </span>
             </div>

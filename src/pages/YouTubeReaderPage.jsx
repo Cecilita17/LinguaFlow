@@ -850,17 +850,17 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
         /* =================== VIEW 2: ADD / IMPORT VIDEO SCREEN =================== */
         <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-2 sm:px-4 py-3 sm:py-4 overflow-y-auto custom-scrollbar text-[var(--text-primary)]">
           {/* Top Bar with Back to Library */}
-          <div className="flex-shrink-0 flex items-center justify-between pb-3 sm:pb-4 border-b border-[#441f15]/80 mb-4">
+          <div className="flex-shrink-0 flex items-center justify-between pb-3 sm:pb-4 border-b border-[var(--border-primary)] mb-4">
             <button
               type="button"
               onClick={() => navigateToView('library')}
-              className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-rose-200 hover:text-white transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
+              className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>{isSpanish ? 'Biblioteca' : 'Library'}</span>
             </button>
 
-            <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+            <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
               <Plus className="w-4 h-4 text-rose-500" />
               <span>{isSpanish ? 'Importar Vídeo y Subtítulos' : 'Import Video & Subtitles'}</span>
             </h2>
@@ -899,7 +899,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
                 type="button"
                 onClick={() => navigateToView('library')}
                 title={isSpanish ? 'Volver a la Biblioteca' : 'Back to Library'}
-                className="px-2.5 py-1 rounded-lg bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-rose-200 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0 active:scale-95 shadow-xs"
+                className="px-2.5 py-1 rounded-lg bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0 active:scale-95 shadow-xs"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>{isSpanish ? 'Biblioteca' : 'Library'}</span>
@@ -910,7 +910,7 @@ export function YouTubeReaderPage({ targetLang = 'zh', nativeLang = 'es', apiKey
               </span>
 
               {videoTitle && (
-                <span className="font-semibold text-white/90 truncate text-xs hidden sm:inline" title={videoTitle}>
+                <span className="font-semibold text-[var(--text-primary)] truncate text-xs hidden sm:inline" title={videoTitle}>
                   {videoTitle}
                 </span>
               )}

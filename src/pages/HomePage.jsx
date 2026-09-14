@@ -212,7 +212,7 @@ export default function HomePage({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white">
+                  <span className="text-xs font-bold text-[var(--text-primary)]">
                     {apiWarning ? (isSpanish ? 'Aviso Groq AI' : 'Groq AI Warning') : (isSpanish ? 'Motor Groq AI Activo' : 'Groq AI Engine Active')}
                   </span>
                   <span
@@ -221,7 +221,7 @@ export default function HomePage({
                     }`}
                   />
                 </div>
-                <div className="text-[11px] text-rose-300/70 font-mono mt-0.5">
+                <div className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">
                   openai/gpt-oss-120b • Whisper V3
                 </div>
               </div>
@@ -230,7 +230,7 @@ export default function HomePage({
             <button
               type="button"
               onClick={() => onSelectMode('settings')}
-              className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 underline shrink-0 cursor-pointer"
+              className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline shrink-0 cursor-pointer"
             >
               {isSpanish ? 'Ver estado' : 'View status'}
             </button>
