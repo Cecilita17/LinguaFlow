@@ -1,29 +1,17 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Languages,
   Mic,
   MicOff,
   Type,
   Settings,
   Volume2,
-  Sparkles,
-  RotateCcw,
-  Menu,
-  X,
-  ChevronDown,
-  MessageSquare,
-  Youtube,
-  Home,
-  Globe,
-  FileText,
-  Gauge
+  RotateCcw
 } from 'lucide-react';
 import { LanguageSelectDropdown } from './LanguageSelectDropdown.jsx';
 import { SiteLanguageToggle } from './SiteLanguageToggle.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
-import { useAudioSettings, SPEECH_RATE_OPTIONS } from '../context/AudioSettingsContext.jsx';
+import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
 import {
-  LANGUAGE_FLAGS,
   NATIVE_LANG_OPTIONS,
   getLanguageMeta
 } from '../constants/languages.js';
