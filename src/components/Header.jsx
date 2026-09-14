@@ -98,206 +98,42 @@ export function Header({
 
         {/* DESKTOP HEADER (>= md) */}
         {activeTab === 'home' ? (
-          /* =================== HOME DESKTOP: CLEAN 2-TIER REORGANIZATION =================== */
-          <div className="hidden md:flex flex-col gap-2.5 max-w-4xl mx-auto w-full">
-            {/* Primary Main Bar: [Logo] --- [Navigation Tabs] --- [Languages & Settings] */}
-            <div className="flex items-center justify-between gap-4 w-full">
-              {/* IZQUIERDA: Logo & Title */}
-              <div
-                onClick={() => setActiveTab && setActiveTab('home')}
-                className="flex items-center space-x-2.5 cursor-pointer select-none group shrink-0"
-                role="button"
-                tabIndex={0}
-                title={t('nav_home')}
-              >
-                <img
-                  src="/linguaflow-logo.svg"
-                  alt="LinguaFlow"
-                  className="w-10 h-10 group-hover:scale-105 transition-transform"
-                  draggable="false"
-                />
-                <div>
-                  <h1 className="font-bold text-[var(--text-primary)] text-lg leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
-                    LinguaFlow
-                  </h1>
-                </div>
-              </div>
-
-              {/* CENTRO: Navegación principal (Inicio · Chat · YouTube Reader · Text Reader) */}
-              <div className="flex items-center p-1 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border-primary)] text-xs font-bold shadow-xs">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab && setActiveTab('home')}
-                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === 'home'
-                      ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <span>🏠</span>
-                  <span>{t('nav_home')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab && setActiveTab('chat')}
-                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === 'chat'
-                      ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <span>💬</span>
-                  <span>{t('nav_chat')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab && setActiveTab('youtube')}
-                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === 'youtube'
-                      ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <span>🎥</span>
-                  <span>{t('nav_youtube')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab && setActiveTab('text')}
-                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === 'text'
-                      ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <span>📖</span>
-                  <span>{t('nav_text_reader') || 'Importar texto'}</span>
-                </button>
-              </div>
-
-              {/* DERECHA: Selector idioma objetivo, idioma nativo, ES/EN y Ajustes */}
-              <div className="flex items-center space-x-2 shrink-0">
-                {/* Idioma Objetivo + Idioma Nativo */}
-                <div className="flex items-center space-x-1.5 p-1 rounded-2xl border border-[var(--border-primary)] shadow-xs text-xs bg-[var(--surface-tertiary)]">
-                  <LanguageSelectDropdown
-                    value={targetLang}
-                    onChange={setTargetLang}
-                    options={languages}
-                    variant="header"
-                    align="left"
-                  />
-
-                  <span className="text-[var(--border-primary)] font-light">|</span>
-
-                  <LanguageSelectDropdown
-                    value={nativeLang}
-                    onChange={setNativeLang}
-                    options={NATIVE_LANG_OPTIONS}
-                    variant="header"
-                    align="right"
-                  />
-                </div>
-
-                {/* Switcher ES / EN */}
-                <SiteLanguageToggle variant="header" />
-
-                {/* Botón Ajustes */}
-                <button
-                  type="button"
-                  onClick={onOpenSettings}
-                  title="Ajustes de API y Voz"
-                  className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shadow-xs transition-colors cursor-pointer"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
+          /* =================== HOME DESKTOP: SINGLE SIMPLE BAR (MATCHING MOBILE LAYOUT) =================== */
+          <div className="hidden md:flex max-w-4xl mx-auto items-center justify-between w-full">
+            {/* Left: Brand Logo & Title */}
+            <div
+              onClick={() => setActiveTab && setActiveTab('home')}
+              className="flex items-center space-x-2.5 cursor-pointer select-none group"
+              role="button"
+              tabIndex={0}
+              title={t('nav_home')}
+            >
+              <img
+                src="/linguaflow-logo.svg"
+                alt="LinguaFlow"
+                className="w-10 h-10 shrink-0 group-hover:scale-105 transition-transform"
+                draggable="false"
+              />
+              <div>
+                <h1 className="font-bold text-[var(--text-primary)] text-lg leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
+                  LinguaFlow
+                </h1>
               </div>
             </div>
 
-            {/* Barra Secundaria Discreta: Transliteración · Manos Libres · Groq AI · Reset Chat */}
-            <div className="flex items-center justify-center gap-2 pt-2 border-t border-[var(--border-subtle)]/70 text-xs text-[var(--text-secondary)]">
-              {/* Transliteration Toggle */}
-              <button
-                type="button"
-                onClick={() => setShowTransliteration(!showTransliteration)}
-                title={showTransliteration ? "Desactivar transliteración" : "Activar transliteración sobre palabras"}
-                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
-                  showTransliteration
-                    ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500 shadow-xs'
-                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-hover)]'
-                }`}
-              >
-                <Type className="w-3.5 h-3.5" />
-                <span>Transliteración</span>
-                <span className={`text-[10px] px-1 rounded ${showTransliteration ? 'bg-rose-800 text-rose-100' : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)]'}`}>
-                  {showTransliteration ? 'ON' : 'OFF'}
-                </span>
-              </button>
+            {/* Right: Site Language Switcher + Circular Target Language Button */}
+            <div className="flex items-center space-x-2 shrink-0">
+              {/* Website Language Switcher (ES/EN) */}
+              <SiteLanguageToggle variant="compact" />
 
-              {/* Hands-Free Mode Toggle */}
-              <button
-                type="button"
-                onClick={() => setHandsFree(!handsFree)}
-                title={handsFree ? "Desactivar modo manos libres" : "Activar modo manos libres"}
-                className={`relative flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
-                  handsFree
-                    ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white border-rose-400 shadow-xs'
-                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-hover)]'
-                }`}
-              >
-                {handsFree ? (
-                  <>
-                    <Mic className="w-3.5 h-3.5 animate-pulse text-white" />
-                    <span>Manos Libres</span>
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-300 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <MicOff className="w-3.5 h-3.5 text-rose-500 dark:text-rose-300/50" />
-                    <span>Manos Libres</span>
-                  </>
-                )}
-              </button>
-
-              {/* Separador sutil */}
-              <span className="text-[var(--border-subtle)] mx-0.5">|</span>
-
-              {/* AI Connection Status Badge */}
-              {apiWarning ? (
-                <button
-                  type="button"
-                  onClick={onOpenSettings}
-                  title="Aviso de Groq AI: Clic para revisar el backend"
-                  className="flex items-center space-x-1.5 px-2 py-1 rounded-lg bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-semibold shadow-xs hover:bg-amber-900/90 transition-all animate-pulse cursor-pointer"
-                >
-                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                  <span>⚠️ Aviso Groq AI</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onOpenSettings}
-                  title="Groq AI Activa (openai/gpt-oss-120b)"
-                  className="flex items-center space-x-1.5 px-2 py-1 rounded-lg bg-emerald-950/85 border border-emerald-600/70 text-emerald-200 text-xs font-semibold shadow-xs hover:bg-emerald-900/80 transition-all cursor-pointer"
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>⚡ Groq IA Activa</span>
-                </button>
-              )}
-
-              {/* Reset Chat Button */}
-              {onResetChat && (
-                <button
-                  type="button"
-                  onClick={onResetChat}
-                  title="Reiniciar chat en este idioma"
-                  className="p-1.5 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shadow-xs transition-colors cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-              )}
+              {/* Target Language Dropdown */}
+              <LanguageSelectDropdown
+                value={targetLang}
+                onChange={setTargetLang}
+                options={languages}
+                variant="header"
+                align="right"
+              />
             </div>
           </div>
         ) : (
