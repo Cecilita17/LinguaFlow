@@ -24,7 +24,8 @@ import {
   ArrowLeft,
   Home,
   Settings,
-  Gauge
+  Gauge,
+  Plus
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';

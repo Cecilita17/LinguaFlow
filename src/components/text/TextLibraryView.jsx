@@ -159,7 +159,7 @@ export function TextLibraryView({
           className="px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-rose-950/40 active:scale-95 transition-all cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>+ Add</span>
+          <span>Add</span>
         </button>
       </div>
 
