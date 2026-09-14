@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'lucide-react';
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
-import { CHINESE_OFFLINE_DICT } from '../services/languageGlossStrategies.js';
+import { CHINESE_OFFLINE_DICT, reconcileChineseTokens } from '../services/languageGlossStrategies.js';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 
 export function ChatMessage({
@@ -348,7 +348,7 @@ export function ChatMessage({
   }
 
   // BOT MESSAGE BUBBLE
-  const tokens = message.tokens || [];
+  let tokens = message.tokens || [];
 
   // Reconcile message.text with tokens to guarantee 100% full text rendering without truncation
   const botSegments = useMemo(() => {
@@ -360,6 +360,28 @@ export function ChatMessage({
     let pos = 0;
     let tIdx = 0;
     const len = rawText.length;
+    // Diagnostic logging: compare concatenated token strings with raw text
+    const concatenated = tokens.map(t => (t.word || t.text || '')).join('');
+    console.log('[ChineseTokenDebug] rawText length:', rawText.length, 'tokens length:', tokens.length, 'concatenated length:', concatenated.length);
+    if (concatenated !== rawText) {
+      const firstMismatchIdx = (() => {
+        const minLen = Math.min(rawText.length, concatenated.length);
+        for (let i = 0; i < minLen; i++) {
+          if (rawText[i] !== concatenated[i]) return i;
+        }
+        return minLen;
+      })();
+      console.warn('[ChineseTokenDebug] Token coverage mismatch. First mismatch at index', firstMismatchIdx);
+      try {
+        const corrected = reconcileChineseTokens(rawText, tokens);
+        if (corrected) {
+          console.log('[ChineseTokenDebug] Reconciliation succeeded, using corrected token list');
+          tokens = corrected;
+        }
+      } catch (e) {
+        console.warn('[ChineseTokenDebug] Reconciliation error:', e);
+      }
+    }
 
     const matchesTokenAtPos = (token, p) => {
       if (!token) return null;

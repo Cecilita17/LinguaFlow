@@ -10,6 +10,19 @@
 export const PUNCTUATION_REGEX = /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]+$/;
 
 // ==========================================
+import { validateChineseAiSegmentation } from './subtitleGlossService.js';
+
+export function reconcileChineseTokens(originalText, aiTokens) {
+  if (!originalText || typeof originalText !== 'string' || !Array.isArray(aiTokens) || aiTokens.length === 0) {
+    return null;
+  }
+  const isValid = validateChineseAiSegmentation(originalText, aiTokens);
+  if (isValid) {
+    return aiTokens;
+  }
+  console.warn('[reconcileChineseTokens] Token coverage validation failed for Chinese text');
+  return null;
+}
 // 1. CHINESE LEXICON (HSK 1-3 & High Frequency)
 // ==========================================
 export const CHINESE_OFFLINE_DICT = {

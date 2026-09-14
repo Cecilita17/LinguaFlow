@@ -18,7 +18,9 @@ import {
   Languages,
   MoreVertical,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Volume2,
+  Gauge
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
@@ -58,7 +60,7 @@ export function TextReaderPage({
   onWordClick = null
 }) {
   const { t } = useSiteLanguage();
-  const { speechRate, autoPlayTextReader } = useAudioSettings();
+  const { speechRate, setSpeechRate, autoPlayTextReader, setAutoPlayTextReader, speechRateOptions } = useAudioSettings();
   const speechRateRef = useRef(speechRate);
   speechRateRef.current = speechRate;
   const autoPlayTextReaderRef = useRef(autoPlayTextReader);
@@ -143,6 +145,7 @@ export function TextReaderPage({
 
   // Auto-hide entire reader header on scroll down
   const [isHeaderHidden, setIsHeaderHidden] = useState(false);
+  const [showChapterBar, setShowChapterBar] = useState(true);
   const scrollContainerRef = useRef(null);
   const previousScrollTopRef = useRef(0);
   const isProgrammaticScrollRef = useRef(false);
@@ -182,11 +185,13 @@ export function TextReaderPage({
 
       // 4. Detect scroll direction
       if (delta > 0) {
-        // Scrolling DOWN -> hide entire header
+        // Scrolling DOWN -> hide entire header and chapter bar
         setIsHeaderHidden(true);
+        setShowChapterBar(false);
       } else {
-        // Scrolling UP -> show entire header immediately
+        // Scrolling UP -> show entire header and chapter bar immediately
         setIsHeaderHidden(false);
+        setShowChapterBar(true);
       }
 
       // Close contextual actions menu if open on scroll
@@ -1066,6 +1071,14 @@ export function TextReaderPage({
     setFontSize(order[nextIdx]);
   };
 
+  // Speech rate cycle (uses same rates as Opciones de LinguaFlow)
+  const cycleSpeechRate = () => {
+    const rates = speechRateOptions || [0.75, 0.85, 1.0, 1.15, 1.25, 1.5];
+    const currentIdx = rates.findIndex(r => Math.abs(r - speechRate) < 0.001);
+    const nextIdx = (currentIdx + 1) % rates.length;
+    setSpeechRate(rates[nextIdx]);
+  };
+
   // Contextual actions menu state for top bar
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef(null);
@@ -1195,102 +1208,43 @@ export function TextReaderPage({
               </div>
             </div>
 
-            {/* Right: [T] [A] [Auto-gloss] [⋮] Controls aligned in the same row */}
-            <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
-              {/* T — Transliteration */}
-              <button
-                type="button"
-                onClick={() => setInterlinearMode(!interlinearMode)}
-                title={interlinearMode ? "Desactivar transliteración (ver texto continuo)" : "Activar transliteración / interlineal"}
-                aria-label="Transliteración"
-                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 ${
-                  interlinearMode
-                    ? 'bg-rose-600 text-white shadow-rose-900/40 border border-rose-500 ring-1 ring-rose-400/30'
-                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
-                }`}
-              >
-                <span className="font-serif text-[13px] sm:text-sm font-bold leading-none select-none">T</span>
-              </button>
-
-              {/* A — Aumentar tamaño de fuente */}
-              <button
-                type="button"
-                onClick={cycleFontSize}
-                title="Aumentar tamaño de texto"
-                aria-label="Aumentar texto"
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-              >
-                <span className="text-[13px] sm:text-sm font-bold leading-none select-none">A</span>
-              </button>
-
-              {/* Auto-gloss — Símbolo (Green when ON, normal when OFF) */}
-              <button
-                type="button"
-                onClick={handleToggleAutoGlossing}
-                title={
-                  isAutoGlossing
-                    ? 'Glosado automático activo (clic para pausar)'
-                    : 'Activar glosado automático'
-                }
-                aria-label="Auto-glosado"
-                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
-                  isAutoGlossing
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 shadow-emerald-950/40'
-                    : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border-primary)]'
-                }`}
-              >
-                <Sparkles className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isAutoGlossing ? 'text-white fill-white' : 'text-[var(--text-secondary)]'}`} />
-              </button>
-
-              {/* ⋮ — Menú contextual de tres puntos */}
-              <div className="relative" ref={actionsMenuRef}>
-                <button
-                  type="button"
-                  onClick={toggleActionsMenu}
-                  title="Más opciones"
-                  aria-label="Más opciones"
-                  aria-expanded={isActionsMenuOpen}
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
-                    isActionsMenuOpen
-                      ? 'bg-[var(--surface-hover)] text-[var(--text-primary)] border border-rose-500/50'
-                      : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
-                  }`}
-                >
-                  <MoreVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-
-                {/* Contextual dropdown popup */}
-                {isActionsMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 z-[100] w-48 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)]">
-                    <button
-                      type="button"
-                      onClick={handleEditTitle}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                    >
-                      <span className="text-sm leading-none">✏️</span>
-                      <span>Editar título</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDeleteText}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-                    >
-                      <span className="text-sm leading-none">🗑️</span>
-                      <span>Eliminar</span>
-                    </button>
-                    <div className="my-1 border-t border-[var(--border-subtle)]/60" />
-                    <button
-                      type="button"
-                      onClick={handleOpenLibrary}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                    >
-                      <span className="text-sm leading-none">📚</span>
-                      <span>Librería</span>
-                    </button>
-                  </div>
-                )}
+              {/* Right: [⋮] Context Menu */}
+              <div className="flex items-center shrink-0">
+                {/* ⋮ menu */}
+                <div className="relative" ref={actionsMenuRef}>
+                  <button
+                    type="button"
+                    onClick={toggleActionsMenu}
+                    title="Más opciones"
+                    aria-label="Más opciones"
+                    aria-expanded={isActionsMenuOpen}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                      isActionsMenuOpen
+                        ? 'bg-[var(--surface-hover)] text-[var(--text-primary)] border border-rose-500/50'
+                        : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                    }`}
+                  >
+                    <MoreVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                  {isActionsMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 z-[100] w-48 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)]">
+                      <button type="button" onClick={handleEditTitle} className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]">
+                        <span className="text-sm leading-none">✏️</span>
+                        <span>Editar título</span>
+                      </button>
+                      <button type="button" onClick={handleDeleteText} className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer">
+                        <span className="text-sm leading-none">🗑️</span>
+                        <span>Eliminar</span>
+                      </button>
+                      <div className="my-1 border-t border-[var(--border-subtle)]/60" />
+                      <button type="button" onClick={handleOpenLibrary} className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]">
+                        <span className="text-sm leading-none">📚</span>
+                        <span>Librería</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
           </div>
         ) : null}
       </header>
@@ -1533,7 +1487,7 @@ export function TextReaderPage({
 
             {/* EPUB Bottom Chapter Navigation Footer Card */}
             {isEpub && chapters.length > 1 && (
-              <div className="mt-8 pt-5 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className={`mt-8 pt-5 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-3 ${showChapterBar ? '' : 'hidden'}`}>
                 <button
                   type="button"
                   disabled={currentChapterIndex === 0}
