@@ -316,25 +316,25 @@ export default function App() {
       initialBotMsg = {
         id: 'msg-init',
         sender: 'bot',
-        text: 'مَرْحَبًا بِكَ! أَنَا مُسْتَعِدٌّ لِمُمَارَسَةِ اللُّغَةِ الْعَرَبِيَّةِ مَعَكَ. كَيْفَ أُسَاعِ[...]',
+        text: 'مَرْحَبًا بِكَ! أَنَا مُسْتَعِدٌّ لِمُمَارَسَةِ اللُّغَةِ الْعَرَبِيَّةِ مَعَكَ. كَيْفَ أُسَاعِدُكَ الْيَوْمَ؟',
         translation: '¡Bienvenido! Estoy listo para practicar el idioma árabe contigo. ¿Cómo te ayudo hoy?',
         tokens: [
           { word: 'مَرْحَبًا', translit: 'marḥaban', clean_word: 'مرحبا' },
           { word: 'بِكَ!', translit: 'bika!', clean_word: 'بك' },
           { word: 'أَنَا', translit: 'anā', clean_word: 'أنا' },
-          { word: 'مُسْتَعِدٌّ', translit: 'musta'iddun', clean_word: 'مستعد' },
+          { word: 'مُسْتَعِدٌّ', translit: 'musta‘iddun', clean_word: 'مستعد' },
           { word: 'لِمُمَارَسَةِ', translit: 'li-mumārasati', clean_word: 'لممارسة' },
           { word: 'اللُّغَةِ', translit: 'al-lughati', clean_word: 'اللغة' },
-          { word: 'الْعَرَبِيَّةِ', translit: 'al-'arabiyyah', clean_word: 'العربية' },
-          { word: 'مَعَكَ.', translit: 'ma'aka.', clean_word: 'معك' },
+          { word: 'الْعَرَبِيَّةِ', translit: 'al-‘arabiyyah', clean_word: 'العربية' },
+          { word: 'مَعَكَ.', translit: 'ma‘aka.', clean_word: 'معك' },
           { word: 'كَيْفَ', translit: 'kayfa', clean_word: 'كيف' },
-          { word: 'أُسَاعِدُكَ', translit: 'usā'iduka', clean_word: 'أساعدك' },
+          { word: 'أُسَاعِدُكَ', translit: 'usā‘iduka', clean_word: 'أساعدك' },
           { word: 'الْيَوْمَ؟', translit: 'al-yawma?', clean_word: 'اليوم' }
         ],
         vocabulary: {
           'مرحبا': { meaning: 'Hola / Bienvenido (saludo cordial)', part_of_speech: 'saludo', translit: 'marḥaban' },
-          'مستعد': { meaning: 'Preparado o listo para una actividad', part_of_speech: 'adjetivo', translit: 'musta'idd' },
-          'أساعدك': { meaning: 'Te ayudo o te asisto', part_of_speech: 'verbo', translit: 'usā'iduk' },
+          'مستعد': { meaning: 'Preparado o listo para una actividad', part_of_speech: 'adjetivo', translit: 'musta‘idd' },
+          'أساعدك': { meaning: 'Te ayudo o te asisto', part_of_speech: 'verbo', translit: 'usā‘iduk' },
           'اليوم': { meaning: 'Hoy (el día de hoy)', part_of_speech: 'sustantivo / adverbio', translit: 'al-yawm' }
         }
       };
@@ -777,11 +777,11 @@ export default function App() {
                   </h2>
                   {isSpanish ? (
                     <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
-                      Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinámicamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold">ámbar</span>.
+                      Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinámicamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">dorado</span>.
                     </p>
                   ) : (
                     <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
-                      Speak or write freely. Every message is dynamically analyzed and corrected with modified words highlighted in <span className="text-amber-300 font-extrabold">amber</span>.
+                      Speak or write freely. Every message is dynamically analyzed and corrected with modified words highlighted in <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">gold</span>.
                     </p>
                   )}
                 </div>
