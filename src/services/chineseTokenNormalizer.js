@@ -574,3 +574,5 @@ export function inspectChineseTokens(text, tokens) {
   console.log('Coverage:', `${(reconstructed.length / text.length * 100).toFixed(1)}%`);
   console.groupEnd();
 }
+
+export { normalizeChineseTokens as normalizeChineseMessageTokens };
