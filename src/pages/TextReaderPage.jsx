@@ -1483,7 +1483,26 @@ export function TextReaderPage({
                   value={inputTitle}
                   onChange={(e) => setInputTitle(e.target.value)}
                   placeholder="Ej: Mi primer día de clases / 我的学校..."
-                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm transition-all"
+                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm transition-all shadow-xs"
+                />
+              </div>
+
+              {/* Language Selector (Idioma del texto) */}
+              <div className="mb-4">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                  {t('text_language') || 'Idioma del texto'}
+                </label>
+                <LanguageSelectDropdown
+                  value={targetLang}
+                  onChange={(newLang) => {
+                    if (setTargetLang) {
+                      setTargetLang(newLang);
+                    }
+                  }}
+                  options={languages}
+                  variant="card"
+                  align="left"
+                  className="w-full"
                 />
               </div>
 
@@ -1742,12 +1761,12 @@ export function TextReaderPage({
               </span>
             </button>
 
-            {/* Transliterations — same interlinearMode / setInterlinearMode */}
+            {/* Translation / Glosses — same interlinearMode / setInterlinearMode */}
             <button
               type="button"
               onClick={() => setInterlinearMode(!interlinearMode)}
-              title={interlinearMode ? 'Desactivar transliteración' : 'Activar transliteración'}
-              aria-label="Transliterations"
+              title={interlinearMode ? 'Desactivar traducción / glosado interlineal' : 'Activar traducción / glosado interlineal'}
+              aria-label="Traducción y glosado interlineal"
               aria-pressed={interlinearMode}
               className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
                 interlinearMode
@@ -1755,7 +1774,7 @@ export function TextReaderPage({
                   : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
               }`}
             >
-              <span className="font-serif text-[13px] sm:text-sm font-bold leading-none select-none">T</span>
+              <span className="font-bold text-[11px] sm:text-xs leading-none select-none tracking-tighter">A文</span>
             </button>
 
             {/* Text size — same cycleFontSize */}
@@ -1763,10 +1782,10 @@ export function TextReaderPage({
               type="button"
               onClick={cycleFontSize}
               title={`Tamaño de texto: ${fontSize} — clic para cambiar`}
-              aria-label="Text size"
+              aria-label="Tamaño de texto"
               className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
             >
-              <span className="text-[13px] sm:text-sm font-bold leading-none select-none">A</span>
+              <span className="font-bold text-[11px] sm:text-xs leading-none select-none tracking-tight">A±</span>
             </button>
 
             {/* Auto glossing — same isAutoGlossing / handleToggleAutoGlossing */}
