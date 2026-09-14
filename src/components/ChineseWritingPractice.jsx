@@ -296,7 +296,7 @@ export function ChineseWritingPractice({
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 mode === 'words'
                   ? 'bg-white dark:bg-stone-700 text-rose-600 dark:text-rose-300 shadow-xs'
-                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900'
+                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >
               <PenTool className="w-3.5 h-3.5" />
@@ -308,7 +308,7 @@ export function ChineseWritingPractice({
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 mode === 'sentence'
                   ? 'bg-white dark:bg-stone-700 text-rose-600 dark:text-rose-300 shadow-xs'
-                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900'
+                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
@@ -325,7 +325,7 @@ export function ChineseWritingPractice({
                 className={`px-2 py-1 rounded-md transition-all font-semibold ${
                   filterType === 'corrections'
                     ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30'
-                    : 'text-stone-500 hover:text-stone-700'
+                    : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
                 }`}
               >
                 Solo corrección ({changedItems.length})
@@ -336,7 +336,7 @@ export function ChineseWritingPractice({
                 className={`px-2 py-1 rounded-md transition-all font-semibold ${
                   filterType === 'all'
                     ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30'
-                    : 'text-stone-500 hover:text-stone-700'
+                    : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
                 }`}
               >
                 Todos ({allItems.length})
@@ -365,13 +365,13 @@ export function ChineseWritingPractice({
                   <span className="text-2xl font-bold text-rose-600 dark:text-rose-400">
                     {completedCharIndices.size} / {activeItems.length}
                   </span>
-                  <p className="text-xs text-stone-500 font-medium mt-0.5">Caracteres</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 font-medium mt-0.5">Caracteres</p>
                 </div>
                 <div className="p-3 rounded-2xl bg-stone-100 dark:bg-stone-800/60 text-center">
                   <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
                     {totalMistakes}
                   </span>
-                  <p className="text-xs text-stone-500 font-medium mt-0.5">Errores de trazo</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 font-medium mt-0.5">Errores de trazo</p>
                 </div>
               </div>
 
@@ -379,7 +379,7 @@ export function ChineseWritingPractice({
                 <button
                   type="button"
                   onClick={handleRestartAll}
-                  className="px-4 py-2 rounded-xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 text-stone-700 dark:text-stone-200 font-semibold text-sm transition-all flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 font-semibold text-sm transition-all flex items-center gap-1.5"
                 >
                   <RotateCcw className="w-4 h-4" />
                   <span>Repetir</span>
@@ -442,7 +442,7 @@ export function ChineseWritingPractice({
                     {currentItem.pinyin}
                   </span>
                 ) : (
-                  <span className="text-xs text-stone-400 font-medium">Escribe con el dedo o mouse</span>
+                  <span className="text-xs text-stone-400 dark:text-stone-500 font-medium">Escribe con el dedo o mouse</span>
                 )}
 
                 {/* Status badges */}
