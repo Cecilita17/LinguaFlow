@@ -898,6 +898,8 @@ export default function App() {
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
           <YouTubeReaderPage
             targetLang={targetLang}
+            setTargetLang={handleTargetLangChange}
+            languages={languages}
             nativeLang={nativeLang}
             apiKey={config?.apiKey}
             onWordClick={handleWordClick}
