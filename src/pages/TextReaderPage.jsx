@@ -53,7 +53,7 @@ import {
   isGlossComplete
 } from '../services/textGlossService.js';
 import { parseEpubFile } from '../services/epubService.js';
-import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
+import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 
 export function TextReaderPage({
   targetLang = 'zh',
@@ -582,7 +582,7 @@ export function TextReaderPage({
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = speechCode;
-    utterance.rate = speechRateRef.current || speechRate || 1.0;
+    utterance.rate = mapSpeechRateToUtteranceRate(speechRateRef.current || speechRate || 1.0);
 
     // Select suitable voice if available
     const voices = window.speechSynthesis.getVoices();

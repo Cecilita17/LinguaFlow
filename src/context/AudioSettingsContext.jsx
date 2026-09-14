@@ -6,6 +6,40 @@ export const SPEECH_RATE_OPTIONS = [
 ];
 export const DEFAULT_SPEECH_RATE = 1.00;
 
+/**
+ * Maps the user-selected display speechRate to the internal SpeechSynthesisUtterance.rate.
+ * 
+ * Background & Rationale:
+ * Web Speech API browsers (Chrome/Chromium, Edge, Safari) and underlying OS TTS engines
+ * compress low rates heavily: raw rates between 0.60 and 0.95 often sound imperceptibly
+ * different or too slow/unnatural, while sub-1.0 speeds lack a smooth, distinct graduation.
+ * 
+ * This mapping ensures:
+ * - 1.00x is preserved exactly as 1.00 (natural normal speed).
+ * - Rates < 1.00 scale smoothly and distinctly across [0.35, 0.94] so that 0.60x is clearly
+ *   the slowest option, 0.65x is distinctly faster, up through 0.95x, in a monotonic, pleasant curve.
+ * - Rates > 1.00 scale linearly from 1.00 to 1.50x.
+ */
+export function mapSpeechRateToUtteranceRate(displayRate) {
+  const rate = typeof displayRate === 'number' && !isNaN(displayRate) ? displayRate : DEFAULT_SPEECH_RATE;
+  
+  if (Math.abs(rate - 1.0) < 0.001) {
+    return 1.0;
+  }
+  
+  if (rate < 1.0) {
+    // Piecewise smooth expansion for slow speeds:
+    // When displayRate = 0.60 -> utterance.rate = 0.35 (clearly distinct slow, natural cadence)
+    // When displayRate = 1.00 -> utterance.rate = 1.00
+    // Linear slope: 0.35 + ((rate - 0.60) / 0.40) * (1.00 - 0.35) = 0.35 + (rate - 0.60) * 1.625
+    const mapped = 0.35 + ((rate - 0.60) / 0.40) * 0.65;
+    return Math.round(Math.max(0.2, Math.min(1.0, mapped)) * 1000) / 1000;
+  }
+  
+  // For rates > 1.0, preserve standard 1:1 speedup
+  return Math.round(rate * 1000) / 1000;
+}
+
 export const STORAGE_KEY_RATE = 'linguaflow_global_speech_rate';
 export const STORAGE_KEY_AUTOPLAY = 'linguaflow_auto_play_ai';
 export const STORAGE_KEY_AUTOPLAY_READER = 'linguaflow_auto_play_text_reader';

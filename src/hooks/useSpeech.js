@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { transcribeAudioApi } from '../services/chatService.js';
+import { mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 
 /**
  * Intelligent phrase and n-gram deduplication to fix Android Chrome / mobile WebKit
@@ -383,7 +384,7 @@ export function useSpeech({
     const cleanText = text.replace(/<[^>]*>/g, '');
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = langCode;
-    utterance.rate = rate;
+    utterance.rate = mapSpeechRateToUtteranceRate(rate);
 
     const voices = window.speechSynthesis.getVoices();
     const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(langCode.slice(0, 2).toLowerCase()));
