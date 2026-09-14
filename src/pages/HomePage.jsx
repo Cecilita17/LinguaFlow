@@ -5,8 +5,11 @@ import {
   Sparkles,
   ArrowRight,
   CheckCircle2,
-  ChevronDown,
-  FileText
+  FileText,
+  Settings as SettingsIcon,
+  Zap,
+  Server,
+  Info
 } from 'lucide-react';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
@@ -15,6 +18,7 @@ import {
   NATIVE_LANG_OPTIONS,
   getLanguageMeta
 } from '../constants/languages.js';
+import { getStudyGreeting } from '../constants/greetings.js';
 
 export default function HomePage({
   onSelectMode,
@@ -22,259 +26,214 @@ export default function HomePage({
   setTargetLang,
   nativeLang,
   setNativeLang,
-  languages = []
+  languages = [],
+  apiWarning = null
 }) {
-  const { t } = useSiteLanguage();
+  const { t, isSpanish } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
   const currentNativeMeta = getLanguageMeta(nativeLang);
-  const currentTargetName = currentTargetMeta.name || (Array.isArray(languages) && languages.find((l) => l && l.code === targetLang)?.name) || targetLang;
-  const currentNativeName =
-    currentNativeMeta.name ||
-    NATIVE_LANG_OPTIONS.find((l) => l && l.code === nativeLang)?.name ||
-    (Array.isArray(languages) && languages.find((l) => l && l.code === nativeLang)?.name) ||
-    nativeLang;
+  const greeting = getStudyGreeting(targetLang);
 
   return (
-    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#180905] dark:via-[#210d07] dark:to-[#140603] dark:text-stone-100 flex flex-col justify-between px-4 py-8 md:py-12 home-gradient-bg">
+    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#180905] dark:via-[#210d07] dark:to-[#140603] dark:text-stone-100 flex flex-col justify-between px-3 sm:px-6 py-4 sm:py-8 home-gradient-bg">
       {/* Background ambient lighting effects */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-rose-500/5 dark:bg-rose-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
       <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-amber-400/5 dark:bg-amber-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
       {/* Main Container */}
-      <div className="max-w-5xl mx-auto w-full flex-1 flex flex-col justify-center">
-        
-        {/* Hero Badge & Titles */}
-        <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12 animate-fade-in">
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 shadow-xs dark:bg-gradient-to-r dark:from-rose-950/90 dark:to-[#38160e] dark:border-rose-700/50 dark:shadow-md dark:shadow-black/40 mb-4">
-            <Sparkles className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-            <span className="text-xs font-bold tracking-wider uppercase text-rose-700 dark:text-rose-200">
-              {t('home_badge')}
-            </span>
+      <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col justify-center">
+
+        {/* 1. DYNAMIC GREETING (prominent on mobile & desktop, immediately updates when targetLang changes) */}
+        <div className="text-center mx-auto mb-4 sm:mb-6 animate-fade-in pt-1">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-300 text-[11px] font-bold tracking-wider uppercase mb-2">
+            <span>{currentTargetMeta.flag || '🌐'}</span>
+            <span>{greeting.langName || currentTargetMeta.name}</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-[var(--text-primary)] dark:text-white leading-tight sm:leading-tight">
-            {t('home_title_pre')}
+          <h1
+            className="text-4xl sm:text-6xl font-black tracking-tight text-[var(--text-primary)] dark:text-white leading-tight transition-all"
+            dir={greeting.rtl ? 'rtl' : 'ltr'}
+          >
             <span className="bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 dark:from-rose-400 dark:via-pink-400 dark:to-amber-300 bg-clip-text text-transparent">
-              {t('home_title_highlight')}
+              {greeting.text}
             </span>
           </h1>
 
-          <p className="mt-3 text-sm sm:text-base text-[var(--text-secondary)] dark:text-rose-100/70 leading-relaxed max-w-xl mx-auto font-medium">
-            {t('home_subtitle')}
+          {greeting.translit && (
+            <p className="text-xs sm:text-sm font-medium text-rose-500/80 dark:text-rose-300/80 mt-1 font-mono tracking-wide">
+              {greeting.translit}
+            </p>
+          )}
+
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] dark:text-rose-100/70 mt-1.5 font-medium">
+            {isSpanish ? 'Selecciona una actividad para continuar practicando' : 'Choose an activity to keep practicing'}
           </p>
-
-          {/* Quick Language Selection Bar */}
-          <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-3 p-2 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md shadow-stone-900/5 dark:bg-[#26110a]/90 dark:border-[#482015] dark:shadow-lg dark:shadow-black/30 backdrop-blur-md">
-            <LanguageSelectDropdown
-              value={targetLang}
-              onChange={(newLang) => setTargetLang && setTargetLang(newLang)}
-              options={languages}
-              label={t('home_practicing')}
-              variant="pill"
-            />
-
-            <LanguageSelectDropdown
-              value={nativeLang}
-              onChange={(newLang) => setNativeLang && setNativeLang(newLang)}
-              options={NATIVE_LANG_OPTIONS}
-              label={t('home_your_lang')}
-              variant="pill"
-            />
-          </div>
         </div>
 
-        {/* 3 Big Interactive Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto w-full mb-10">
-          
-          {/* CARD 1: CHAT TUTOR */}
+        {/* 2. MAIN 4 BIG ACTION CARDS (Mobile touch-first 4-card grid; Desktop balanced) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-5 w-full mb-6">
+
+          {/* CARD 1: TUTOR CHAT */}
           <div
             onClick={() => onSelectMode('chat')}
-            className="group relative p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform hover:-translate-y-1"
+            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
           >
-            {/* Top decorative gradient glow */}
-            <div className="absolute -top-16 -right-16 w-36 h-36 bg-rose-500/10 group-hover:bg-rose-500/20 dark:bg-rose-500/15 dark:group-hover:bg-rose-500/25 rounded-full blur-2xl transition-all" />
-
-            <div>
-              {/* Header Icon + Tag */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 dark:shadow-rose-950/60 group-hover:scale-105 transition-transform">
-                  <MessageSquare className="w-6 h-6" />
-                </div>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200/90 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800/70">
-                  ✦ {t('home_chat_tag')}
-                </span>
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-
-              {/* Title & Description */}
-              <h2 className="text-xl font-bold text-[var(--text-primary)] group-hover:text-rose-600 dark:text-white dark:group-hover:text-rose-200 transition-colors">
-                {t('home_chat_title')}
-              </h2>
-              <p className="mt-2 text-xs text-[var(--text-secondary)] dark:text-stone-300 leading-relaxed font-normal">
-                {t('home_chat_desc')}
-              </p>
-
-              {/* Features List */}
-              <ul className="mt-4 space-y-2 text-xs text-[var(--text-secondary)] dark:text-rose-100/80 font-medium">
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
-                  <span>{t('home_chat_f1')}</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
-                  <span>{t('home_chat_f2')}</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
-                  <span>{t('home_chat_f3')}</span>
-                </li>
-              </ul>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-500 dark:group-hover:text-rose-200 transition-colors">
+                    Tutor Chat
+                  </h2>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
+                    IA
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                  {isSpanish
+                    ? 'Conversación interactiva con correcciones inteligentes en tiempo real.'
+                    : 'Interactive AI conversation with real-time grammar feedback.'}
+                </p>
+              </div>
             </div>
-
-            {/* CTA Button */}
-            <div className="mt-6 pt-4 border-t border-[var(--border-subtle)] dark:border-[#411c12]">
-              <button
-                type="button"
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-xs shadow-md shadow-rose-900/20 dark:shadow-lg dark:shadow-rose-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-rose-900/40 dark:group-hover:shadow-rose-900/80"
-              >
-                <span>{t('home_chat_btn')}</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-rose-600 dark:text-rose-300">
+              <span>{isSpanish ? 'Abrir Chat' : 'Start Chat'}</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
 
-          {/* CARD 2: YOUTUBE READER */}
+          {/* CARD 2: YOUTUBE READER (Opens YouTube Library) */}
           <div
             onClick={() => onSelectMode('youtube')}
-            className="group relative p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform hover:-translate-y-1"
+            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
           >
-            {/* Top decorative gradient glow */}
-            <div className="absolute -top-16 -right-16 w-36 h-36 bg-amber-500/10 group-hover:bg-amber-500/20 dark:bg-amber-500/15 dark:group-hover:bg-amber-500/25 rounded-full blur-2xl transition-all" />
-
-            <div>
-              {/* Header Icon + Tag */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-950/40 dark:shadow-red-950/60 group-hover:scale-105 transition-transform">
-                  <Youtube className="w-6 h-6" />
-                </div>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200/90 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800/70">
-                  ✦ {t('home_yt_tag')}
-                </span>
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <Youtube className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-
-              {/* Title & Description */}
-              <h2 className="text-xl font-bold text-[var(--text-primary)] group-hover:text-amber-600 dark:text-white dark:group-hover:text-amber-200 transition-colors">
-                {t('home_yt_title')}
-              </h2>
-              <p className="mt-2 text-xs text-[var(--text-secondary)] dark:text-stone-300 leading-relaxed font-normal">
-                {t('home_yt_desc')}
-              </p>
-
-              {/* Features List */}
-              <ul className="mt-4 space-y-2 text-xs text-[var(--text-secondary)] dark:text-rose-100/80 font-medium">
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <span>{t('home_yt_f1')}</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <span>{t('home_yt_f2')}</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <span>{t('home_yt_f3')}</span>
-                </li>
-              </ul>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors">
+                    YouTube Reader
+                  </h2>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                    {isSpanish ? 'Biblioteca' : 'Library'}
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                  {isSpanish
+                    ? 'Tu biblioteca de vídeos con transcripciones interlineales y glosado.'
+                    : 'Your video library with interlinear transcripts and instant glossing.'}
+                </p>
+              </div>
             </div>
-
-            {/* CTA Button */}
-            <div className="mt-6 pt-4 border-t border-[var(--border-subtle)] dark:border-[#411c12]">
-              <button
-                type="button"
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-600 via-rose-600 to-red-600 hover:from-amber-500 hover:to-rose-500 text-white font-bold text-xs shadow-md shadow-amber-900/20 dark:shadow-lg dark:shadow-amber-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-amber-900/40 dark:group-hover:shadow-amber-900/80"
-              >
-                <span>{t('home_yt_btn')}</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-300">
+              <span>{isSpanish ? 'Ver Biblioteca de Vídeos' : 'Open Video Library'}</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
 
           {/* CARD 3: TEXT READER */}
           <div
             onClick={() => onSelectMode('text')}
-            className="group relative p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-pink-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform hover:-translate-y-1"
+            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-pink-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
           >
-            {/* Top decorative gradient glow */}
-            <div className="absolute -top-16 -right-16 w-36 h-36 bg-pink-500/10 group-hover:bg-pink-500/20 dark:bg-pink-500/15 dark:group-hover:bg-pink-500/25 rounded-full blur-2xl transition-all" />
-
-            <div>
-              {/* Header Icon + Tag */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 dark:shadow-pink-950/60 group-hover:scale-105 transition-transform">
-                  <FileText className="w-6 h-6" />
-                </div>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-pink-50 text-pink-700 border border-pink-200/90 dark:bg-pink-950/80 dark:text-pink-300 dark:border-pink-800/70">
-                  ✦ {t('home_text_tag') || 'LECTOR DE TEXTOS'}
-                </span>
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <FileText className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-
-              {/* Title & Description */}
-              <h2 className="text-xl font-bold text-[var(--text-primary)] group-hover:text-pink-600 dark:text-white dark:group-hover:text-pink-200 transition-colors">
-                {t('home_text_title') || 'Importar Texto'}
-              </h2>
-              <p className="mt-2 text-xs text-[var(--text-secondary)] dark:text-stone-300 leading-relaxed font-normal">
-                {t('home_text_desc') || 'Pega o importa cualquier texto sin video. Lee párrafos con audio individual y glosado inteligente.'}
-              </p>
-
-              {/* Features List */}
-              <ul className="mt-4 space-y-2 text-xs text-[var(--text-secondary)] dark:text-rose-100/80 font-medium">
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-pink-500 dark:text-pink-400 shrink-0 mt-0.5" />
-                  <span>{t('home_text_f1') || 'Lectura independiente sin video'}</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-pink-500 dark:text-pink-400 shrink-0 mt-0.5" />
-                  <span>{t('home_text_f2') || 'Audio TTS por párrafo individual'}</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-pink-500 dark:text-pink-400 shrink-0 mt-0.5" />
-                  <span>{t('home_text_f3') || 'Glosado interlineal por palabras'}</span>
-                </li>
-              </ul>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors">
+                    Text Reader
+                  </h2>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/30">
+                    EPUB / TXT
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                  {isSpanish
+                    ? 'Lee textos y libros con audio por párrafos y definiciones al clic.'
+                    : 'Read texts and books with paragraph TTS audio and word lookups.'}
+                </p>
+              </div>
             </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-pink-600 dark:text-pink-300">
+              <span>{isSpanish ? 'Abrir Text Reader' : 'Open Text Reader'}</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
 
-            {/* CTA Button */}
-            <div className="mt-6 pt-4 border-t border-[var(--border-subtle)] dark:border-[#411c12]">
-              <button
-                type="button"
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-pink-600 via-rose-500 to-amber-600 hover:from-pink-500 hover:to-amber-500 text-white font-bold text-xs shadow-md shadow-pink-900/20 dark:shadow-lg dark:shadow-pink-950/60 flex items-center justify-center space-x-2 transition-all group-hover:shadow-pink-900/40 dark:group-hover:shadow-pink-900/80"
-              >
-                <span>{t('home_text_btn') || 'Abrir Lector de Texto'}</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+          {/* CARD 4: SETTINGS (Opens Dedicated Settings Page) */}
+          <div
+            onClick={() => onSelectMode('settings')}
+            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-stone-400/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-stone-900/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+          >
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-stone-600 via-rose-700 to-stone-800 flex items-center justify-center text-white shadow-lg shadow-black/40 shrink-0 group-hover:scale-105 transition-transform">
+                <SettingsIcon className="w-6 h-6 sm:w-7 sm:h-7" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-400 transition-colors">
+                    {isSpanish ? 'Ajustes' : 'Settings'}
+                  </h2>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-stone-500/15 text-stone-300 border border-stone-500/30">
+                    ⚙️
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                  {isSpanish
+                    ? 'Configura idiomas, tema, velocidad de voz, nivel de IA y opciones.'
+                    : 'Configure languages, theme, speech speed, AI level and options.'}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-rose-400">
+              <span>{isSpanish ? 'Configurar LinguaFlow' : 'Open Settings'}</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
 
         </div>
 
-        {/* Feature Highlights Strip */}
-        <div className="max-w-4xl mx-auto w-full pt-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-            <div className="p-3 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-xs dark:bg-[#1e0d08]/80 dark:border-[#3b170e]">
-              <div className="text-amber-600 dark:text-amber-400 font-bold text-xs">⚡ Motor Groq AI</div>
-              <div className="text-[11px] text-[var(--text-secondary)] dark:text-rose-200/60 font-medium mt-0.5">openai/gpt-oss-120b</div>
+        {/* 3. GROQ AI / BACKEND STATUS INFORMATION (Solely at the bottom of the Home page per Requirement 6 & 7) */}
+        <div className="w-full pt-2">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-xs dark:bg-[#1e0d08]/80 dark:border-[#3b170e] flex items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                  apiWarning ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'
+                }`}
+              >
+                <Zap className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-white">
+                    {apiWarning ? (isSpanish ? 'Aviso Groq AI' : 'Groq AI Warning') : (isSpanish ? 'Motor Groq AI Activo' : 'Groq AI Engine Active')}
+                  </span>
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      apiWarning ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'
+                    }`}
+                  />
+                </div>
+                <div className="text-[11px] text-rose-300/70 font-mono mt-0.5">
+                  openai/gpt-oss-120b • Whisper V3
+                </div>
+              </div>
             </div>
-            <div className="p-3 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-xs dark:bg-[#1e0d08]/80 dark:border-[#3b170e]">
-              <div className="text-rose-600 dark:text-rose-400 font-bold text-xs">🌐 13+ Idiomas</div>
-              <div className="text-[11px] text-[var(--text-secondary)] dark:text-rose-200/60 font-medium mt-0.5">Soporte interlineal</div>
-            </div>
-            <div className="p-3 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-xs dark:bg-[#1e0d08]/80 dark:border-[#3b170e]">
-              <div className="text-pink-600 dark:text-pink-400 font-bold text-xs">💾 Persistencia Local</div>
-              <div className="text-[11px] text-[var(--text-secondary)] dark:text-rose-200/60 font-medium mt-0.5">Historial por idioma</div>
-            </div>
-            <div className="p-3 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-xs dark:bg-[#1e0d08]/80 dark:border-[#3b170e]">
-              <div className="text-emerald-600 dark:text-emerald-400 font-bold text-xs">🎙️ Voz Multilingüe</div>
-              <div className="text-[11px] text-[var(--text-secondary)] dark:text-rose-200/60 font-medium mt-0.5">Code-switching STT</div>
-            </div>
+
+            <button
+              type="button"
+              onClick={() => onSelectMode('settings')}
+              className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 underline shrink-0 cursor-pointer"
+            >
+              {isSpanish ? 'Ver estado' : 'View status'}
+            </button>
           </div>
         </div>
 

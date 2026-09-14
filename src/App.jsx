@@ -7,6 +7,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
 import { YouTubeReaderPage } from './pages/YouTubeReaderPage';
 import { TextReaderPage } from './pages/TextReaderPage';
+import { SettingsPage } from './pages/SettingsPage';
 import HomePage from './pages/HomePage';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw } from 'lucide-react';
@@ -33,7 +34,7 @@ const STORAGE_PREFIX = 'linguaflow_chat_';
 const TARGET_LANG_KEY = 'linguaflow_target_lang';
 const NATIVE_LANG_KEY = 'linguaflow_native_lang';
 const ACTIVE_TAB_KEY = 'linguaflow_active_tab';
-const VALID_TABS = ['home', 'chat', 'youtube', 'text'];
+const VALID_TABS = ['home', 'chat', 'youtube', 'text', 'settings'];
 
 function getActiveTabFromLocation() {
   try {
@@ -854,7 +855,7 @@ export default function App() {
           setShowTransliteration={setShowTransliteration}
           handsFree={handsFree}
           setHandsFree={setHandsFree}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => setActiveTab('settings')}
           onResetChat={handleResetChat}
           isListening={isRecording}
           isSpeaking={isSpeaking}
@@ -873,7 +874,26 @@ export default function App() {
           nativeLang={nativeLang}
           setNativeLang={handleNativeLangChange}
           languages={languages}
+          apiWarning={apiWarning}
         />
+      ) : activeTab === 'settings' ? (
+        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
+          <SettingsPage
+            onBack={() => setActiveTab('home')}
+            config={config}
+            onSaveConfig={handleSaveConfig}
+            targetLang={targetLang}
+            setTargetLang={handleTargetLangChange}
+            nativeLang={nativeLang}
+            setNativeLang={handleNativeLangChange}
+            languages={languages}
+            showTransliteration={showTransliteration}
+            setShowTransliteration={setShowTransliteration}
+            handsFree={handsFree}
+            setHandsFree={setHandsFree}
+            onResetChat={handleResetChat}
+          />
+        </main>
       ) : activeTab === 'youtube' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
           <YouTubeReaderPage
@@ -916,7 +936,7 @@ export default function App() {
                     <p className="text-[11px] text-amber-200/80 mt-0.5">
                       Haz clic en{' '}
                       <button
-                        onClick={() => setIsSettingsOpen(true)}
+                        onClick={() => setActiveTab('settings')}
                         className="underline font-bold text-white hover:text-amber-300"
                       >
                         Ajustes ⚙️
