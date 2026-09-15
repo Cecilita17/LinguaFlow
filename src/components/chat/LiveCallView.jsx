@@ -129,15 +129,6 @@ export function LiveCallView({
         </button>
 
         <div className="flex items-center space-x-2">
-          <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-sm">
-            <Mic className="w-4 h-4" />
-          </div>
-          <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] tracking-wide flex items-center gap-1.5">
-            <span>{t('call_active_title')}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-              {currentTargetMeta.flag} {currentTargetMeta.name}
-            </span>
-          </h2>
           <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
             {formattedDuration}
           </span>
