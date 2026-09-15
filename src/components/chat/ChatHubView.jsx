@@ -1,4 +1,4 @@
-﻿import React, { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   MessageSquare,
   Mic,
@@ -101,9 +101,11 @@ export function ChatHubView({
         let storedCalls = [];
         const rawCalls = localStorage.getItem(CALL_STORAGE_KEY);
         if (rawCalls) {
-          storedCalls = JSON.parse(rawCalls);
-        } else {
-          storedCalls = DEFAULT_CALL_HISTORY;
+          try {
+            storedCalls = JSON.parse(rawCalls) || [];
+          } catch (err) {
+            storedCalls = [];
+          }
         }
 
         storedCalls.forEach((call) => {

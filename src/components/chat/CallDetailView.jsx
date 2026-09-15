@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   ArrowLeft,
   Mic,
@@ -62,11 +62,11 @@ export function CallDetailView({
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              <span>{callData?.duration || '05:00'}</span>
+              <span>{callData?.duration || '00:00'}</span>
             </span>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5" />
-              <span>{callData?.date || 'Hoy'}</span>
+              <span>{callData?.date || (isSpanish ? 'Hoy' : 'Today')}</span>
             </span>
           </div>
         </div>
@@ -99,7 +99,7 @@ export function CallDetailView({
           </div>
         ) : (
           <div className="text-center py-6 text-xs text-[var(--text-muted)] bg-[var(--surface-secondary)] rounded-2xl border border-[var(--border-primary)] p-4">
-            <p>{isSpanish ? 'Transcripción de llamada en preparación.' : 'Call transcript in preparation.'}</p>
+            <p>{isSpanish ? 'No se registró transcripción para esta llamada.' : 'No transcript recorded for this call.'}</p>
           </div>
         )}
       </div>

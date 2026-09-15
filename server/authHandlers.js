@@ -1,7 +1,30 @@
-﻿import { OAuth2Client } from 'google-auth-library';
+import dotenv from 'dotenv';
+import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'linguaflow-super-secret-session-key-2026';
+dotenv.config();
+
+function getJwtSecret() {
+  return process.env.JWT_SECRET || process.env.SESSION_SECRET || 'linguaflow-super-secret-session-key-2026';
+}
+
+export function setCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+function parseRequestBody(req) {
+  if (!req.body) return {};
+  if (typeof req.body === 'string') {
+    try {
+      return JSON.parse(req.body);
+    } catch (e) {
+      return {};
+    }
+  }
+  return req.body;
+}
 
 function getGoogleClientId() {
   return (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '').trim();
@@ -12,8 +35,11 @@ function getGoogleClientId() {
  * Verifies the Google ID Token or Access Token and returns a signed session token + user profile.
  */
 export async function handleGoogleAuth(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   try {
-    const { credential, accessToken } = req.body || {};
+    const { credential, accessToken } = parseRequestBody(req);
 
     if (!credential && !accessToken) {
       return res.status(400).json({
@@ -89,7 +115,7 @@ export async function handleGoogleAuth(req, res) {
         photoURL: user.photoURL,
         provider: user.provider
       },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '30d' }
     );
 
@@ -112,6 +138,9 @@ export async function handleGoogleAuth(req, res) {
  * Validates the server session token and returns the current user profile.
  */
 export async function handleGetSession(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   try {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
@@ -125,7 +154,7 @@ export async function handleGetSession(req, res) {
     }
 
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, getJwtSecret());
       return res.json({
         authenticated: true,
         user: {
@@ -156,6 +185,9 @@ export async function handleGetSession(req, res) {
  * Handle POST /api/auth/logout
  */
 export async function handleLogout(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   return res.json({
     success: true,
     message: 'Sesión cerrada correctamente.'

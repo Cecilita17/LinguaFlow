@@ -38,6 +38,7 @@ const STORAGE_PREFIX = 'linguaflow_chat_';
 const TARGET_LANG_KEY = 'linguaflow_target_lang';
 const NATIVE_LANG_KEY = 'linguaflow_native_lang';
 const ACTIVE_TAB_KEY = 'linguaflow_active_tab';
+const CALL_STORAGE_KEY = 'linguaflow_call_history';
 const VALID_TABS = ['home', 'chat', 'youtube', 'text', 'settings'];
 
 function getActiveTabFromLocation() {
@@ -847,6 +848,24 @@ export default function App() {
     stopSpeaking();
   };
 
+  // Handle saving completed real-time call to unified history
+  const handleEndRealtimeCall = (sessionData) => {
+    if (sessionData && sessionData.transcript && sessionData.transcript.length > 0) {
+      try {
+        let storedCalls = [];
+        const raw = localStorage.getItem(CALL_STORAGE_KEY);
+        if (raw) {
+          storedCalls = JSON.parse(raw);
+        }
+        storedCalls.unshift(sessionData);
+        localStorage.setItem(CALL_STORAGE_KEY, JSON.stringify(storedCalls));
+      } catch (e) {
+        console.warn('Failed to save call session to history:', e);
+      }
+    }
+    setChatViewMode('hub');
+  };
+
   return (
     <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
       {/* Global Header — hidden in Text Reader, YouTube Reader & Live Call because they own their dedicated full-screen headers */}
@@ -928,7 +947,9 @@ export default function App() {
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
           <LiveCallView
             targetLang={targetLang}
-            onEndCall={() => setChatViewMode('hub')}
+            nativeLang={nativeLang}
+            level={config?.level || 'A2/B1'}
+            onEndCall={handleEndRealtimeCall}
           />
         </main>
       ) : chatViewMode === 'call-detail' ? (

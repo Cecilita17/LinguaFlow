@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { handleHealth, handleLanguages, handleChat, handleLookupWord, handleTranscribe, handleSentenceBreakdown, handleBatchGloss } from './handlers.js';
 import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
+import { handleRealtimeSession } from './realtimeHandlers.js';
 
 dotenv.config();
 
@@ -43,6 +44,10 @@ app.post('/sentence-breakdown', handleSentenceBreakdown);
 
 app.post('/api/batch-gloss', handleBatchGloss);
 app.post('/batch-gloss', handleBatchGloss);
+
+// OpenAI Realtime WebRTC Session creation
+app.post('/api/realtime/session', handleRealtimeSession);
+app.post('/realtime/session', handleRealtimeSession);
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
