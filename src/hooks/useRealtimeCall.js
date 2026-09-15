@@ -245,7 +245,7 @@ export function useRealtimeCall({
         throw new Error(sessionData.error || 'Error al solicitar sesión efímera al backend');
       }
 
-      const ephemeralKey = sessionData.client_secret?.value;
+      const ephemeralKey = sessionData.value || sessionData.client_secret?.value || sessionData.key;
       if (!ephemeralKey) {
         throw new Error('El servidor no devolvió una clave efímera válida.');
       }
@@ -311,8 +311,8 @@ export function useRealtimeCall({
       await pc.setLocalDescription(offer);
 
       // 8. Connect to OpenAI Realtime WebRTC endpoint with ephemeral token
-      const model = 'gpt-4o-realtime-preview';
-      const sdpResponse = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
+      // Primary GA endpoint: POST https://api.openai.com/v1/realtime/calls
+      let sdpResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
         method: 'POST',
         body: offer.sdp,
         headers: {
@@ -320,6 +320,18 @@ export function useRealtimeCall({
           'Content-Type': 'application/sdp'
         }
       });
+
+      // Fallback for endpoints expecting model query parameter
+      if (!sdpResponse.ok && sdpResponse.status === 404) {
+        sdpResponse = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
+          method: 'POST',
+          body: offer.sdp,
+          headers: {
+            'Authorization': `Bearer ${ephemeralKey}`,
+            'Content-Type': 'application/sdp'
+          }
+        });
+      }
 
       if (!sdpResponse.ok) {
         const errorText = await sdpResponse.text();

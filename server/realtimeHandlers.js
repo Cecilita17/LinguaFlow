@@ -74,25 +74,28 @@ Key Conversational Rules:
 4. Adapt your vocabulary to the user's level (${level}).
 5. Sound cheerful, warm, and natural as if speaking on a phone call.`;
 
-    const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
+    // OpenAI Realtime GA client_secrets endpoint for WebRTC sessions
+    const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey.trim()}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-realtime-preview',
-        modalities: ['audio', 'text'],
-        voice: 'cedar',
-        instructions: pedagogicalInstructions,
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 500
-        },
-        input_audio_transcription: {
-          model: 'whisper-1'
+        session: {
+          type: 'realtime',
+          model: 'gpt-realtime',
+          voice: 'cedar',
+          instructions: pedagogicalInstructions,
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500
+          },
+          input_audio_transcription: {
+            model: 'whisper-1'
+          }
         }
       })
     });
@@ -100,13 +103,19 @@ Key Conversational Rules:
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('❌ OpenAI Realtime Session Error:', data);
+      console.error('❌ OpenAI Realtime Client Secret Error:', data);
       return res.status(response.status).json({
-        error: data.error?.message || 'Error al solicitar sesión efímera a OpenAI Realtime API'
+        error: data.error?.message || 'Error al solicitar credencial efímera a OpenAI Realtime API'
       });
     }
 
-    return res.json(data);
+    const ephemeralValue = data.value || data.client_secret?.value || data.key;
+
+    return res.json({
+      value: ephemeralValue,
+      client_secret: { value: ephemeralValue },
+      ...data
+    });
   } catch (err) {
     console.error('❌ Server error creating realtime session:', err);
     return res.status(500).json({
