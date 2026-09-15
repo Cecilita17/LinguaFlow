@@ -16,6 +16,10 @@ import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './servic
 import { normalizeChineseTokens, validateChineseTokens } from './services/chineseTokenNormalizer';
 import { useSiteLanguage } from './context/SiteLanguageContext.jsx';
 import { useAudioSettings } from './context/AudioSettingsContext.jsx';
+import { ChatHubView } from './components/chat/ChatHubView.jsx';
+import { LiveCallView } from './components/chat/LiveCallView.jsx';
+import { CallDetailView } from './components/chat/CallDetailView.jsx';
+import { ArrowLeft } from 'lucide-react';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -145,6 +149,8 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(() => getActiveTabFromLocation());
+  const [chatViewMode, setChatViewMode] = useState('hub'); // 'hub' | 'chat' | 'call' | 'call-detail'
+  const [selectedCallData, setSelectedCallData] = useState(null);
 
   // Synchronize activeTab to URL and localStorage
   useEffect(() => {
@@ -587,7 +593,7 @@ export default function App() {
   // Immediately and across sequential animation frames, plus ResizeObserver to wait for async elements
   // (Chinese tokens, Pinyin ruby annotations, translations, audio controls) to fully layout.
   useEffect(() => {
-    if (activeTab !== 'chat') return;
+    if (activeTab !== 'chat' || chatViewMode !== 'chat') return;
     const container = chatContainerRef.current;
     if (!container) return;
 
@@ -631,14 +637,14 @@ export default function App() {
 
   // Smooth scroll to bottom when new messages arrive or processing state changes during active chat
   useEffect(() => {
-    if (activeTab !== 'chat') return;
+    if (activeTab !== 'chat' || chatViewMode !== 'chat') return;
     if (!isUserScrolledUpRef.current && chatContainerRef.current) {
       chatContainerRef.current.scrollTo({
         top: chatContainerRef.current.scrollHeight,
         behavior: 'smooth'
       });
     }
-  }, [messages, isProcessing, activeTab]);
+  }, [messages, isProcessing, activeTab, chatViewMode]);
 
   // Send message flow
   const handleSendMessage = async (text) => {
@@ -843,8 +849,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
-      {/* Global Header — hidden in Text Reader & YouTube Reader because they own their own headers */}
-      {activeTab !== 'text' && activeTab !== 'youtube' && (
+      {/* Global Header — hidden in Text Reader, YouTube Reader & Live Call because they own their dedicated full-screen headers */}
+      {activeTab !== 'text' && activeTab !== 'youtube' && !(activeTab === 'chat' && chatViewMode === 'call') && (
         <Header
           languages={languages}
           targetLang={targetLang}
@@ -918,6 +924,43 @@ export default function App() {
             setActiveTab={setActiveTab}
           />
         </main>
+      ) : chatViewMode === 'call' ? (
+        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
+          <LiveCallView
+            targetLang={targetLang}
+            onEndCall={() => setChatViewMode('hub')}
+          />
+        </main>
+      ) : chatViewMode === 'call-detail' ? (
+        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
+          <CallDetailView
+            callData={selectedCallData}
+            onBack={() => {
+              setSelectedCallData(null);
+              setChatViewMode('hub');
+            }}
+          />
+        </main>
+      ) : chatViewMode === 'hub' ? (
+        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
+          <ChatHubView
+            targetLang={targetLang}
+            setTargetLang={handleTargetLangChange}
+            languages={languages}
+            onStartChat={() => setChatViewMode('chat')}
+            onStartCall={() => setChatViewMode('call')}
+            onOpenChatSession={(langCode) => {
+              if (langCode && langCode !== targetLang) {
+                handleTargetLangChange(langCode);
+              }
+              setChatViewMode('chat');
+            }}
+            onOpenCallDetail={(callData) => {
+              setSelectedCallData(callData);
+              setChatViewMode('call-detail');
+            }}
+          />
+        </main>
       ) : (
         <>
           {/* Main Chat Scroll Area */}
@@ -926,6 +969,23 @@ export default function App() {
             onScroll={handleChatScroll}
             className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
           >
+            {/* Top Navigation Bar inside active chat to return to Chat Hub */}
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-primary)]/70">
+              <button
+                type="button"
+                onClick={() => setChatViewMode('hub')}
+                className="px-3.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs font-semibold shadow-xs active:scale-95"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{t('back_to_hub')}</span>
+              </button>
+
+              <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
+                <span className="text-sm">{currentLangObj.flag || '💬'}</span>
+                <span>{currentLangObj.name}</span>
+              </div>
+            </div>
+
             {/* API Error Warning Banner */}
             {apiWarning && (
               <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in">
