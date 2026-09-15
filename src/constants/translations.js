@@ -49,6 +49,24 @@ export const TRANSLATIONS = {
     site_language_title: 'Idioma del Sitio Web',
     site_language_desc: 'Cambia el idioma de la interfaz entre Español e Inglés',
 
+    // Account & Profile
+    account_title: 'Cuenta',
+    account_section_desc: 'Gestiona tu perfil, inicio de sesión con Google y sincronización',
+    account_not_logged_in: 'No has iniciado sesión',
+    account_logged_in_as: 'Conectado como',
+    account_login_google: 'Continuar con Google',
+    account_logout: 'Cerrar sesión',
+    account_status_active: 'Sesión activa',
+    account_benefits_title: 'Beneficios de tu cuenta',
+    account_benefit_sync: 'Sincronización en la nube de tu vocabulario y progreso',
+    account_benefit_history: 'Guarda tus conversaciones y lecturas favoritas',
+    account_benefit_devices: 'Acceso seguro desde cualquier dispositivo',
+    account_google_connected: 'Cuenta de Google vinculada',
+    account_privacy_notice: 'Tus datos están protegidos. LinguaFlow no tiene acceso a tus contraseñas ni comparte tu información personal.',
+    account_sync_ready_note: 'Arquitectura lista para sincronización en la nube.',
+    account_enter_section: 'Ver detalles de la cuenta',
+    back_to_settings: 'Volver a Ajustes',
+
     // HomePage
     home_badge: 'LinguaFlow AI Platform',
     home_title_pre: '¿Cómo querés practicar ',
@@ -173,6 +191,24 @@ export const TRANSLATIONS = {
     advanced_settings: 'Advanced Settings',
     site_language_title: 'Website Language',
     site_language_desc: 'Switch the interface language between Spanish and English',
+
+    // Account & Profile
+    account_title: 'Account',
+    account_section_desc: 'Manage your profile, Google sign-in and sync',
+    account_not_logged_in: 'Not signed in',
+    account_logged_in_as: 'Signed in as',
+    account_login_google: 'Continue with Google',
+    account_logout: 'Sign out',
+    account_status_active: 'Active session',
+    account_benefits_title: 'Account Benefits',
+    account_benefit_sync: 'Cloud sync for your vocabulary and learning progress',
+    account_benefit_history: 'Save your conversations and favorite readings',
+    account_benefit_devices: 'Secure access from any computer or mobile device',
+    account_google_connected: 'Google account linked',
+    account_privacy_notice: 'Your data is protected. LinguaFlow does not access your passwords or share your personal information.',
+    account_sync_ready_note: 'Architecture ready for cloud synchronization.',
+    account_enter_section: 'View account details',
+    back_to_settings: 'Back to Settings',
 
     // HomePage
     home_badge: 'LinguaFlow AI Platform',

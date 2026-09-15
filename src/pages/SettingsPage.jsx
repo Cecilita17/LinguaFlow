@@ -19,14 +19,18 @@ import {
   Sun,
   Moon,
   Monitor,
-  Languages
+  Languages,
+  User,
+  ChevronRight
 } from 'lucide-react';
 import { API_BASE_URL } from '../services/chatService.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { useAudioSettings, SPEECH_RATE_OPTIONS } from '../context/AudioSettingsContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { SiteLanguageToggle } from '../components/SiteLanguageToggle.jsx';
+import { AccountSettingsView } from '../components/settings/AccountSettingsView.jsx';
 import { NATIVE_LANG_OPTIONS } from '../constants/languages.js';
 
 export function SettingsPage({
@@ -46,6 +50,7 @@ export function SettingsPage({
 }) {
   const { siteLang, setSiteLang, isSpanish, t } = useSiteLanguage();
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const { user, isAuthenticated } = useAuth();
   const {
     speechRate: globalSpeechRate,
     setSpeechRate: setGlobalSpeechRate,
@@ -55,6 +60,7 @@ export function SettingsPage({
     setAutoPlayTextReader
   } = useAudioSettings();
 
+  const [activeSubView, setActiveSubView] = useState('main'); // 'main' | 'account'
   const [level, setLevel] = useState(config.level || 'A2/B1');
   const [speechRate, setSpeechRate] = useState(globalSpeechRate || config.speechRate || 1.0);
   const [testingConnection, setTestingConnection] = useState(false);
@@ -121,6 +127,14 @@ export function SettingsPage({
     setTimeout(() => setSavedNotice(false), 2000);
   };
 
+  if (activeSubView === 'account') {
+    return (
+      <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)]">
+        <AccountSettingsView onBack={() => setActiveSubView('main')} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)]">
       {/* Top Header with Back to Home Button */}
@@ -155,6 +169,60 @@ export function SettingsPage({
       </div>
 
       <div className="space-y-6 pb-8">
+        {/* SECTION 0: CUENTA / ACCOUNT */}
+        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
+          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <User className="w-4 h-4 text-rose-500" />
+            <span>{t('account_title')}</span>
+          </h2>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubView('account')}
+            className="w-full bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] rounded-2xl p-4 flex items-center justify-between text-left transition-all cursor-pointer active:scale-[0.99] group shadow-xs"
+          >
+            <div className="flex items-center space-x-3.5 min-w-0">
+              {isAuthenticated && user?.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={user.displayName || 'Google Profile'}
+                  className="w-10 h-10 rounded-full border border-rose-500/50 object-cover shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white shrink-0 shadow-sm font-bold text-sm">
+                  {isAuthenticated && user?.displayName ? user.displayName[0].toUpperCase() : <User className="w-5 h-5" />}
+                </div>
+              )}
+
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] group-hover:text-rose-500 transition-colors truncate">
+                    {isAuthenticated && user ? user.displayName || user.email : t('account_not_logged_in')}
+                  </span>
+                  {isAuthenticated ? (
+                    <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.2 rounded-full font-bold">
+                      Google
+                    </span>
+                  ) : null}
+                </div>
+                <span className="text-[11px] text-[var(--text-muted)] block truncate">
+                  {isAuthenticated && user
+                    ? user.email
+                    : (isSpanish ? 'Inicia sesión con Google para sincronizar y guardar tu progreso' : 'Sign in with Google to sync and save your progress')}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-1.5 shrink-0 pl-2 text-[var(--text-secondary)] group-hover:text-rose-500 transition-colors">
+              <span className="text-xs font-semibold hidden sm:inline">
+                {t('account_enter_section')}
+              </span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </button>
+        </div>
+
         {/* SECTION 1: IDIOMA Y TEMA */}
         <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
           <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">

@@ -11,6 +11,7 @@ import { LanguageSelectDropdown } from './LanguageSelectDropdown.jsx';
 import { SiteLanguageToggle } from './SiteLanguageToggle.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import {
   NATIVE_LANG_OPTIONS,
   getLanguageMeta
@@ -36,6 +37,7 @@ export function Header({
   setActiveTab
 }) {
   const { t } = useSiteLanguage();
+  const { user, isAuthenticated } = useAuth();
   const {
     speechRate,
     setSpeechRate,
