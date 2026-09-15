@@ -146,6 +146,7 @@ export function useRealtimeCall({
       }
 
       // AI is actively streaming response audio and transcript deltas
+      case 'response.output_audio_transcript.delta':
       case 'response.audio_transcript.delta': {
         setCallState('speaking');
         const delta = event.delta || '';
@@ -177,6 +178,7 @@ export function useRealtimeCall({
       }
 
       // Turn finished
+      case 'response.output_audio_transcript.done':
       case 'response.audio_transcript.done':
       case 'response.done': {
         setCallState('listening');
@@ -311,8 +313,8 @@ export function useRealtimeCall({
       await pc.setLocalDescription(offer);
 
       // 8. Connect to OpenAI Realtime WebRTC endpoint with ephemeral token
-      // Primary GA endpoint: POST https://api.openai.com/v1/realtime/calls
-      let sdpResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
+      // Official GA endpoint: POST https://api.openai.com/v1/realtime/calls
+      const sdpResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
         method: 'POST',
         body: offer.sdp,
         headers: {
@@ -320,18 +322,6 @@ export function useRealtimeCall({
           'Content-Type': 'application/sdp'
         }
       });
-
-      // Fallback for endpoints expecting model query parameter
-      if (!sdpResponse.ok && sdpResponse.status === 404) {
-        sdpResponse = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
-          method: 'POST',
-          body: offer.sdp,
-          headers: {
-            'Authorization': `Bearer ${ephemeralKey}`,
-            'Content-Type': 'application/sdp'
-          }
-        });
-      }
 
       if (!sdpResponse.ok) {
         const errorText = await sdpResponse.text();
