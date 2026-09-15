@@ -137,6 +137,7 @@ export function TranscriptLine({
         {interlinearMode && tokens && tokens.length > 0 ? (
           (() => {
             const isChinese = targetLang === 'zh';
+            const isArabic = targetLang === 'ar';
 
             return (
               <div
@@ -158,8 +159,8 @@ export function TranscriptLine({
                   const word = rawWord != null ? String(rawWord) : '';
                   if (!word) return null;
 
-                  const rawAux = isChinese && tokenObj && typeof tokenObj === 'object'
-                    ? (tokenObj.auxiliary ?? tokenObj.pinyin ?? null)
+                  const rawAux = (isChinese || isArabic) && tokenObj && typeof tokenObj === 'object'
+                    ? (tokenObj.auxiliary ?? tokenObj.translit ?? tokenObj.pinyin ?? null)
                     : null;
                   const auxiliary = rawAux != null ? String(rawAux).trim() : null;
 
@@ -206,8 +207,8 @@ export function TranscriptLine({
                         isChinese ? 'px-0.5 sm:px-1 py-0.5' : 'px-1 py-0.5'
                       }`}
                     >
-                      {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
-                      {isChinese && auxiliary && (
+                      {/* Tier 1 (TOP): Pinyin for Chinese / Transliteration for Arabic */}
+                      {(isChinese || isArabic) && auxiliary && (
                         <span className="text-[12px] sm:text-[13px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                           {auxiliary}
                         </span>

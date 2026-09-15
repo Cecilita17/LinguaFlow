@@ -4,6 +4,7 @@ import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { normalizeChineseMessageTokens } from '../services/chineseTokenNormalizer.js';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
+import { getArabicTransliteration } from '../services/arabicTransliteration.js';
 
 export function ChatMessage({
   message,
@@ -85,7 +86,7 @@ export function ChatMessage({
 
       if (!baseWord && punctuation) {
         return (
-          <span key={key} className="text-white/90 text-[15px] sm:text-base font-normal select-text">
+          <span key={key} className="text-white/90 text-base sm:text-[17px] font-normal select-text">
             {punctuation}
           </span>
         );
@@ -106,7 +107,7 @@ export function ChatMessage({
             <span dir="ltr" className={isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}>{baseWord}</span>
           )}
           {punctuation && (
-            <span className="text-white/90 text-[15px] sm:text-base font-normal select-text">
+            <span className="text-white/90 text-base sm:text-[17px] font-normal select-text">
               {punctuation}
             </span>
           )}
@@ -145,9 +146,12 @@ export function ChatMessage({
     if (typeof token === 'string') return null;
     if (token.translit) return token.translit;
     if (token.pinyin) return token.pinyin;
+    const wordStr = (token.text || token.word || token.clean_word || '').trim();
     if (targetLang === 'zh') {
-      const clean = (token.text || token.word || '').trim();
-      if (PINYIN_LEXICON[clean]) return PINYIN_LEXICON[clean];
+      if (PINYIN_LEXICON[wordStr]) return PINYIN_LEXICON[wordStr];
+    }
+    if (isArabic || targetLang === 'ar' || /[\u0600-\u06FF]/.test(wordStr)) {
+      return getArabicTransliteration(wordStr);
     }
     return null;
   };
@@ -195,8 +199,8 @@ export function ChatMessage({
             dir={isArabic ? 'rtl' : 'ltr'}
             className={`${
               isArabic
-                ? 'font-arabic text-right text-lg sm:text-xl leading-loose tracking-normal'
-                : 'text-left text-[15px] sm:text-base leading-relaxed tracking-wide font-normal'
+                ? 'font-arabic text-right text-xl sm:text-2xl leading-loose tracking-normal'
+                : 'text-left text-base sm:text-[17px] leading-relaxed tracking-wide font-normal'
             }`}
           >
             {diffTokens && diffTokens.length > 0 ? (
@@ -235,7 +239,7 @@ export function ChatMessage({
                           )}
                         </span>
                         {punctuation && (
-                          <span className="text-white/90 text-[15px] sm:text-base font-normal select-text">
+                          <span className="text-white/90 text-base sm:text-[17px] font-normal select-text">
                             {punctuation}
                           </span>
                         )}
@@ -522,8 +526,8 @@ export function ChatMessage({
           dir={isArabic ? 'rtl' : 'ltr'}
           className={`${
             isArabic
-              ? 'font-arabic text-right text-lg sm:text-xl leading-loose tracking-normal'
-              : 'text-left text-[15px] sm:text-base leading-relaxed tracking-wide font-normal'
+              ? 'font-arabic text-right text-xl sm:text-2xl leading-loose tracking-normal'
+              : 'text-left text-base sm:text-[17px] leading-relaxed tracking-wide font-normal'
           } text-stone-900 flex flex-wrap items-baseline gap-x-0.5 gap-y-0.5 break-words [overflow-wrap:anywhere]`}
         >
           {botSegments.map((segment, idx) => {
@@ -605,7 +609,7 @@ export function ChatMessage({
                     </button>
                   )}
                   {punctuation && (
-                    <span className="text-stone-500 text-[15px] sm:text-base font-normal select-text">
+                    <span className="text-stone-500 text-base sm:text-[17px] font-normal select-text">
                       {punctuation}
                     </span>
                   )}

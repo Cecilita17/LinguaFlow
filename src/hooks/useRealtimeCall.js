@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { getPedagogicalCorrection } from '../services/grammarEngine.js';
 
 /**
  * Hook for managing OpenAI Realtime API WebRTC voice calls in LinguaFlow.
@@ -32,6 +33,7 @@ export function useRealtimeCall({
   const callDurationSecondsRef = useRef(0);
   const currentAiTurnIdRef = useRef(null);
   const currentAiTurnTextRef = useRef('');
+  const pendingUserTurnIdRef = useRef(null);
 
   // Keep refs in sync with state for access inside event handlers
   useEffect(() => {
@@ -106,12 +108,25 @@ export function useRealtimeCall({
   // Handle incoming OpenAI Realtime Data Channel events
   const handleServerEvent = useCallback((event) => {
     switch (event.type) {
+      case 'session.created':
+      case 'session.updated': {
+        console.log('🎙️ Realtime session status:', event.type, event.session);
+        break;
+      }
+
       // User started speaking -> Server VAD detected barge-in/interruption
       case 'input_audio_buffer.speech_started': {
         setCallState('listening');
-        // Finalize current AI turn if any
+        // Finalize active AI streaming turn so it locks in history
+        const activeAiId = currentAiTurnIdRef.current;
+        if (activeAiId) {
+          setLiveTranscript((prev) =>
+            prev.map((msg) => (msg.id === activeAiId ? { ...msg, isStreaming: false } : msg))
+          );
+        }
         currentAiTurnTextRef.current = '';
-        currentAiTurnIdRef.current = `bot-${Date.now()}`;
+        currentAiTurnIdRef.current = null;
+        pendingUserTurnIdRef.current = event.item_id || `user-${Date.now()}`;
         if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
           try {
             dataChannelRef.current.send(JSON.stringify({ type: 'response.cancel' }));
@@ -120,19 +135,164 @@ export function useRealtimeCall({
         break;
       }
 
+      // Conversation item created by server (user voice turn or assistant)
+      case 'conversation.item.created': {
+        if (event.item?.role === 'user') {
+          const itemId = event.item.id;
+          if (itemId) {
+            pendingUserTurnIdRef.current = itemId;
+          }
+          const contentTranscript = event.item.content?.[0]?.transcript?.trim();
+          if (contentTranscript) {
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            setLiveTranscript((prev) => {
+              if (prev.some((m) => m.id === itemId)) return prev;
+              const userMsg = {
+                id: itemId,
+                sender: 'user',
+                speaker: isSpanish ? 'Tú' : 'You',
+                text: contentTranscript,
+                timestamp: timeStr,
+                hasCorrection: false,
+                diffTokens: [{ text: contentTranscript, changed: false, original: null }],
+                originalText: contentTranscript,
+                correctedText: contentTranscript,
+                isCorrecting: true
+              };
+              const botIdx = currentAiTurnIdRef.current ? prev.findIndex((m) => m.id === currentAiTurnIdRef.current) : -1;
+              if (botIdx >= 0) {
+                return [...prev.slice(0, botIdx), userMsg, ...prev.slice(botIdx)];
+              }
+              return [...prev, userMsg];
+            });
+
+            // Trigger pedagogical correction
+            getPedagogicalCorrection(contentTranscript, targetLang, nativeLang, level)
+              .then((correction) => {
+                if (correction) {
+                  const hasErr = Boolean(correction.has_errors || correction.diff_tokens?.some((t) => t.changed));
+                  setLiveTranscript((prev) =>
+                    prev.map((msg) =>
+                      msg.id === itemId
+                        ? {
+                            ...msg,
+                            hasCorrection: hasErr,
+                            correctedText: correction.corrected_text || contentTranscript,
+                            diffTokens: correction.diff_tokens && correction.diff_tokens.length > 0
+                              ? correction.diff_tokens
+                              : [{ text: contentTranscript, changed: false, original: null }],
+                            originalText: correction.original_text || contentTranscript,
+                            isCorrecting: false
+                          }
+                        : msg
+                    )
+                  );
+                }
+              })
+              .catch((err) => {
+                console.warn('[PedagogicalCorrection] Error:', err);
+                setLiveTranscript((prev) =>
+                  prev.map((msg) => (msg.id === itemId ? { ...msg, isCorrecting: false } : msg))
+                );
+              });
+          }
+        }
+        break;
+      }
+
+      // Streaming delta of user audio transcription
+      case 'conversation.item.input_audio_transcription.delta': {
+        const delta = event.delta || '';
+        const itemId = event.item_id || pendingUserTurnIdRef.current;
+        if (delta && itemId) {
+          setLiveTranscript((prev) => {
+            const idx = prev.findIndex((m) => m.id === itemId);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = {
+                ...updated[idx],
+                text: (updated[idx].text || '') + delta
+              };
+              return updated;
+            }
+            return prev;
+          });
+        }
+        break;
+      }
+
       // User finished speaking and speech was recognized by whisper-1
       case 'conversation.item.input_audio_transcription.completed': {
         const userText = event.transcript ? event.transcript.trim() : '';
+        const itemId = event.item_id || pendingUserTurnIdRef.current || `user-${Date.now()}`;
         if (userText) {
-          setLiveTranscript((prev) => [
-            ...prev,
-            {
-              id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+          setLiveTranscript((prev) => {
+            const existingIdx = prev.findIndex((m) => m.id === itemId);
+            if (existingIdx >= 0) {
+              const updated = [...prev];
+              updated[existingIdx] = {
+                ...updated[existingIdx],
+                text: userText,
+                originalText: userText,
+                correctedText: userText,
+                diffTokens: [{ text: userText, changed: false, original: null }],
+                isCorrecting: true
+              };
+              return updated;
+            }
+
+            const newUserMsg = {
+              id: itemId,
               sender: 'user',
               speaker: isSpanish ? 'Tú' : 'You',
-              text: userText
+              text: userText,
+              timestamp: timeStr,
+              hasCorrection: false,
+              diffTokens: [{ text: userText, changed: false, original: null }],
+              originalText: userText,
+              correctedText: userText,
+              isCorrecting: true
+            };
+
+            // Maintain true chronological conversation order: place before active AI turn if one already began
+            const botIdx = currentAiTurnIdRef.current ? prev.findIndex((m) => m.id === currentAiTurnIdRef.current) : -1;
+            if (botIdx >= 0) {
+              return [...prev.slice(0, botIdx), newUserMsg, ...prev.slice(botIdx)];
             }
-          ]);
+            return [...prev, newUserMsg];
+          });
+
+          // Run LinguaFlow pedagogical grammar correction engine asynchronously
+          getPedagogicalCorrection(userText, targetLang, nativeLang, level)
+            .then((correction) => {
+              if (correction) {
+                const hasErrors = Boolean(correction.has_errors || correction.diff_tokens?.some((t) => t.changed));
+                setLiveTranscript((prev) =>
+                  prev.map((msg) =>
+                    msg.id === itemId
+                      ? {
+                          ...msg,
+                          hasCorrection: hasErrors,
+                          correctedText: correction.corrected_text || userText,
+                          diffTokens: correction.diff_tokens && correction.diff_tokens.length > 0
+                            ? correction.diff_tokens
+                            : [{ text: userText, changed: false, original: null }],
+                          originalText: correction.original_text || userText,
+                          isCorrecting: false
+                        }
+                      : msg
+                  )
+                );
+              }
+            })
+            .catch((err) => {
+              console.warn('[PedagogicalCorrection] Live transcript error:', err);
+              setLiveTranscript((prev) =>
+                prev.map((msg) => (msg.id === itemId ? { ...msg, isCorrecting: false } : msg))
+              );
+            });
         }
         break;
       }
@@ -141,7 +301,7 @@ export function useRealtimeCall({
       case 'response.created': {
         setCallState('thinking');
         currentAiTurnTextRef.current = '';
-        currentAiTurnIdRef.current = `bot-${Date.now()}`;
+        currentAiTurnIdRef.current = null;
         break;
       }
 
@@ -150,8 +310,18 @@ export function useRealtimeCall({
       case 'response.audio_transcript.delta': {
         setCallState('speaking');
         const delta = event.delta || '';
+        if (!delta) break;
+
+        // If this is the first delta of this turn, allocate a unique turn ID
+        if (!currentAiTurnIdRef.current) {
+          currentAiTurnIdRef.current = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          currentAiTurnTextRef.current = '';
+        }
+
         currentAiTurnTextRef.current += delta;
         const currentTurnId = currentAiTurnIdRef.current;
+        const currentText = currentAiTurnTextRef.current;
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         setLiveTranscript((prev) => {
           const index = prev.findIndex((item) => item.id === currentTurnId);
@@ -159,7 +329,8 @@ export function useRealtimeCall({
             const updated = [...prev];
             updated[index] = {
               ...updated[index],
-              text: currentAiTurnTextRef.current
+              text: currentText,
+              isStreaming: true
             };
             return updated;
           } else {
@@ -169,7 +340,9 @@ export function useRealtimeCall({
                 id: currentTurnId,
                 sender: 'bot',
                 speaker: 'LinguaFlow AI',
-                text: currentAiTurnTextRef.current
+                text: currentText,
+                isStreaming: true,
+                timestamp: timeStr
               }
             ];
           }
@@ -177,13 +350,19 @@ export function useRealtimeCall({
         break;
       }
 
-      // Turn finished
+      // Turn finished: freeze current AI message and release turn ID
       case 'response.output_audio_transcript.done':
       case 'response.audio_transcript.done':
       case 'response.done': {
         setCallState('listening');
+        const finishedId = currentAiTurnIdRef.current;
+        if (finishedId) {
+          setLiveTranscript((prev) =>
+            prev.map((msg) => (msg.id === finishedId ? { ...msg, isStreaming: false } : msg))
+          );
+        }
         currentAiTurnTextRef.current = '';
-        currentAiTurnIdRef.current = `bot-${Date.now()}`;
+        currentAiTurnIdRef.current = null;
         break;
       }
 
@@ -198,7 +377,7 @@ export function useRealtimeCall({
       default:
         break;
     }
-  }, [isSpanish]);
+  }, [isSpanish, targetLang, nativeLang, level]);
 
   // Start Realtime Call
   const startCall = useCallback(async () => {
@@ -209,7 +388,7 @@ export function useRealtimeCall({
       setLiveTranscript([]);
       setIsMuted(false);
       currentAiTurnTextRef.current = '';
-      currentAiTurnIdRef.current = `bot-${Date.now()}`;
+      currentAiTurnIdRef.current = null;
 
       // 1. Request microphone permission
       let localStream;
@@ -293,6 +472,22 @@ export function useRealtimeCall({
       dc.onopen = () => {
         setCallState('listening');
         startDurationTimer();
+
+        // Enable user input audio transcription via Whisper-1 on the session
+        try {
+          const sessionUpdate = {
+            type: 'session.update',
+            session: {
+              input_audio_transcription: {
+                model: 'whisper-1'
+              }
+            }
+          };
+          dc.send(JSON.stringify(sessionUpdate));
+          console.log('🎙️ Realtime session.update sent to enable input_audio_transcription (whisper-1)');
+        } catch (updateErr) {
+          console.warn('⚠️ Could not send session.update on DataChannel:', updateErr);
+        }
       };
 
       dc.onmessage = (e) => {

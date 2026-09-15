@@ -473,3 +473,58 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl', nati
 export async function reanalyzeGrammarStrictly(text, targetLang = 'pl', nativeLang = 'es', apiKey = '', provider = '') {
   return performFullGrammarCorrection(text, targetLang, nativeLang, apiKey, provider);
 }
+
+/**
+ * Master pedagogical correction helper for live speech turns.
+ * First queries the LinguaFlow chat backend (/api/chat) for full contextual LLM correction (Groq).
+ * If unavailable or times out, seamlessly falls back to the deterministic grammar engine.
+ */
+export async function getPedagogicalCorrection(text, targetLang = 'en', nativeLang = 'es', level = 'A2/B1') {
+  const clean = (text || '').trim();
+  if (!clean) {
+    return {
+      original_text: '',
+      corrected_text: '',
+      has_errors: false,
+      diff_tokens: []
+    };
+  }
+
+  // 1. Attempt LLM-based pedagogical correction via /api/chat
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: clean,
+        targetLang,
+        nativeLang,
+        level
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const json = await res.json();
+      const cor = json?.data?.user_correction || json?.user_correction;
+      if (cor && (cor.corrected_text || cor.diff_tokens)) {
+        return {
+          original_text: cor.original_text || clean,
+          corrected_text: cor.corrected_text || clean,
+          has_errors: Boolean(cor.has_errors || cor.diff_tokens?.some((t) => t.changed)),
+          diff_tokens: cor.diff_tokens || computeWordDiff(clean, cor.corrected_text || clean)
+        };
+      }
+    }
+  } catch (e) {
+    // Graceful fallback to deterministic correction
+  }
+
+  // 2. Deterministic linguistic rules & LanguageTool fallback
+  return performFullGrammarCorrection(clean, targetLang, nativeLang);
+}

@@ -90,10 +90,37 @@ export function CallDetailView({
                     : 'bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] mr-6'
                 }`}
               >
-                <span className="font-bold text-[10px] text-rose-600 dark:text-rose-400 block mb-0.5">
-                  {line.sender === 'user' ? (isSpanish ? 'Tú:' : 'You:') : 'LinguaFlow AI:'}
-                </span>
-                <p>{line.text}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-[10px] text-rose-600 dark:text-rose-400 block">
+                    {line.sender === 'user' ? (isSpanish ? 'Tú:' : 'You:') : 'LinguaFlow AI:'}
+                  </span>
+                  {line.sender === 'user' && (
+                    line.hasCorrection ? (
+                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-amber-500" />
+                        <span>{isSpanish ? 'Corregido' : 'Corrected'}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        <span>{isSpanish ? 'Sin errores' : 'No errors'}</span>
+                      </span>
+                    )
+                  )}
+                </div>
+                <p className="whitespace-pre-wrap">{line.text}</p>
+                {line.hasCorrection && line.originalText && line.correctedText && line.originalText.toLowerCase().trim() !== line.correctedText.toLowerCase().trim() && (
+                  <div className="mt-2 pt-1.5 border-t border-rose-500/20 text-[11px] space-y-0.5">
+                    <p className="text-[var(--text-muted)]">
+                      <span className="font-medium text-rose-500">{isSpanish ? 'Original: ' : 'Original: '}</span>
+                      <span className="line-through">{line.originalText}</span>
+                    </p>
+                    <p className="text-amber-600 dark:text-amber-400 font-medium">
+                      <span>{isSpanish ? 'Correcto: ' : 'Corrected: '}</span>
+                      <span>{line.correctedText}</span>
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

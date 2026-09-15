@@ -101,8 +101,9 @@ export function TextParagraphItem({
               }`}
             >
               {tokens.map((tokenObj, idx) => {
+                const isArabic = targetLang === 'ar';
                 const word = typeof tokenObj === 'string' ? tokenObj : (tokenObj.word || tokenObj.text);
-                const auxiliary = isChinese ? (tokenObj.auxiliary || tokenObj.pinyin || null) : null;
+                const auxiliary = (isChinese || isArabic) ? (tokenObj.auxiliary || tokenObj.translit || tokenObj.pinyin || null) : null;
                 const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : null;
                 const isPunctuation = typeof tokenObj === 'object'
                   ? tokenObj.isPunctuation
@@ -147,8 +148,8 @@ export function TextParagraphItem({
                     }`}
                     title={cleanGloss ? `"${word}": ${cleanGloss}` : word}
                   >
-                    {/* Tier 1 (TOP): ONLY FOR CHINESE - Tone-marked Pinyin in auxiliary */}
-                    {isChinese && auxiliary && (
+                    {/* Tier 1 (TOP): Pinyin for Chinese / Transliteration for Arabic */}
+                    {(isChinese || isArabic) && auxiliary && (
                       <span className="text-[12px] sm:text-[13px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                         {auxiliary}
                       </span>

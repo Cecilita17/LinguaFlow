@@ -638,8 +638,8 @@ const activeModel = getSanitizedGroqModel();
       } else if (isArabic) {
         languageRules = `- ARABIC RULES (targetLang: 'ar'):
   * Preserve Arabic script. Use Arabic diacritics (tashkeel) on words when appropriate to help with reading.
-  * Never transliterate Arabic into Latin characters.
-  * Do NOT generate pronunciation, transliteration, romanization, Pinyin, or any auxiliary text. STRICTLY set "auxiliary": null for all tokens.
+  * In the "auxiliary" field, provide the clear Latin transliteration / romanization with vowels (e.g. "marḥaban", "kayfa", "al-kitāb"). Never leave it null for real Arabic words.
+  * In the "word" field, provide the Arabic script word with tashkeel.
   * In the "gloss" field, provide the direct concise meaning in "${nativeLang}".`;
       } else {
         languageRules = `- RULES FOR ${targetLang.toUpperCase()} (${targetLangName}):

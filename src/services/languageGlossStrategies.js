@@ -11,6 +11,7 @@ export const PUNCTUATION_REGEX = /^[，。！？；：、“”‘’（）《�
 
 // ==========================================
 import { validateChineseAiSegmentation } from './subtitleGlossService.js';
+import { getArabicTransliteration } from './arabicTransliteration.js';
 
 export function reconcileChineseTokens(originalText, aiTokens) {
   if (!originalText || typeof originalText !== 'string' || !Array.isArray(aiTokens) || aiTokens.length === 0) {
@@ -1278,10 +1279,10 @@ export class ArabicGlossStrategy {
   constructor() {
     this.code = 'ar';
     this.name = 'Árabe';
-    this.hasAuxiliary = false;
-    this.hasTranslit = false;
-    this.requiresTranslit = false;
-    this.translitKey = null;
+    this.hasAuxiliary = true;
+    this.hasTranslit = true;
+    this.requiresTranslit = true;
+    this.translitKey = 'translit';
     this.offlineDict = ARABIC_OFFLINE_DICT;
   }
 
@@ -1300,13 +1301,14 @@ export class ArabicGlossStrategy {
           if (!w) continue;
           const isPunctuation = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
           const entry = isPunctuation ? null : this.lookupOffline(w);
+          const translit = isPunctuation ? null : (entry?.translit || getArabicTransliteration(w));
 
           tokens.push({
             text: w,
             word: w,
-            auxiliary: null,
+            auxiliary: translit,
             pinyin: null,
-            translit: null,
+            translit: translit,
             gloss: isPunctuation ? null : (entry?.gloss || null),
             isPunctuation
           });
@@ -1325,13 +1327,14 @@ export class ArabicGlossStrategy {
       if (!w) continue;
       const isPunctuation = PUNCTUATION_REGEX.test(w);
       const entry = isPunctuation ? null : this.lookupOffline(w);
+      const translit = isPunctuation ? null : (entry?.translit || getArabicTransliteration(w));
 
       tokens.push({
         text: w,
         word: w,
-        auxiliary: null,
+        auxiliary: translit,
         pinyin: null,
-        translit: null,
+        translit: translit,
         gloss: isPunctuation ? null : (entry?.gloss || null),
         isPunctuation
       });
@@ -1357,6 +1360,12 @@ export class ArabicGlossStrategy {
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
     if (!gloss || gloss === w) return false;
+
+    // Arabic words must have Latin transliteration in auxiliary / translit
+    if (/[\u0600-\u06FF]/.test(w)) {
+      const aux = typeof (token.auxiliary || token.translit) === 'string' ? (token.auxiliary || token.translit).trim() : '';
+      if (!aux || aux === gloss) return false;
+    }
     return true;
   }
 }
