@@ -46,8 +46,13 @@ export function usePipelineCall({
   const recognitionRef = useRef(null);
   const isRecognitionActiveRef = useRef(false);
   const silenceTimeoutRef = useRef(null);
-  const pendingUserTurnIdRef = useRef(null);
-  const turnStartIndexRef = useRef(0);
+  const currentTurnRef = useRef({
+    id: null,
+    sessionFinalText: '',
+    currentFinalText: '',
+    interimText: '',
+    finalized: false
+  });
 
   // Audio Playback & Streaming Queue Refs
   const audioContextRef = useRef(null);
@@ -191,12 +196,17 @@ export function usePipelineCall({
       audioContextRef.current = null;
     }
 
-    // Clear deduplication caches
+    // Clear deduplication caches & turn state
     correctedTurnIdsRef.current.clear();
     glossedTurnIdsRef.current.clear();
     processedUserTurnIdsRef.current.clear();
-    turnStartIndexRef.current = 0;
-    pendingUserTurnIdRef.current = null;
+    currentTurnRef.current = {
+      id: null,
+      sessionFinalText: '',
+      currentFinalText: '',
+      interimText: '',
+      finalized: false
+    };
   }, [interruptAssistant]);
 
   // Trigger pedagogical correction asynchronously for a user voice turn
@@ -579,17 +589,23 @@ export function usePipelineCall({
     const cleanText = userText.trim();
     if (!cleanText) return;
 
-    const currentId = turnId || pendingUserTurnIdRef.current || `user-${Date.now()}`;
+    const activeTurn = currentTurnRef.current;
+    const currentId = turnId || activeTurn.id || `user-${Date.now()}`;
 
-    // CRITICAL: Protect against duplicate finalization of the same turn
+    // 1. Guard against duplicate finalization
+    if (activeTurn.id === currentId && activeTurn.finalized) {
+      return;
+    }
     if (processedUserTurnIdsRef.current.has(currentId)) {
       return;
     }
     processedUserTurnIdsRef.current.add(currentId);
     sessionMetricsRef.current.userTurns++;
 
-    // Clear pending turnId and silence timer
-    pendingUserTurnIdRef.current = null;
+    // 2. Mark active turn as finalized and clear silence timer
+    if (activeTurn.id === currentId) {
+      activeTurn.finalized = true;
+    }
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = null;
@@ -601,11 +617,20 @@ export function usePipelineCall({
     const initialGlosses = extractTurnGlosses(initialTokens);
 
     setLiveTranscript((prev) => {
-      const existingIdx = prev.findIndex(m => m.id === currentId || (m.sender === 'user' && m.isTranscribing));
-      if (existingIdx >= 0) {
+      let targetIdx = prev.findIndex((m) => m.id === currentId);
+      if (targetIdx < 0) {
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].sender === 'user' && prev[i].isTranscribing) {
+            targetIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (targetIdx >= 0) {
         const updated = [...prev];
-        updated[existingIdx] = {
-          ...updated[existingIdx],
+        updated[targetIdx] = {
+          ...updated[targetIdx],
           id: currentId,
           text: cleanText,
           originalText: cleanText,
@@ -669,51 +694,80 @@ export function usePipelineCall({
         interruptAssistant();
       }
 
-      // Reconstruct final and interim text idempotently from event.results for the current turn
-      let finalTranscript = '';
-      let interimTranscript = '';
+      // Reconstruct final and interim text from current recognition session
+      let sessionFinal = '';
+      let sessionInterim = '';
 
-      const startIndex = Math.min(turnStartIndexRef.current || 0, event.results.length);
-      for (let i = startIndex; i < event.results.length; i++) {
+      for (let i = 0; i < event.results.length; i++) {
         const resultItem = event.results[i];
         const transcript = resultItem[0]?.transcript || '';
         if (resultItem.isFinal) {
-          finalTranscript = (finalTranscript ? finalTranscript + ' ' : '') + transcript.trim();
+          sessionFinal = (sessionFinal ? sessionFinal + ' ' : '') + transcript.trim();
         } else {
-          interimTranscript = (interimTranscript ? interimTranscript + ' ' : '') + transcript.trim();
+          sessionInterim = (sessionInterim ? sessionInterim + ' ' : '') + transcript.trim();
         }
       }
 
-      const currentTurnText = (finalTranscript + (interimTranscript ? (finalTranscript ? ' ' : '') + interimTranscript : '')).trim();
-      if (!currentTurnText) return;
-
-      // If previous turn was already processed or null, ensure fresh turnId
-      if (!pendingUserTurnIdRef.current || processedUserTurnIdsRef.current.has(pendingUserTurnIdRef.current)) {
-        pendingUserTurnIdRef.current = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      // Ensure active unfinalized turn state
+      if (!currentTurnRef.current.id || currentTurnRef.current.finalized) {
+        currentTurnRef.current = {
+          id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          sessionFinalText: '',
+          currentFinalText: sessionFinal.trim(),
+          interimText: sessionInterim.trim(),
+          finalized: false
+        };
+      } else {
+        currentTurnRef.current.currentFinalText = sessionFinal.trim();
+        currentTurnRef.current.interimText = sessionInterim.trim();
       }
-      const turnId = pendingUserTurnIdRef.current;
-      const previewTokens = tokenizeLiveCallTurn(currentTurnText, targetLang);
+
+      const activeTurn = currentTurnRef.current;
+      const turnId = activeTurn.id;
+
+      const fullCommitted = [activeTurn.sessionFinalText, activeTurn.currentFinalText].filter(Boolean).join(' ').trim();
+      const combinedText = [fullCommitted, activeTurn.interimText].filter(Boolean).join(' ').trim();
+
+      if (!combinedText) return;
+
+      const previewTokens = tokenizeLiveCallTurn(combinedText, targetLang);
 
       setLiveTranscript((prev) => {
-        const existingIdx = prev.findIndex(m => m.id === turnId);
+        // 1. Find active user bubble by ID
+        const existingIdx = prev.findIndex((m) => m.id === turnId);
         if (existingIdx >= 0) {
           const updated = [...prev];
           updated[existingIdx] = {
             ...updated[existingIdx],
-            text: currentTurnText,
+            text: combinedText,
             tokens: previewTokens,
             isTranscribing: true
           };
           return updated;
         }
 
+        // 2. Reuse any trailing transcribing user bubble to prevent multiple bubbles
+        const lastIdx = prev.length - 1;
+        if (lastIdx >= 0 && prev[lastIdx].sender === 'user' && prev[lastIdx].isTranscribing) {
+          const updated = [...prev];
+          updated[lastIdx] = {
+            ...updated[lastIdx],
+            id: turnId,
+            text: combinedText,
+            tokens: previewTokens,
+            isTranscribing: true
+          };
+          return updated;
+        }
+
+        // 3. Otherwise add new user bubble
         return [
           ...prev,
           {
             id: turnId,
             sender: 'user',
             speaker: isSpanish ? 'Tú' : 'You',
-            text: currentTurnText,
+            text: combinedText,
             tokens: previewTokens,
             isTranscribing: true,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -726,12 +780,19 @@ export function usePipelineCall({
         clearTimeout(silenceTimeoutRef.current);
       }
 
-      // Auto-finalize turn ONLY after stable silence (950ms), capturing current turnId & result length
-      const capturedLength = event.results.length;
+      // Auto-finalize turn ONLY after stable silence (950ms)
+      const capturedTurnId = turnId;
       silenceTimeoutRef.current = setTimeout(() => {
-        if (pendingUserTurnIdRef.current === turnId && !processedUserTurnIdsRef.current.has(turnId)) {
-          turnStartIndexRef.current = capturedLength;
-          finalizeUserSpeechTurn(currentTurnText, turnId);
+        if (currentTurnRef.current.id === capturedTurnId && !currentTurnRef.current.finalized) {
+          const textToFinalize = [
+            currentTurnRef.current.sessionFinalText,
+            currentTurnRef.current.currentFinalText,
+            currentTurnRef.current.interimText
+          ].filter(Boolean).join(' ').trim() || combinedText;
+
+          if (textToFinalize) {
+            finalizeUserSpeechTurn(textToFinalize, capturedTurnId);
+          }
         }
       }, 950);
     };
@@ -743,8 +804,19 @@ export function usePipelineCall({
     };
 
     recognition.onend = () => {
+      // If recognition ends mid-turn, commit current session's text into sessionFinalText
+      if (currentTurnRef.current.id && !currentTurnRef.current.finalized) {
+        const committedSoFar = [
+          currentTurnRef.current.sessionFinalText,
+          currentTurnRef.current.currentFinalText,
+          currentTurnRef.current.interimText
+        ].filter(Boolean).join(' ').trim();
+        currentTurnRef.current.sessionFinalText = committedSoFar;
+        currentTurnRef.current.currentFinalText = '';
+        currentTurnRef.current.interimText = '';
+      }
+
       // Auto-restart recognition if call is still active
-      turnStartIndexRef.current = 0;
       if (isRecognitionActiveRef.current) {
         try {
           recognition.start();
