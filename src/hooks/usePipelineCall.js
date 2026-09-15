@@ -47,7 +47,7 @@ export function usePipelineCall({
   const isRecognitionActiveRef = useRef(false);
   const silenceTimeoutRef = useRef(null);
   const pendingUserTurnIdRef = useRef(null);
-  const activeUserTextRef = useRef('');
+  const turnStartIndexRef = useRef(0);
 
   // Audio Playback & Streaming Queue Refs
   const audioContextRef = useRef(null);
@@ -195,7 +195,7 @@ export function usePipelineCall({
     correctedTurnIdsRef.current.clear();
     glossedTurnIdsRef.current.clear();
     processedUserTurnIdsRef.current.clear();
-    activeUserTextRef.current = '';
+    turnStartIndexRef.current = 0;
     pendingUserTurnIdRef.current = null;
   }, [interruptAssistant]);
 
@@ -588,8 +588,7 @@ export function usePipelineCall({
     processedUserTurnIdsRef.current.add(currentId);
     sessionMetricsRef.current.userTurns++;
 
-    // Clear pending active text & pending turnId
-    activeUserTextRef.current = '';
+    // Clear pending turnId and silence timer
     pendingUserTurnIdRef.current = null;
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
@@ -670,26 +669,30 @@ export function usePipelineCall({
         interruptAssistant();
       }
 
-      let interim = '';
+      // Reconstruct final and interim text idempotently from event.results for the current turn
+      let finalTranscript = '';
+      let interimTranscript = '';
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const item = event.results[i];
-        const text = item[0]?.transcript || '';
-        if (item.isFinal) {
-          activeUserTextRef.current = (activeUserTextRef.current ? activeUserTextRef.current + ' ' : '') + text;
+      const startIndex = Math.min(turnStartIndexRef.current || 0, event.results.length);
+      for (let i = startIndex; i < event.results.length; i++) {
+        const resultItem = event.results[i];
+        const transcript = resultItem[0]?.transcript || '';
+        if (resultItem.isFinal) {
+          finalTranscript = (finalTranscript ? finalTranscript + ' ' : '') + transcript.trim();
         } else {
-          interim = (interim ? interim + ' ' : '') + text;
+          interimTranscript = (interimTranscript ? interimTranscript + ' ' : '') + transcript.trim();
         }
       }
 
-      const combined = (activeUserTextRef.current + ' ' + interim).trim();
-      if (!combined) return;
+      const currentTurnText = (finalTranscript + (interimTranscript ? (finalTranscript ? ' ' : '') + interimTranscript : '')).trim();
+      if (!currentTurnText) return;
 
-      if (!pendingUserTurnIdRef.current) {
+      // If previous turn was already processed or null, ensure fresh turnId
+      if (!pendingUserTurnIdRef.current || processedUserTurnIdsRef.current.has(pendingUserTurnIdRef.current)) {
         pendingUserTurnIdRef.current = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       }
       const turnId = pendingUserTurnIdRef.current;
-      const previewTokens = tokenizeLiveCallTurn(combined, targetLang);
+      const previewTokens = tokenizeLiveCallTurn(currentTurnText, targetLang);
 
       setLiveTranscript((prev) => {
         const existingIdx = prev.findIndex(m => m.id === turnId);
@@ -697,7 +700,7 @@ export function usePipelineCall({
           const updated = [...prev];
           updated[existingIdx] = {
             ...updated[existingIdx],
-            text: combined,
+            text: currentTurnText,
             tokens: previewTokens,
             isTranscribing: true
           };
@@ -710,7 +713,7 @@ export function usePipelineCall({
             id: turnId,
             sender: 'user',
             speaker: isSpanish ? 'Tú' : 'You',
-            text: combined,
+            text: currentTurnText,
             tokens: previewTokens,
             isTranscribing: true,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -723,11 +726,12 @@ export function usePipelineCall({
         clearTimeout(silenceTimeoutRef.current);
       }
 
-      // Auto-finalize turn ONLY after stable silence (950ms), independent of isFinal
+      // Auto-finalize turn ONLY after stable silence (950ms), capturing current turnId & result length
+      const capturedLength = event.results.length;
       silenceTimeoutRef.current = setTimeout(() => {
-        const textToFinalize = (activeUserTextRef.current + ' ' + interim).trim() || combined;
-        if (textToFinalize) {
-          finalizeUserSpeechTurn(textToFinalize, turnId);
+        if (pendingUserTurnIdRef.current === turnId && !processedUserTurnIdsRef.current.has(turnId)) {
+          turnStartIndexRef.current = capturedLength;
+          finalizeUserSpeechTurn(currentTurnText, turnId);
         }
       }, 950);
     };
@@ -740,6 +744,7 @@ export function usePipelineCall({
 
     recognition.onend = () => {
       // Auto-restart recognition if call is still active
+      turnStartIndexRef.current = 0;
       if (isRecognitionActiveRef.current) {
         try {
           recognition.start();
