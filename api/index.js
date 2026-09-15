@@ -1,5 +1,5 @@
-import { handleHealth } from '../server/handlers.js';
+import app from '../server/index.js';
 
-export default async function handler(req, res) {
-  return handleHealth(req, res);
+export default function handler(req, res) {
+  return app(req, res);
 }
