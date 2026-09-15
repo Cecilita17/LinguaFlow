@@ -202,9 +202,12 @@ export function useRealtimeCall({
               updated[targetIdx] = {
                 ...updated[targetIdx],
                 hasCorrection: hasErrors,
+                text: corrected,
                 correctedText: corrected,
                 diffTokens,
                 tokens: updatedTokens,
+                transliteration: extractTurnTransliteration(updatedTokens, targetLang),
+                glosses: extractTurnGlosses(updatedTokens),
                 originalText: correction.original_text || cleanText,
                 isCorrecting: false
               };
@@ -237,6 +240,8 @@ export function useRealtimeCall({
     const currentId = turnId || pendingUserTurnIdRef.current || `user-${Date.now()}`;
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const initialTokens = tokenizeLiveCallTurn(cleanText, targetLang);
+    const initialTranslit = extractTurnTransliteration(initialTokens, targetLang);
+    const initialGlosses = extractTurnGlosses(initialTokens);
 
     setLiveTranscript((prev) => {
       const existingIdx = prev.findIndex(
@@ -253,6 +258,8 @@ export function useRealtimeCall({
           correctedText: cleanText,
           diffTokens: [{ text: cleanText, changed: false, original: null }],
           tokens: initialTokens,
+          transliteration: initialTranslit,
+          glosses: initialGlosses,
           isTranscribing: false,
           isCorrecting: true
         };
@@ -268,6 +275,8 @@ export function useRealtimeCall({
         hasCorrection: false,
         diffTokens: [{ text: cleanText, changed: false, original: null }],
         tokens: initialTokens,
+        transliteration: initialTranslit,
+        glosses: initialGlosses,
         originalText: cleanText,
         correctedText: cleanText,
         isCorrecting: true,

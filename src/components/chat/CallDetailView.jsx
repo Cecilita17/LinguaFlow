@@ -14,6 +14,7 @@ import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLanguageMeta } from '../../constants/languages.js';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 import { PUNCTUATION_REGEX } from '../../services/subtitleGlossService.js';
+import { tokenizeLiveCallTurn } from '../../services/liveCallGlossService.js';
 
 export function CallDetailView({
   callData,
@@ -43,7 +44,9 @@ export function CallDetailView({
   // Render 3-tier interlinear tokens for history segment
   const renderHistoryTokens = (line) => {
     const isUser = line.sender === 'user';
-    const tokens = Array.isArray(line.tokens) ? line.tokens : [];
+    const tokens = Array.isArray(line.tokens) && line.tokens.length > 0
+      ? line.tokens
+      : (line.text ? tokenizeLiveCallTurn(line.text, targetLang, line.diffTokens) : []);
 
     // Fallback for legacy history records without tokenization
     if (tokens.length === 0) {
@@ -68,8 +71,8 @@ export function CallDetailView({
         style={{ direction: textDirection }}
         className={`flex flex-wrap items-start ${
           isChinese
-            ? 'gap-x-1 sm:gap-x-1.5 gap-y-2 sm:gap-y-2.5'
-            : 'gap-x-1.5 sm:gap-x-2 gap-y-1.5 sm:gap-y-2'
+            ? 'gap-x-1 sm:gap-x-1.5 gap-y-2.5 sm:gap-y-3'
+            : 'gap-x-1.5 sm:gap-x-2 gap-y-2 sm:gap-y-2.5'
         } leading-tight break-words max-w-full ${
           isRtl ? 'justify-start text-right' : 'justify-start text-left'
         }`}
@@ -107,7 +110,7 @@ export function CallDetailView({
                 key={idx}
                 dir={textDirection}
                 className={`font-medium select-text self-start isolate [unicode-bidi:isolate] ${
-                  isUser ? 'text-pink-300 dark:text-pink-400' : 'text-stone-400'
+                  isUser ? 'text-pink-200/90' : 'text-stone-400'
                 } ${
                   isChinese
                     ? (hasTranslit ? 'text-sm sm:text-base mt-2.5 sm:mt-3' : 'text-sm sm:text-base mt-0.5')
@@ -132,7 +135,7 @@ export function CallDetailView({
                 <span
                   dir="ltr"
                   className={`text-[11px] sm:text-[12px] font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-90 ${
-                    isUser ? 'text-pink-700 dark:text-pink-300' : 'text-[var(--text-muted)] dark:text-stone-400'
+                    isUser ? 'text-pink-100' : 'text-[var(--text-muted)] dark:text-stone-400'
                   }`}
                 >
                   {auxiliary}
@@ -142,7 +145,7 @@ export function CallDetailView({
               {/* Tier 2 (MIDDLE): Word */}
               {isChanged ? (
                 <span
-                  className="relative inline-block text-amber-600 dark:text-amber-300 font-extrabold tracking-wide underline decoration-amber-500/70 decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text"
+                  className="relative inline-block text-amber-200 dark:text-amber-200 font-extrabold tracking-wide underline decoration-amber-300 decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text"
                   title={tokenObj.original ? `Original: "${tokenObj.original}"` : (isSpanish ? 'Palabra corregida' : 'Corrected word')}
                 >
                   <span>{word}</span>
@@ -155,10 +158,10 @@ export function CallDetailView({
               ) : (
                 <span
                   dir={textDirection}
-                  className={`leading-tight select-text font-semibold text-sm sm:text-base ${
+                  className={`leading-tight select-text ${
                     isUser
-                      ? 'text-rose-950 dark:text-rose-100'
-                      : 'text-[var(--text-primary)]'
+                      ? 'text-white font-semibold text-sm sm:text-base'
+                      : 'text-[var(--text-primary)] font-semibold text-sm sm:text-base'
                   } ${isArabic ? 'font-arabic text-base sm:text-lg' : ''}`}
                 >
                   {word}
@@ -171,7 +174,11 @@ export function CallDetailView({
                   gloss={cleanGloss}
                   isChinese={isChinese}
                   nativeLang={nativeLang}
-                  className={isUser ? '!text-rose-700 dark:!text-rose-300/90 text-xs sm:text-sm font-normal' : 'text-xs sm:text-sm'}
+                  className={
+                    isUser
+                      ? 'text-amber-200 dark:text-amber-200 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
+                      : 'text-rose-600 dark:text-rose-400 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
+                  }
                 />
               )}
             </div>
@@ -182,9 +189,9 @@ export function CallDetailView({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)] space-y-6 animate-fade-in">
+    <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)] space-y-5 animate-fade-in">
       {/* 1. Header with Back button */}
-      <div className="flex items-center justify-between pb-4 border-b border-[var(--border-primary)]">
+      <div className="flex items-center justify-between pb-3 border-b border-[var(--border-primary)]">
         <button
           type="button"
           onClick={onBack}
@@ -203,11 +210,11 @@ export function CallDetailView({
           </h2>
         </div>
 
-        <div className="w-20" />
+        <div className="w-16" />
       </div>
 
       {/* 2. Metadata Card */}
-      <div className="p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-4">
+      <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <span className="text-3xl">{langMeta.flag}</span>
@@ -222,11 +229,11 @@ export function CallDetailView({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-xs">
               <Clock className="w-3.5 h-3.5" />
               <span>{callData?.duration || '00:00'}</span>
             </span>
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1.5">
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1.5 shadow-xs">
               <Calendar className="w-3.5 h-3.5" />
               <span>{callData?.date || (isSpanish ? 'Hoy' : 'Today')}</span>
             </span>
@@ -234,10 +241,10 @@ export function CallDetailView({
         </div>
       </div>
 
-      {/* 3. Transcription Section */}
-      <div className="p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
+      {/* 3. Transcription Section (Wide Modern Feed) */}
+      <div className="p-4 sm:p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-[var(--border-primary)]/70">
+          <h4 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-2">
             <FileText className="w-4 h-4 text-rose-500" />
             <span>{t('call_detail_transcript_title')}</span>
           </h4>
@@ -246,12 +253,12 @@ export function CallDetailView({
           <button
             type="button"
             onClick={() => setShowGlosses(!showGlosses)}
-            className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border ${
+            className={`px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border ${
               showGlosses
                 ? 'bg-rose-500 text-white border-rose-600'
                 : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-hover)]'
             }`}
-            title={showGlosses ? 'Ocultar glosas palabra por palabra' : 'Mostrar glosas palabra por palabra'}
+            title={showGlosses ? (isSpanish ? 'Ocultar glosas palabra por palabra' : 'Hide word-by-word glosses') : (isSpanish ? 'Mostrar glosas palabra por palabra' : 'Show word-by-word glosses')}
           >
             <Languages className="w-3.5 h-3.5" />
             <span>{showGlosses ? 'Glosas ON' : 'Glosas OFF'}</span>
@@ -259,56 +266,92 @@ export function CallDetailView({
         </div>
 
         {callData?.transcript && callData.transcript.length > 0 ? (
-          <div className="space-y-3">
-            {callData.transcript.map((line, idx) => (
-              <div
-                key={idx}
-                className={`p-3.5 rounded-2xl text-xs leading-relaxed ${
-                  line.sender === 'user'
-                    ? 'bg-rose-500/10 border border-rose-500/20 text-[var(--text-primary)] ml-4 sm:ml-6'
-                    : 'bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] mr-4 sm:mr-6'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-[11px] text-rose-600 dark:text-rose-400 block">
-                    {line.sender === 'user' ? (isSpanish ? 'Tú:' : 'You:') : 'LinguaFlow AI:'}
-                  </span>
-                  {line.sender === 'user' && (
-                    line.hasCorrection ? (
-                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-amber-500" />
-                        <span>{isSpanish ? 'Corregido' : 'Corrected'}</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                        <span>{isSpanish ? 'Sin errores' : 'No errors'}</span>
-                      </span>
-                    )
-                  )}
-                </div>
+          <div className="space-y-4 sm:space-y-5 pt-2">
+            {callData.transcript.map((line, idx) => {
+              const isUser = line.sender === 'user';
 
-                {/* 3-Tier Interlinear Token Presentation */}
-                {renderHistoryTokens(line)}
+              if (isUser) {
+                return (
+                  <div key={idx} className="flex flex-col items-end w-full animate-fade-in group">
+                    {/* User Header Badge */}
+                    <div className="flex items-center space-x-2 mb-1 px-1">
+                      <span className="text-xs font-semibold text-[var(--text-secondary)]">
+                        {isSpanish ? 'Tú' : 'You'}
+                      </span>
+                      {line.hasCorrection ? (
+                        <span className="flex items-center space-x-1.5 text-[10px] sm:text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/30 shadow-xs">
+                          <CheckCircle2 className="w-3 h-3 text-amber-500" />
+                          <span>{isSpanish ? 'Corregido' : 'Corrected'}</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center space-x-1.5 text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30 shadow-xs">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                          <span>{isSpanish ? 'Sin errores' : 'No errors'}</span>
+                        </span>
+                      )}
+                      {line.timestamp && (
+                        <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                          {line.timestamp}
+                        </span>
+                      )}
+                    </div>
 
-                {/* Pedagogical Correction summary diff if applicable */}
-                {line.hasCorrection && line.originalText && line.correctedText && line.originalText.toLowerCase().trim() !== line.correctedText.toLowerCase().trim() && (
-                  <div className="mt-2.5 pt-2 border-t border-rose-500/20 text-[11px] space-y-0.5">
-                    <p className="text-[var(--text-muted)]">
-                      <span className="font-medium text-rose-500">{isSpanish ? 'Original: ' : 'Original: '}</span>
-                      <span className="line-through">{line.originalText}</span>
-                    </p>
-                    <p className="text-amber-600 dark:text-amber-400 font-medium">
-                      <span>{isSpanish ? 'Correcto: ' : 'Corrected: '}</span>
-                      <span>{line.correctedText}</span>
-                    </p>
+                    {/* User Speech Bubble with Corrected Version as Primary */}
+                    <div
+                      dir={targetLang === 'ar' || /[؀-ۿ]/.test(line.text || '') ? 'rtl' : 'ltr'}
+                      className="max-w-[92%] sm:max-w-[82%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-3xl rounded-tr-xs px-4 sm:px-5 py-3 sm:py-3.5 shadow-md shadow-rose-950/20 border border-rose-400/30 text-left"
+                    >
+                      {renderHistoryTokens(line)}
+
+                      {/* Secondary Pedagogical Comparison (Original vs Corrected) */}
+                      {line.hasCorrection && line.originalText && line.correctedText && line.originalText.toLowerCase().trim() !== line.correctedText.toLowerCase().trim() && (
+                        <div className="mt-2.5 pt-2 border-t border-white/20 text-xs space-y-0.5" dir="ltr">
+                          <div className="flex items-center gap-1.5 text-pink-100/90">
+                            <span className="font-medium text-pink-200">{isSpanish ? 'Original:' : 'Original:'}</span>
+                            <span className="line-through text-pink-200/80">{line.originalText}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 font-semibold text-amber-200">
+                            <span>{isSpanish ? 'Correcto:' : 'Corrected:'}</span>
+                            <span>{line.correctedText}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              }
+
+              // Assistant Message (Left)
+              return (
+                <div key={idx} className="flex flex-col items-start w-full animate-fade-in group">
+                  {/* Bot Header */}
+                  <div className="flex items-center space-x-1.5 mb-1 px-1">
+                    <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-rose-500 to-pink-400 flex items-center justify-center text-[10px] text-white font-bold shadow-xs">
+                      L
+                    </div>
+                    <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                      LinguaFlow AI
+                    </span>
+                    {line.timestamp && (
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                        {line.timestamp}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Bot Bubble */}
+                  <div
+                    dir={targetLang === 'ar' || /[؀-ۿ]/.test(line.text || '') ? 'rtl' : 'ltr'}
+                    className="max-w-[92%] sm:max-w-[82%] bg-[var(--surface-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-3xl rounded-tl-xs px-4 sm:px-5 py-3 sm:py-3.5 shadow-sm text-left"
+                  >
+                    {renderHistoryTokens(line)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
-          <div className="text-center py-6 text-xs text-[var(--text-muted)] bg-[var(--surface-secondary)] rounded-2xl border border-[var(--border-primary)] p-4">
+          <div className="text-center py-8 text-xs text-[var(--text-muted)] bg-[var(--surface-secondary)] rounded-2xl border border-[var(--border-primary)] p-4">
             <p>{isSpanish ? 'No se registró transcripción para esta llamada.' : 'No transcript recorded for this call.'}</p>
           </div>
         )}
@@ -316,19 +359,19 @@ export function CallDetailView({
 
       {/* 4. Learned Vocabulary & Corrections Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-3">
+        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-2">
           <h4 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-rose-500" />
             <span>{t('call_detail_vocab_title')}</span>
           </h4>
           <p className="text-xs text-[var(--text-muted)]">
             {isSpanish
-              ? 'Las palabras practicadas en las llamadas se sincronizarán aquí automáticamente.'
+              ? 'Las palabras practicadas en las llamadas se sincronizan aquí automáticamente.'
               : 'Vocabulary practiced during voice calls will be automatically recorded here.'}
           </p>
         </div>
 
-        <div className="p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-3">
+        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-2">
           <h4 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-rose-500" />
             <span>{t('call_detail_corrections_title')}</span>
