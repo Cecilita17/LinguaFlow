@@ -105,6 +105,111 @@ export function useRealtimeCall({
     }
   }, []);
 
+  // Trigger pedagogical correction asynchronously for a user voice turn
+  const triggerCorrection = useCallback((userText, turnId) => {
+    if (!userText || !userText.trim()) return;
+    const cleanText = userText.trim();
+
+    getPedagogicalCorrection(cleanText, targetLang, nativeLang, level)
+      .then((correction) => {
+        if (correction) {
+          const hasErrors = Boolean(correction.has_errors || correction.diff_tokens?.some((t) => t.changed));
+          setLiveTranscript((prev) => {
+            let targetIdx = prev.findIndex((msg) => msg.id === turnId);
+            if (targetIdx < 0) {
+              targetIdx = prev.findIndex((msg) => msg.sender === 'user' && msg.text === cleanText && msg.isCorrecting);
+            }
+            if (targetIdx < 0) {
+              for (let i = prev.length - 1; i >= 0; i--) {
+                if (prev[i].sender === 'user' && prev[i].isCorrecting) {
+                  targetIdx = i;
+                  break;
+                }
+              }
+            }
+
+            if (targetIdx >= 0) {
+              const updated = [...prev];
+              updated[targetIdx] = {
+                ...updated[targetIdx],
+                hasCorrection: hasErrors,
+                correctedText: correction.corrected_text || cleanText,
+                diffTokens: correction.diff_tokens && correction.diff_tokens.length > 0
+                  ? correction.diff_tokens
+                  : [{ text: cleanText, changed: false, original: null }],
+                originalText: correction.original_text || cleanText,
+                isCorrecting: false
+              };
+              return updated;
+            }
+            return prev;
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('[PedagogicalCorrection] Live transcript error:', err);
+        setLiveTranscript((prev) =>
+          prev.map((msg) =>
+            msg.id === turnId || (msg.sender === 'user' && msg.text === cleanText)
+              ? { ...msg, isCorrecting: false }
+              : msg
+          )
+        );
+      });
+  }, [targetLang, nativeLang, level]);
+
+  // Process completed or updated user voice transcript
+  const processUserTurn = useCallback((userText, turnId) => {
+    if (!userText || !userText.trim()) return;
+    const cleanText = userText.trim();
+    const currentId = turnId || pendingUserTurnIdRef.current || `user-${Date.now()}`;
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    setLiveTranscript((prev) => {
+      const existingIdx = prev.findIndex(
+        (m) => m.id === currentId || m.id === pendingUserTurnIdRef.current || (m.sender === 'user' && !m.text)
+      );
+
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          id: currentId,
+          text: cleanText,
+          originalText: cleanText,
+          correctedText: cleanText,
+          diffTokens: [{ text: cleanText, changed: false, original: null }],
+          isTranscribing: false,
+          isCorrecting: true
+        };
+        return updated;
+      }
+
+      const newUserMsg = {
+        id: currentId,
+        sender: 'user',
+        speaker: isSpanish ? 'Tú' : 'You',
+        text: cleanText,
+        timestamp: timeStr,
+        hasCorrection: false,
+        diffTokens: [{ text: cleanText, changed: false, original: null }],
+        originalText: cleanText,
+        correctedText: cleanText,
+        isCorrecting: true,
+        isTranscribing: false
+      };
+
+      // Maintain true chronological conversation order: place before active AI turn if one already began
+      const botIdx = currentAiTurnIdRef.current ? prev.findIndex((m) => m.id === currentAiTurnIdRef.current) : -1;
+      if (botIdx >= 0) {
+        return [...prev.slice(0, botIdx), newUserMsg, ...prev.slice(botIdx)];
+      }
+      return [...prev, newUserMsg];
+    });
+
+    triggerCorrection(cleanText, currentId);
+  }, [isSpanish, triggerCorrection]);
+
   // Handle incoming OpenAI Realtime Data Channel events
   const handleServerEvent = useCallback((event) => {
     switch (event.type) {
@@ -126,7 +231,8 @@ export function useRealtimeCall({
         }
         currentAiTurnTextRef.current = '';
         currentAiTurnIdRef.current = null;
-        pendingUserTurnIdRef.current = event.item_id || `user-${Date.now()}`;
+        pendingUserTurnIdRef.current = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
         if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
           try {
             dataChannelRef.current.send(JSON.stringify({ type: 'response.cancel' }));
@@ -144,57 +250,7 @@ export function useRealtimeCall({
           }
           const contentTranscript = event.item.content?.[0]?.transcript?.trim();
           if (contentTranscript) {
-            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            setLiveTranscript((prev) => {
-              if (prev.some((m) => m.id === itemId)) return prev;
-              const userMsg = {
-                id: itemId,
-                sender: 'user',
-                speaker: isSpanish ? 'Tú' : 'You',
-                text: contentTranscript,
-                timestamp: timeStr,
-                hasCorrection: false,
-                diffTokens: [{ text: contentTranscript, changed: false, original: null }],
-                originalText: contentTranscript,
-                correctedText: contentTranscript,
-                isCorrecting: true
-              };
-              const botIdx = currentAiTurnIdRef.current ? prev.findIndex((m) => m.id === currentAiTurnIdRef.current) : -1;
-              if (botIdx >= 0) {
-                return [...prev.slice(0, botIdx), userMsg, ...prev.slice(botIdx)];
-              }
-              return [...prev, userMsg];
-            });
-
-            // Trigger pedagogical correction
-            getPedagogicalCorrection(contentTranscript, targetLang, nativeLang, level)
-              .then((correction) => {
-                if (correction) {
-                  const hasErr = Boolean(correction.has_errors || correction.diff_tokens?.some((t) => t.changed));
-                  setLiveTranscript((prev) =>
-                    prev.map((msg) =>
-                      msg.id === itemId
-                        ? {
-                            ...msg,
-                            hasCorrection: hasErr,
-                            correctedText: correction.corrected_text || contentTranscript,
-                            diffTokens: correction.diff_tokens && correction.diff_tokens.length > 0
-                              ? correction.diff_tokens
-                              : [{ text: contentTranscript, changed: false, original: null }],
-                            originalText: correction.original_text || contentTranscript,
-                            isCorrecting: false
-                          }
-                        : msg
-                    )
-                  );
-                }
-              })
-              .catch((err) => {
-                console.warn('[PedagogicalCorrection] Error:', err);
-                setLiveTranscript((prev) =>
-                  prev.map((msg) => (msg.id === itemId ? { ...msg, isCorrecting: false } : msg))
-                );
-              });
+            processUserTurn(contentTranscript, itemId || pendingUserTurnIdRef.current);
           }
         }
         break;
@@ -224,75 +280,9 @@ export function useRealtimeCall({
       // User finished speaking and speech was recognized by whisper-1
       case 'conversation.item.input_audio_transcription.completed': {
         const userText = event.transcript ? event.transcript.trim() : '';
-        const itemId = event.item_id || pendingUserTurnIdRef.current || `user-${Date.now()}`;
+        const itemId = event.item_id || pendingUserTurnIdRef.current;
         if (userText) {
-          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-          setLiveTranscript((prev) => {
-            const existingIdx = prev.findIndex((m) => m.id === itemId);
-            if (existingIdx >= 0) {
-              const updated = [...prev];
-              updated[existingIdx] = {
-                ...updated[existingIdx],
-                text: userText,
-                originalText: userText,
-                correctedText: userText,
-                diffTokens: [{ text: userText, changed: false, original: null }],
-                isCorrecting: true
-              };
-              return updated;
-            }
-
-            const newUserMsg = {
-              id: itemId,
-              sender: 'user',
-              speaker: isSpanish ? 'Tú' : 'You',
-              text: userText,
-              timestamp: timeStr,
-              hasCorrection: false,
-              diffTokens: [{ text: userText, changed: false, original: null }],
-              originalText: userText,
-              correctedText: userText,
-              isCorrecting: true
-            };
-
-            // Maintain true chronological conversation order: place before active AI turn if one already began
-            const botIdx = currentAiTurnIdRef.current ? prev.findIndex((m) => m.id === currentAiTurnIdRef.current) : -1;
-            if (botIdx >= 0) {
-              return [...prev.slice(0, botIdx), newUserMsg, ...prev.slice(botIdx)];
-            }
-            return [...prev, newUserMsg];
-          });
-
-          // Run LinguaFlow pedagogical grammar correction engine asynchronously
-          getPedagogicalCorrection(userText, targetLang, nativeLang, level)
-            .then((correction) => {
-              if (correction) {
-                const hasErrors = Boolean(correction.has_errors || correction.diff_tokens?.some((t) => t.changed));
-                setLiveTranscript((prev) =>
-                  prev.map((msg) =>
-                    msg.id === itemId
-                      ? {
-                          ...msg,
-                          hasCorrection: hasErrors,
-                          correctedText: correction.corrected_text || userText,
-                          diffTokens: correction.diff_tokens && correction.diff_tokens.length > 0
-                            ? correction.diff_tokens
-                            : [{ text: userText, changed: false, original: null }],
-                          originalText: correction.original_text || userText,
-                          isCorrecting: false
-                        }
-                      : msg
-                  )
-                );
-              }
-            })
-            .catch((err) => {
-              console.warn('[PedagogicalCorrection] Live transcript error:', err);
-              setLiveTranscript((prev) =>
-                prev.map((msg) => (msg.id === itemId ? { ...msg, isCorrecting: false } : msg))
-              );
-            });
+          processUserTurn(userText, itemId);
         }
         break;
       }
@@ -314,7 +304,7 @@ export function useRealtimeCall({
 
         // If this is the first delta of this turn, allocate a unique turn ID
         if (!currentAiTurnIdRef.current) {
-          currentAiTurnIdRef.current = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          currentAiTurnIdRef.current = event.item_id || `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           currentAiTurnTextRef.current = '';
         }
 
@@ -377,7 +367,7 @@ export function useRealtimeCall({
       default:
         break;
     }
-  }, [isSpanish, targetLang, nativeLang, level]);
+  }, [processUserTurn]);
 
   // Start Realtime Call
   const startCall = useCallback(async () => {

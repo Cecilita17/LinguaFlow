@@ -303,7 +303,10 @@ export function LiveCallView({
                         </div>
 
                         {/* User Speech Bubble */}
-                        <div className="max-w-[88%] sm:max-w-[78%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-2xl rounded-tr-xs px-3.5 sm:px-4 py-2.5 shadow-md shadow-black/20 border border-rose-400/30 text-left">
+                        <div
+                          dir={targetLang === 'ar' || /[\u0600-\u06FF]/.test(item.text || '') ? 'rtl' : 'ltr'}
+                          className="max-w-[88%] sm:max-w-[78%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-2xl rounded-tr-xs px-3.5 sm:px-4 py-2.5 shadow-md shadow-black/20 border border-rose-400/30 text-left"
+                        >
                           <div className="text-[13px] sm:text-sm leading-relaxed tracking-wide font-normal select-text">
                             {!item.text ? (
                               <span className="italic opacity-85 text-xs flex items-center gap-1.5 py-0.5 animate-pulse">
@@ -315,7 +318,7 @@ export function LiveCallView({
                                 const rawWord = token.text || '';
                                 const cleanWord = rawWord.trim();
                                 if (!cleanWord) return null;
-                                const needsSpace = idx > 0;
+                                const needsSpace = targetLang !== 'zh' && idx > 0;
 
                                 if (token.changed) {
                                   return (
@@ -327,7 +330,7 @@ export function LiveCallView({
                                       >
                                         <span>{cleanWord}</span>
                                         {token.original && (
-                                          <span className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded shadow-lg border border-stone-700 pointer-events-none">
+                                          <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded shadow-lg border border-stone-700 pointer-events-none">
                                             Original: <span className="line-through text-rose-300">{token.original}</span>
                                           </span>
                                         )}
@@ -350,7 +353,7 @@ export function LiveCallView({
 
                           {/* Pedagogical Correction Comparison */}
                           {item.hasCorrection && item.originalText && item.correctedText && item.originalText.toLowerCase().trim() !== item.correctedText.toLowerCase().trim() && (
-                            <div className="mt-2 pt-2 border-t border-white/20 text-[11px] text-white/95 flex flex-col gap-0.5">
+                            <div className="mt-2 pt-2 border-t border-white/20 text-[11px] text-white/95 flex flex-col gap-0.5" dir="ltr">
                               <div className="flex items-center gap-1.5 text-pink-100">
                                 <span className="font-semibold text-rose-200">{isSpanish ? 'Original:' : 'Original:'}</span>
                                 <span className="line-through text-pink-200/90">{item.originalText}</span>
@@ -385,7 +388,10 @@ export function LiveCallView({
                       </div>
 
                       {/* Bot Bubble */}
-                      <div className="max-w-[88%] sm:max-w-[78%] bg-[var(--surface-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-2xl rounded-tl-xs px-3.5 sm:px-4 py-2.5 shadow-md shadow-black/10 text-left">
+                      <div
+                        dir={targetLang === 'ar' || /[\u0600-\u06FF]/.test(item.text || '') ? 'rtl' : 'ltr'}
+                        className="max-w-[88%] sm:max-w-[78%] bg-[var(--surface-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-2xl rounded-tl-xs px-3.5 sm:px-4 py-2.5 shadow-md shadow-black/10 text-left"
+                      >
                         <p className="text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap select-text">
                           {item.text}
                           {item.isStreaming && (
