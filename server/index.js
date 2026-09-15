@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleSentenceBreakdown, handleBatchGloss } from './handlers.js';
 import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
 import { handleRealtimeSession } from './realtimeHandlers.js';
+import { handlePipelineChatStream, handlePipelineTTS } from './pipelineHandlers.js';
 
 dotenv.config();
 
@@ -51,6 +52,13 @@ app.post('/batch-gloss', handleBatchGloss);
 // OpenAI Realtime WebRTC Session creation
 app.post('/api/realtime/session', handleRealtimeSession);
 app.post('/realtime/session', handleRealtimeSession);
+
+// Pipeline Call Endpoints (Fase 2: Low-Cost Voice Calls)
+app.post('/api/pipeline/chat-stream', handlePipelineChatStream);
+app.post('/pipeline/chat-stream', handlePipelineChatStream);
+
+app.post('/api/pipeline/tts', handlePipelineTTS);
+app.post('/pipeline/tts', handlePipelineTTS);
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {

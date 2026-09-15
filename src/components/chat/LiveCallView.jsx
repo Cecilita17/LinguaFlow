@@ -17,6 +17,7 @@ import {
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLanguageMeta, getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { useRealtimeCall } from '../../hooks/useRealtimeCall.js';
+import { usePipelineCall } from '../../hooks/usePipelineCall.js';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
@@ -26,6 +27,7 @@ export function LiveCallView({
   targetLang,
   nativeLang = 'es',
   level = 'A2/B1',
+  initialMode = 'realtime',
   onEndCall
 }) {
   const { t, isSpanish } = useSiteLanguage();
@@ -37,8 +39,25 @@ export function LiveCallView({
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
 
+  const [callMode, setCallMode] = useState(initialMode); // 'realtime' | 'pipeline'
   const [showLiveTranscript, setShowLiveTranscript] = useState(true);
   const transcriptContainerRef = useRef(null);
+
+  const realtimeController = useRealtimeCall({
+    targetLang,
+    nativeLang,
+    level,
+    isSpanish
+  });
+
+  const pipelineController = usePipelineCall({
+    targetLang,
+    nativeLang,
+    level,
+    isSpanish
+  });
+
+  const activeCall = callMode === 'pipeline' ? pipelineController : realtimeController;
 
   const {
     callState,
@@ -52,14 +71,9 @@ export function LiveCallView({
     startCall,
     endCall,
     toggleMute
-  } = useRealtimeCall({
-    targetLang,
-    nativeLang,
-    level,
-    isSpanish
-  });
+  } = activeCall;
 
-  // Automatically start call on mount
+  // Automatically start call on mount or mode switch
   useEffect(() => {
     startCall();
   }, [startCall]);
@@ -271,7 +285,7 @@ export function LiveCallView({
           <span>{t('back_to_hub')}</span>
         </button>
 
-        {/* Center: Language & Duration */}
+        {/* Center: Language, Duration & Mode Selector */}
         <div className="flex items-center space-x-2 sm:space-x-3">
           <span className="text-xl sm:text-2xl">{currentTargetMeta.flag}</span>
           <div className="text-left hidden xs:block">
@@ -282,6 +296,44 @@ export function LiveCallView({
           <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 shadow-xs">
             {formattedDuration}
           </span>
+
+          {/* Mode Selector Pill */}
+          <div className="flex items-center rounded-xl bg-[var(--surface-secondary)] p-0.5 border border-[var(--border-primary)] text-xs shadow-xs">
+            <button
+              type="button"
+              onClick={() => {
+                if (callMode !== 'realtime') {
+                  activeCall.endCall();
+                  setCallMode('realtime');
+                }
+              }}
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                callMode === 'realtime'
+                  ? 'bg-rose-500 text-white shadow-xs'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title="OpenAI Realtime WebRTC"
+            >
+              Realtime
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (callMode !== 'pipeline') {
+                  activeCall.endCall();
+                  setCallMode('pipeline');
+                }
+              }}
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                callMode === 'pipeline'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Pipeline Económico (STT + Groq LLM + TTS Streaming)"
+            >
+              {isSpanish ? 'Económico' : 'Pipeline'}
+            </button>
+          </div>
         </div>
 
         {/* Right: Toggle Buttons */}
@@ -364,8 +416,8 @@ export function LiveCallView({
         </div>
 
         <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] font-mono">
-          <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
-          <span>WebRTC Realtime</span>
+          <Radio className={`w-3 h-3 ${callMode === 'pipeline' ? 'text-emerald-500' : 'text-rose-500'} animate-pulse`} />
+          <span>{callMode === 'pipeline' ? 'Pipeline Económico (STT→LLM→TTS)' : 'WebRTC Realtime (Nativo)'}</span>
         </div>
       </div>
 
