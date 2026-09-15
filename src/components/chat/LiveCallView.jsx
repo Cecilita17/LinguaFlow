@@ -11,11 +11,16 @@ import {
   Languages,
   AlertCircle,
   RotateCcw,
-  CheckCircle2
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
-import { getLanguageMeta } from '../../constants/languages.js';
+import { getLanguageMeta, getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { useRealtimeCall } from '../../hooks/useRealtimeCall.js';
+import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
+import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
+import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
+import { tokenizeLiveCallTurn } from '../../services/liveCallGlossService.js';
 
 export function LiveCallView({
   targetLang,
@@ -26,6 +31,12 @@ export function LiveCallView({
   const { t, isSpanish } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
 
+  const isChinese = targetLang === 'zh';
+  const isArabic = targetLang === 'ar';
+  const hasTranslit = isChinese || isArabic;
+  const isRtl = isRtlLanguage(targetLang);
+  const textDirection = getTextDirection(targetLang);
+
   const [showLiveTranscript, setShowLiveTranscript] = useState(true);
   const transcriptContainerRef = useRef(null);
 
@@ -34,6 +45,9 @@ export function LiveCallView({
     isMuted,
     errorMessage,
     liveTranscript,
+    showGlosses,
+    setShowGlosses,
+    toggleGlosses,
     formattedDuration,
     startCall,
     endCall,
@@ -116,6 +130,136 @@ export function LiveCallView({
 
   const statusInfo = getStatusDisplay();
 
+  // Helper to render 3-tier interlinear tokens: Translit/Pinyin (Tier 1, ar/zh only) + Word (Tier 2) + Gloss (Tier 3, when ON)
+  const renderInterlinearTokens = (tokens, isUser = false) => {
+    if (!Array.isArray(tokens) || tokens.length === 0) return null;
+
+    return (
+      <div
+        dir={textDirection}
+        style={{ direction: textDirection }}
+        className={`flex flex-wrap items-start ${
+          isChinese
+            ? 'gap-x-1 sm:gap-x-1.5 gap-y-2.5 sm:gap-y-3'
+            : 'gap-x-1.5 sm:gap-x-2 gap-y-2 sm:gap-y-2.5'
+        } leading-tight break-words max-w-full ${
+          isRtl ? 'justify-start text-right' : 'justify-start text-left'
+        }`}
+      >
+        {tokens.map((tokenObj, idx) => {
+          if (!tokenObj) return null;
+          const rawWord = typeof tokenObj === 'string'
+            ? tokenObj
+            : (tokenObj.word || tokenObj.text || '');
+          const word = rawWord != null ? String(rawWord).trim() : '';
+          if (!word) return null;
+
+          const isPunctuation = typeof tokenObj === 'object' && typeof tokenObj.isPunctuation === 'boolean'
+            ? tokenObj.isPunctuation
+            : PUNCTUATION_REGEX.test(word);
+
+          // Tier 1 (Transliteration / Pīnyīn): STRICTLY for Arabic ('ar') and Chinese ('zh')
+          const rawAux = (isChinese || isArabic) && tokenObj && typeof tokenObj === 'object'
+            ? (tokenObj.auxiliary ?? tokenObj.translit ?? tokenObj.pinyin ?? (isArabic ? getArabicTransliteration(word) : null))
+            : (isArabic ? getArabicTransliteration(word) : null);
+          const auxiliary = (isChinese || isArabic) && rawAux != null ? String(rawAux).trim() : null;
+
+          // Tier 3 (Word-by-word Gloss):
+          const rawGlossVal = tokenObj && typeof tokenObj === 'object' ? tokenObj.gloss : null;
+          const rawGloss = rawGlossVal != null ? String(rawGlossVal).trim() : null;
+          const wordLower = word.toLowerCase();
+          const rawGlossLower = rawGloss ? rawGloss.toLowerCase() : null;
+          const isLegitSameWord = word === '的' && rawGlossLower === 'de';
+          const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameWord) && rawGlossLower !== wordLower)
+            ? rawGloss
+            : null;
+
+          if (isPunctuation) {
+            return (
+              <span
+                key={idx}
+                dir={textDirection}
+                className={`font-medium select-text self-start isolate [unicode-bidi:isolate] ${
+                  isUser ? 'text-pink-200/80' : 'text-stone-400'
+                } ${
+                  isChinese
+                    ? (hasTranslit ? 'text-sm sm:text-base mt-2.5 sm:mt-3' : 'text-sm sm:text-base mt-0.5')
+                    : (hasTranslit ? 'text-base sm:text-lg mt-2.5 sm:mt-3' : 'text-base sm:text-lg mt-0.5')
+                }`}
+              >
+                {word}
+              </span>
+            );
+          }
+
+          const isChanged = Boolean(isUser && tokenObj.changed);
+
+          return (
+            <div
+              key={idx}
+              dir={textDirection}
+              className={`inline-flex flex-col items-center justify-start rounded transition-colors group/token max-w-full isolate [unicode-bidi:isolate] ${
+                isChinese ? 'px-0.5 sm:px-1 py-0.5' : 'px-0.5 sm:px-1 py-0.5'
+              }`}
+            >
+              {/* Tier 1 (TOP): Transliteration for Arabic / Pīnyīn for Chinese ONLY */}
+              {hasTranslit && auxiliary && (
+                <span
+                  dir="ltr"
+                  className={`text-[11px] sm:text-[12px] font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-90 ${
+                    isUser ? 'text-pink-100' : 'text-[var(--text-muted)] dark:text-stone-400'
+                  }`}
+                >
+                  {auxiliary}
+                </span>
+              )}
+
+              {/* Tier 2 (MIDDLE): Word */}
+              {isChanged ? (
+                <span
+                  className="relative inline-block text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text"
+                  title={tokenObj.original ? `Original: "${tokenObj.original}"` : (isSpanish ? 'Palabra corregida' : 'Corrected word')}
+                >
+                  <span>{word}</span>
+                  {tokenObj.original && (
+                    <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded shadow-lg border border-stone-700 pointer-events-none">
+                      Original: <span className="line-through text-rose-300">{tokenObj.original}</span>
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span
+                  dir={textDirection}
+                  className={`leading-tight select-text ${
+                    isUser
+                      ? 'text-white font-semibold text-sm sm:text-base'
+                      : 'text-[var(--text-primary)] font-semibold text-sm sm:text-base'
+                  } ${isArabic ? 'font-arabic text-base sm:text-lg' : ''}`}
+                >
+                  {word}
+                </span>
+              )}
+
+              {/* Tier 3 (BOTTOM): Gloss (ONLY if showGlosses is ON and cleanGloss is available) */}
+              {showGlosses && cleanGloss && (
+                <InterlinearGloss
+                  gloss={cleanGloss}
+                  isChinese={isChinese}
+                  nativeLang={nativeLang}
+                  className={
+                    isUser
+                      ? 'text-amber-200 dark:text-amber-200 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
+                      : 'text-rose-600 dark:text-rose-400 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
+                  }
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)] flex flex-col justify-between min-h-[580px] animate-fade-in">
       {/* 1. TOP BAR */}
@@ -135,12 +279,31 @@ export function LiveCallView({
           </span>
         </div>
 
-        {/* Live Transcription Toggle Button */}
+        {/* Live Transcription & Glosses Toggle Buttons */}
         <div className="flex items-center space-x-2">
+          {showLiveTranscript && (
+            <button
+              type="button"
+              onClick={toggleGlosses}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+                showGlosses
+                  ? 'bg-amber-500/15 border-amber-500 text-amber-600 dark:text-amber-300'
+                  : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title={showGlosses ? (isSpanish ? 'Desactivar glosas' : 'Disable glosses') : (isSpanish ? 'Activar glosas palabra por palabra' : 'Enable word-by-word glosses')}
+            >
+              <Languages className="w-3.5 h-3.5 text-amber-500" />
+              <span className="hidden sm:inline">{isSpanish ? 'Glosas' : 'Glosses'}</span>
+              <span className="text-[10px] px-1 py-0.2 rounded bg-black/10 dark:bg-white/10 font-mono">
+                {showGlosses ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setShowLiveTranscript(!showLiveTranscript)}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
               showLiveTranscript
                 ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-rose-300'
                 : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
@@ -149,7 +312,7 @@ export function LiveCallView({
           >
             <FileText className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{t('call_transcription_toggle')}</span>
-            <span className="text-[10px] px-1 py-0.2 rounded bg-black/10 dark:bg-white/10">
+            <span className="text-[10px] px-1 py-0.2 rounded bg-black/10 dark:bg-white/10 font-mono">
               {showLiveTranscript ? t('call_transcription_on') : t('call_transcription_off')}
             </span>
           </button>
@@ -259,10 +422,28 @@ export function LiveCallView({
                 <FileText className="w-3.5 h-3.5" />
                 <span>{isSpanish ? 'Transcripción en vivo' : 'Live Transcript'}</span>
               </span>
-              <span className="text-[10px] text-[var(--text-muted)] font-mono flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>WebRTC Realtime</span>
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleGlosses}
+                  className={`px-2 py-0.5 rounded-lg border text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 ${
+                    showGlosses
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-600 dark:text-amber-300'
+                      : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  }`}
+                  title={showGlosses ? (isSpanish ? 'Desactivar glosas' : 'Disable glosses') : (isSpanish ? 'Activar glosas palabra por palabra' : 'Enable word-by-word glosses')}
+                >
+                  <Languages className="w-3 h-3 text-amber-500" />
+                  <span>{isSpanish ? 'Glosas' : 'Glosses'}</span>
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-black/10 dark:bg-white/10 font-mono font-bold">
+                    {showGlosses ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+                <span className="text-[10px] text-[var(--text-muted)] font-mono flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>WebRTC</span>
+                </span>
+              </div>
             </div>
 
             {/* Conversation Flow (User vs LinguaFlow AI) */}
@@ -270,6 +451,8 @@ export function LiveCallView({
               {liveTranscript.length > 0 ? (
                 liveTranscript.map((item) => {
                   const isUser = item.sender === 'user';
+                  const userTokens = item.tokens || (item.text ? tokenizeLiveCallTurn(item.text, targetLang, item.diffTokens) : []);
+                  const botTokens = item.tokens || (item.text ? tokenizeLiveCallTurn(item.text, targetLang) : []);
 
                   if (isUser) {
                     return (
@@ -295,6 +478,12 @@ export function LiveCallView({
                               <span>{isSpanish ? 'Sin errores' : 'No errors'}</span>
                             </span>
                           )}
+                          {item.isGlossing && (
+                            <span className="flex items-center space-x-1 text-[10px] text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-700/60 animate-pulse">
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              <span>{isSpanish ? 'Glosando...' : 'Glossing...'}</span>
+                            </span>
+                          )}
                           {item.timestamp && (
                             <span className="text-[10px] text-[var(--text-muted)] font-mono">
                               {item.timestamp}
@@ -305,51 +494,16 @@ export function LiveCallView({
                         {/* User Speech Bubble */}
                         <div
                           dir={targetLang === 'ar' || /[\u0600-\u06FF]/.test(item.text || '') ? 'rtl' : 'ltr'}
-                          className="max-w-[88%] sm:max-w-[78%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-2xl rounded-tr-xs px-3.5 sm:px-4 py-2.5 shadow-md shadow-black/20 border border-rose-400/30 text-left"
+                          className="max-w-[88%] sm:max-w-[80%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-2xl rounded-tr-xs px-3.5 sm:px-4 py-2.5 shadow-md shadow-black/20 border border-rose-400/30 text-left"
                         >
-                          <div className="text-[13px] sm:text-sm leading-relaxed tracking-wide font-normal select-text">
-                            {!item.text ? (
-                              <span className="italic opacity-85 text-xs flex items-center gap-1.5 py-0.5 animate-pulse">
-                                <Mic className="w-3.5 h-3.5 text-pink-200" />
-                                <span>{isSpanish ? 'Transcribiendo audio...' : 'Transcribing speech...'}</span>
-                              </span>
-                            ) : item.diffTokens && item.diffTokens.length > 0 ? (
-                              item.diffTokens.map((token, idx) => {
-                                const rawWord = token.text || '';
-                                const cleanWord = rawWord.trim();
-                                if (!cleanWord) return null;
-                                const needsSpace = targetLang !== 'zh' && idx > 0;
-
-                                if (token.changed) {
-                                  return (
-                                    <React.Fragment key={idx}>
-                                      {needsSpace && ' '}
-                                      <span
-                                        className="relative inline-block mx-0.5 text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-help group/word"
-                                        title={token.original ? `Original: "${token.original}"` : (isSpanish ? 'Palabra corregida' : 'Corrected word')}
-                                      >
-                                        <span>{cleanWord}</span>
-                                        {token.original && (
-                                          <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded shadow-lg border border-stone-700 pointer-events-none">
-                                            Original: <span className="line-through text-rose-300">{token.original}</span>
-                                          </span>
-                                        )}
-                                      </span>
-                                    </React.Fragment>
-                                  );
-                                }
-
-                                return (
-                                  <React.Fragment key={idx}>
-                                    {needsSpace && ' '}
-                                    <span>{cleanWord}</span>
-                                  </React.Fragment>
-                                );
-                              })
-                            ) : (
-                              <span>{item.text}</span>
-                            )}
-                          </div>
+                          {!item.text ? (
+                            <span className="italic opacity-85 text-xs flex items-center gap-1.5 py-0.5 animate-pulse">
+                              <Mic className="w-3.5 h-3.5 text-pink-200" />
+                              <span>{isSpanish ? 'Transcribiendo audio...' : 'Transcribing speech...'}</span>
+                            </span>
+                          ) : (
+                            renderInterlinearTokens(userTokens, true)
+                          )}
 
                           {/* Pedagogical Correction Comparison */}
                           {item.hasCorrection && item.originalText && item.correctedText && item.originalText.toLowerCase().trim() !== item.correctedText.toLowerCase().trim() && (
@@ -380,6 +534,12 @@ export function LiveCallView({
                         <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
                           LinguaFlow AI
                         </span>
+                        {item.isGlossing && (
+                          <span className="flex items-center space-x-1 text-[10px] text-amber-500 dark:text-amber-400">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            <span>{isSpanish ? 'Glosando...' : 'Glossing...'}</span>
+                          </span>
+                        )}
                         {item.timestamp && (
                           <span className="text-[10px] text-[var(--text-muted)] font-mono">
                             {item.timestamp}
@@ -390,14 +550,12 @@ export function LiveCallView({
                       {/* Bot Bubble */}
                       <div
                         dir={targetLang === 'ar' || /[\u0600-\u06FF]/.test(item.text || '') ? 'rtl' : 'ltr'}
-                        className="max-w-[88%] sm:max-w-[78%] bg-[var(--surface-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-2xl rounded-tl-xs px-3.5 sm:px-4 py-2.5 shadow-md shadow-black/10 text-left"
+                        className="max-w-[88%] sm:max-w-[80%] bg-[var(--surface-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-2xl rounded-tl-xs px-3.5 sm:px-4 py-2.5 shadow-md shadow-black/10 text-left"
                       >
-                        <p className="text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap select-text">
-                          {item.text}
-                          {item.isStreaming && (
-                            <span className="inline-block w-1.5 h-3.5 bg-rose-500 ml-1 animate-pulse align-middle" />
-                          )}
-                        </p>
+                        {renderInterlinearTokens(botTokens, false)}
+                        {item.isStreaming && (
+                          <span className="inline-block w-1.5 h-3.5 bg-rose-500 ml-1 animate-pulse align-middle" />
+                        )}
                       </div>
                     </div>
                   );

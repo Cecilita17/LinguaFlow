@@ -774,7 +774,9 @@ Return STRICTLY valid JSON with no markdown formatting:
                 id: String(l.id),
                 tokens: l.tokens.map(t => {
                   const w = String(t.word || t.text || '').trim();
-                  const aux = isChinese ? (t.auxiliary || t.pinyin || null) : null;
+                  const aux = isChinese
+                    ? (t.auxiliary || t.pinyin || null)
+                    : (isArabic ? (t.auxiliary || t.translit || getArabicTransliteration(w) || null) : null);
                   const gloss = t.gloss ? String(t.gloss).trim() : null;
                   return {
                     word: w,

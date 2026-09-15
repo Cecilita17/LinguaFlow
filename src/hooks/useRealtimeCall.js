@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { getPedagogicalCorrection } from '../services/grammarEngine.js';
+import { tokenizeLiveCallTurn, glossLiveCallTurnAsync } from '../services/liveCallGlossService.js';
+import { isGlossComplete } from '../services/subtitleGlossService.js';
 
 /**
  * Hook for managing OpenAI Realtime API WebRTC voice calls in LinguaFlow.
@@ -22,6 +24,7 @@ export function useRealtimeCall({
   const [errorMessage, setErrorMessage] = useState(null);
   const [liveTranscript, setLiveTranscript] = useState([]);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
+  const [showGlosses, setShowGlosses] = useState(false);
 
   const peerConnectionRef = useRef(null);
   const dataChannelRef = useRef(null);
@@ -31,6 +34,7 @@ export function useRealtimeCall({
 
   const liveTranscriptRef = useRef([]);
   const callDurationSecondsRef = useRef(0);
+  const showGlossesRef = useRef(false);
   const currentAiTurnIdRef = useRef(null);
   const currentAiTurnTextRef = useRef('');
   const pendingUserTurnIdRef = useRef(null);
@@ -43,6 +47,10 @@ export function useRealtimeCall({
   useEffect(() => {
     callDurationSecondsRef.current = callDurationSeconds;
   }, [callDurationSeconds]);
+
+  useEffect(() => {
+    showGlossesRef.current = showGlosses;
+  }, [showGlosses]);
 
   const stopDurationTimer = () => {
     if (durationTimerRef.current) {
@@ -105,6 +113,56 @@ export function useRealtimeCall({
     }
   }, []);
 
+  // Asynchronously request AI word-by-word glosses for a transcript turn
+  const triggerTurnGloss = useCallback((turnId, turnText, currentTokens = []) => {
+    if (!turnText || !turnText.trim()) return;
+    const cleanText = turnText.trim();
+
+    setLiveTranscript((prev) =>
+      prev.map((msg) => (msg.id === turnId ? { ...msg, isGlossing: true } : msg))
+    );
+
+    glossLiveCallTurnAsync({
+      turnId,
+      text: cleanText,
+      tokens: currentTokens,
+      targetLang,
+      nativeLang
+    })
+      .then((glossedTokens) => {
+        if (Array.isArray(glossedTokens) && glossedTokens.length > 0) {
+          setLiveTranscript((prev) =>
+            prev.map((msg) =>
+              msg.id === turnId
+                ? { ...msg, tokens: glossedTokens, isGlossing: false }
+                : msg
+            )
+          );
+        } else {
+          setLiveTranscript((prev) =>
+            prev.map((msg) => (msg.id === turnId ? { ...msg, isGlossing: false } : msg))
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn('[LiveCallGloss] Turn glossing notice:', err);
+        setLiveTranscript((prev) =>
+          prev.map((msg) => (msg.id === turnId ? { ...msg, isGlossing: false } : msg))
+        );
+      });
+  }, [targetLang, nativeLang]);
+
+  // When showGlosses is toggled ON, asynchronously gloss any completed turns in transcript that lack glosses
+  useEffect(() => {
+    if (showGlosses) {
+      liveTranscriptRef.current.forEach((msg) => {
+        if (msg.text && !isGlossComplete(msg, targetLang) && !msg.isGlossing) {
+          triggerTurnGloss(msg.id, msg.text, msg.tokens);
+        }
+      });
+    }
+  }, [showGlosses, targetLang, triggerTurnGloss]);
+
   // Trigger pedagogical correction asynchronously for a user voice turn
   const triggerCorrection = useCallback((userText, turnId) => {
     if (!userText || !userText.trim()) return;
@@ -114,6 +172,12 @@ export function useRealtimeCall({
       .then((correction) => {
         if (correction) {
           const hasErrors = Boolean(correction.has_errors || correction.diff_tokens?.some((t) => t.changed));
+          const corrected = correction.corrected_text || cleanText;
+          const diffTokens = correction.diff_tokens && correction.diff_tokens.length > 0
+            ? correction.diff_tokens
+            : [{ text: cleanText, changed: false, original: null }];
+          const updatedTokens = tokenizeLiveCallTurn(corrected, targetLang, diffTokens);
+
           setLiveTranscript((prev) => {
             let targetIdx = prev.findIndex((msg) => msg.id === turnId);
             if (targetIdx < 0) {
@@ -133,10 +197,9 @@ export function useRealtimeCall({
               updated[targetIdx] = {
                 ...updated[targetIdx],
                 hasCorrection: hasErrors,
-                correctedText: correction.corrected_text || cleanText,
-                diffTokens: correction.diff_tokens && correction.diff_tokens.length > 0
-                  ? correction.diff_tokens
-                  : [{ text: cleanText, changed: false, original: null }],
+                correctedText: corrected,
+                diffTokens,
+                tokens: updatedTokens,
                 originalText: correction.original_text || cleanText,
                 isCorrecting: false
               };
@@ -144,6 +207,10 @@ export function useRealtimeCall({
             }
             return prev;
           });
+
+          if (showGlossesRef.current) {
+            triggerTurnGloss(turnId, corrected, updatedTokens);
+          }
         }
       })
       .catch((err) => {
@@ -156,7 +223,7 @@ export function useRealtimeCall({
           )
         );
       });
-  }, [targetLang, nativeLang, level]);
+  }, [targetLang, nativeLang, level, triggerTurnGloss]);
 
   // Process completed or updated user voice transcript
   const processUserTurn = useCallback((userText, turnId) => {
@@ -164,6 +231,7 @@ export function useRealtimeCall({
     const cleanText = userText.trim();
     const currentId = turnId || pendingUserTurnIdRef.current || `user-${Date.now()}`;
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const initialTokens = tokenizeLiveCallTurn(cleanText, targetLang);
 
     setLiveTranscript((prev) => {
       const existingIdx = prev.findIndex(
@@ -179,6 +247,7 @@ export function useRealtimeCall({
           originalText: cleanText,
           correctedText: cleanText,
           diffTokens: [{ text: cleanText, changed: false, original: null }],
+          tokens: initialTokens,
           isTranscribing: false,
           isCorrecting: true
         };
@@ -193,6 +262,7 @@ export function useRealtimeCall({
         timestamp: timeStr,
         hasCorrection: false,
         diffTokens: [{ text: cleanText, changed: false, original: null }],
+        tokens: initialTokens,
         originalText: cleanText,
         correctedText: cleanText,
         isCorrecting: true,
@@ -208,7 +278,7 @@ export function useRealtimeCall({
     });
 
     triggerCorrection(cleanText, currentId);
-  }, [isSpanish, triggerCorrection]);
+  }, [targetLang, isSpanish, triggerCorrection]);
 
   // Handle incoming OpenAI Realtime Data Channel events
   const handleServerEvent = useCallback((event) => {
@@ -312,6 +382,7 @@ export function useRealtimeCall({
         const currentTurnId = currentAiTurnIdRef.current;
         const currentText = currentAiTurnTextRef.current;
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const streamingTokens = tokenizeLiveCallTurn(currentText, targetLang);
 
         setLiveTranscript((prev) => {
           const index = prev.findIndex((item) => item.id === currentTurnId);
@@ -320,6 +391,7 @@ export function useRealtimeCall({
             updated[index] = {
               ...updated[index],
               text: currentText,
+              tokens: streamingTokens,
               isStreaming: true
             };
             return updated;
@@ -331,6 +403,7 @@ export function useRealtimeCall({
                 sender: 'bot',
                 speaker: 'LinguaFlow AI',
                 text: currentText,
+                tokens: streamingTokens,
                 isStreaming: true,
                 timestamp: timeStr
               }
@@ -346,10 +419,19 @@ export function useRealtimeCall({
       case 'response.done': {
         setCallState('listening');
         const finishedId = currentAiTurnIdRef.current;
-        if (finishedId) {
+        const finishedText = currentAiTurnTextRef.current;
+        if (finishedId && finishedText) {
+          const botFinalTokens = tokenizeLiveCallTurn(finishedText, targetLang);
           setLiveTranscript((prev) =>
-            prev.map((msg) => (msg.id === finishedId ? { ...msg, isStreaming: false } : msg))
+            prev.map((msg) =>
+              msg.id === finishedId
+                ? { ...msg, isStreaming: false, tokens: botFinalTokens }
+                : msg
+            )
           );
+          if (showGlossesRef.current) {
+            triggerTurnGloss(finishedId, finishedText, botFinalTokens);
+          }
         }
         currentAiTurnTextRef.current = '';
         currentAiTurnIdRef.current = null;
@@ -367,7 +449,7 @@ export function useRealtimeCall({
       default:
         break;
     }
-  }, [processUserTurn]);
+  }, [processUserTurn, targetLang, triggerTurnGloss]);
 
   // Start Realtime Call
   const startCall = useCallback(async () => {
@@ -587,6 +669,9 @@ export function useRealtimeCall({
     isMuted,
     errorMessage,
     liveTranscript,
+    showGlosses,
+    setShowGlosses,
+    toggleGlosses: () => setShowGlosses((prev) => !prev),
     callDurationSeconds,
     formattedDuration: formatSeconds(callDurationSeconds),
     startCall,
