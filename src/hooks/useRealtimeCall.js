@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { getPedagogicalCorrection } from '../services/grammarEngine.js';
-import { tokenizeLiveCallTurn, glossLiveCallTurnAsync } from '../services/liveCallGlossService.js';
+import {
+  tokenizeLiveCallTurn,
+  glossLiveCallTurnAsync,
+  extractTurnTransliteration,
+  extractTurnGlosses
+} from '../services/liveCallGlossService.js';
 import { isGlossComplete } from '../services/subtitleGlossService.js';
 
 /**
@@ -651,7 +656,17 @@ export function useRealtimeCall({
       timestamp: Date.now(),
       duration: formattedDuration,
       summary: summaryText,
-      transcript: finalTranscript
+      transcript: finalTranscript.map((msg) => {
+        const tokens = Array.isArray(msg.tokens) ? msg.tokens : [];
+        const transliteration = msg.transliteration || extractTurnTransliteration(tokens, targetLang);
+        const glosses = msg.glosses || extractTurnGlosses(tokens);
+        return {
+          ...msg,
+          tokens,
+          transliteration,
+          glosses
+        };
+      })
     };
 
     return sessionRecord;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ArrowLeft,
   Mic,
@@ -7,17 +7,179 @@ import {
   BookOpen,
   FileText,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Languages
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLanguageMeta } from '../../constants/languages.js';
+import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
+import { PUNCTUATION_REGEX } from '../../services/subtitleGlossService.js';
 
 export function CallDetailView({
   callData,
-  onBack
+  onBack,
+  nativeLang = 'es'
 }) {
   const { t, isSpanish } = useSiteLanguage();
-  const langMeta = getLanguageMeta(callData?.lang || 'es');
+  const targetLang = callData?.lang || 'es';
+  const langMeta = getLanguageMeta(targetLang);
+
+  const isArabic = targetLang === 'ar';
+  const isChinese = targetLang === 'zh';
+  const hasTranslit = isArabic || isChinese;
+  const textDirection = isArabic ? 'rtl' : 'ltr';
+  const isRtl = isArabic;
+
+  // Check if any line in transcript contains glosses to set intelligent initial toggle state
+  const hasAnyGlosses = Boolean(
+    callData?.transcript?.some((line) =>
+      (Array.isArray(line.tokens) && line.tokens.some((t) => Boolean(t.gloss))) ||
+      (Array.isArray(line.glosses) && line.glosses.some(Boolean))
+    )
+  );
+
+  const [showGlosses, setShowGlosses] = useState(hasAnyGlosses);
+
+  // Render 3-tier interlinear tokens for history segment
+  const renderHistoryTokens = (line) => {
+    const isUser = line.sender === 'user';
+    const tokens = Array.isArray(line.tokens) ? line.tokens : [];
+
+    // Fallback for legacy history records without tokenization
+    if (tokens.length === 0) {
+      if (hasTranslit && line.transliteration) {
+        return (
+          <div className="space-y-1">
+            <p dir="ltr" className="text-xs font-mono text-[var(--text-muted)] dark:text-stone-400">
+              {line.transliteration}
+            </p>
+            <p dir={textDirection} className="whitespace-pre-wrap font-medium">
+              {line.text}
+            </p>
+          </div>
+        );
+      }
+      return <p dir={textDirection} className="whitespace-pre-wrap">{line.text}</p>;
+    }
+
+    return (
+      <div
+        dir={textDirection}
+        style={{ direction: textDirection }}
+        className={`flex flex-wrap items-start ${
+          isChinese
+            ? 'gap-x-1 sm:gap-x-1.5 gap-y-2 sm:gap-y-2.5'
+            : 'gap-x-1.5 sm:gap-x-2 gap-y-1.5 sm:gap-y-2'
+        } leading-tight break-words max-w-full ${
+          isRtl ? 'justify-start text-right' : 'justify-start text-left'
+        }`}
+      >
+        {tokens.map((tokenObj, idx) => {
+          if (!tokenObj) return null;
+          const rawWord = typeof tokenObj === 'string'
+            ? tokenObj
+            : (tokenObj.word || tokenObj.text || '');
+          const word = rawWord != null ? String(rawWord).trim() : '';
+          if (!word) return null;
+
+          const isPunctuation = typeof tokenObj === 'object' && typeof tokenObj.isPunctuation === 'boolean'
+            ? tokenObj.isPunctuation
+            : PUNCTUATION_REGEX.test(word);
+
+          // Tier 1 (Transliteration / Pīnyīn): STRICTLY for Arabic ('ar') and Chinese ('zh')
+          const auxiliary = hasTranslit && tokenObj && typeof tokenObj === 'object'
+            ? (tokenObj.auxiliary ?? tokenObj.translit ?? tokenObj.pinyin ?? null)
+            : null;
+
+          // Tier 3 (Word-by-word Gloss):
+          const rawGlossVal = tokenObj && typeof tokenObj === 'object' ? tokenObj.gloss : null;
+          const rawGloss = rawGlossVal != null ? String(rawGlossVal).trim() : null;
+          const wordLower = word.toLowerCase();
+          const rawGlossLower = rawGloss ? rawGloss.toLowerCase() : null;
+          const isLegitSameWord = word === '的' && rawGlossLower === 'de';
+          const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameWord) && rawGlossLower !== wordLower)
+            ? rawGloss
+            : null;
+
+          if (isPunctuation) {
+            return (
+              <span
+                key={idx}
+                dir={textDirection}
+                className={`font-medium select-text self-start isolate [unicode-bidi:isolate] ${
+                  isUser ? 'text-pink-300 dark:text-pink-400' : 'text-stone-400'
+                } ${
+                  isChinese
+                    ? (hasTranslit ? 'text-sm sm:text-base mt-2.5 sm:mt-3' : 'text-sm sm:text-base mt-0.5')
+                    : (hasTranslit ? 'text-base sm:text-lg mt-2.5 sm:mt-3' : 'text-base sm:text-lg mt-0.5')
+                }`}
+              >
+                {word}
+              </span>
+            );
+          }
+
+          const isChanged = Boolean(isUser && tokenObj.changed);
+
+          return (
+            <div
+              key={idx}
+              dir={textDirection}
+              className="inline-flex flex-col items-center justify-start rounded transition-colors group/token max-w-full isolate [unicode-bidi:isolate] px-0.5 sm:px-1 py-0.5"
+            >
+              {/* Tier 1 (TOP): Transliteration for Arabic / Pīnyīn for Chinese ONLY */}
+              {hasTranslit && auxiliary && (
+                <span
+                  dir="ltr"
+                  className={`text-[11px] sm:text-[12px] font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-90 ${
+                    isUser ? 'text-pink-700 dark:text-pink-300' : 'text-[var(--text-muted)] dark:text-stone-400'
+                  }`}
+                >
+                  {auxiliary}
+                </span>
+              )}
+
+              {/* Tier 2 (MIDDLE): Word */}
+              {isChanged ? (
+                <span
+                  className="relative inline-block text-amber-600 dark:text-amber-300 font-extrabold tracking-wide underline decoration-amber-500/70 decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text"
+                  title={tokenObj.original ? `Original: "${tokenObj.original}"` : (isSpanish ? 'Palabra corregida' : 'Corrected word')}
+                >
+                  <span>{word}</span>
+                  {tokenObj.original && (
+                    <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded shadow-lg border border-stone-700 pointer-events-none">
+                      Original: <span className="line-through text-rose-300">{tokenObj.original}</span>
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span
+                  dir={textDirection}
+                  className={`leading-tight select-text font-semibold text-sm sm:text-base ${
+                    isUser
+                      ? 'text-rose-950 dark:text-rose-100'
+                      : 'text-[var(--text-primary)]'
+                  } ${isArabic ? 'font-arabic text-base sm:text-lg' : ''}`}
+                >
+                  {word}
+                </span>
+              )}
+
+              {/* Tier 3 (BOTTOM): Word-by-word Gloss */}
+              {showGlosses && cleanGloss && (
+                <InterlinearGloss
+                  gloss={cleanGloss}
+                  isChinese={isChinese}
+                  nativeLang={nativeLang}
+                  className={isUser ? '!text-rose-700 dark:!text-rose-300/90 text-xs sm:text-sm font-normal' : 'text-xs sm:text-sm'}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)] space-y-6 animate-fade-in">
@@ -74,24 +236,41 @@ export function CallDetailView({
 
       {/* 3. Transcription Section */}
       <div className="p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-4">
-        <h4 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
-          <FileText className="w-4 h-4 text-rose-500" />
-          <span>{t('call_detail_transcript_title')}</span>
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
+            <FileText className="w-4 h-4 text-rose-500" />
+            <span>{t('call_detail_transcript_title')}</span>
+          </h4>
+
+          {/* Glosses Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowGlosses(!showGlosses)}
+            className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border ${
+              showGlosses
+                ? 'bg-rose-500 text-white border-rose-600'
+                : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-hover)]'
+            }`}
+            title={showGlosses ? 'Ocultar glosas palabra por palabra' : 'Mostrar glosas palabra por palabra'}
+          >
+            <Languages className="w-3.5 h-3.5" />
+            <span>{showGlosses ? 'Glosas ON' : 'Glosas OFF'}</span>
+          </button>
+        </div>
 
         {callData?.transcript && callData.transcript.length > 0 ? (
           <div className="space-y-3">
             {callData.transcript.map((line, idx) => (
               <div
                 key={idx}
-                className={`p-3 rounded-2xl text-xs leading-relaxed ${
+                className={`p-3.5 rounded-2xl text-xs leading-relaxed ${
                   line.sender === 'user'
-                    ? 'bg-rose-500/10 border border-rose-500/20 text-[var(--text-primary)] ml-6'
-                    : 'bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] mr-6'
+                    ? 'bg-rose-500/10 border border-rose-500/20 text-[var(--text-primary)] ml-4 sm:ml-6'
+                    : 'bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] mr-4 sm:mr-6'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-[10px] text-rose-600 dark:text-rose-400 block">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-[11px] text-rose-600 dark:text-rose-400 block">
                     {line.sender === 'user' ? (isSpanish ? 'Tú:' : 'You:') : 'LinguaFlow AI:'}
                   </span>
                   {line.sender === 'user' && (
@@ -108,9 +287,13 @@ export function CallDetailView({
                     )
                   )}
                 </div>
-                <p className="whitespace-pre-wrap">{line.text}</p>
+
+                {/* 3-Tier Interlinear Token Presentation */}
+                {renderHistoryTokens(line)}
+
+                {/* Pedagogical Correction summary diff if applicable */}
                 {line.hasCorrection && line.originalText && line.correctedText && line.originalText.toLowerCase().trim() !== line.correctedText.toLowerCase().trim() && (
-                  <div className="mt-2 pt-1.5 border-t border-rose-500/20 text-[11px] space-y-0.5">
+                  <div className="mt-2.5 pt-2 border-t border-rose-500/20 text-[11px] space-y-0.5">
                     <p className="text-[var(--text-muted)]">
                       <span className="font-medium text-rose-500">{isSpanish ? 'Original: ' : 'Original: '}</span>
                       <span className="line-through">{line.originalText}</span>
@@ -131,7 +314,7 @@ export function CallDetailView({
         )}
       </div>
 
-      {/* 4. Learned Vocabulary & Corrections Section (Placeholder Foundation) */}
+      {/* 4. Learned Vocabulary & Corrections Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-3">
           <h4 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">

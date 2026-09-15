@@ -219,3 +219,29 @@ export async function glossLiveCallTurnAsync({
 
   return preparedTokens;
 }
+
+/**
+ * Extract line-level transliteration string from tokens strictly for Arabic & Chinese.
+ * Returns null for any other language.
+ */
+export function extractTurnTransliteration(tokens, targetLang) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return null;
+  const isArabic = targetLang === 'ar';
+  const isChinese = targetLang === 'zh';
+  if (!isArabic && !isChinese) return null;
+
+  const translitParts = tokens
+    .filter(t => !t.isPunctuation)
+    .map(t => t.auxiliary || t.translit || t.pinyin || '')
+    .filter(Boolean);
+
+  return translitParts.length > 0 ? translitParts.join(' ') : null;
+}
+
+/**
+ * Extract glosses array from tokens.
+ */
+export function extractTurnGlosses(tokens) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return [];
+  return tokens.map(t => t.gloss || null);
+}

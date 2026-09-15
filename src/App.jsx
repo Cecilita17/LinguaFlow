@@ -984,6 +984,7 @@ export default function App() {
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
           <CallDetailView
             callData={selectedCallData}
+            nativeLang={nativeLang}
             onBack={() => {
               setSelectedCallData(null);
               setChatViewMode('hub');
