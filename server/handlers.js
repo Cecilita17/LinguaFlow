@@ -7,8 +7,44 @@ import {
 } from './promptTemplates.js';
 import { SUPPORTED_LANGUAGES } from './languageData.js';
 import { processDeterministicLinguistics, processSmartConversation } from './conversationEngine.js';
+import { getArabicTransliteration } from './arabicTransliteration.js';
 
 dotenv.config();
+
+function enrichArabicPayload(data, targetLang) {
+  if (!data || typeof data !== 'object') return data;
+  const isArabic = targetLang === 'ar';
+
+  if (data.user_correction?.diff_tokens && Array.isArray(data.user_correction.diff_tokens)) {
+    data.user_correction.diff_tokens = data.user_correction.diff_tokens.map(token => {
+      if (!token) return token;
+      const text = token.text || '';
+      if ((isArabic || /[\u0600-\u06FF]/.test(text)) && !token.translit) {
+        return {
+          ...token,
+          translit: getArabicTransliteration(text)
+        };
+      }
+      return token;
+    });
+  }
+
+  if (data.bot_response?.tokens && Array.isArray(data.bot_response.tokens)) {
+    data.bot_response.tokens = data.bot_response.tokens.map(token => {
+      if (!token) return token;
+      const text = token.word || token.text || token.clean_word || '';
+      if ((isArabic || /[\u0600-\u06FF]/.test(text)) && !token.translit) {
+        return {
+          ...token,
+          translit: getArabicTransliteration(text)
+        };
+      }
+      return token;
+    });
+  }
+
+  return data;
+}
 
 export function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -192,10 +228,11 @@ export async function handleChat(req, res) {
 
           if (parsedData && parsedData.user_correction && parsedData.bot_response) {
             console.log(`✅ Groq AI answered using [${activeModel}]`);
+            const enrichedData = enrichArabicPayload(parsedData, targetLang);
             return res.status(200).json({
               success: true,
               source: `groq (${activeModel})`,
-              data: parsedData
+              data: enrichedData
             });
           } else {
             groqErrorMessage = `La respuesta de Groq no tuvo el formato JSON esperado: ${rawText.slice(0, 120)}`;

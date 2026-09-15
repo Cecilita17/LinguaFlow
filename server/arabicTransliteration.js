@@ -4,7 +4,7 @@
  * for Modern Standard Arabic (MSA) with full support for tashkeel (diacritics).
  */
 
-import { ARABIC_OFFLINE_DICT } from './languageGlossStrategies.js';
+import { ARABIC_OFFLINE_DICT } from '../src/services/languageGlossStrategies.js';
 
 // Arabic consonant map (ALA-LC / DIN standard inspired)
 const ARABIC_LETTER_MAP = {

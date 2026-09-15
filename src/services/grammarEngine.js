@@ -1,4 +1,5 @@
 import { computeWordDiff } from '../../server/languageData.js';
+import { getArabicTransliteration } from './arabicTransliteration.js';
 
 const LT_LANG_MAP = {
   es: 'es',
@@ -478,7 +479,19 @@ export async function performFullGrammarCorrection(text, targetLang = 'pl', nati
   }
 
   // 6. Compute fine-grained diff tokens with golden highlighting
-  const diffTokens = computeWordDiff(original, corrected);
+  const rawDiffTokens = computeWordDiff(original, corrected);
+  const isArabic = targetLang === 'ar';
+
+  const diffTokens = rawDiffTokens.map(token => {
+    const wordText = token.text || '';
+    if ((isArabic || /[\u0600-\u06FF]/.test(wordText)) && !token.translit) {
+      return {
+        ...token,
+        translit: getArabicTransliteration(wordText)
+      };
+    }
+    return token;
+  });
 
   return {
     original_text: original,

@@ -86,7 +86,7 @@ export function ChatMessage({
 
       if (!baseWord && punctuation) {
         return (
-          <span key={key} className="text-white/90 text-base sm:text-[17px] font-normal select-text">
+          <span key={key} className="text-white/90 text-[17px] sm:text-[18.5px] font-normal select-text">
             {punctuation}
           </span>
         );
@@ -98,7 +98,7 @@ export function ChatMessage({
         <React.Fragment key={key}>
           {showTransliteration && cleanTranslit ? (
             <ruby className="user-ruby mx-0.5 inline-flex flex-col items-center">
-              <rt dir="ltr" className="text-[12px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
+              <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
                 {cleanTranslit}
               </rt>
               <span dir="ltr" className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
@@ -107,7 +107,7 @@ export function ChatMessage({
             <span dir="ltr" className={isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}>{baseWord}</span>
           )}
           {punctuation && (
-            <span className="text-white/90 text-base sm:text-[17px] font-normal select-text">
+            <span className="text-white/90 text-[17px] sm:text-[18.5px] font-normal select-text">
               {punctuation}
             </span>
           )}
@@ -116,11 +116,12 @@ export function ChatMessage({
     }
 
     const isSaved = isWordSaved(word, targetLang);
-    if (showTransliteration && translit) {
+    const effectiveTranslit = translit || ((isArabic || /[\u0600-\u06FF]/.test(word)) ? getArabicTransliteration(word) : null);
+    if (showTransliteration && effectiveTranslit) {
       return (
         <ruby key={key} className="user-ruby mx-0.5 inline-flex flex-col items-center">
-          <rt dir="ltr" className="text-[12px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
-            {translit}
+          <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
+            {effectiveTranslit}
           </rt>
           <span dir={isArabic ? 'rtl' : 'ltr'} className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{word}</span>
         </ruby>
@@ -143,9 +144,22 @@ export function ChatMessage({
 
   const resolveTranslit = (token) => {
     if (!token) return null;
-    if (typeof token === 'string') return null;
-    if (token.translit) return token.translit;
-    if (token.pinyin) return token.pinyin;
+    if (typeof token === 'string') {
+      const cleanStr = token.trim();
+      if (isArabic || targetLang === 'ar' || /[\u0600-\u06FF]/.test(cleanStr)) {
+        return getArabicTransliteration(cleanStr);
+      }
+      return null;
+    }
+    if (token.translit && typeof token.translit === 'string' && token.translit.trim().length > 0) {
+      return token.translit.trim();
+    }
+    if (token.pinyin && typeof token.pinyin === 'string' && token.pinyin.trim().length > 0) {
+      return token.pinyin.trim();
+    }
+    if (token.auxiliary && typeof token.auxiliary === 'string' && token.auxiliary.trim().length > 0) {
+      return token.auxiliary.trim();
+    }
     const wordStr = (token.text || token.word || token.clean_word || '').trim();
     if (targetLang === 'zh') {
       if (PINYIN_LEXICON[wordStr]) return PINYIN_LEXICON[wordStr];
@@ -199,8 +213,8 @@ export function ChatMessage({
             dir={isArabic ? 'rtl' : 'ltr'}
             className={`${
               isArabic
-                ? 'font-arabic text-right text-xl sm:text-2xl leading-loose tracking-normal'
-                : 'text-left text-base sm:text-[17px] leading-relaxed tracking-wide font-normal'
+                ? 'font-arabic text-right text-[22px] sm:text-[26px] leading-loose tracking-normal'
+                : 'text-left text-[17px] sm:text-[18.5px] leading-relaxed tracking-wide font-normal'
             }`}
           >
             {diffTokens && diffTokens.length > 0 ? (
@@ -209,7 +223,7 @@ export function ChatMessage({
                 const cleanWord = rawWord.trim();
                 if (!cleanWord) return null;
                 const needsSpace = !isChinese && idx > 0;
-                const tokenTranslit = resolveTranslit(token);
+                const tokenTranslit = resolveTranslit(token) || ((isArabic || /[\u0600-\u06FF]/.test(cleanWord)) ? getArabicTransliteration(cleanWord) : null);
 
                 if (token.changed) {
                   if (isChinese) {
@@ -224,7 +238,7 @@ export function ChatMessage({
                         >
                           {showTransliteration && cleanTranslit ? (
                             <ruby className="user-ruby inline-flex flex-col items-center">
-                              <rt dir="ltr" className="text-[11px] text-amber-200 font-black leading-tight select-none">
+                              <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] text-amber-200 font-black leading-tight select-none">
                                 {cleanTranslit}
                               </rt>
                               <span>{baseWord}</span>
@@ -239,7 +253,7 @@ export function ChatMessage({
                           )}
                         </span>
                         {punctuation && (
-                          <span className="text-white/90 text-base sm:text-[17px] font-normal select-text">
+                          <span className="text-white/90 text-[17px] sm:text-[18.5px] font-normal select-text">
                             {punctuation}
                           </span>
                         )}
@@ -257,7 +271,7 @@ export function ChatMessage({
                       >
                         {showTransliteration && tokenTranslit ? (
                           <ruby className="user-ruby inline-flex flex-col items-center">
-                            <rt dir="ltr" className="text-[11px] text-amber-200 font-black leading-tight select-none">
+                            <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] text-amber-200 font-black leading-tight select-none">
                               {tokenTranslit}
                             </rt>
                             <span dir={isArabic ? 'rtl' : 'ltr'}>{cleanWord}</span>
@@ -526,8 +540,8 @@ export function ChatMessage({
           dir={isArabic ? 'rtl' : 'ltr'}
           className={`${
             isArabic
-              ? 'font-arabic text-right text-xl sm:text-2xl leading-loose tracking-normal'
-              : 'text-left text-base sm:text-[17px] leading-relaxed tracking-wide font-normal'
+              ? 'font-arabic text-right text-[22px] sm:text-[26px] leading-loose tracking-normal'
+              : 'text-left text-[17px] sm:text-[18.5px] leading-relaxed tracking-wide font-normal'
           } text-stone-900 flex flex-wrap items-baseline gap-x-0.5 gap-y-0.5 break-words [overflow-wrap:anywhere]`}
         >
           {botSegments.map((segment, idx) => {
@@ -544,7 +558,7 @@ export function ChatMessage({
 
             if (segment.type === 'punctuation') {
               return (
-                <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="text-stone-400 px-0.5 select-text">
+                <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="text-stone-400 px-0.5 select-text text-[17px] sm:text-[18.5px]">
                   {segment.text}
                 </span>
               );
@@ -552,7 +566,7 @@ export function ChatMessage({
 
             if (segment.type === 'text') {
               return (
-                <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="select-text">
+                <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="select-text text-[17px] sm:text-[18.5px]">
                   {segment.text}
                 </span>
               );
@@ -580,7 +594,7 @@ export function ChatMessage({
                     >
                       {showTransliteration && cleanTranslit ? (
                         <ruby className="inline-flex flex-col items-center">
-                          <rt dir="ltr" className="text-[11px] sm:text-[12px] text-sky-700 font-bold leading-tight select-none">
+                          <rt dir="ltr" className="text-[12px] sm:text-[13px] text-sky-700 font-bold leading-tight select-none">
                             {cleanTranslit}
                           </rt>
                           <span
@@ -609,7 +623,7 @@ export function ChatMessage({
                     </button>
                   )}
                   {punctuation && (
-                    <span className="text-stone-500 text-base sm:text-[17px] font-normal select-text">
+                    <span className="text-stone-500 text-[17px] sm:text-[18.5px] font-normal select-text">
                       {punctuation}
                     </span>
                   )}
@@ -617,7 +631,7 @@ export function ChatMessage({
               );
             }
 
-            const tokenTranslit = resolveTranslit(tokenObj);
+            const tokenTranslit = resolveTranslit(tokenObj) || ((isArabic || /[\u0600-\u06FF]/.test(wordStr)) ? getArabicTransliteration(wordStr) : null);
             const isSaved = isWordSaved(clean, targetLang) || isWordSaved(wordStr, targetLang);
 
             return (
@@ -631,7 +645,7 @@ export function ChatMessage({
               >
                 {showTransliteration && tokenTranslit ? (
                   <ruby className="inline-flex flex-col items-center">
-                    <rt dir="ltr" className="text-[11px] sm:text-[12px] text-sky-700 font-bold leading-tight select-none">
+                    <rt dir="ltr" className="text-[12px] sm:text-[13px] text-sky-700 font-bold leading-tight select-none">
                       {tokenTranslit}
                     </rt>
                     <span

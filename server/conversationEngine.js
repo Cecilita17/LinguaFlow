@@ -311,6 +311,8 @@ export function translateMixedNativeVocabulary(text, targetLang = 'nl') {
   });
 }
 
+import { getArabicTransliteration } from './arabicTransliteration.js';
+
 /**
  * Deterministic Linguistic Processing (Grammar corrections, code-switching & word-diff)
  * Does NOT generate conversational bot responses. Conversational generation belongs exclusively to Groq AI (openai/gpt-oss-120b).
@@ -337,7 +339,20 @@ export function processDeterministicLinguistics(message, targetLang = 'pl', nati
   }
 
   // 3. Compute fine-grained diff tokens
-  const diffTokens = computeWordDiff(message, correctedText);
+  const rawDiffTokens = computeWordDiff(message, correctedText);
+  const isArabic = targetLang === 'ar';
+
+  // 4. Guarantee Arabic transliteration on every Arabic token
+  const diffTokens = rawDiffTokens.map(token => {
+    const text = token.text || '';
+    if ((isArabic || /[\u0600-\u06FF]/.test(text)) && !token.translit) {
+      return {
+        ...token,
+        translit: getArabicTransliteration(text)
+      };
+    }
+    return token;
+  });
 
   return {
     original_text: message,
@@ -349,12 +364,17 @@ export function processDeterministicLinguistics(message, targetLang = 'pl', nati
 
 export const processSmartConversation = processDeterministicLinguistics;
 
-export function tokenizeSimple(text) {
+export function tokenizeSimple(text, targetLang = '') {
   if (!text) return [];
+  const isArabic = targetLang === 'ar' || /[\u0600-\u06FF]/.test(text);
   const parts = text.split(/(\s+)/);
-  return parts.map(p => ({
-    word: p,
-    clean_word: p.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '').toLowerCase(),
-    translit: null
-  })).filter(t => t.word.trim().length > 0);
+  return parts.map(p => {
+    const cleanWord = p.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '').toLowerCase();
+    const translit = (isArabic && /[\u0600-\u06FF]/.test(p)) ? getArabicTransliteration(p) : null;
+    return {
+      word: p,
+      clean_word: cleanWord,
+      translit
+    };
+  }).filter(t => t.word.trim().length > 0);
 }

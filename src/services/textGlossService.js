@@ -4,7 +4,7 @@
  * 
  * Reuses 100% of the proven linguistic strategies:
  * - Chinese: Multi-character word segmentation via Intl.Segmenter, tone-marked Pinyin exclusively on Tier 1 (auxiliary), gloss below.
- * - Arabic: Preserves diacritics/tashkeel, strictly NO Latin transliteration.
+ * - Arabic: Preserves diacritics/tashkeel with Latin transliteration on Tier 1, gloss below.
  * - Polish: Words with diacritics, strictly NO transliteration.
  * - Russian/Bulgarian/Others: Word units with gloss, strictly NO transliteration.
  * 

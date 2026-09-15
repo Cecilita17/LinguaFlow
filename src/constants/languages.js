@@ -100,7 +100,8 @@ export const LANGUAGE_METADATA = {
     nativeName: 'العربية',
     flag: '🇸🇦',
     speechCode: 'ar-SA',
-    hasTranslit: false,
+    hasTranslit: true,
+    translitName: 'Romanización',
     rtl: true
   },
   pt: {

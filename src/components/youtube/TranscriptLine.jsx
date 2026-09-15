@@ -1,6 +1,7 @@
 import React from 'react';
 import { Volume2, Languages, Loader2 } from 'lucide-react';
 import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
+import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
@@ -160,8 +161,8 @@ export function TranscriptLine({
                   if (!word) return null;
 
                   const rawAux = (isChinese || isArabic) && tokenObj && typeof tokenObj === 'object'
-                    ? (tokenObj.auxiliary ?? tokenObj.translit ?? tokenObj.pinyin ?? null)
-                    : null;
+                    ? (tokenObj.auxiliary ?? tokenObj.translit ?? tokenObj.pinyin ?? (isArabic ? getArabicTransliteration(word) : null))
+                    : (isArabic ? getArabicTransliteration(word) : null);
                   const auxiliary = rawAux != null ? String(rawAux).trim() : null;
 
                   const rawGlossVal = tokenObj && typeof tokenObj === 'object'

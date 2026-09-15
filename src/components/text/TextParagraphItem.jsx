@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Square, Pause, AlertCircle, Languages, Loader2, Headphones } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
+import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
@@ -103,7 +104,9 @@ export function TextParagraphItem({
               {tokens.map((tokenObj, idx) => {
                 const isArabic = targetLang === 'ar';
                 const word = typeof tokenObj === 'string' ? tokenObj : (tokenObj.word || tokenObj.text);
-                const auxiliary = (isChinese || isArabic) ? (tokenObj.auxiliary || tokenObj.translit || tokenObj.pinyin || null) : null;
+                const auxiliary = (isChinese || isArabic)
+                  ? (tokenObj.auxiliary || tokenObj.translit || tokenObj.pinyin || (isArabic && word && !isPunctuation ? getArabicTransliteration(word) : null))
+                  : null;
                 const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : null;
                 const isPunctuation = typeof tokenObj === 'object'
                   ? tokenObj.isPunctuation
