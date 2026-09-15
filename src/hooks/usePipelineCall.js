@@ -439,19 +439,28 @@ export function usePipelineCall({
           playNextInAudioQueue();
         };
 
-        audio.onerror = () => {
+        audio.onerror = (e) => {
+          console.warn('[PipelineTTS] HTML5 Audio playback error:', e);
           URL.revokeObjectURL(audioUrl);
           activeAudioElementRef.current = null;
           isPlayingQueueRef.current = false;
           playNextInAudioQueue();
         };
 
-        await audio.play();
+        try {
+          await audio.play();
+        } catch (playErr) {
+          console.warn('[PipelineTTS] Playback failed: HTML5 audio.play() rejected:', playErr);
+          URL.revokeObjectURL(audioUrl);
+          activeAudioElementRef.current = null;
+          isPlayingQueueRef.current = false;
+          playNextInAudioQueue();
+        }
       }
 
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.warn('[PipelineTTS] Audio playback notice:', err);
+        console.warn('[PipelineTTS] Playback failed: TTS request or decode error:', err);
       }
       isPlayingQueueRef.current = false;
       playNextInAudioQueue();
@@ -725,12 +734,18 @@ export function usePipelineCall({
 
     recognition.onresult = (event) => {
       if (isMutedRef.current) return;
-      sessionMetricsRef.current.transcriptionEvents++;
 
-      // If user starts speaking while AI is speaking, trigger Barge-in!
-      if (callStateRef.current === 'speaking' || callStateRef.current === 'thinking') {
-        interruptAssistant();
+      // When the AI is actively speaking/playing audio, ignore STT feedback to prevent audio cutoffs and speaker echo
+      if (isPlayingQueueRef.current || callStateRef.current === 'speaking') {
+        for (let i = 0; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            consumedFinalIndicesRef.current.add(i);
+          }
+        }
+        return;
       }
+
+      sessionMetricsRef.current.transcriptionEvents++;
 
       // Ensure active unfinalized turn state
       if (!currentTurnRef.current.id || currentTurnRef.current.finalized) {
