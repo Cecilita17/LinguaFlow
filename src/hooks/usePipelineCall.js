@@ -48,6 +48,7 @@ export function usePipelineCall({
   const silenceTimeoutRef = useRef(null);
   const currentTurnRef = useRef({
     id: null,
+    startIndex: 0,
     baseText: '',
     text: '',
     finalized: false
@@ -201,6 +202,7 @@ export function usePipelineCall({
     processedUserTurnIdsRef.current.clear();
     currentTurnRef.current = {
       id: null,
+      startIndex: 0,
       baseText: '',
       text: '',
       finalized: false
@@ -694,20 +696,11 @@ export function usePipelineCall({
         interruptAssistant();
       }
 
-      // Reconstruct total text from the current recognition session's results array
-      let currentSessionText = '';
-      for (let i = 0; i < event.results.length; i++) {
-        const transcript = event.results[i][0]?.transcript || '';
-        if (transcript.trim()) {
-          currentSessionText = (currentSessionText ? currentSessionText + ' ' : '') + transcript.trim();
-        }
-      }
-      currentSessionText = currentSessionText.trim();
-
       // Ensure active unfinalized turn state
       if (!currentTurnRef.current.id || currentTurnRef.current.finalized) {
         currentTurnRef.current = {
           id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          startIndex: event.resultIndex || 0,
           baseText: '',
           text: '',
           finalized: false
@@ -716,6 +709,17 @@ export function usePipelineCall({
 
       const activeTurn = currentTurnRef.current;
       const turnId = activeTurn.id;
+      const startIndex = activeTurn.startIndex || 0;
+
+      // Reconstruct total text strictly from this turn's starting result index onwards
+      let currentSessionText = '';
+      for (let i = startIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0]?.transcript || '';
+        if (transcript.trim()) {
+          currentSessionText = (currentSessionText ? currentSessionText + ' ' : '') + transcript.trim();
+        }
+      }
+      currentSessionText = currentSessionText.trim();
 
       // Deduplicated full turn text
       let fullText = currentSessionText;
@@ -800,9 +804,10 @@ export function usePipelineCall({
     };
 
     recognition.onend = () => {
-      // If recognition ends mid-turn before finalization, keep current accumulated text as baseText
+      // If recognition ends mid-turn before finalization, preserve accumulated text and reset startIndex for the new session
       if (currentTurnRef.current.id && !currentTurnRef.current.finalized) {
         currentTurnRef.current.baseText = currentTurnRef.current.text || '';
+        currentTurnRef.current.startIndex = 0;
       }
 
       // Auto-restart recognition if call is still active
