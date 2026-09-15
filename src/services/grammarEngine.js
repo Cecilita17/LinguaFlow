@@ -1,4 +1,4 @@
-import { computeWordDiff } from '../../server/languageData.js';
+import { computeWordDiff } from './diffUtils.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
 
 const LT_LANG_MAP = {

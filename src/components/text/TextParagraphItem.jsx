@@ -104,13 +104,13 @@ export function TextParagraphItem({
               {tokens.map((tokenObj, idx) => {
                 const isArabic = targetLang === 'ar';
                 const word = typeof tokenObj === 'string' ? tokenObj : (tokenObj.word || tokenObj.text);
+                const isPunctuation = typeof tokenObj === 'object'
+                  ? tokenObj.isPunctuation
+                  : PUNCTUATION_REGEX.test(word);
                 const auxiliary = (isChinese || isArabic)
                   ? (tokenObj.auxiliary || tokenObj.translit || tokenObj.pinyin || (isArabic && word && !isPunctuation ? getArabicTransliteration(word) : null))
                   : null;
                 const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : null;
-                const isPunctuation = typeof tokenObj === 'object'
-                  ? tokenObj.isPunctuation
-                  : PUNCTUATION_REGEX.test(word);
 
                 // Never display auxiliary as gloss or word as gloss (except valid cases like 'de')
                 const isLegitSameWord = word === '的' && rawGloss?.toLowerCase() === 'de';

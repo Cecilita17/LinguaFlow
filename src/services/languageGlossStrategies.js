@@ -9,9 +9,10 @@
 
 export const PUNCTUATION_REGEX = /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]+$/;
 
-// ==========================================
 import { validateChineseAiSegmentation } from './subtitleGlossService.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
+import { ARABIC_OFFLINE_DICT } from './arabicOfflineDict.js';
+export { ARABIC_OFFLINE_DICT };
 
 export function reconcileChineseTokens(originalText, aiTokens) {
   if (!originalText || typeof originalText !== 'string' || !Array.isArray(aiTokens) || aiTokens.length === 0) {
@@ -905,95 +906,8 @@ export const CHINESE_OFFLINE_DICT = {
 
 // ==========================================
 // 2. ARABIC LEXICON (High Frequency & Vowels)
+// (Exported from ./arabicOfflineDict.js to avoid circular dependencies)
 // ==========================================
-export const ARABIC_OFFLINE_DICT = {
-  'مرحبا': { translit: 'marḥaban', gloss: 'hola / bienvenido' },
-  'مَرْحَبًا': { translit: 'marḥaban', gloss: 'hola / bienvenido' },
-  'أهلا': { translit: 'ahlan', gloss: 'hola / bienvenido' },
-  'أَهْلًا': { translit: 'ahlan', gloss: 'hola / bienvenido' },
-  'أهلا وسهلا': { translit: 'ahlan wa sahlan', gloss: 'bienvenido' },
-  'شكرا': { translit: 'shukran', gloss: 'gracias' },
-  'شُكْرًا': { translit: 'shukran', gloss: 'gracias' },
-  'عفوا': { translit: "'afwan", gloss: 'de nada / perdón' },
-  'عَفْوًا': { translit: "'afwan", gloss: 'de nada / perdón' },
-  'كيف': { translit: 'kayfa', gloss: 'cómo' },
-  'كَيْفَ': { translit: 'kayfa', gloss: 'cómo' },
-  'حالك': { translit: 'ḥāluka', gloss: 'tu estado / cómo estás' },
-  'حَالُكَ': { translit: 'ḥāluka', gloss: 'tu estado / cómo estás' },
-  'أنا': { translit: 'anā', gloss: 'yo' },
-  'أَنَا': { translit: 'anā', gloss: 'yo' },
-  'أنت': { translit: 'anta', gloss: 'tú' },
-  'أَنْتَ': { translit: 'anta', gloss: 'tú (masculino)' },
-  'أنتِ': { translit: 'anti', gloss: 'tú (femenino)' },
-  'أَنْتِ': { translit: 'anti', gloss: 'tú (femenino)' },
-  'هو': { translit: 'huwa', gloss: 'él' },
-  'هُوَ': { translit: 'huwa', gloss: 'él' },
-  'هي': { translit: 'hiya', gloss: 'ella' },
-  'هِيَ': { translit: 'hiya', gloss: 'ella' },
-  'نحن': { translit: 'naḥnu', gloss: 'nosotros' },
-  'نَحْنُ': { translit: 'naḥnu', gloss: 'nosotros' },
-  'هم': { translit: 'hum', gloss: 'ellos' },
-  'هُمْ': { translit: 'hum', gloss: 'ellos' },
-  'نعم': { translit: "na'am", gloss: 'sí' },
-  'نَعَمْ': { translit: "na'am", gloss: 'sí' },
-  'لا': { translit: 'lā', gloss: 'no' },
-  'لَا': { translit: 'lā', gloss: 'no' },
-  'ما': { translit: 'mā', gloss: 'qué' },
-  'مَا': { translit: 'mā', gloss: 'qué' },
-  'ماذا': { translit: 'mādhā', gloss: 'qué' },
-  'مَاذَا': { translit: 'mādhā', gloss: 'qué' },
-  'من': { translit: 'min / man', gloss: 'de / quién' },
-  'مَنْ': { translit: 'man', gloss: 'quién' },
-  'مِنْ': { translit: 'min', gloss: 'de / desde' },
-  'أين': { translit: 'ayna', gloss: 'dónde' },
-  'أَيْنَ': { translit: 'ayna', gloss: 'dónde' },
-  'متى': { translit: 'matā', gloss: 'cuándo' },
-  'مَتَى': { translit: 'matā', gloss: 'cuándo' },
-  'لماذا': { translit: 'limādhā', gloss: 'por qué' },
-  'لِمَاذَا': { translit: 'limādhā', gloss: 'por qué' },
-  'في': { translit: 'fī', gloss: 'en' },
-  'فِي': { translit: 'fī', gloss: 'en' },
-  'إلى': { translit: 'ilā', gloss: 'a / hacia' },
-  'إِلَى': { translit: 'ilā', gloss: 'a / hacia' },
-  'على': { translit: "'alā", gloss: 'sobre / en' },
-  'عَلَى': { translit: "'alā", gloss: 'sobre / en' },
-  'مع': { translit: "ma'a", gloss: 'con' },
-  'مَعَ': { translit: "ma'a", gloss: 'con' },
-  'هذا': { translit: 'hādhā', gloss: 'este' },
-  'هَذَا': { translit: 'hādhā', gloss: 'este' },
-  'هذه': { translit: 'hādhihi', gloss: 'esta' },
-  'هَذِهِ': { translit: 'hādhihi', gloss: 'esta' },
-  'اليوم': { translit: 'al-yawm', gloss: 'hoy' },
-  'اليَوْمَ': { translit: 'al-yawm', gloss: 'hoy' },
-  'صباح': { translit: 'ṣabāḥ', gloss: 'mañana' },
-  'صَبَاح': { translit: 'ṣabāḥ', gloss: 'mañana' },
-  'صباح الخير': { translit: 'ṣabāḥ al-khayr', gloss: 'buenos días' },
-  'مساء': { translit: "masā'", gloss: 'tarde / noche' },
-  'مَسَاء': { translit: "masā'", gloss: 'tarde / noche' },
-  'مساء الخير': { translit: "masā' al-khayr", gloss: 'buenas tardes/noches' },
-  'ماء': { translit: "mā'", gloss: 'agua' },
-  'مَاء': { translit: "mā'", gloss: 'agua' },
-  'قهوة': { translit: 'qahwah', gloss: 'café' },
-  'قَهْوَة': { translit: 'qahwah', gloss: 'café' },
-  'شاي': { translit: 'shāy', gloss: 'té' },
-  'شَاي': { translit: 'shāy', gloss: 'té' },
-  'كتاب': { translit: 'kitāb', gloss: 'libro' },
-  'كِتَاب': { translit: 'kitāb', gloss: 'libro' },
-  'بيت': { translit: 'bayt', gloss: 'casa' },
-  'بَيْت': { translit: 'bayt', gloss: 'casa' },
-  'جميل': { translit: 'jamīl', gloss: 'bonito / hermoso' },
-  'جَمِيل': { translit: 'jamīl', gloss: 'bonito / hermoso' },
-  'جيد': { translit: 'jayyid', gloss: 'bien / bueno' },
-  'جَيِّد': { translit: 'jayyid', gloss: 'bien / bueno' },
-  'كبير': { translit: 'kabīr', gloss: 'grande' },
-  'كَبِير': { translit: 'kabīr', gloss: 'grande' },
-  'صغير': { translit: 'ṣaghīr', gloss: 'pequeño' },
-  'صَغِير': { translit: 'ṣaghīr', gloss: 'pequeño' },
-  'أريد': { translit: 'urīdu', gloss: 'quiero' },
-  'أُرِيدُ': { translit: 'urīdu', gloss: 'quiero' },
-  'أعرف': { translit: "a'rifu", gloss: 'sé / conozco' },
-  'أَعْرِفُ': { translit: "a'rifu", gloss: 'sé / conozco' }
-};
 
 // ==========================================
 // 3. POLISH LEXICON (Latin Script, NO Translit)
