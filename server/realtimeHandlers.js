@@ -9,6 +9,7 @@ const LANGUAGE_NAMES = {
   zh: 'Chino Mandarín (Mandarin Chinese)',
   ar: 'Árabe (Arabic)',
   ru: 'Ruso (Russian)',
+  tr: 'Turco (Turkish)',
   nl: 'Neerlandés (Dutch)',
   de: 'Alemán (German)',
   it: 'Italiano (Italian)',

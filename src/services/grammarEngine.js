@@ -10,7 +10,8 @@ const LT_LANG_MAP = {
   ru: 'ru-RU',
   nl: 'nl-NL',
   zh: 'zh-CN',
-  ar: 'ar'
+  ar: 'ar',
+  tr: 'tr-TR'
 };
 
 /**
@@ -18,6 +19,18 @@ const LT_LANG_MAP = {
  * (When the user types in Spanish while practicing another target language)
  */
 const SPANISH_CROSS_CORRECTIONS = {
+  tr: [
+    { regex: /\b(hola|buenas|buen d[ií]a|buenos d[ií]as)\b/gi, replacement: 'Merhaba!', orig: 'hola' },
+    { regex: /\b(c[oó]mo est[aá]s|qu[eé] tal)\b/gi, replacement: 'Nasılsın?', orig: 'cómo estás' },
+    { regex: /\b(tengo sue[nñ]o|tengo sue[nñ]ito)\b/gi, replacement: 'Uykum var', orig: 'tengo sueño' },
+    { regex: /\b(quiero caf[eé]|un caf[eé] por favor)\b/gi, replacement: 'Bir kahve istiyorum, lütfen', orig: 'quiero café' },
+    { regex: /\b(gracias|muchas gracias)\b/gi, replacement: 'Çok teşekkür ederim!', orig: 'gracias' },
+    { regex: /\b(por favor)\b/gi, replacement: 'Lütfen', orig: 'por favor' },
+    { regex: /\b(adi[oó]s|chau|hasta luego)\b/gi, replacement: 'Hoşça kal! / Görüşürüz!', orig: 'adiós' },
+    { regex: /\b(me llamo|mi nombre es)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)/gi, replacement: 'Benim adım $2', orig: 'me llamo' },
+    { regex: /\b(soy de|vengo de)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)/gi, replacement: '$2\'dan geliyorum', orig: 'soy de' },
+    { regex: /\b(no entiendo|no comprendo)\b/gi, replacement: 'Anlamıyorum', orig: 'no entiendo' }
+  ],
   pl: [
     { regex: /\b(hola|buenas|buen d[ií]a|buenos d[ií]as)\b/gi, replacement: 'Cześć!', orig: 'hola' },
     { regex: /\b(c[oó]mo est[aá]s|qu[eé] tal)\b/gi, replacement: 'Jak się masz?', orig: 'cómo estás' },
@@ -137,6 +150,14 @@ export const CODE_SWITCHING_LEXICON = {
     'hoy': 'vandaag', 'today': 'vandaag',
     'mañana': 'morgen', 'tomorrow': 'morgen',
     'ayer': 'gisteren', 'yesterday': 'gisteren'
+  },
+  tr: {
+    'sopa': 'çorba', 'verduras': 'sebze', 'vegetales': 'sebzeler', 'carne': 'et', 'pollo': 'tavuk',
+    'pescado': 'balık', 'arroz': 'pirinç', 'pan': 'ekmek', 'queso': 'peynir', 'huevo': 'yumurta', 'leche': 'süt',
+    'agua': 'su', 'café': 'kahve', 'cafe': 'kahve', 'té': 'çay', 'te': 'çay', 'azúcar': 'şeker',
+    'con': 'ile', 'sin': 'olmadan', 'para': 'için', 'y': 've', 'pero': 'ama',
+    'hacer': 'yapmak', 'cocinar': 'pişirmek', 'comer': 'yemek', 'beber': 'içmek', 'tomar': 'içmek',
+    'casa': 'ev', 'amigo': 'arkadaş', 'libro': 'kitap'
   },
   pl: {
     'sopa': 'zupę', 'verduras': 'warzywa', 'vegetales': 'warzywa', 'carne': 'mięso', 'pollo': 'kurczaka',

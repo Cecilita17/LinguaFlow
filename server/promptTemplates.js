@@ -49,7 +49,7 @@ Your goal is to understand what the user wants, provide helpful responses, and e
      * For Chinese (${targetLang} === 'zh'), you MUST provide accurate Pinyin with tone marks in "translit" for EVERY token (e.g., "text": "你好", "translit": "nǐ hǎo"). Both changed and unchanged tokens MUST include "translit".
      * CRITICAL CHINESE PUNCTUATION RULE: All punctuation marks (，。！？；：) MUST be placed in the Chinese Hanzi text ("text" / "word"), NEVER in the Pinyin ("translit"). The "translit" field MUST contain only clean romanized syllables with tone marks and ZERO punctuation marks. Convert any Western punctuation (, ? ! .) into proper full-width Chinese punctuation (， ？ ！ 。) attached to the Hanzi text.
      * For Arabic (ar) or Russian (ru), provide standard romanization in "translit" for EVERY token.
-     * For Latin-alphabet languages (es, en, nl, pl, de, fr, it), set "translit": null.
+     * For Latin-alphabet languages (es, en, nl, pl, de, fr, it, tr), set "translit": null.
      * For any word that was corrected or translated from ${nativeLang}, set "changed": true and "original": "[student's original word/phrase]".
      * For correct untouched words, set "changed": false and "original": null.
 2. Content-Driven Conversational Reply ("bot_response"):

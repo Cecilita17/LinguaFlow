@@ -57,6 +57,7 @@ export function normalizeEpubLanguage(rawLang) {
   if (clean.startsWith('fr')) return 'fr';
   if (clean.startsWith('it')) return 'it';
   if (clean.startsWith('nl')) return 'nl';
+  if (clean.startsWith('tr') || clean.startsWith('tur')) return 'tr';
   return null;
 }
 

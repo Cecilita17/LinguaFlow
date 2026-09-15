@@ -83,6 +83,32 @@ const COMMON_WORDS_DB = {
     'goed': { pos: 'Adjetivo / Adverbio', lemma: 'goed', meaning: 'bien / bueno', explanation: 'Indica estado positivo o correcto.' },
     'alles': { pos: 'Pronombre indefinido universal', lemma: 'alles', meaning: 'todo', explanation: 'Engloba la totalidad de las cosas.' }
   },
+  tr: {
+    'merhaba': { pos: 'Interjección de saludo', lemma: 'merhaba', meaning: 'hola', explanation: 'Fórmula cordial habitual para saludar en turco.' },
+    'selam': { pos: 'Interjección de saludo informal', lemma: 'selam', meaning: 'hola / saludos', explanation: 'Saludo coloquial y cercano.' },
+    'nasılsın': { pos: 'Pregunta de estado (2ª pers. singular)', lemma: 'nasıl', meaning: '¿cómo estás?', explanation: 'Palabra interrogativa "nasıl" combinada con el sufijo personal de 2.ª persona "-sın".' },
+    'nasıl': { pos: 'Palabra interrogativa (Question word)', lemma: 'nasıl', meaning: 'cómo', explanation: 'Pronombre/adverbio interrogativo de modo.' },
+    'iyiyim': { pos: 'Adjetivo con sufijo personal (1ª persona)', lemma: 'iyi', meaning: 'estoy bien', explanation: 'Raíz "iyi" (bien/bueno) con sufijo personal de 1.ª persona "-yim".' },
+    'iyi': { pos: 'Adjetivo calificativo', lemma: 'iyi', meaning: 'bueno / bien', explanation: 'Indica cualidad positiva o estado correcto.' },
+    'teşekkürler': { pos: 'Fórmula de agradecimiento', lemma: 'teşekkür', meaning: 'gracias', explanation: 'Sustantivo con sufijo de plural para expresar gratitud.' },
+    'lütfen': { pos: 'Interjección de cortesía', lemma: 'lütfen', meaning: 'por favor', explanation: 'Fórmula para solicitar algo educadamente.' },
+    'ben': { pos: 'Pronombre personal (1ª persona singular)', lemma: 'ben', meaning: 'yo', explanation: 'Sujeto de primera persona del singular.' },
+    'sen': { pos: 'Pronombre personal (2ª persona singular)', lemma: 'sen', meaning: 'tú', explanation: 'Segunda persona del singular informal.' },
+    'o': { pos: 'Pronombre personal (3ª persona singular)', lemma: 'o', meaning: 'él / ella / eso', explanation: 'Tercera persona singular (sin distinción de género en turco).' },
+    'biz': { pos: 'Pronombre personal (1ª persona plural)', lemma: 'biz', meaning: 'nosotros', explanation: 'Primera persona del plural.' },
+    'siz': { pos: 'Pronombre personal (2ª persona plural / formal)', lemma: 'siz', meaning: 'ustedes / usted', explanation: 'Segunda persona plural o tratamiento formal singular.' },
+    'onlar': { pos: 'Pronombre personal (3ª persona plural)', lemma: 'onlar', meaning: 'ellos / ellas', explanation: 'Tercera persona plural con sufijo "-lar".' },
+    'istiyorum': { pos: 'Verbo en presente continuo (1ª persona)', lemma: 'istemek', meaning: 'quiero / deseo', explanation: 'Raíz "iste-" + infijo de presente continuo "-iyor-" + marca personal "-um".' },
+    'istiyorsun': { pos: 'Verbo en presente continuo (2ª persona)', lemma: 'istemek', meaning: 'quieres', explanation: '2.ª persona del singular en presente continuo.' },
+    'kahve': { pos: 'Sustantivo común', lemma: 'kahve', meaning: 'café', explanation: 'Bebida aromática obtenida de granos tostados.' },
+    'çay': { pos: 'Sustantivo común', lemma: 'çay', meaning: 'té', explanation: 'Infusión tradicional muy popular en Turquía.' },
+    'su': { pos: 'Sustantivo común', lemma: 'su', meaning: 'agua', explanation: 'Líquido vital indispensable.' },
+    'evet': { pos: 'Adverbio afirmativo', lemma: 'evet', meaning: 'sí', explanation: 'Partícula afirmativa directa.' },
+    'hayır': { pos: 'Adverbio negativo', lemma: 'hayır', meaning: 'no', explanation: 'Partícula negativa directa.' },
+    'var': { pos: 'Predicado existencial afirmativo', lemma: 'var', meaning: 'hay / existe / tengo', explanation: 'Indica existencia o posesión en construcciones turcas.' },
+    'yok': { pos: 'Predicado existencial negativo', lemma: 'yok', meaning: 'no hay / no existe / no tengo', explanation: 'Indica inexistencia o ausencia.' },
+    'çok': { pos: 'Adverbio de cantidad / Adjetivo', lemma: 'çok', meaning: 'mucho / muy', explanation: 'Expresa grado elevado o cantidad.' }
+  },
   pl: {
     'jak': { pos: 'Palabra interrogativa (Question word)', lemma: 'jak', meaning: 'cómo', explanation: 'Adverbio interrogativo de modo ("cómo").' },
     'się': { pos: 'Partícula pronominal reflexiva', lemma: 'się', meaning: 'se / -se', explanation: 'Indica acción recíproca o intransitiva refleja.' },
@@ -282,6 +308,31 @@ function inferLinguisticRole(cleanWord, rawWord, targetLang) {
     }
     if (/t$/.test(cleanWord)) {
       return { pos: 'Werkwoord persoonsvorm (2e/3e persoon)', lemma: cleanWord.slice(0, -1), meaning: cleanWord, pinyin: null, translit: null, explanation: '2.ª o 3.ª persona singular del presente en neerlandés.' };
+    }
+  }
+
+  // Turkish endings
+  if (targetLang === 'tr') {
+    if (/mak$|mek$/.test(cleanWord)) {
+      return { pos: 'Fiil mastarı (Infinitivo turco)', lemma: cleanWord, meaning: cleanWord, pinyin: null, translit: null, explanation: 'Forma canónica de infinitivo del verbo en turco.' };
+    }
+    if (/iyor$|ıyor$|uyor$|üyor$/.test(cleanWord)) {
+      return { pos: 'Şimdiki zaman (Presente continuo)', lemma: cleanWord, meaning: cleanWord, pinyin: null, translit: null, explanation: 'Tiempo presente continuo en desarrollo en turco.' };
+    }
+    if (/ecek$|acak$/.test(cleanWord)) {
+      return { pos: 'Gelecek zaman (Futuro)', lemma: cleanWord, meaning: cleanWord, pinyin: null, translit: null, explanation: 'Tiempo verbal futuro en turco.' };
+    }
+    if (/lar$|ler$/.test(cleanWord)) {
+      return { pos: 'Çoğul eki (Plural nominal)', lemma: cleanWord, meaning: cleanWord, pinyin: null, translit: null, explanation: 'Sufijo de plural en turco que armoniza vocálicamente.' };
+    }
+    if (/dan$|den$|tan$|ten$/.test(cleanWord)) {
+      return { pos: 'Ayrılma durumu (Caso ablativo: de/desde)', lemma: cleanWord, meaning: cleanWord, pinyin: null, translit: null, explanation: 'Caso ablativo que expresa origen o punto de partida.' };
+    }
+    if (/da$|de$|ta$|te$/.test(cleanWord)) {
+      return { pos: 'Bulunma durumu (Caso locativo: en/sobre)', lemma: cleanWord, meaning: cleanWord, pinyin: null, translit: null, explanation: 'Caso locativo que expresa ubicación o tiempo.' };
+    }
+    if (/ım$|im$|um$|üm$/.test(cleanWord)) {
+      return { pos: '1. Tekil şahıs eki (1.ª pers. o posesivo)', lemma: cleanWord, meaning: cleanWord, pinyin: null, translit: null, explanation: 'Sufijo de 1.ª persona singular o sufijo posesivo.' };
     }
   }
 

@@ -11,6 +11,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'fr', name: 'Francés', englishName: 'French', native: 'Français', speechCode: 'fr-FR', hasTranslit: false },
   { code: 'it', name: 'Italiano', englishName: 'Italian', native: 'Italiano', speechCode: 'it-IT', hasTranslit: false },
   { code: 'ar', name: 'Árabe', englishName: 'Arabic', native: 'العربية', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
+  { code: 'tr', name: 'Turco', englishName: 'Turkish', native: 'Türkçe', speechCode: 'tr-TR', hasTranslit: false },
   { code: 'zh', name: 'Chino Mandarín', englishName: 'Mandarin Chinese', native: '中文 (普通话)', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
   { code: 'ru', name: 'Ruso', englishName: 'Russian', native: 'Русский', speechCode: 'ru-RU', hasTranslit: true, translitName: 'Romanización' }
 ];

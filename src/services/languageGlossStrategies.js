@@ -1454,6 +1454,372 @@ export class PolishGlossStrategy {
   }
 }
 
+// ==========================================
+// 4. TURKISH LEXICON (Latin Script, NO Translit)
+// ==========================================
+export const TURKISH_OFFLINE_DICT = {
+  // Greetings & Courtesies
+  'merhaba': { gloss: 'hola' },
+  'selam': { gloss: 'hola / saludos' },
+  'günaydın': { gloss: 'buenos días' },
+  'tünaydın': { gloss: 'buenas tardes' },
+  'akşamlar': { gloss: 'tardes / noches' },
+  'geceler': { gloss: 'noches' },
+  'hoşça': { gloss: 'adiós (pásalo bien)' },
+  'hoşçakal': { gloss: 'adiós' },
+  'kal': { gloss: 'quédate' },
+  'görüşürüz': { gloss: 'nos vemos / hasta la vista' },
+  'teşekkürler': { gloss: 'gracias' },
+  'teşekkür': { gloss: 'agradecimiento' },
+  'ederim': { gloss: 'hago / doy' },
+  'sağol': { gloss: 'gracias' },
+  'lütfen': { gloss: 'por favor' },
+  'rica': { gloss: 'de nada / por favor' },
+  'özür': { gloss: 'disculpa / perdón' },
+  'dilerim': { gloss: 'deseo / pido' },
+  'affedersiniz': { gloss: 'disculpe / perdón' },
+  'afedersiniz': { gloss: 'disculpe' },
+  'hoş': { gloss: 'agradable / bienvenido' },
+  'geldiniz': { gloss: 'bienvenidos' },
+  'bulduk': { gloss: 'gracias (respuesta a bienvenidos)' },
+  'nasılsın': { gloss: 'cómo estás' },
+  'nasılsınız': { gloss: 'cómo está / están' },
+  'iyiyim': { gloss: 'estoy bien' },
+
+  // Question Words & Conjunctions
+  'bir': { gloss: 'un / una / uno' },
+  'ne': { gloss: 'qué' },
+  'nasıl': { gloss: 'cómo' },
+  'kim': { gloss: 'quién' },
+  'nerede': { gloss: 'dónde' },
+  'nereye': { gloss: 'adónde' },
+  'nereden': { gloss: 'de dónde' },
+  'zaman': { gloss: 'tiempo / cuándo' },
+  'neden': { gloss: 'por qué' },
+  'niçin': { gloss: 'por qué / para qué' },
+  'niye': { gloss: 'por qué (coloquial)' },
+  'kaç': { gloss: 'cuánto / cuántos' },
+  'kadar': { gloss: 'hasta / tanto como' },
+  'hangi': { gloss: 'cuál / qué' },
+  'evet': { gloss: 'sí' },
+  'hayır': { gloss: 'no' },
+  'yok': { gloss: 'no hay / no existe' },
+  'var': { gloss: 'hay / existe / tengo' },
+  've': { gloss: 'y' },
+  'veya': { gloss: 'o / u' },
+  'ama': { gloss: 'pero' },
+  'fakat': { gloss: 'pero / sin embargo' },
+  'lakin': { gloss: 'pero' },
+  'çünkü': { gloss: 'porque' },
+  'ile': { gloss: 'con / y' },
+  'için': { gloss: 'para / por' },
+  'gibi': { gloss: 'como / parecido a' },
+  'de': { gloss: 'también / en' },
+  'da': { gloss: 'también / en' },
+  'ki': { gloss: 'que (conjunción)' },
+  'mi': { gloss: '¿acaso? (pregunta)' },
+  'mı': { gloss: '¿acaso? (pregunta)' },
+  'mu': { gloss: '¿acaso? (pregunta)' },
+  'mü': { gloss: '¿acaso? (pregunta)' },
+  'ise': { gloss: 'en cuanto a / si' },
+  'eğer': { gloss: 'si (condicional)' },
+  'diye': { gloss: 'diciendo que / para que' },
+
+  // Pronouns & Demonstratives
+  'ben': { gloss: 'yo' },
+  'sen': { gloss: 'tú' },
+  'o': { gloss: 'él / ella / eso' },
+  'biz': { gloss: 'nosotros' },
+  'siz': { gloss: 'ustedes / vosotros / usted' },
+  'onlar': { gloss: 'ellos / ellas' },
+  'benim': { gloss: 'mi / mío' },
+  'senin': { gloss: 'tu / tuyo' },
+  'onun': { gloss: 'su / suyo' },
+  'bizim': { gloss: 'nuestro' },
+  'sizin': { gloss: 'vuestro / su' },
+  'onların': { gloss: 'su / de ellos' },
+  'bana': { gloss: 'a mí / me' },
+  'sana': { gloss: 'a ti / te' },
+  'ona': { gloss: 'a él / a ella / le' },
+  'bize': { gloss: 'a nosotros / nos' },
+  'size': { gloss: 'a ustedes / os' },
+  'onlara': { gloss: 'a ellos / les' },
+  'beni': { gloss: 'a mí (acusativo)' },
+  'seni': { gloss: 'a ti (acusativo)' },
+  'onu': { gloss: 'a él / a ella / lo / la' },
+  'bizi': { gloss: 'a nosotros (acusativo)' },
+  'sizi': { gloss: 'a ustedes (acusativo)' },
+  'onları': { gloss: 'a ellos / los / las' },
+  'bende': { gloss: 'en mí / conmigo' },
+  'sende': { gloss: 'en ti / contigo' },
+  'onda': { gloss: 'en él / en ella' },
+  'benden': { gloss: 'de mí / desde mí' },
+  'senden': { gloss: 'de ti / desde ti' },
+  'ondan': { gloss: 'de él / de ella' },
+  'bu': { gloss: 'este / esta / esto' },
+  'şu': { gloss: 'ese / esa / eso' },
+  'bunlar': { gloss: 'estos / estas' },
+  'şunlar': { gloss: 'esos / esas' },
+  'burada': { gloss: 'aquí' },
+  'şurada': { gloss: 'ahí' },
+  'orada': { gloss: 'allí' },
+  'buraya': { gloss: 'aquí (dirección)' },
+  'oraya': { gloss: 'allá (dirección)' },
+  'kendi': { gloss: 'propio / sí mismo' },
+  'kendim': { gloss: 'yo mismo' },
+  'kendin': { gloss: 'tú mismo' },
+  'herkes': { gloss: 'todos / todo el mundo' },
+  'hepsi': { gloss: 'todos ellos / todo' },
+  'biri': { gloss: 'alguien / uno de ellos' },
+  'şey': { gloss: 'cosa' },
+  'hiç': { gloss: 'nada / nunca' },
+  'hiçbir': { gloss: 'ningún / ninguno' },
+
+  // Common Adjectives & Adverbs
+  'iyi': { gloss: 'bueno / bien' },
+  'güzel': { gloss: 'bonito / hermoso / bien' },
+  'kötü': { gloss: 'malo' },
+  'büyük': { gloss: 'grande' },
+  'küçük': { gloss: 'pequeño' },
+  'yeni': { gloss: 'nuevo' },
+  'eski': { gloss: 'viejo / antiguo' },
+  'genç': { gloss: 'joven' },
+  'kolay': { gloss: 'fácil' },
+  'zor': { gloss: 'difícil' },
+  'çok': { gloss: 'mucho / muy' },
+  'az': { gloss: 'poco' },
+  'daha': { gloss: 'más / aún' },
+  'en': { gloss: 'el más (superlativo)' },
+  'şimdi': { gloss: 'ahora' },
+  'bugün': { gloss: 'hoy' },
+  'yarın': { gloss: 'mañana' },
+  'dün': { gloss: 'ayer' },
+  'her': { gloss: 'cada' },
+  'biraz': { gloss: 'un poco' },
+  'doğru': { gloss: 'correcto / hacia' },
+  'yanlış': { gloss: 'incorrecto / error' },
+  'mutlu': { gloss: 'feliz' },
+  'üzgün': { gloss: 'triste' },
+  'yorgun': { gloss: 'cansado' },
+  'aç': { gloss: 'hambriento / abre' },
+  'tok': { gloss: 'satisfecho / lleno' },
+  'sıcak': { gloss: 'caliente / cálido' },
+  'soğuk': { gloss: 'frío' },
+  'hızlı': { gloss: 'rápido' },
+  'yavaş': { gloss: 'lento / despacio' },
+  'erken': { gloss: 'temprano' },
+  'geç': { gloss: 'tarde' },
+
+  // Common Nouns
+  'ev': { gloss: 'casa' },
+  'evde': { gloss: 'en casa' },
+  'eve': { gloss: 'a casa' },
+  'iş': { gloss: 'trabajo' },
+  'işte': { gloss: 'en el trabajo' },
+  'insan': { gloss: 'humano / persona' },
+  'insanlar': { gloss: 'personas / gente' },
+  'adam': { gloss: 'hombre' },
+  'kadın': { gloss: 'mujer' },
+  'çocuk': { gloss: 'niño / hijo' },
+  'çocuklar': { gloss: 'niños' },
+  'arkadaş': { gloss: 'amigo' },
+  'arkadaşlar': { gloss: 'amigos' },
+  'kitap': { gloss: 'libro' },
+  'kitabı': { gloss: 'el libro (acusativo)' },
+  'su': { gloss: 'agua' },
+  'suyu': { gloss: 'el agua (acusativo)' },
+  'çay': { gloss: 'té' },
+  'kahve': { gloss: 'café' },
+  'ekmek': { gloss: 'pan / sembrar' },
+  'yemek': { gloss: 'comida / comer' },
+  'zaman': { gloss: 'tiempo' },
+  'gün': { gloss: 'día' },
+  'gece': { gloss: 'noche' },
+  'sabah': { gloss: 'mañana' },
+  'akşam': { gloss: 'tarde / noche' },
+  'hafta': { gloss: 'semana' },
+  'ay': { gloss: 'mes / luna' },
+  'yıl': { gloss: 'año' },
+  'sene': { gloss: 'año' },
+  'para': { gloss: 'dinero' },
+  'şehir': { gloss: 'ciudad' },
+  'ülke': { gloss: 'país' },
+  'dil': { gloss: 'idioma / lengua' },
+  'türkçe': { gloss: 'turco (idioma)' },
+  'ispanyolca': { gloss: 'español (idioma)' },
+  'ingilizce': { gloss: 'inglés (idioma)' },
+  'dünya': { gloss: 'mundo' },
+  'hayat': { gloss: 'vida' },
+  'soru': { gloss: 'pregunta' },
+  'cevap': { gloss: 'respuesta' },
+  'kapı': { gloss: 'puerta' },
+  'araba': { gloss: 'auto / coche' },
+  'yol': { gloss: 'camino / ruta' },
+  'masa': { gloss: 'mesa' },
+  'okul': { gloss: 'escuela' },
+  'ders': { gloss: 'clase / lección' },
+  'hastane': { gloss: 'hospital' },
+  'doktor': { gloss: 'médico / doctor' },
+  'anne': { gloss: 'madre / mamá' },
+  'baba': { gloss: 'padre / papá' },
+  'kardeş': { gloss: 'hermano / hermana' },
+
+  // Common Verbs (Infinitive & Inflected)
+  'olmak': { gloss: 'ser / estar / ocurrir' },
+  'etmek': { gloss: 'hacer' },
+  'yapmak': { gloss: 'hacer' },
+  'gitmek': { gloss: 'ir' },
+  'gelmek': { gloss: 'venir / llegar' },
+  'almak': { gloss: 'tomar / comprar / recibir' },
+  'vermek': { gloss: 'dar' },
+  'istemek': { gloss: 'querer / desear' },
+  'bilmek': { gloss: 'saber / conocer' },
+  'görmek': { gloss: 'ver' },
+  'bakmak': { gloss: 'mirar' },
+  'duymak': { gloss: 'oír / sentir' },
+  'dinlemek': { gloss: 'escuchar' },
+  'konuşmak': { gloss: 'hablar / conversar' },
+  'okumak': { gloss: 'leer / estudiar' },
+  'yazmak': { gloss: 'escribir' },
+  'çalışmak': { gloss: 'trabajar / intentar' },
+  'öğrenmek': { gloss: 'aprender' },
+  'öğretmek': { gloss: 'enseñar' },
+  'anlamak': { gloss: 'entender / comprender' },
+  'içmek': { gloss: 'beber / tomar' },
+  'sevmek': { gloss: 'amar / querer / gustar' },
+  'yaşamak': { gloss: 'vivir' },
+  'bulmak': { gloss: 'encontrar' },
+  'düşünmek': { gloss: 'pensar' },
+  'başlamak': { gloss: 'empezar / comenzar' },
+  'bitmek': { gloss: 'terminar / acabarse' },
+  'oturmak': { gloss: 'sentarse / residir' },
+  'kalkmak': { gloss: 'levantarse' },
+  'uyumak': { gloss: 'dormir' },
+  'uyanmak': { gloss: 'despertarse' },
+  'istiyorum': { gloss: 'quiero' },
+  'istiyorsun': { gloss: 'quieres' },
+  'istiyor': { gloss: 'quiere' },
+  'istiyoruz': { gloss: 'queremos' },
+  'istersin': { gloss: 'quieres (aoristo)' },
+  'isterim': { gloss: 'quisiera / me gustaría' },
+  'biliyorum': { gloss: 'sé' },
+  'bilmiyorum': { gloss: 'no sé' },
+  'anlıyorum': { gloss: 'entiendo' },
+  'anlamıyorum': { gloss: 'no entiendo' },
+  'geliyorum': { gloss: 'vengo / voy de camino' },
+  'gidiyorum': { gloss: 'me voy / voy' },
+  'yapıyorum': { gloss: 'hago / estoy haciendo' },
+  'seviyorum': { gloss: 'amo / me gusta' },
+  'görüyorum': { gloss: 'veo' },
+  'konuşuyorum': { gloss: 'hablo' },
+  'yaparım': { gloss: 'lo hago / haré' },
+  'giderim': { gloss: 'iré / suelo ir' },
+  'gelirim': { gloss: 'iré / vendré' },
+  'olur': { gloss: 'de acuerdo / sucede' },
+  'olmaz': { gloss: 'no es posible / imposible' },
+  'oldu': { gloss: 'sucedió / listo / fue' },
+  'gitti': { gloss: 'se fue' },
+  'geldi': { gloss: 'vino / llegó' },
+  'yaptı': { gloss: 'hizo' },
+  'dedi': { gloss: 'dijo' },
+  'dedim': { gloss: 'dije' },
+  'söyledi': { gloss: 'dijo / expresó' },
+  'yoktur': { gloss: 'no hay (certeza)' },
+  'vardır': { gloss: 'ciertamente hay' }
+};
+
+export class TurkishGlossStrategy {
+  constructor() {
+    this.code = 'tr';
+    this.name = 'Turco';
+    this.hasAuxiliary = false;
+    this.hasTranslit = false;
+    this.requiresTranslit = false;
+    this.translitKey = null;
+    this.offlineDict = TURKISH_OFFLINE_DICT;
+  }
+
+  tokenize(text) {
+    if (!text || typeof text !== 'string') return [];
+    const cleanStr = text.trim();
+    if (!cleanStr) return [];
+
+    try {
+      if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+        const segmenter = new Intl.Segmenter('tr', { granularity: 'word' });
+        const segments = [...segmenter.segment(cleanStr)];
+        const tokens = [];
+        for (const seg of segments) {
+          const w = seg.segment.trim();
+          if (!w) continue;
+          const isPunctuation = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
+          const entry = isPunctuation ? null : this.lookupOffline(w);
+
+          tokens.push({
+            text: w,
+            word: w,
+            auxiliary: null,
+            pinyin: null,
+            translit: null,
+            gloss: isPunctuation ? null : (entry?.gloss || null),
+            isPunctuation
+          });
+        }
+        if (tokens.length > 0) return tokens;
+      }
+    } catch (e) {
+      console.warn('Intl.Segmenter fallback in TurkishGlossStrategy:', e);
+    }
+
+    const parts = cleanStr.split(/([a-zA-ZçğıİöşüÇĞIÖŞÜ]+|[^\sa-zA-ZçğıİöşüÇĞIÖŞÜ]+)/).filter(Boolean);
+    const tokens = [];
+
+    for (const part of parts) {
+      const w = part.trim();
+      if (!w) continue;
+      const isPunctuation = PUNCTUATION_REGEX.test(w);
+      const entry = isPunctuation ? null : this.lookupOffline(w);
+
+      tokens.push({
+        text: w,
+        word: w,
+        auxiliary: null,
+        pinyin: null,
+        translit: null,
+        gloss: isPunctuation ? null : (entry?.gloss || null),
+        isPunctuation
+      });
+    }
+    return tokens;
+  }
+
+  lookupOffline(word) {
+    if (!word) return null;
+    const clean = word.trim().toLocaleLowerCase('tr-TR');
+    if (this.offlineDict[clean]) return this.offlineDict[clean];
+
+    // Strip proper noun apostrophe suffix e.g. "İstanbul'da" -> "İstanbul"
+    if (clean.includes("'")) {
+      const root = clean.split("'")[0];
+      if (this.offlineDict[root]) return this.offlineDict[root];
+    }
+
+    return null;
+  }
+
+  isTokenComplete(token) {
+    if (!token) return false;
+    if (token.isPunctuation) return true;
+    const w = (token.text || token.word || '').trim();
+    if (!w || PUNCTUATION_REGEX.test(w)) return true;
+
+    const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
+    if (token.glossSource === 'manual' && gloss) return true;
+    if (!gloss || gloss.toLocaleLowerCase('tr-TR') === w.toLocaleLowerCase('tr-TR')) return false;
+    return true;
+  }
+}
+
 export class DefaultGlossStrategy {
   constructor(langCode = 'default') {
     this.code = langCode;
@@ -1530,7 +1896,8 @@ export class DefaultGlossStrategy {
 const strategyInstances = {
   zh: new ChineseGlossStrategy(),
   ar: new ArabicGlossStrategy(),
-  pl: new PolishGlossStrategy()
+  pl: new PolishGlossStrategy(),
+  tr: new TurkishGlossStrategy()
 };
 
 /**

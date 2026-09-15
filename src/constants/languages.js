@@ -151,7 +151,8 @@ export const DEFAULT_TARGET_LANGUAGES = [
   LANGUAGE_METADATA.ru,
   LANGUAGE_METADATA.ar,
   LANGUAGE_METADATA.pt,
-  LANGUAGE_METADATA.ja
+  LANGUAGE_METADATA.ja,
+  LANGUAGE_METADATA.tr
 ];
 
 export const NATIVE_LANG_OPTIONS = [
@@ -163,6 +164,7 @@ export const NATIVE_LANG_OPTIONS = [
   { code: 'pl', name: 'Polaco', nativeName: 'Polski', flag: '🇵🇱' },
   { code: 'it', name: 'Italiano', nativeName: 'Italiano', flag: '🇮🇹' },
   { code: 'fr', name: 'Francés', nativeName: 'Français', flag: '🇫🇷' },
+  { code: 'tr', name: 'Turco', nativeName: 'Türkçe', flag: '🇹🇷' },
   { code: 'zh', name: 'Chino Mandarín', nativeName: '中文', flag: '🇨🇳' },
   { code: 'ar', name: 'Árabe', nativeName: 'العربية', flag: '🇸🇦' },
   { code: 'pt', name: 'Portugués', nativeName: 'Português', flag: '🇧🇷' }

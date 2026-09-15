@@ -30,6 +30,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'fr', name: 'Francés', speechCode: 'fr-FR', hasTranslit: false },
   { code: 'it', name: 'Italiano', speechCode: 'it-IT', hasTranslit: false },
   { code: 'ar', name: 'Árabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
+  { code: 'tr', name: 'Turco', speechCode: 'tr-TR', hasTranslit: false },
   { code: 'zh', name: 'Chino Mandarín', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
   { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: true, translitName: 'Romanización' }
 ];
@@ -555,6 +556,33 @@ export default function App() {
         vocabulary: {
           'oefenen': { meaning: 'Practicar o ejercitar', part_of_speech: 'werkwoord' },
           'leuk': { meaning: 'Lindo o agradable', part_of_speech: 'adjectief' }
+        }
+      };
+    } else if (targetLang === 'tr') {
+      initialBotMsg = {
+        id: 'msg-init',
+        sender: 'bot',
+        text: 'Merhaba! Seninle Türkçe pratik yapmaktan çok mutluyum. Bugün ne hakkında konuşmak istersin?',
+        translation: '¡Hola! Me alegro mucho de practicar turco contigo. ¿De qué te gustaría hablar hoy?',
+        tokens: [
+          { word: 'Merhaba!', clean_word: 'merhaba', translit: null },
+          { word: 'Seninle', clean_word: 'seninle', translit: null },
+          { word: 'Türkçe', clean_word: 'türkçe', translit: null },
+          { word: 'pratik', clean_word: 'pratik', translit: null },
+          { word: 'yapmaktan', clean_word: 'yapmaktan', translit: null },
+          { word: 'çok', clean_word: 'çok', translit: null },
+          { word: 'mutluyum.', clean_word: 'mutluyum', translit: null },
+          { word: 'Bugün', clean_word: 'bugün', translit: null },
+          { word: 'ne', clean_word: 'ne', translit: null },
+          { word: 'hakkında', clean_word: 'hakkında', translit: null },
+          { word: 'konuşmak', clean_word: 'konuşmak', translit: null },
+          { word: 'istersin?', clean_word: 'istersin', translit: null }
+        ],
+        vocabulary: {
+          'merhaba': { meaning: 'Hola (saludo cordial)', part_of_speech: 'saludo' },
+          'pratik': { meaning: 'Práctica o ejercicio', part_of_speech: 'sustantivo' },
+          'mutlu': { meaning: 'Feliz o contento', part_of_speech: 'adjetivo' },
+          'konuşmak': { meaning: 'Hablar o conversar', part_of_speech: 'verbo' }
         }
       };
     } else {
