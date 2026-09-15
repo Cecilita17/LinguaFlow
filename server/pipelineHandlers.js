@@ -24,10 +24,11 @@ function parseRequestBody(req) {
 }
 
 const PRIMARY_GROQ_MODEL = 'openai/gpt-oss-120b';
+const GROQ_MODEL_ID_REGEX = /^[a-zA-Z0-9_./-]+$/;
 
-function getSanitizedGroqModel() {
-  const envModel = (process.env.GROQ_MODEL || '').trim();
-  if (envModel && !envModel.includes('llama') && !envModel.includes('gemini') && !envModel.includes('3.3') && !envModel.includes('3.1') && !envModel.includes('8b') && !envModel.includes('70b')) {
+export function getSanitizedGroqModel() {
+  const envModel = (process.env.GROQ_MODEL || '').trim().replace(/^["']|["']$/g, '');
+  if (envModel && GROQ_MODEL_ID_REGEX.test(envModel)) {
     return envModel;
   }
   return PRIMARY_GROQ_MODEL;

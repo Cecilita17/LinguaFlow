@@ -517,6 +517,7 @@ export function usePipelineCall({
               );
 
               // Check for complete sentence chunk
+              sentenceRegex.lastIndex = 0;
               let match;
               let lastIndex = 0;
               while ((match = sentenceRegex.exec(sentenceBuffer)) !== null) {
@@ -528,6 +529,7 @@ export function usePipelineCall({
               }
               if (lastIndex > 0) {
                 sentenceBuffer = sentenceBuffer.slice(lastIndex);
+                sentenceRegex.lastIndex = 0;
               }
             }
           } catch (e) {}
