@@ -373,24 +373,13 @@ export function usePipelineCall({
     }
 
     const nextItem = ttsQueueRef.current.shift();
-    if (!nextItem) return;
+    if (!nextItem || !nextItem.text) return;
 
     isPlayingQueueRef.current = true;
     setCallState('speaking');
 
     try {
-      if (!audioContextRef.current) {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx) {
-          audioContextRef.current = new AudioCtx();
-        }
-      }
-
-      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
-
-      // 1. Fetch audio from /api/pipeline/tts
+      console.log('[PipelineTTS] Request: synthesising text chunk:', nextItem.text.slice(0, 40) + '...');
       ttsAbortControllerRef.current = new AbortController();
       sessionMetricsRef.current.ttsRequests++;
 
@@ -405,34 +394,82 @@ export function usePipelineCall({
         signal: ttsAbortControllerRef.current.signal
       });
 
+      console.log('[PipelineTTS] Response status:', ttsResponse.status);
+      const contentType = ttsResponse.headers.get('content-type') || '';
+      console.log('[PipelineTTS] Content-Type:', contentType);
+
       if (!ttsResponse.ok) {
-        throw new Error('TTS HTTP status: ' + ttsResponse.status);
+        const errBody = await ttsResponse.text();
+        // Parse structured error from backend for better diagnostics
+        let errInfo = errBody;
+        try { errInfo = JSON.parse(errBody); } catch (_) {}
+        console.warn(
+          '[PipelineTTS] ⚠ TTS FAILED. HTTP', ttsResponse.status,
+          '| upstream:', errInfo?.upstream || 'unknown',
+          '| details:', errInfo?.details || errBody
+        );
+        isPlayingQueueRef.current = false;
+        playNextInAudioQueue();
+        return;
       }
 
       const audioBuffer = await ttsResponse.arrayBuffer();
+      console.log('[PipelineTTS] Audio bytes:', audioBuffer ? audioBuffer.byteLength : 0);
 
-      if (audioContextRef.current && audioBuffer.byteLength > 0) {
-        const decodedBuffer = await audioContextRef.current.decodeAudioData(audioBuffer);
-        const sourceNode = audioContextRef.current.createBufferSource();
-        sourceNode.buffer = decodedBuffer;
-        sourceNode.connect(audioContextRef.current.destination);
-        activeAudioSourceRef.current = sourceNode;
+      if (!audioBuffer || audioBuffer.byteLength === 0) {
+        console.warn('[PipelineTTS] Playback failed: TTS returned 0 audio bytes');
+        isPlayingQueueRef.current = false;
+        playNextInAudioQueue();
+        return;
+      }
 
-        sourceNode.onended = () => {
-          activeAudioSourceRef.current = null;
-          isPlayingQueueRef.current = false;
-          playNextInAudioQueue();
-        };
+      // 1. Try Web Audio API playback
+      let webAudioStarted = false;
+      const ctx = audioContextRef.current;
 
-        sourceNode.start(0);
-      } else {
-        // Fallback to HTML5 Audio Element
+      if (ctx) {
+        try {
+          if (ctx.state === 'suspended') {
+            await ctx.resume();
+          }
+          if (ctx.state === 'running') {
+            // Use a slice of the ArrayBuffer so decode failure does not detach the buffer
+            const decodedBuffer = await ctx.decodeAudioData(audioBuffer.slice(0));
+            if (decodedBuffer) {
+              console.log('[PipelineAudio] decodeAudioData success');
+              const sourceNode = ctx.createBufferSource();
+              sourceNode.buffer = decodedBuffer;
+              sourceNode.connect(ctx.destination);
+              activeAudioSourceRef.current = sourceNode;
+
+              sourceNode.onended = () => {
+                console.log('[PipelineAudio] playback ended (Web Audio)');
+                activeAudioSourceRef.current = null;
+                isPlayingQueueRef.current = false;
+                playNextInAudioQueue();
+              };
+
+              sourceNode.start(0);
+              webAudioStarted = true;
+            }
+          }
+        } catch (webAudioErr) {
+          console.warn('[PipelineAudio] decodeAudioData failed, falling back to HTML5 Audio:', webAudioErr);
+        }
+      }
+
+      // 2. Fallback to HTML5 Audio Element if Web Audio was unavailable or failed
+      if (!webAudioStarted) {
+        console.log('[PipelineAudio] HTML5 fallback');
         const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
         const audioUrl = URL.createObjectURL(blob);
-        const audio = new Audio(audioUrl);
+        const audio = new Audio();
+        audio.src = audioUrl;
+        audio.preload = 'auto';
         activeAudioElementRef.current = audio;
 
         audio.onended = () => {
+          console.log('[PipelineAudio] playback ended (HTML5 Audio)');
           URL.revokeObjectURL(audioUrl);
           activeAudioElementRef.current = null;
           isPlayingQueueRef.current = false;
@@ -440,7 +477,9 @@ export function usePipelineCall({
         };
 
         audio.onerror = (e) => {
-          console.warn('[PipelineTTS] HTML5 Audio playback error:', e);
+          const code = audio.error?.code;
+          const message = audio.error?.message;
+          console.warn('[PipelineAudio] audio.play failed / HTML5 error:', { code, message, errorEvent: e });
           URL.revokeObjectURL(audioUrl);
           activeAudioElementRef.current = null;
           isPlayingQueueRef.current = false;
@@ -449,8 +488,14 @@ export function usePipelineCall({
 
         try {
           await audio.play();
+          console.log('[PipelineAudio] audio.play success');
         } catch (playErr) {
-          console.warn('[PipelineTTS] Playback failed: HTML5 audio.play() rejected:', playErr);
+          console.warn('[PipelineAudio] audio.play failed:', {
+            name: playErr.name,
+            message: playErr.message,
+            code: audio.error?.code,
+            mediaErrorMessage: audio.error?.message
+          });
           URL.revokeObjectURL(audioUrl);
           activeAudioElementRef.current = null;
           isPlayingQueueRef.current = false;
@@ -460,7 +505,7 @@ export function usePipelineCall({
 
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.warn('[PipelineTTS] Playback failed: TTS request or decode error:', err);
+        console.warn('[PipelineTTS] Playback failed: Request or playback error:', err);
       }
       isPlayingQueueRef.current = false;
       playNextInAudioQueue();
@@ -874,8 +919,56 @@ export function usePipelineCall({
 
   // Start Pipeline Call
   const startCall = useCallback(async () => {
+    // 1. Immediately create / resume AudioContext synchronously in direct response to user gesture BEFORE any await!
     try {
-      cleanupResources();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx && !audioContextRef.current) {
+        audioContextRef.current = new AudioCtx();
+        console.log('[PipelineAudio] AudioContext created');
+      }
+      if (audioContextRef.current) {
+        console.log('[PipelineAudio] AudioContext state:', audioContextRef.current.state);
+        if (audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume().then(() => {
+            console.log('[PipelineAudio] AudioContext resumed');
+          }).catch((err) => {
+            console.warn('[PipelineAudio] AudioContext resume notice:', err);
+          });
+        }
+      }
+    } catch (audioInitErr) {
+      console.warn('[PipelineAudio] AudioContext initialization notice:', audioInitErr);
+    }
+
+    try {
+      // Clear previous resources without closing the newly unlocked AudioContext
+      stopDurationTimer();
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
+      interruptAssistant();
+      if (recognitionRef.current) {
+        isRecognitionActiveRef.current = false;
+        try {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.abort();
+        } catch (e) {}
+        recognitionRef.current = null;
+      }
+      consumedFinalIndicesRef.current.clear();
+      correctedTurnIdsRef.current.clear();
+      glossedTurnIdsRef.current.clear();
+      processedUserTurnIdsRef.current.clear();
+      currentTurnRef.current = {
+        id: null,
+        confirmedText: '',
+        text: '',
+        finalized: false
+      };
+
       setCallState('connecting');
       setErrorMessage(null);
       setLiveTranscript([]);
@@ -933,7 +1026,7 @@ export function usePipelineCall({
       setCallState('error');
       setErrorMessage(err.message || 'Error desconocido al conectar la llamada.');
     }
-  }, [isSpanish, cleanupResources, initSpeechRecognition]);
+  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant]);
 
   // Toggle Mute / Unmute
   const toggleMute = useCallback(() => {

@@ -182,6 +182,11 @@ CRITICAL SPOKEN CONVERSATION RULES:
 /**
  * Streaming TTS Synthesis Endpoint for Pipeline Calls.
  * Streams OpenAI tts-1 audio chunks directly to the client with low latency.
+ *
+ * Diagnostic logging:
+ *   - Logs whether OPENAI_API_KEY is set, its length, and the first 7 characters.
+ *   - On OpenAI error: logs upstream HTTP status, Content-Type, and full error body.
+ *   - NEVER logs or returns the full API key.
  */
 export async function handlePipelineTTS(req, res) {
   setCorsHeaders(res);
@@ -197,21 +202,45 @@ export async function handlePipelineTTS(req, res) {
 
     const cleanText = (text || '').trim();
     if (!cleanText) {
-      return res.status(400).json({ error: 'El texto a sintetizar no puede estar vacío.' });
-    }
-
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey || !apiKey.trim()) {
       return res.status(400).json({
-        error: 'Falta OPENAI_API_KEY en el servidor para síntesis TTS.'
+        error: 'El texto a sintetizar no puede estar vacío.',
+        upstream: 'self',
+        status: 400,
+        details: 'Empty text'
       });
     }
 
-    // Call OpenAI TTS-1 API
+    // ── Key diagnostics (safe: never log full key) ──────────────────────
+    const rawKey = process.env.OPENAI_API_KEY;
+    const trimmedKey = (rawKey || '').trim();
+    const hasKey = trimmedKey.length > 0;
+    const keyLen = trimmedKey.length;
+    const keyPrefix = hasKey ? trimmedKey.slice(0, 7) : '(none)';
+
+    console.log(
+      '[BackendPipelineTTS] Request received.',
+      'Text length:', cleanText.length,
+      'Voice:', voice,
+      'Has OPENAI_API_KEY:', hasKey,
+      'Key length:', keyLen,
+      'Key prefix:', keyPrefix
+    );
+
+    if (!hasKey) {
+      console.warn('[BackendPipelineTTS] OPENAI_API_KEY is MISSING or EMPTY in process.env');
+      return res.status(500).json({
+        error: 'Falta OPENAI_API_KEY en el servidor para síntesis TTS.',
+        upstream: 'self',
+        status: 500,
+        details: 'OPENAI_API_KEY environment variable is not set on the server.'
+      });
+    }
+
+    // ── Call OpenAI TTS-1 API ───────────────────────────────────────────
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey.trim()}`,
+        'Authorization': `Bearer ${trimmedKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -223,22 +252,58 @@ export async function handlePipelineTTS(req, res) {
       })
     });
 
+    const upstreamContentType = response.headers.get('content-type') || '';
+
+    console.log(
+      '[BackendPipelineTTS] OpenAI response:',
+      'HTTP', response.status,
+      'Content-Type:', upstreamContentType
+    );
+
     if (!response.ok) {
+      // Read full error body for server-side diagnostics
       const errText = await response.text();
-      console.warn('OpenAI TTS error HTTP', response.status, errText);
-      return res.status(response.status).json({ error: 'Error al sintetizar voz', details: errText });
+      console.warn(
+        '[BackendPipelineTTS] ⚠ OpenAI TTS REJECTED.',
+        'HTTP status:', response.status,
+        'Content-Type:', upstreamContentType,
+        'Error body:', errText,
+        '| Key info — present:', hasKey, 'len:', keyLen, 'prefix:', keyPrefix
+      );
+
+      // Parse error JSON if possible for richer details
+      let parsedDetails = errText;
+      try {
+        const parsed = JSON.parse(errText);
+        parsedDetails = parsed.error?.message || parsed.error || errText;
+      } catch (_) { /* keep raw text */ }
+
+      return res.status(response.status).json({
+        error: 'Error al sintetizar voz (upstream OpenAI)',
+        upstream: 'openai',
+        status: response.status,
+        details: parsedDetails
+      });
     }
 
-    // Stream audio buffer directly to client
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'no-cache');
-
+    // ── Stream audio buffer directly to client ──────────────────────────
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    console.log('[BackendPipelineTTS] ✓ Audio generated OK. Bytes:', buffer.length);
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'no-cache');
     res.end(buffer);
 
   } catch (err) {
-    console.error('Server error in /api/pipeline/tts:', err);
-    res.status(500).json({ error: 'Error interno en síntesis TTS' });
+    console.error('[BackendPipelineTTS] Server error in /api/pipeline/tts:', err);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'Error interno en síntesis TTS',
+        upstream: 'self',
+        status: 500,
+        details: err.message
+      });
+    }
   }
 }
