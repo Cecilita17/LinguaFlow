@@ -181,13 +181,19 @@ CRITICAL SPOKEN CONVERSATION RULES:
 
 /**
  * Streaming TTS Synthesis Endpoint for Pipeline Calls.
- * Streams OpenAI tts-1 audio chunks directly to the client with low latency.
+ * Streams OpenAI audio chunks directly to the client with low latency.
+ *
+ * TTS Model selection:
+ *   - Uses process.env.OPENAI_TTS_MODEL if set (e.g. 'tts-1', 'tts-1-hd', 'gpt-4o-mini-tts').
+ *   - Falls back to 'gpt-4o-mini-tts' (the current recommended model for /v1/audio/speech).
  *
  * Diagnostic logging:
- *   - Logs whether OPENAI_API_KEY is set, its length, and the first 7 characters.
- *   - On OpenAI error: logs upstream HTTP status, Content-Type, and full error body.
+ *   - Logs the TTS model used, whether OPENAI_API_KEY is set, its length, and first 7 characters.
+ *   - On OpenAI error: logs upstream HTTP status, Content-Type, model used, and full error body.
  *   - NEVER logs or returns the full API key.
  */
+const DEFAULT_TTS_MODEL = 'gpt-4o-mini-tts';
+
 export async function handlePipelineTTS(req, res) {
   setCorsHeaders(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -210,6 +216,10 @@ export async function handlePipelineTTS(req, res) {
       });
     }
 
+    // ── TTS Model selection ─────────────────────────────────────────────
+    const envModel = (process.env.OPENAI_TTS_MODEL || '').trim();
+    const ttsModel = envModel || DEFAULT_TTS_MODEL;
+
     // ── Key diagnostics (safe: never log full key) ──────────────────────
     const rawKey = process.env.OPENAI_API_KEY;
     const trimmedKey = (rawKey || '').trim();
@@ -221,6 +231,8 @@ export async function handlePipelineTTS(req, res) {
       '[BackendPipelineTTS] Request received.',
       'Text length:', cleanText.length,
       'Voice:', voice,
+      'TTS model:', ttsModel,
+      'Model source:', envModel ? 'OPENAI_TTS_MODEL env' : 'default',
       'Has OPENAI_API_KEY:', hasKey,
       'Key length:', keyLen,
       'Key prefix:', keyPrefix
@@ -236,7 +248,7 @@ export async function handlePipelineTTS(req, res) {
       });
     }
 
-    // ── Call OpenAI TTS-1 API ───────────────────────────────────────────
+    // ── Call OpenAI TTS API ─────────────────────────────────────────────
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: {
@@ -244,7 +256,7 @@ export async function handlePipelineTTS(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'tts-1',
+        model: ttsModel,
         voice: voice || 'alloy',
         input: cleanText,
         response_format: 'mp3',
@@ -257,7 +269,8 @@ export async function handlePipelineTTS(req, res) {
     console.log(
       '[BackendPipelineTTS] OpenAI response:',
       'HTTP', response.status,
-      'Content-Type:', upstreamContentType
+      'Content-Type:', upstreamContentType,
+      'Model used:', ttsModel
     );
 
     if (!response.ok) {
@@ -267,6 +280,7 @@ export async function handlePipelineTTS(req, res) {
         '[BackendPipelineTTS] ⚠ OpenAI TTS REJECTED.',
         'HTTP status:', response.status,
         'Content-Type:', upstreamContentType,
+        'Model used:', ttsModel,
         'Error body:', errText,
         '| Key info — present:', hasKey, 'len:', keyLen, 'prefix:', keyPrefix
       );
@@ -279,9 +293,10 @@ export async function handlePipelineTTS(req, res) {
       } catch (_) { /* keep raw text */ }
 
       return res.status(response.status).json({
-        error: 'Error al sintetizar voz (upstream OpenAI)',
+        error: `Error al sintetizar voz (upstream OpenAI, model: ${ttsModel})`,
         upstream: 'openai',
         status: response.status,
+        model: ttsModel,
         details: parsedDetails
       });
     }
@@ -289,7 +304,7 @@ export async function handlePipelineTTS(req, res) {
     // ── Stream audio buffer directly to client ──────────────────────────
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    console.log('[BackendPipelineTTS] ✓ Audio generated OK. Bytes:', buffer.length);
+    console.log('[BackendPipelineTTS] ✓ Audio generated OK. Bytes:', buffer.length, 'Model:', ttsModel);
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-cache');
