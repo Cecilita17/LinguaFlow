@@ -31,6 +31,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { SiteLanguageToggle } from '../components/SiteLanguageToggle.jsx';
 import { AccountSettingsView } from '../components/settings/AccountSettingsView.jsx';
+import { GoogleDriveBackupSection } from '../components/settings/GoogleDriveBackupSection.jsx';
 import { NATIVE_LANG_OPTIONS } from '../constants/languages.js';
 
 export function SettingsPage({
@@ -222,6 +223,9 @@ export function SettingsPage({
             </div>
           </button>
         </div>
+
+        {/* SECTION 0.5: GOOGLE DRIVE BACKUP & RESTORE */}
+        <GoogleDriveBackupSection onNavigateToAccount={() => setActiveSubView('account')} />
 
         {/* SECTION 1: IDIOMA Y TEMA */}
         <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
