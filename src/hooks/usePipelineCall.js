@@ -10,6 +10,42 @@ import { isGlossComplete } from '../services/subtitleGlossService.js';
 import { cleanDuplicatePhrases } from './useSpeech.js';
 
 /**
+ * Deterministically merges newly recognized turn text with existing confirmed text,
+ * handling full prefix re-emissions and boundary word overlaps gracefully.
+ */
+function mergeTurnText(confirmed, incoming) {
+  if (!confirmed) return incoming || '';
+  if (!incoming) return confirmed || '';
+  const conf = confirmed.trim();
+  const inc = incoming.trim();
+  if (!conf) return inc;
+  if (!inc) return conf;
+
+  // If incoming already includes confirmed as prefix, use incoming
+  if (inc.toLowerCase().startsWith(conf.toLowerCase())) {
+    return inc;
+  }
+  // If confirmed already includes incoming as suffix, use confirmed
+  if (conf.toLowerCase().endsWith(inc.toLowerCase())) {
+    return conf;
+  }
+
+  // Check for word-level overlap at boundary (suffix of conf matching prefix of inc)
+  const confWords = conf.split(/\s+/);
+  const incWords = inc.split(/\s+/);
+  const maxOverlap = Math.min(confWords.length, incWords.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    const confSuffix = confWords.slice(-overlap).join(' ').toLowerCase();
+    const incPrefix = incWords.slice(0, overlap).join(' ').toLowerCase();
+    if (confSuffix === incPrefix) {
+      return `${conf} ${incWords.slice(overlap).join(' ')}`.trim();
+    }
+  }
+
+  return `${conf} ${inc}`.trim();
+}
+
+/**
  * Hook for managing Low-Cost Live Voice Calls (Pipeline Architecture) in LinguaFlow.
  * Flow:
  * - Client Microphone + Live STT (Streaming Speech Recognition + Auto-VAD)
@@ -46,10 +82,10 @@ export function usePipelineCall({
   const recognitionRef = useRef(null);
   const isRecognitionActiveRef = useRef(false);
   const silenceTimeoutRef = useRef(null);
+  const consumedFinalIndicesRef = useRef(new Set());
   const currentTurnRef = useRef({
     id: null,
-    startIndex: 0,
-    baseText: '',
+    confirmedText: '',
     text: '',
     finalized: false
   });
@@ -197,13 +233,13 @@ export function usePipelineCall({
     }
 
     // Clear deduplication caches & turn state
+    consumedFinalIndicesRef.current.clear();
     correctedTurnIdsRef.current.clear();
     glossedTurnIdsRef.current.clear();
     processedUserTurnIdsRef.current.clear();
     currentTurnRef.current = {
       id: null,
-      startIndex: 0,
-      baseText: '',
+      confirmedText: '',
       text: '',
       finalized: false
     };
@@ -602,11 +638,11 @@ export function usePipelineCall({
     processedUserTurnIdsRef.current.add(currentId);
     sessionMetricsRef.current.userTurns++;
 
-    // 2. Mark active turn as finalized and reset baseText
+    // 2. Mark active turn as finalized
     if (activeTurn.id === currentId) {
       activeTurn.finalized = true;
       activeTurn.text = cleanText;
-      activeTurn.baseText = '';
+      activeTurn.confirmedText = cleanText;
     }
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
@@ -700,8 +736,7 @@ export function usePipelineCall({
       if (!currentTurnRef.current.id || currentTurnRef.current.finalized) {
         currentTurnRef.current = {
           id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          startIndex: event.resultIndex || 0,
-          baseText: '',
+          confirmedText: '',
           text: '',
           finalized: false
         };
@@ -709,33 +744,37 @@ export function usePipelineCall({
 
       const activeTurn = currentTurnRef.current;
       const turnId = activeTurn.id;
-      const startIndex = activeTurn.startIndex || 0;
 
-      // Reconstruct total text strictly from this turn's starting result index onwards
-      let currentSessionText = '';
-      for (let i = startIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0]?.transcript || '';
-        if (transcript.trim()) {
-          currentSessionText = (currentSessionText ? currentSessionText + ' ' : '') + transcript.trim();
-        }
-      }
-      currentSessionText = currentSessionText.trim();
+      // Process event results: consume newly confirmed final items, compute latest interim
+      let sessionInterim = '';
+      for (let i = 0; i < event.results.length; i++) {
+        const resultItem = event.results[i];
+        const transcript = resultItem[0]?.transcript?.trim() || '';
+        if (!transcript) continue;
 
-      // Deduplicated full turn text
-      let fullText = currentSessionText;
-      const base = activeTurn.baseText;
-      if (base) {
-        if (currentSessionText.toLowerCase().startsWith(base.toLowerCase())) {
-          fullText = currentSessionText;
+        if (resultItem.isFinal) {
+          if (!consumedFinalIndicesRef.current.has(i)) {
+            consumedFinalIndicesRef.current.add(i);
+            activeTurn.confirmedText = mergeTurnText(activeTurn.confirmedText, transcript);
+          }
         } else {
-          fullText = `${base} ${currentSessionText}`.trim();
+          sessionInterim = (sessionInterim ? sessionInterim + ' ' : '') + transcript;
         }
       }
 
-      activeTurn.text = fullText;
-      if (!fullText) return;
+      sessionInterim = sessionInterim.trim();
 
-      const previewTokens = tokenizeLiveCallTurn(fullText, targetLang);
+      // Full active turn text is confirmed base merged with current interim
+      let fullTurnText = activeTurn.confirmedText;
+      if (sessionInterim) {
+        fullTurnText = mergeTurnText(activeTurn.confirmedText, sessionInterim);
+      }
+      fullTurnText = fullTurnText.trim();
+
+      activeTurn.text = fullTurnText;
+      if (!fullTurnText) return;
+
+      const previewTokens = tokenizeLiveCallTurn(fullTurnText, targetLang);
 
       setLiveTranscript((prev) => {
         // 1. Find active user bubble by ID
@@ -744,7 +783,7 @@ export function usePipelineCall({
           const updated = [...prev];
           updated[existingIdx] = {
             ...updated[existingIdx],
-            text: fullText,
+            text: fullTurnText,
             tokens: previewTokens,
             isTranscribing: true
           };
@@ -758,7 +797,7 @@ export function usePipelineCall({
           updated[lastIdx] = {
             ...updated[lastIdx],
             id: turnId,
-            text: fullText,
+            text: fullTurnText,
             tokens: previewTokens,
             isTranscribing: true
           };
@@ -772,7 +811,7 @@ export function usePipelineCall({
             id: turnId,
             sender: 'user',
             speaker: isSpanish ? 'Tú' : 'You',
-            text: fullText,
+            text: fullTurnText,
             tokens: previewTokens,
             isTranscribing: true,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -789,7 +828,7 @@ export function usePipelineCall({
       const capturedTurnId = turnId;
       silenceTimeoutRef.current = setTimeout(() => {
         if (currentTurnRef.current.id === capturedTurnId && !currentTurnRef.current.finalized) {
-          const textToFinalize = currentTurnRef.current.text || fullText;
+          const textToFinalize = currentTurnRef.current.text || fullTurnText;
           if (textToFinalize && textToFinalize.trim()) {
             finalizeUserSpeechTurn(textToFinalize.trim(), capturedTurnId);
           }
@@ -804,11 +843,8 @@ export function usePipelineCall({
     };
 
     recognition.onend = () => {
-      // If recognition ends mid-turn before finalization, preserve accumulated text and reset startIndex for the new session
-      if (currentTurnRef.current.id && !currentTurnRef.current.finalized) {
-        currentTurnRef.current.baseText = currentTurnRef.current.text || '';
-        currentTurnRef.current.startIndex = 0;
-      }
+      // In a new recognition session, event.results indices start from 0 again
+      consumedFinalIndicesRef.current.clear();
 
       // Auto-restart recognition if call is still active
       if (isRecognitionActiveRef.current) {
