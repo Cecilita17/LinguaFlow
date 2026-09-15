@@ -311,7 +311,7 @@ export function useRealtimeCall({
       await pc.setLocalDescription(offer);
 
       // 8. Connect to OpenAI Realtime WebRTC endpoint with ephemeral token
-      const model = 'gpt-4o-realtime-preview-2024-12-17';
+      const model = 'gpt-4o-realtime-preview';
       const sdpResponse = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
         method: 'POST',
         body: offer.sdp,

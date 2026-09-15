@@ -58,8 +58,7 @@ export async function handleRealtimeSession(req, res) {
     const {
       targetLang = 'es',
       nativeLang = 'es',
-      level = 'A2/B1',
-      voice = 'alloy'
+      level = 'A2/B1'
     } = parseRequestBody(req);
 
     const targetLangName = LANGUAGE_NAMES[targetLang] || targetLang;
@@ -82,9 +81,9 @@ Key Conversational Rules:
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-realtime-preview-2024-12-17',
+        model: 'gpt-4o-realtime-preview',
         modalities: ['audio', 'text'],
-        voice: voice || 'alloy',
+        voice: 'cedar',
         instructions: pedagogicalInstructions,
         turn_detection: {
           type: 'server_vad',
