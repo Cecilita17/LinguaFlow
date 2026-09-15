@@ -509,11 +509,11 @@ export async function reanalyzeGrammarStrictly(text, targetLang = 'pl', nativeLa
 }
 
 /**
- * Master pedagogical correction helper for live speech turns.
- * First queries the LinguaFlow chat backend (/api/chat) for full contextual LLM correction (Groq).
- * If unavailable or times out, seamlessly falls back to the deterministic grammar engine.
+ * Specialized pedagogical correction helper for Live Calls.
+ * Queries the dedicated, lightweight /api/pedagogical-correct endpoint (Groq openai/gpt-oss-120b).
+ * If unavailable or times out, seamlessly falls back to LanguageTool + deterministic grammar engine.
  */
-export async function getPedagogicalCorrection(text, targetLang = 'en', nativeLang = 'es', level = 'A2/B1') {
+export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', nativeLang = 'es', level = 'A2/B1') {
   const clean = (text || '').trim();
   if (!clean) {
     return {
@@ -524,16 +524,16 @@ export async function getPedagogicalCorrection(text, targetLang = 'en', nativeLa
     };
   }
 
-  // 1. Attempt LLM-based pedagogical correction via /api/chat
+  // 1. Attempt lightweight pedagogical correction via dedicated /api/pedagogical-correct
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-    const res = await fetch('/api/chat', {
+    const res = await fetch('/api/pedagogical-correct', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: clean,
+        text: clean,
         targetLang,
         nativeLang,
         level
@@ -545,13 +545,18 @@ export async function getPedagogicalCorrection(text, targetLang = 'en', nativeLa
 
     if (res.ok) {
       const json = await res.json();
-      const cor = json?.data?.user_correction || json?.user_correction;
-      if (cor && (cor.corrected_text || cor.diff_tokens)) {
+      const cor = json?.data || json?.user_correction;
+      if (cor && (cor.corrected_text !== undefined || cor.diff_tokens)) {
+        const corrected = cor.corrected_text || clean;
+        const diffTokens = cor.diff_tokens && cor.diff_tokens.length > 0
+          ? cor.diff_tokens
+          : computeWordDiff(clean, corrected);
+
         return {
           original_text: cor.original_text || clean,
-          corrected_text: cor.corrected_text || clean,
-          has_errors: Boolean(cor.has_errors || cor.diff_tokens?.some((t) => t.changed)),
-          diff_tokens: cor.diff_tokens || computeWordDiff(clean, cor.corrected_text || clean)
+          corrected_text: corrected,
+          has_errors: Boolean(cor.has_errors || diffTokens.some((t) => t.changed) || corrected.toLowerCase() !== clean.toLowerCase()),
+          diff_tokens: diffTokens
         };
       }
     }
@@ -561,4 +566,12 @@ export async function getPedagogicalCorrection(text, targetLang = 'en', nativeLa
 
   // 2. Deterministic linguistic rules & LanguageTool fallback
   return performFullGrammarCorrection(clean, targetLang, nativeLang);
+}
+
+/**
+ * Master pedagogical correction helper.
+ * Delegates to getLiveCallPedagogicalCorrection with guaranteed fallback.
+ */
+export async function getPedagogicalCorrection(text, targetLang = 'en', nativeLang = 'es', level = 'A2/B1') {
+  return getLiveCallPedagogicalCorrection(text, targetLang, nativeLang, level);
 }

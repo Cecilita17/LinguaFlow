@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { getPedagogicalCorrection } from '../services/grammarEngine.js';
+import { getLiveCallPedagogicalCorrection } from '../services/grammarEngine.js';
 import {
   tokenizeLiveCallTurn,
   glossLiveCallTurnAsync,
@@ -16,6 +16,8 @@ import { isGlossComplete } from '../services/subtitleGlossService.js';
  * - Server VAD with natural user interruptions
  * - Live bidirectional transcription
  * - Mute / Unmute audio track control
+ * - Deduplicated pedagogical grammar correction per turn
+ * - Internal session usage & cost instrumentation
  * - Clean WebRTC teardown and session summarization
  */
 export function useRealtimeCall({
@@ -43,6 +45,27 @@ export function useRealtimeCall({
   const currentAiTurnIdRef = useRef(null);
   const currentAiTurnTextRef = useRef('');
   const pendingUserTurnIdRef = useRef(null);
+
+  // Session-scoped Deduplication Sets (cleared on teardown/session start)
+  const correctedTurnIdsRef = useRef(new Set());
+  const glossedTurnIdsRef = useRef(new Set());
+  const processedUserTurnIdsRef = useRef(new Set());
+
+  // Internal Session Usage Metrics Instrumentation
+  const sessionMetricsRef = useRef({
+    sessionId: null,
+    startedAt: null,
+    endedAt: null,
+    durationSeconds: 0,
+    userTurns: 0,
+    assistantTurns: 0,
+    correctionRequests: 0,
+    correctionSuccesses: 0,
+    correctionFailures: 0,
+    duplicateCorrectionAttempts: 0,
+    transcriptionEvents: 0,
+    glossRequests: 0
+  });
 
   // Keep refs in sync with state for access inside event handlers
   useEffect(() => {
@@ -81,6 +104,11 @@ export function useRealtimeCall({
   // Teardown WebRTC and hardware audio resources
   const cleanupResources = useCallback(() => {
     stopDurationTimer();
+
+    // Clear deduplication caches to avoid memory leaks across sessions
+    correctedTurnIdsRef.current.clear();
+    glossedTurnIdsRef.current.clear();
+    processedUserTurnIdsRef.current.clear();
 
     // 1. Stop local microphone stream tracks
     if (localStreamRef.current) {
@@ -122,6 +150,14 @@ export function useRealtimeCall({
   const triggerTurnGloss = useCallback((turnId, turnText, currentTokens = []) => {
     if (!turnText || !turnText.trim()) return;
     const cleanText = turnText.trim();
+    if (!turnId) return;
+
+    // Deduplication check: Do not re-request glossing for a turn that is already in progress or completed
+    if (glossedTurnIdsRef.current.has(turnId)) {
+      return;
+    }
+    glossedTurnIdsRef.current.add(turnId);
+    sessionMetricsRef.current.glossRequests++;
 
     setLiveTranscript((prev) =>
       prev.map((msg) => (msg.id === turnId ? { ...msg, isGlossing: true } : msg))
@@ -161,7 +197,7 @@ export function useRealtimeCall({
   useEffect(() => {
     if (showGlosses) {
       liveTranscriptRef.current.forEach((msg) => {
-        if (msg.text && !isGlossComplete(msg, targetLang) && !msg.isGlossing) {
+        if (msg.text && !isGlossComplete(msg, targetLang) && !msg.isGlossing && !glossedTurnIdsRef.current.has(msg.id)) {
           triggerTurnGloss(msg.id, msg.text, msg.tokens);
         }
       });
@@ -172,9 +208,19 @@ export function useRealtimeCall({
   const triggerCorrection = useCallback((userText, turnId) => {
     if (!userText || !userText.trim()) return;
     const cleanText = userText.trim();
+    const dedupeKey = turnId || cleanText;
 
-    getPedagogicalCorrection(cleanText, targetLang, nativeLang, level)
+    // Robust Deduplication: Prevent duplicate correction triggers for the same user turn
+    if (correctedTurnIdsRef.current.has(dedupeKey)) {
+      sessionMetricsRef.current.duplicateCorrectionAttempts++;
+      return;
+    }
+    correctedTurnIdsRef.current.add(dedupeKey);
+    sessionMetricsRef.current.correctionRequests++;
+
+    getLiveCallPedagogicalCorrection(cleanText, targetLang, nativeLang, level)
       .then((correction) => {
+        sessionMetricsRef.current.correctionSuccesses++;
         if (correction) {
           const hasErrors = Boolean(correction.has_errors || correction.diff_tokens?.some((t) => t.changed));
           const corrected = correction.corrected_text || cleanText;
@@ -222,6 +268,7 @@ export function useRealtimeCall({
         }
       })
       .catch((err) => {
+        sessionMetricsRef.current.correctionFailures++;
         console.warn('[PedagogicalCorrection] Live transcript error:', err);
         setLiveTranscript((prev) =>
           prev.map((msg) =>
@@ -242,6 +289,11 @@ export function useRealtimeCall({
     const initialTokens = tokenizeLiveCallTurn(cleanText, targetLang);
     const initialTranslit = extractTurnTransliteration(initialTokens, targetLang);
     const initialGlosses = extractTurnGlosses(initialTokens);
+
+    if (!processedUserTurnIdsRef.current.has(currentId)) {
+      processedUserTurnIdsRef.current.add(currentId);
+      sessionMetricsRef.current.userTurns++;
+    }
 
     setLiveTranscript((prev) => {
       const existingIdx = prev.findIndex(
@@ -327,6 +379,7 @@ export function useRealtimeCall({
 
       // Conversation item created by server (user voice turn or assistant)
       case 'conversation.item.created': {
+        sessionMetricsRef.current.transcriptionEvents++;
         if (event.item?.role === 'user') {
           const itemId = event.item.id;
           if (itemId) {
@@ -342,6 +395,7 @@ export function useRealtimeCall({
 
       // Streaming delta of user audio transcription
       case 'conversation.item.input_audio_transcription.delta': {
+        sessionMetricsRef.current.transcriptionEvents++;
         const delta = event.delta || '';
         const itemId = event.item_id || pendingUserTurnIdRef.current;
         if (delta && itemId) {
@@ -363,6 +417,7 @@ export function useRealtimeCall({
 
       // User finished speaking and speech was recognized by whisper-1
       case 'conversation.item.input_audio_transcription.completed': {
+        sessionMetricsRef.current.transcriptionEvents++;
         const userText = event.transcript ? event.transcript.trim() : '';
         const itemId = event.item_id || pendingUserTurnIdRef.current;
         if (userText) {
@@ -435,6 +490,7 @@ export function useRealtimeCall({
         const finishedId = currentAiTurnIdRef.current;
         const finishedText = currentAiTurnTextRef.current;
         if (finishedId && finishedText) {
+          sessionMetricsRef.current.assistantTurns++;
           const botFinalTokens = tokenizeLiveCallTurn(finishedText, targetLang);
           setLiveTranscript((prev) =>
             prev.map((msg) =>
@@ -475,6 +531,23 @@ export function useRealtimeCall({
       setIsMuted(false);
       currentAiTurnTextRef.current = '';
       currentAiTurnIdRef.current = null;
+
+      // Initialize session metrics for tracking
+      const newSessionId = `call-session-${Date.now()}`;
+      sessionMetricsRef.current = {
+        sessionId: newSessionId,
+        startedAt: new Date().toISOString(),
+        endedAt: null,
+        durationSeconds: 0,
+        userTurns: 0,
+        assistantTurns: 0,
+        correctionRequests: 0,
+        correctionSuccesses: 0,
+        correctionFailures: 0,
+        duplicateCorrectionAttempts: 0,
+        transcriptionEvents: 0,
+        glossRequests: 0
+      };
 
       // 1. Request microphone permission
       let localStream;
@@ -643,6 +716,11 @@ export function useRealtimeCall({
     const finalSeconds = callDurationSecondsRef.current;
     const finalTranscript = [...liveTranscriptRef.current];
 
+    // Finalize session metrics
+    sessionMetricsRef.current.endedAt = new Date().toISOString();
+    sessionMetricsRef.current.durationSeconds = finalSeconds;
+    const finalMetrics = { ...sessionMetricsRef.current };
+
     cleanupResources();
     setCallState('idle');
 
@@ -665,6 +743,7 @@ export function useRealtimeCall({
       timestamp: Date.now(),
       duration: formattedDuration,
       summary: summaryText,
+      metrics: finalMetrics,
       transcript: finalTranscript.map((msg) => {
         const tokens = Array.isArray(msg.tokens) ? msg.tokens : [];
         const transliteration = msg.transliteration || extractTurnTransliteration(tokens, targetLang);

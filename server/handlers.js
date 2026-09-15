@@ -143,6 +143,161 @@ export function handleLanguages(req, res) {
   res.status(200).json({ languages: SUPPORTED_LANGUAGES });
 }
 
+// Dedicated pedagogical correction endpoint for Live Calls & lightweight corrections
+export async function handlePedagogicalCorrect(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  try {
+    const body = parseRequestBody(req);
+    const {
+      text,
+      message,
+      targetLang = 'es',
+      nativeLang = 'es',
+      level = 'A2/B1',
+      apiKey: clientApiKey
+    } = body;
+
+    const rawText = (text || message || '').trim();
+    if (!rawText) {
+      return res.status(400).json({ error: 'El texto no puede estar vacío.' });
+    }
+
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers?.['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
+
+    const activeModel = getSanitizedGroqModel();
+    const isArabic = targetLang === 'ar';
+    const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
+    const nativeObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
+    const targetName = langObj.englishName || langObj.name;
+    const nativeName = nativeObj.englishName || nativeObj.name;
+
+    if (effectiveApiKey) {
+      console.log(`Pedagogical correction requested with Groq [${activeModel}] for lang: ${targetLang}`);
+
+      const systemPrompt = `You are an expert pedagogical grammar correction engine for language learners.
+Your ONLY task is to analyze user learner sentences, detect errors (grammar, conjugation, cases, diacritics, vocabulary, code-switching), and output structured JSON.
+CRITICAL RULES:
+- NEVER engage in conversation or roleplay.
+- NEVER explain or add conversational greetings.
+- Always output STRICTLY valid JSON matching the requested schema.`;
+
+      const userPrompt = `Analyze this sentence in ${targetName} spoken by a student whose native language is ${nativeName} (Level: ${level}):
+"${rawText}"
+
+Tasks:
+1. If the sentence is grammatically, lexically, and naturally correct in ${targetName}, set "corrected_text" identical to "${rawText.replace(/"/g, '\\"')}" and "has_errors": false.
+2. If it contains mistakes (verb tense, gender, case agreement, spelling, awkward phrasing, or words left in ${nativeName}), write the natural grammatically correct version in "corrected_text" and set "has_errors": true. Preserve the user's intended meaning without unnecessary stylistic overhauls.
+3. Return STRICTLY valid JSON with no markdown wrapping:
+{
+  "original_text": "${rawText.replace(/"/g, '\\"')}",
+  "corrected_text": "corrected sentence in ${targetName}",
+  "has_errors": false
+}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      let httpStatus = 0;
+      let groqErrorMessage = '';
+
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+            // max_tokens: 350 is chosen because pedagogical corrections of a speech turn
+            // consist of 1-3 sentences max in JSON. This prevents lengthy hallucinated output,
+            // minimizes token costs on Groq, and guarantees rapid response latency (<300ms).
+            max_tokens: 350
+          })
+        });
+
+        clearTimeout(timeoutId);
+        httpStatus = response.status;
+
+        if (response.ok) {
+          const data = await response.json();
+          const rawContent = data?.choices?.[0]?.message?.content || '';
+          const parsed = cleanAndParseJSON(rawContent);
+
+          if (parsed && typeof parsed.corrected_text === 'string') {
+            const corrected = parsed.corrected_text.trim();
+            const rawDiffTokens = computeWordDiff(rawText, corrected);
+            const diffTokens = rawDiffTokens.map(token => {
+              const tokenText = token.text || '';
+              if ((isArabic || /[\u0600-\u06FF]/.test(tokenText)) && !token.translit) {
+                return {
+                  ...token,
+                  translit: getArabicTransliteration(tokenText)
+                };
+              }
+              return token;
+            });
+
+            const hasErrors = Boolean(parsed.has_errors || diffTokens.some(t => t.changed) || corrected.toLowerCase() !== rawText.toLowerCase());
+
+            const resultPayload = {
+              original_text: rawText,
+              corrected_text: corrected,
+              has_errors: hasErrors,
+              diff_tokens: diffTokens
+            };
+
+            return res.status(200).json({
+              success: true,
+              source: `groq (${activeModel})`,
+              data: resultPayload
+            });
+          }
+        } else {
+          const err = await response.json().catch(() => ({}));
+          groqErrorMessage = err?.error?.message || response.statusText;
+        }
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        httpStatus = fetchErr.name === 'AbortError' ? 408 : 500;
+        groqErrorMessage = fetchErr.name === 'AbortError' ? 'Timeout en corrección pedagógica Groq' : fetchErr.message;
+      }
+
+      console.warn(`Groq pedagogical correction failed [HTTP ${httpStatus}]: ${groqErrorMessage}. Using deterministic fallback.`);
+    }
+
+    // Seamless Fallback: Deterministic Grammar Engine & Linguistic Rules
+    const deterministic = processDeterministicLinguistics(rawText, targetLang, nativeLang);
+    return res.status(200).json({
+      success: false,
+      fallback: true,
+      source: 'deterministic-linguistics',
+      data: deterministic
+    });
+
+  } catch (error) {
+    console.error('Server error in /api/pedagogical-correct:', error);
+    const deterministic = processDeterministicLinguistics(req.body?.text || req.body?.message || '', req.body?.targetLang || 'es', req.body?.nativeLang || 'es');
+    return res.status(200).json({
+      success: false,
+      fallback: true,
+      data: deterministic
+    });
+  }
+}
+
 // Chat endpoint (Groq openai/gpt-oss-120b)
 export async function handleChat(req, res) {
   setCorsHeaders(res);

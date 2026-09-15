@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { handleHealth, handleLanguages, handleChat, handleLookupWord, handleTranscribe, handleSentenceBreakdown, handleBatchGloss } from './handlers.js';
+import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleSentenceBreakdown, handleBatchGloss } from './handlers.js';
 import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
 import { handleRealtimeSession } from './realtimeHandlers.js';
 
@@ -32,6 +32,9 @@ app.get('/languages', handleLanguages);
 
 app.post('/api/chat', handleChat);
 app.post('/chat', handleChat);
+
+app.post('/api/pedagogical-correct', handlePedagogicalCorrect);
+app.post('/pedagogical-correct', handlePedagogicalCorrect);
 
 app.post('/api/lookup-word', handleLookupWord);
 app.post('/lookup-word', handleLookupWord);
