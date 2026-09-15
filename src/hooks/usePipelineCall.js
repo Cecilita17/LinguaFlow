@@ -576,19 +576,30 @@ export function usePipelineCall({
   // Finalize and process a completed user speech turn
   const finalizeUserSpeechTurn = useCallback((userText, turnId) => {
     if (!userText || !userText.trim()) return;
-    const cleanText = cleanDuplicatePhrases(userText.trim());
+    const cleanText = userText.trim();
     if (!cleanText) return;
 
     const currentId = turnId || pendingUserTurnIdRef.current || `user-${Date.now()}`;
+
+    // CRITICAL: Protect against duplicate finalization of the same turn
+    if (processedUserTurnIdsRef.current.has(currentId)) {
+      return;
+    }
+    processedUserTurnIdsRef.current.add(currentId);
+    sessionMetricsRef.current.userTurns++;
+
+    // Clear pending active text & pending turnId
+    activeUserTextRef.current = '';
+    pendingUserTurnIdRef.current = null;
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const initialTokens = tokenizeLiveCallTurn(cleanText, targetLang);
     const initialTranslit = extractTurnTransliteration(initialTokens, targetLang);
     const initialGlosses = extractTurnGlosses(initialTokens);
-
-    if (!processedUserTurnIdsRef.current.has(currentId)) {
-      processedUserTurnIdsRef.current.add(currentId);
-      sessionMetricsRef.current.userTurns++;
-    }
 
     setLiveTranscript((prev) => {
       const existingIdx = prev.findIndex(m => m.id === currentId || (m.sender === 'user' && m.isTranscribing));
@@ -629,10 +640,6 @@ export function usePipelineCall({
       return [...prev, newUserMsg];
     });
 
-    // Reset pending buffers
-    activeUserTextRef.current = '';
-    pendingUserTurnIdRef.current = null;
-
     // Asynchronously trigger single pedagogical correction
     triggerCorrection(cleanText, currentId);
 
@@ -664,20 +671,18 @@ export function usePipelineCall({
       }
 
       let interim = '';
-      let isFinal = false;
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const item = event.results[i];
         const text = item[0]?.transcript || '';
         if (item.isFinal) {
-          isFinal = true;
           activeUserTextRef.current = (activeUserTextRef.current ? activeUserTextRef.current + ' ' : '') + text;
         } else {
-          interim += text;
+          interim = (interim ? interim + ' ' : '') + text;
         }
       }
 
-      const combined = cleanDuplicatePhrases((activeUserTextRef.current + ' ' + interim).trim());
+      const combined = (activeUserTextRef.current + ' ' + interim).trim();
       if (!combined) return;
 
       if (!pendingUserTurnIdRef.current) {
@@ -718,12 +723,13 @@ export function usePipelineCall({
         clearTimeout(silenceTimeoutRef.current);
       }
 
-      // Auto-finalize turn after 950ms of silence
+      // Auto-finalize turn ONLY after stable silence (950ms), independent of isFinal
       silenceTimeoutRef.current = setTimeout(() => {
-        if (combined.trim()) {
-          finalizeUserSpeechTurn(combined, turnId);
+        const textToFinalize = (activeUserTextRef.current + ' ' + interim).trim() || combined;
+        if (textToFinalize) {
+          finalizeUserSpeechTurn(textToFinalize, turnId);
         }
-      }, isFinal ? 400 : 950);
+      }, 950);
     };
 
     recognition.onerror = (event) => {
