@@ -1,6 +1,7 @@
-﻿import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { API_BASE_URL } from '../services/chatService.js';
 
-export const STORAGE_KEY_AUTH_USER = 'linguaflow_user_account';
+export const STORAGE_KEY_AUTH_TOKEN = 'linguaflow_session_token';
 
 const AuthContext = createContext({
   user: null,
@@ -8,156 +9,199 @@ const AuthContext = createContext({
   isLoading: false,
   error: null,
   loginWithGoogle: async () => {},
-  logout: () => {},
+  logout: async () => {},
   clearError: () => {}
 });
 
-function parseJwt(token) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    return null;
-  }
-}
-
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_AUTH_USER);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === 'object' && parsed.email) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to parse saved user account from localStorage:', e);
-    }
-    return null;
-  });
-
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const tokenClientRef = useRef(null);
 
-  useEffect(() => {
+  const clearError = useCallback(() => setError(null), []);
+
+  // 1. Verify and restore real session on initial load or refresh from backend
+  const verifySessionOnMount = useCallback(async () => {
     try {
-      if (user) {
-        localStorage.setItem(STORAGE_KEY_AUTH_USER, JSON.stringify(user));
+      const storedToken = localStorage.getItem(STORAGE_KEY_AUTH_TOKEN);
+      if (!storedToken) {
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Query the backend endpoint /api/auth/me to cryptographically verify token
+      const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${storedToken}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+        } else {
+          localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+          setUser(null);
+        }
       } else {
-        localStorage.removeItem(STORAGE_KEY_AUTH_USER);
+        localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+        setUser(null);
       }
     } catch (e) {
-      console.warn('Failed to persist user session:', e);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!googleClientId) return;
-
-    if (document.getElementById('google-client-script')) return;
-
-    const script = document.createElement('script');
-    script.id = 'google-client-script';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
-  }, []);
-
-  const loginWithGoogle = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-    if (googleClientId && window.google?.accounts?.id) {
-      try {
-        await new Promise((resolve, reject) => {
-          window.google.accounts.id.initialize({
-            client_id: googleClientId,
-            callback: (response) => {
-              try {
-                if (response.credential) {
-                  const payload = parseJwt(response.credential);
-                  if (payload) {
-                    const loggedUser = {
-                      uid: payload.sub || `google-${Date.now()}`,
-                      displayName: payload.name || payload.given_name || 'Google User',
-                      email: payload.email || '',
-                      photoURL: payload.picture || '',
-                      provider: 'google',
-                      createdAt: new Date().toISOString()
-                    };
-                    setUser(loggedUser);
-                    resolve(loggedUser);
-                    return;
-                  }
-                }
-                reject(new Error('No se pudo verificar el token de Google.'));
-              } catch (err) {
-                reject(err);
-              }
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true
-          });
-
-          window.google.accounts.id.prompt((notification) => {
-            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-              console.log('Google prompt not displayed or skipped:', notification.getNotDisplayedReason());
-            }
-          });
-        });
-      } catch (err) {
-        console.warn('Google Identity error, using fallback session:', err);
-        setError(err.message || 'Error al conectar con Google.');
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    try {
-      await new Promise((res) => setTimeout(res, 500));
-
-      const demoUser = {
-        uid: 'demo-google-uid-1001',
-        displayName: 'Estudiante de LinguaFlow',
-        email: 'lingua.learner@gmail.com',
-        photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&auto=format&fit=crop&q=80',
-        provider: 'google',
-        createdAt: new Date().toISOString()
-      };
-
-      setUser(demoUser);
-    } catch (err) {
-      setError(err.message || 'Error al iniciar sesión.');
+      console.warn('Session verification notice:', e);
+      // If server unreachable or error, do not assume authenticated
+      localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
+  useEffect(() => {
+    verifySessionOnMount();
+  }, [verifySessionOnMount]);
+
+  // 2. Exchange Google token with backend for real verification and session creation
+  const handleVerifyWithBackend = useCallback(async ({ credential, accessToken }) => {
+    setIsLoading(true);
     setError(null);
+
     try {
-      localStorage.removeItem(STORAGE_KEY_AUTH_USER);
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.disableAutoSelect();
+      const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ credential, accessToken })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Error al verificar la cuenta con el servidor.');
       }
-    } catch (e) {}
+
+      // Save real server-issued session token
+      if (data.token) {
+        localStorage.setItem(STORAGE_KEY_AUTH_TOKEN, data.token);
+      }
+      setUser(data.user);
+      return data.user;
+    } catch (err) {
+      console.error('Backend verification error:', err);
+      setError(err.message || 'Error al autenticar con el servidor.');
+      setUser(null);
+      localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const clearError = useCallback(() => setError(null), []);
+  // 3. Real Google OAuth login flow triggered explicitly by user click
+  const loginWithGoogle = useCallback(async () => {
+    setError(null);
+    const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+
+    // Check configuration
+    if (!googleClientId) {
+      const configMsg = 'Google Client ID no está configurado. Por favor configura VITE_GOOGLE_CLIENT_ID en tu archivo .env.';
+      console.error(configMsg);
+      setError(configMsg);
+      return;
+    }
+
+    if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
+      // If oauth2 client is not yet loaded, wait briefly or report error
+      const notLoadedMsg = 'El servicio de Google Identity no está disponible en este momento. Revisa tu conexión a internet.';
+      console.error(notLoadedMsg);
+      setError(notLoadedMsg);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Use Google OAuth2 Code/Token flow with standard popup window
+      await new Promise((resolve, reject) => {
+        try {
+          const client = window.google.accounts.oauth2.initTokenClient({
+            client_id: googleClientId,
+            scope: 'openid email profile',
+            callback: async (tokenResponse) => {
+              if (tokenResponse.error) {
+                console.error('Google OAuth error:', tokenResponse);
+                if (tokenResponse.error === 'popup_closed_by_user' || tokenResponse.error === 'access_denied') {
+                  // User cancelled
+                  reject(new Error('Inicio de sesión cancelado por el usuario.'));
+                } else {
+                  reject(new Error(`Error de Google OAuth: ${tokenResponse.error_description || tokenResponse.error}`));
+                }
+                return;
+              }
+
+              if (!tokenResponse.access_token) {
+                reject(new Error('No se recibió el token de acceso de Google.'));
+                return;
+              }
+
+              try {
+                // Send access token to backend for verification
+                const verifiedUser = await handleVerifyWithBackend({ accessToken: tokenResponse.access_token });
+                resolve(verifiedUser);
+              } catch (backendErr) {
+                reject(backendErr);
+              }
+            },
+            error_callback: (err) => {
+              console.error('Google token client error callback:', err);
+              reject(new Error(err.message || 'No se pudo abrir la ventana de inicio de sesión de Google.'));
+            }
+          });
+
+          tokenClientRef.current = client;
+          // Prompt user with Google Account Selector popup
+          client.requestAccessToken({ prompt: 'select_account' });
+        } catch (initErr) {
+          reject(initErr);
+        }
+      });
+    } catch (err) {
+      console.warn('Google login failed or cancelled:', err.message);
+      setError(err.message || 'No se pudo completar el inicio de sesión.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [handleVerifyWithBackend]);
+
+  // 4. Real Logout
+  const logout = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const storedToken = localStorage.getItem(STORAGE_KEY_AUTH_TOKEN);
+      if (storedToken) {
+        try {
+          await fetch(`${API_BASE_URL}/api/auth/logout`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${storedToken}`
+            }
+          });
+        } catch (e) {
+          // Non-blocking network catch on logout
+        }
+      }
+    } finally {
+      // Clear token and state immediately
+      localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+      setUser(null);
+      setError(null);
+      setIsLoading(false);
+    }
+  }, []);
 
   const value = {
     user,

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { handleHealth, handleLanguages, handleChat, handleLookupWord, handleTranscribe, handleSentenceBreakdown, handleBatchGloss } from './handlers.js';
+import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
 
 dotenv.config();
 
@@ -10,6 +11,16 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Auth Routes (Backend-verified Google OAuth & Session Management)
+app.post('/api/auth/google', handleGoogleAuth);
+app.post('/auth/google', handleGoogleAuth);
+
+app.get('/api/auth/me', handleGetSession);
+app.get('/auth/me', handleGetSession);
+
+app.post('/api/auth/logout', handleLogout);
+app.post('/auth/logout', handleLogout);
 
 // Routes supported both with /api prefix and without
 app.get('/api/health', handleHealth);
