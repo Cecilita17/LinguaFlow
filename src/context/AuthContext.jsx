@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '../services/chatService.js';
 
 export const STORAGE_KEY_AUTH_TOKEN = 'linguaflow_session_token';
@@ -114,12 +114,29 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
-      // If oauth2 client is not yet loaded, wait briefly or report error
-      const notLoadedMsg = 'El servicio de Google Identity no está disponible en este momento. Revisa tu conexión a internet.';
-      console.error(notLoadedMsg);
-      setError(notLoadedMsg);
-      return;
+    // Ensure Google Identity Services SDK is ready
+    if (typeof window !== 'undefined' && !window.google?.accounts?.oauth2) {
+      // Wait up to 2.5s if script is currently loading
+      const isLoaded = await new Promise((resolve) => {
+        let attempts = 0;
+        const interval = setInterval(() => {
+          attempts++;
+          if (window.google?.accounts?.oauth2) {
+            clearInterval(interval);
+            resolve(true);
+          } else if (attempts >= 25) {
+            clearInterval(interval);
+            resolve(false);
+          }
+        }, 100);
+      });
+
+      if (!isLoaded) {
+        const notLoadedMsg = 'El servicio de Google Identity no está disponible en este momento. Revisa tu conexión o bloqueadores de anuncios.';
+        console.error(notLoadedMsg);
+        setError(notLoadedMsg);
+        return;
+      }
     }
 
     setIsLoading(true);
