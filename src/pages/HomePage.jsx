@@ -85,7 +85,7 @@ export default function HomePage({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-500 dark:group-hover:text-rose-200 transition-colors">
-                    Tutor Chat
+                    Conversations & Voice
                   </h2>
                   <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
                     IA
