@@ -653,7 +653,7 @@ export function ChatMessage({
                     >
                       {showTransliteration && cleanTranslit ? (
                         <ruby className="inline-flex flex-col items-center">
-                          <rt dir="ltr" className="text-[12px] sm:text-[13px] text-sky-700 font-bold leading-tight select-none">
+                          <rt dir="ltr" className="text-[12px] sm:text-[13px] text-sky-700 dark:text-sky-300 font-bold leading-tight select-none">
                             {cleanTranslit}
                           </rt>
                           <span
@@ -704,7 +704,7 @@ export function ChatMessage({
               >
                 {showTransliteration && tokenTranslit ? (
                   <ruby className="inline-flex flex-col items-center">
-                    <rt dir="ltr" className="text-[12px] sm:text-[13px] text-sky-700 font-bold leading-tight select-none">
+                    <rt dir="ltr" className="text-[12px] sm:text-[13px] text-sky-700 dark:text-sky-300 font-bold leading-tight select-none">
                       {tokenTranslit}
                     </rt>
                     <span

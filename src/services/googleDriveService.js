@@ -189,15 +189,18 @@ export async function getOrCreateBackupFolder(accessToken) {
 }
 
 /**
- * Uploads a backup JSON payload to the "LinguaFlow Backups" folder using multipart upload.
+ * Uploads a backup JSON payload to the "LinguaFlow Backups" folder.
+ * Accepts both Blob and string inputs.
+ * Uses Google Drive Resumable Upload for large payloads (>4MB) and Multipart Blob upload for smaller payloads,
+ * completely avoiding giant string concatenations and V8 string length limits.
  * 
  * @param {string} accessToken
  * @param {string} folderId
  * @param {string} fileName
- * @param {string} jsonString
+ * @param {Blob|string} fileData
  * @returns {Promise<object>} Uploaded file metadata
  */
-export async function uploadBackupFile(accessToken, folderId, fileName, jsonString) {
+export async function uploadBackupFile(accessToken, folderId, fileName, fileData) {
   const metadata = {
     name: fileName,
     mimeType: 'application/json',
@@ -205,18 +208,26 @@ export async function uploadBackupFile(accessToken, folderId, fileName, jsonStri
     description: 'LinguaFlow manual backup containing user learning history, library, and settings.'
   };
 
-  const boundary = '-------LinguaFlowBackupBoundary' + Math.random().toString(36).substring(2);
-  const delimiter = `\r\n--${boundary}\r\n`;
-  const closeDelimiter = `\r\n--${boundary}--`;
+  const blob = (typeof Blob !== 'undefined' && fileData instanceof Blob)
+    ? fileData
+    : new Blob([fileData], { type: 'application/json' });
 
-  const multipartRequestBody =
-    delimiter +
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-    JSON.stringify(metadata) +
-    delimiter +
-    'Content-Type: application/json\r\n\r\n' +
-    jsonString +
-    closeDelimiter;
+  // For payloads > 4MB, use Google Drive Resumable Upload protocol (streams blob natively)
+  if (blob.size > 4 * 1024 * 1024) {
+    return await uploadResumableFile(accessToken, folderId, metadata, blob);
+  }
+
+  // For standard payloads, use Multipart upload via Blob parts (no string concatenation)
+  const boundary = '-------LinguaFlowBackupBoundary' + Math.random().toString(36).substring(2);
+  const metadataPart = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n`
+  ], { type: 'text/plain' });
+
+  const closePart = new Blob([`\r\n--${boundary}--`], { type: 'text/plain' });
+
+  const multipartBlob = new Blob([metadataPart, blob, closePart], {
+    type: `multipart/related; boundary=${boundary}`
+  });
 
   const uploadUrl = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime';
 
@@ -226,12 +237,61 @@ export async function uploadBackupFile(accessToken, folderId, fileName, jsonStri
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': `multipart/related; boundary=${boundary}`
     },
-    body: multipartRequestBody
+    body: multipartBlob
+  });
+
+  if (!uploadRes.ok) {
+    if (uploadRes.status === 403 || uploadRes.status === 507) {
+      throw new Error('No hay suficiente espacio de almacenamiento o permisos en Google Drive para completar la copia.');
+    }
+    const errText = await uploadRes.text();
+    throw new Error(`Error al subir archivo a Google Drive (${uploadRes.status}): ${errText}`);
+  }
+
+  return await uploadRes.json();
+}
+
+/**
+ * Resumable upload for large backup files without multipart encoding overhead.
+ */
+async function uploadResumableFile(accessToken, folderId, metadata, blob) {
+  const initUrl = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size,createdTime';
+
+  const initRes = await fetch(initUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': 'application/json',
+      'X-Upload-Content-Length': String(blob.size)
+    },
+    body: JSON.stringify(metadata)
+  });
+
+  if (!initRes.ok) {
+    if (initRes.status === 403 || initRes.status === 507) {
+      throw new Error('No hay suficiente espacio disponible en tu cuenta de Google Drive para este backup.');
+    }
+    const errText = await initRes.text();
+    throw new Error(`Error al iniciar subida en Google Drive: ${errText}`);
+  }
+
+  const locationUrl = initRes.headers.get('Location');
+  if (!locationUrl) {
+    throw new Error('Google Drive no devolvió la URL de sesión de subida.');
+  }
+
+  const uploadRes = await fetch(locationUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: blob
   });
 
   if (!uploadRes.ok) {
     const errText = await uploadRes.text();
-    throw new Error(`Error al subir archivo a Google Drive: ${errText}`);
+    throw new Error(`Error durante la transferencia de datos a Google Drive: ${errText}`);
   }
 
   return await uploadRes.json();
@@ -262,7 +322,30 @@ export async function listBackupFiles(accessToken, folderId) {
 }
 
 /**
- * Downloads a backup file's raw content by its Google Drive file ID.
+ * Downloads and parses backup JSON payload directly from Google Drive response stream.
+ * 
+ * @param {string} accessToken
+ * @param {string} fileId
+ * @returns {Promise<object>} Parsed payload
+ */
+export async function downloadBackupPayload(accessToken, fileId) {
+  const downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+
+  const res = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Error al descargar el backup de Google Drive: ${errText}`);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Downloads a backup file's raw content by its Google Drive file ID as text.
+ * Maintained for backward compatibility.
  * 
  * @param {string} accessToken
  * @param {string} fileId

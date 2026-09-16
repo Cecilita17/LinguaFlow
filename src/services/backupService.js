@@ -19,6 +19,7 @@ import {
   uploadBackupFile,
   listBackupFiles,
   downloadBackupContent,
+  downloadBackupPayload,
   isDriveConnected
 } from './googleDriveService.js';
 
@@ -265,8 +266,74 @@ export async function createBackupPayload(user = null) {
 }
 
 /**
+ * Safely serializes the backup payload into a Blob.
+ * Uses compact JSON (avoiding 3x-5x indentation expansion).
+ * If monolithic stringify fails or exceeds V8 memory limits,
+ * safely falls back to chunked Blob serialization without throwing "Invalid string length".
+ * 
+ * @param {object} payload - Complete backup data structure
+ * @returns {Blob} Valid JSON Blob
+ */
+export function serializeBackupToBlob(payload) {
+  try {
+    // Standard compact serialization (3x-5x smaller than pretty JSON)
+    const jsonString = JSON.stringify(payload);
+    return new Blob([jsonString], { type: 'application/json' });
+  } catch (err) {
+    console.warn('[BackupService] Monolithic JSON stringify failed, falling back to chunked Blob serialization:', err);
+    try {
+      const parts = [];
+      parts.push('{"format":' + JSON.stringify(payload.format || BACKUP_FORMAT) + ',');
+      parts.push('"version":' + JSON.stringify(payload.version || BACKUP_SCHEMA_VERSION) + ',');
+      parts.push('"createdAt":' + JSON.stringify(payload.createdAt || new Date().toISOString()) + ',');
+      parts.push('"appVersion":' + JSON.stringify(payload.appVersion || '1.0.0') + ',');
+      parts.push('"user":' + JSON.stringify(payload.user || {}) + ',');
+      parts.push('"counts":' + JSON.stringify(payload.counts || {}) + ',');
+      parts.push('"data":{');
+
+      const dataObj = payload.data || {};
+      const dataKeys = Object.keys(dataObj);
+
+      for (let i = 0; i < dataKeys.length; i++) {
+        const key = dataKeys[i];
+        parts.push(JSON.stringify(key) + ':');
+        const val = dataObj[key];
+
+        if (Array.isArray(val)) {
+          parts.push('[');
+          for (let j = 0; j < val.length; j++) {
+            parts.push(JSON.stringify(val[j]));
+            if (j < val.length - 1) parts.push(',');
+          }
+          parts.push(']');
+        } else if (val && typeof val === 'object') {
+          const subKeys = Object.keys(val);
+          parts.push('{');
+          for (let k = 0; k < subKeys.length; k++) {
+            const subKey = subKeys[k];
+            parts.push(JSON.stringify(subKey) + ':' + JSON.stringify(val[subKey]));
+            if (k < subKeys.length - 1) parts.push(',');
+          }
+          parts.push('}');
+        } else {
+          parts.push(JSON.stringify(val));
+        }
+
+        if (i < dataKeys.length - 1) parts.push(',');
+      }
+
+      parts.push('}}');
+      return new Blob(parts, { type: 'application/json' });
+    } catch (chunkErr) {
+      console.error('[BackupService] Chunked serialization failed:', chunkErr);
+      throw new Error('La cantidad de datos acumulados es demasiado grande para la memoria del navegador. Cierra pestañas no utilizadas e intenta nuevamente.');
+    }
+  }
+}
+
+/**
  * Performs a complete manual backup: generates payload, obtains Google Drive authorization,
- * locates or creates "LinguaFlow Backups" folder, and uploads the JSON file.
+ * locates or creates "LinguaFlow Backups" folder, and uploads the JSON file as a stream/blob.
  * 
  * @param {object} user - Current authenticated user
  * @param {function} onProgress - Progress status callback
@@ -277,40 +344,47 @@ export async function performManualBackup(user, onProgress = () => {}) {
     throw new Error('Debes iniciar sesión con Google antes de realizar una copia de seguridad.');
   }
 
-  // 1. Authorize Google Drive
-  onProgress({ step: 'auth', message: 'Conectando con Google Drive...' });
-  const accessToken = await requestDriveAccessToken(user.email);
+  try {
+    // 1. Authorize Google Drive
+    onProgress({ step: 'auth', message: 'Conectando con Google Drive...' });
+    const accessToken = await requestDriveAccessToken(user.email);
 
-  // 2. Prepare payload
-  onProgress({ step: 'preparing', message: 'Recopilando datos y biblioteca...' });
-  const backupPayload = await createBackupPayload(user);
-  const jsonString = JSON.stringify(backupPayload, null, 2);
+    // 2. Prepare payload
+    onProgress({ step: 'preparing', message: 'Recopilando datos y biblioteca...' });
+    const backupPayload = await createBackupPayload(user);
+    const backupBlob = serializeBackupToBlob(backupPayload);
 
-  // 3. Locate or create backup folder
-  onProgress({ step: 'folder', message: 'Verificando carpeta en Google Drive...' });
-  const folderId = await getOrCreateBackupFolder(accessToken);
+    // 3. Locate or create backup folder
+    onProgress({ step: 'folder', message: 'Verificando carpeta en Google Drive...' });
+    const folderId = await getOrCreateBackupFolder(accessToken);
 
-  // 4. Generate filename with date
-  const now = new Date();
-  const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const fileName = `linguaflow-backup-${dateStr}.json`;
+    // 4. Generate filename with date
+    const now = new Date();
+    const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `linguaflow-backup-${dateStr}.json`;
 
-  // 5. Upload file
-  onProgress({ step: 'uploading', message: 'Subiendo copia a Google Drive...' });
-  const uploadResult = await uploadBackupFile(accessToken, folderId, fileName, jsonString);
+    // 5. Upload file (streams blob natively, using resumable upload if large)
+    onProgress({ step: 'uploading', message: 'Subiendo copia a Google Drive...' });
+    const uploadResult = await uploadBackupFile(accessToken, folderId, fileName, backupBlob);
 
-  // 6. Save metadata of last successful backup
-  const lastBackupMeta = {
-    fileId: uploadResult.id,
-    fileName: uploadResult.name,
-    createdAt: now.toISOString(),
-    size: uploadResult.size || jsonString.length,
-    counts: backupPayload.counts
-  };
-  saveLastBackupMeta(lastBackupMeta);
+    // 6. Save metadata of last successful backup
+    const lastBackupMeta = {
+      fileId: uploadResult.id,
+      fileName: uploadResult.name,
+      createdAt: now.toISOString(),
+      size: uploadResult.size || backupBlob.size,
+      counts: backupPayload.counts
+    };
+    saveLastBackupMeta(lastBackupMeta);
 
-  onProgress({ step: 'done', message: 'Copia de seguridad completada con éxito.' });
-  return lastBackupMeta;
+    onProgress({ step: 'done', message: 'Copia de seguridad completada con éxito.' });
+    return lastBackupMeta;
+  } catch (err) {
+    if (err && err.name === 'RangeError' && /Invalid string length/i.test(err.message)) {
+      throw new Error('El tamaño total del backup excede la capacidad de memoria contigua del navegador. Intenta reiniciar la pestaña para liberar memoria.');
+    }
+    throw err;
+  }
 }
 
 /**
@@ -334,6 +408,10 @@ export async function getAvailableBackups(userEmail) {
  */
 export async function fetchBackupPayload(userEmail, fileId) {
   const accessToken = await requestDriveAccessToken(userEmail);
-  const rawText = await downloadBackupContent(accessToken, fileId);
-  return JSON.parse(rawText);
+  try {
+    return await downloadBackupPayload(accessToken, fileId);
+  } catch (err) {
+    const rawText = await downloadBackupContent(accessToken, fileId);
+    return JSON.parse(rawText);
+  }
 }
