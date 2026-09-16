@@ -9,7 +9,7 @@
  * Completely separate from YouTube transcripts IndexedDB database.
  */
 
-import { normalizeDocument } from './textDocumentService.js';
+import { normalizeDocument, splitTextIntoParagraphs } from './textDocumentService.js';
 
 const DB_NAME = 'LinguaFlow_TextDocuments_DB';
 const DB_VERSION = 1;
@@ -77,20 +77,69 @@ export async function saveTextDocument(rawDoc) {
   const now = new Date().toISOString();
   const existing = rawDoc.id ? (await getTextDocumentById(rawDoc.id)) : null;
 
-  const targetLang = rawDoc.targetLang || 'zh';
-  const effectiveParagraphs = Array.isArray(rawDoc.paragraphs) ? rawDoc.paragraphs : [];
+  const targetLang = rawDoc.targetLang || existing?.targetLang || 'zh';
+  const nativeLang = rawDoc.nativeLang || existing?.nativeLang || 'es';
 
-  const existingStates = (rawDoc.languageStates && typeof rawDoc.languageStates === 'object')
-    ? { ...rawDoc.languageStates }
-    : (existing?.languageStates ? { ...existing.languageStates } : {});
-
-  existingStates[targetLang] = {
-    targetLang,
-    paragraphs: effectiveParagraphs,
-    updatedAt: now
+  // 1. Language States Merging
+  const existingStates = {
+    ...(existing?.languageStates || {}),
+    ...(rawDoc.languageStates || {})
   };
 
-  // Safe preservation of lastAudioPosition:
+  // 2. Resolve Effective Paragraphs
+  let effectiveParagraphs = [];
+  if (Array.isArray(rawDoc.paragraphs) && rawDoc.paragraphs.length > 0) {
+    effectiveParagraphs = rawDoc.paragraphs;
+  } else if (existingStates[targetLang]?.paragraphs && Array.isArray(existingStates[targetLang].paragraphs) && existingStates[targetLang].paragraphs.length > 0) {
+    effectiveParagraphs = existingStates[targetLang].paragraphs;
+  } else if (existing && Array.isArray(existing.paragraphs) && existing.paragraphs.length > 0) {
+    effectiveParagraphs = existing.paragraphs;
+  } else if (typeof rawDoc.rawText === 'string' && rawDoc.rawText.trim().length > 0) {
+    effectiveParagraphs = splitTextIntoParagraphs(rawDoc.rawText, targetLang);
+  } else if (existing && typeof existing.rawText === 'string' && existing.rawText.trim().length > 0) {
+    effectiveParagraphs = splitTextIntoParagraphs(existing.rawText, targetLang);
+  }
+
+  // Update targetLang in languageStates if effectiveParagraphs has content
+  if (effectiveParagraphs.length > 0) {
+    existingStates[targetLang] = {
+      targetLang,
+      paragraphs: effectiveParagraphs,
+      updatedAt: now
+    };
+  }
+
+  // 3. Resolve Effective Raw Text
+  let effectiveRawText = '';
+  if (typeof rawDoc.rawText === 'string' && rawDoc.rawText.trim().length > 0) {
+    effectiveRawText = rawDoc.rawText;
+  } else if (existing && typeof existing.rawText === 'string' && existing.rawText.trim().length > 0) {
+    effectiveRawText = existing.rawText;
+  } else if (effectiveParagraphs.length > 0) {
+    effectiveRawText = effectiveParagraphs.map(p => p.text || '').join('\n\n');
+  }
+
+  // 4. Resolve Title & Author
+  let effectiveTitle = (typeof rawDoc.title === 'string' ? rawDoc.title.trim() : '') ||
+                       (typeof existing?.title === 'string' ? existing.title.trim() : '');
+  if (!effectiveTitle && effectiveParagraphs.length > 0) {
+    const firstLine = (effectiveParagraphs[0].text || '').trim();
+    effectiveTitle = firstLine.slice(0, 40) + (firstLine.length > 40 ? '...' : '');
+  }
+  if (!effectiveTitle) {
+    effectiveTitle = 'Texto sin título';
+  }
+
+  const effectiveAuthor = rawDoc.author !== undefined ? rawDoc.author : (existing?.author || '');
+  const effectiveSourceType = rawDoc.sourceType || existing?.sourceType || rawDoc.format || existing?.format || 'txt';
+  const effectiveFormat = rawDoc.format || existing?.format || effectiveSourceType;
+
+  // 5. Resolve Chapters
+  const effectiveChapters = (Array.isArray(rawDoc.chapters) && rawDoc.chapters.length > 0)
+    ? rawDoc.chapters
+    : (Array.isArray(existing?.chapters) && existing.chapters.length > 0 ? existing.chapters : []);
+
+  // 6. Safe preservation of lastAudioPosition:
   // If rawDoc explicitly specifies lastAudioPosition, compare with existing to prevent race conditions.
   // If rawDoc.lastAudioPosition is undefined, fall back to existing?.lastAudioPosition.
   let effectiveLastAudioPosition = rawDoc.lastAudioPosition !== undefined
@@ -106,7 +155,7 @@ export async function saveTextDocument(rawDoc) {
     }
   }
 
-  // Safe preservation of lastReadingPosition:
+  // 7. Safe preservation of lastReadingPosition:
   let effectiveLastReadingPosition = rawDoc.lastReadingPosition !== undefined
     ? rawDoc.lastReadingPosition
     : (existing?.lastReadingPosition || null);
@@ -119,18 +168,24 @@ export async function saveTextDocument(rawDoc) {
     }
   }
 
-  const toSave = normalizeDocument({
-    ...rawDoc,
-    author: rawDoc.author !== undefined ? rawDoc.author : (existing?.author || ''),
-    sourceType: rawDoc.sourceType || existing?.sourceType || rawDoc.format || existing?.format || 'txt',
-    format: rawDoc.format || existing?.format || rawDoc.sourceType || existing?.sourceType || 'txt',
-    chapters: (Array.isArray(rawDoc.chapters) && rawDoc.chapters.length > 0) ? rawDoc.chapters : (existing?.chapters || []),
+  const toSave = {
+    id: rawDoc.id || existing?.id || `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: effectiveTitle,
+    author: effectiveAuthor,
+    sourceType: effectiveSourceType,
+    format: effectiveFormat,
+    rawText: effectiveRawText,
+    targetLang,
+    nativeLang,
+    paragraphsCount: effectiveParagraphs.length,
+    paragraphs: effectiveParagraphs,
+    chapters: effectiveChapters,
+    languageStates: existingStates,
     lastAudioPosition: effectiveLastAudioPosition,
     lastReadingPosition: effectiveLastReadingPosition,
     createdAt: existing?.createdAt || rawDoc.createdAt || now,
-    updatedAt: now,
-    languageStates: existingStates
-  });
+    updatedAt: now
+  };
 
   // Always update in-memory fallback
   memoryStore.set(toSave.id, toSave);

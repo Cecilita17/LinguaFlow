@@ -451,6 +451,10 @@ export function TextReaderPage({
   useEffect(() => {
     if (document) {
       saveActiveDocumentDraft(document);
+      // If the document is an unhydrated minimal draft from localStorage, avoid redundant IndexedDB writes
+      if (document.isMinimalDraft) {
+        return;
+      }
       if (document.id) {
         saveTextDocument(document).then(() => {
           refreshLibraryCount();

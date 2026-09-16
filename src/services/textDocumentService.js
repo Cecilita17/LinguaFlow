@@ -251,7 +251,24 @@ export function normalizeDocument(rawDoc) {
   const targetLang = rawDoc.targetLang || 'zh';
   const nativeLang = rawDoc.nativeLang || 'es';
   const rawText = typeof rawDoc.rawText === 'string' ? rawDoc.rawText : '';
-  const paragraphs = Array.isArray(rawDoc.paragraphs) ? rawDoc.paragraphs : splitTextIntoParagraphs(rawText, targetLang);
+
+  // Resolve paragraphs: preserve non-empty array, or recover from languageStates or rawText
+  let paragraphs = Array.isArray(rawDoc.paragraphs) && rawDoc.paragraphs.length > 0 ? rawDoc.paragraphs : [];
+  if (paragraphs.length === 0 && rawDoc.languageStates && typeof rawDoc.languageStates === 'object') {
+    if (Array.isArray(rawDoc.languageStates[targetLang]?.paragraphs) && rawDoc.languageStates[targetLang].paragraphs.length > 0) {
+      paragraphs = rawDoc.languageStates[targetLang].paragraphs;
+    } else {
+      const anyState = Object.values(rawDoc.languageStates).find(s => Array.isArray(s?.paragraphs) && s.paragraphs.length > 0);
+      if (anyState) {
+        paragraphs = anyState.paragraphs;
+      }
+    }
+  }
+  if (paragraphs.length === 0 && rawText.trim().length > 0) {
+    paragraphs = splitTextIntoParagraphs(rawText, targetLang);
+  }
+
+  const effectiveRawText = rawText || (paragraphs.length > 0 ? paragraphs.map(p => p.text || '').join('\n\n') : '');
 
   let title = (rawDoc.title || '').trim();
   if (!title && paragraphs.length > 0) {
@@ -264,12 +281,14 @@ export function normalizeDocument(rawDoc) {
     ? { ...rawDoc.languageStates }
     : {};
 
-  if (!languageStates[targetLang] || !Array.isArray(languageStates[targetLang].paragraphs)) {
-    languageStates[targetLang] = {
-      targetLang,
-      paragraphs,
-      updatedAt: rawDoc.updatedAt || now
-    };
+  if (!languageStates[targetLang] || !Array.isArray(languageStates[targetLang].paragraphs) || languageStates[targetLang].paragraphs.length === 0) {
+    if (paragraphs.length > 0) {
+      languageStates[targetLang] = {
+        targetLang,
+        paragraphs,
+        updatedAt: rawDoc.updatedAt || now
+      };
+    }
   }
 
   const author = typeof rawDoc.author === 'string' ? rawDoc.author.trim() : '';
@@ -286,7 +305,7 @@ export function normalizeDocument(rawDoc) {
     author,
     sourceType,
     format,
-    rawText,
+    rawText: effectiveRawText,
     targetLang,
     nativeLang,
     paragraphsCount: paragraphs.length,
