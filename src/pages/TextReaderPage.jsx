@@ -56,6 +56,7 @@ import {
 } from '../services/textGlossService.js';
 import { parseEpubFile } from '../services/epubService.js';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
+import { estimateSpeechDurationMs } from '../utils/audioWordSync.js';
 
 export function TextReaderPage({
   targetLang = 'zh',
@@ -175,6 +176,8 @@ export function TextReaderPage({
   const [inputTitle, setInputTitle] = useState(() => loadActiveDocumentDraft()?.title || '');
 
   const handleAddNewDocument = useCallback(() => {
+    audioPlaybackIdRef.current++;
+    clearAudioVisualTimer();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -183,10 +186,11 @@ export function TextReaderPage({
     }
     setIsAutoGlossing(false);
     setPlayingParagraphId(null);
+    setActiveAudioCharIndex(-1);
     setInputText('');
     setInputTitle('');
     navigateToView('importer');
-  }, [navigateToView]);
+  }, [clearAudioVisualTimer, navigateToView]);
   const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl'
   const [interlinearMode, setInterlinearMode] = useState(true);
 
@@ -203,6 +207,18 @@ export function TextReaderPage({
   const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
   const [audioErrorId, setAudioErrorId] = useState(null);
   const audioPlaybackIdRef = useRef(0);
+  const audioVisualTimerRef = useRef(null);
+  const audioVisualCharRef = useRef(0);
+  const lastAudioBoundaryCharRef = useRef(0);
+  const lastAudioBoundaryTimeRef = useRef(0);
+  const audioMsPerCharRef = useRef(70);
+
+  const clearAudioVisualTimer = useCallback(() => {
+    if (audioVisualTimerRef.current) {
+      clearInterval(audioVisualTimerRef.current);
+      audioVisualTimerRef.current = null;
+    }
+  }, []);
 
   // Last audio position bookmark — persisted in document.lastAudioPosition
   const [lastAudioParagraphId, setLastAudioParagraphId] = useState(
@@ -311,10 +327,13 @@ export function TextReaderPage({
   // Navigate to another chapter (unmounts previous chapter, mounts new chapter, scrolls to top)
   const handleNavigateChapter = useCallback((newIndex) => {
     if (newIndex < 0 || newIndex >= chapters.length) return;
+    audioPlaybackIdRef.current++;
+    clearAudioVisualTimer();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setPlayingParagraphId(null);
+    setActiveAudioCharIndex(-1);
     setCurrentChapterIndex(newIndex);
 
     if (scrollContainerRef.current) {
@@ -367,6 +386,7 @@ export function TextReaderPage({
   useEffect(() => {
     return () => {
       audioPlaybackIdRef.current++;
+      clearAudioVisualTimer();
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -377,7 +397,7 @@ export function TextReaderPage({
         clearTimeout(saveReadingPositionTimeoutRef.current);
       }
     };
-  }, []);
+  }, [clearAudioVisualTimer]);
 
   // Refresh library count from IndexedDB
   const refreshLibraryCount = useCallback(async () => {
@@ -622,9 +642,13 @@ export function TextReaderPage({
     }
 
     userStoppedRef.current = false;
+    clearAudioVisualTimer();
 
     // Cancel any current utterance
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
     setActiveAudioCharIndex(0);
@@ -662,32 +686,94 @@ export function TextReaderPage({
     const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
     const speechCode = paragraph.tts?.speechCode || getLanguageMeta(docLang)?.speechCode || 'zh-CN';
     const cleanText = paragraph.text.replace(/<[^>]*>/g, '').trim();
+    const textLength = cleanText.length;
+    const currentRate = speechRateRef.current || speechRate || 1.0;
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = speechCode;
-    utterance.rate = mapSpeechRateToUtteranceRate(speechRateRef.current || speechRate || 1.0);
+    utterance.rate = mapSpeechRateToUtteranceRate(currentRate);
 
     // Select suitable voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(speechCode.slice(0, 2).toLowerCase()));
-    if (matchingVoice) {
-      utterance.voice = matchingVoice;
-    }
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(speechCode.slice(0, 2).toLowerCase()));
+      if (matchingVoice) {
+        utterance.voice = matchingVoice;
+      }
+    } catch (voiceErr) {}
+
+    // Initialize visual progression rates
+    const estimatedDurationMs = estimateSpeechDurationMs(cleanText, activeDocLang, currentRate);
+    const initialMsPerChar = Math.max(15, estimatedDurationMs / Math.max(1, textLength));
+
+    audioVisualCharRef.current = 0;
+    lastAudioBoundaryCharRef.current = 0;
+    lastAudioBoundaryTimeRef.current = 0;
+    audioMsPerCharRef.current = initialMsPerChar;
 
     utterance.onstart = () => {
       if (playbackId !== audioPlaybackIdRef.current) return;
+      clearAudioVisualTimer();
+
+      const startTime = Date.now();
+      lastAudioBoundaryTimeRef.current = startTime;
+      lastAudioBoundaryCharRef.current = 0;
+      audioVisualCharRef.current = 0;
       setActiveAudioCharIndex(0);
+
+      let lastTickTime = startTime;
+
+      // Smooth visual progression timer running at ~40ms
+      audioVisualTimerRef.current = setInterval(() => {
+        if (playbackId !== audioPlaybackIdRef.current) {
+          clearAudioVisualTimer();
+          return;
+        }
+
+        const now = Date.now();
+        const dt = now - lastTickTime;
+        lastTickTime = now;
+
+        const msPerChar = Math.max(15, audioMsPerCharRef.current);
+        const step = dt / msPerChar;
+        const nextChar = Math.min(textLength - 1, audioVisualCharRef.current + step);
+
+        if (nextChar > audioVisualCharRef.current) {
+          audioVisualCharRef.current = nextChar;
+          setActiveAudioCharIndex(Math.floor(nextChar));
+        }
+      }, 40);
     };
 
     utterance.onboundary = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
-        setActiveAudioCharIndex(event.charIndex);
+        const newBoundaryChar = Math.min(textLength - 1, event.charIndex);
+        const now = Date.now();
+
+        // Calibrate real measured speed between consecutive boundaries
+        if (lastAudioBoundaryTimeRef.current > 0 && newBoundaryChar > lastAudioBoundaryCharRef.current) {
+          const charDelta = newBoundaryChar - lastAudioBoundaryCharRef.current;
+          const timeDelta = now - lastAudioBoundaryTimeRef.current;
+          if (timeDelta > 50 && charDelta > 0) {
+            const measuredMsPerChar = timeDelta / charDelta;
+            audioMsPerCharRef.current = Math.max(15, Math.min(350, measuredMsPerChar * 0.7 + audioMsPerCharRef.current * 0.3));
+          }
+        }
+
+        lastAudioBoundaryCharRef.current = newBoundaryChar;
+        lastAudioBoundaryTimeRef.current = now;
+
+        if (newBoundaryChar > audioVisualCharRef.current) {
+          audioVisualCharRef.current = newBoundaryChar;
+          setActiveAudioCharIndex(newBoundaryChar);
+        }
       }
     };
 
     utterance.onend = () => {
       if (playbackId !== audioPlaybackIdRef.current) return;
+      clearAudioVisualTimer();
       setPlayingParagraphId(null);
       setActiveAudioCharIndex(-1);
       // If Auto-play is ON and user did NOT manually pause/stop, advance to next paragraph
@@ -711,6 +797,7 @@ export function TextReaderPage({
 
     utterance.onerror = (e) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
+      clearAudioVisualTimer();
       setPlayingParagraphId(null);
       setActiveAudioCharIndex(-1);
       if (!userStoppedRef.current) {
@@ -724,19 +811,20 @@ export function TextReaderPage({
     } catch (speakErr) {
       console.warn('SpeechSynthesis speak call error:', speakErr);
     }
-  }, [activeDocLang, refreshLibraryCount, speechRate]);
+  }, [activeDocLang, clearAudioVisualTimer, refreshLibraryCount, speechRate]);
 
   handlePlayParagraphRef.current = handlePlayParagraph;
 
   const handleStopAudio = useCallback(() => {
     userStoppedRef.current = true;
     audioPlaybackIdRef.current++;
+    clearAudioVisualTimer();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setPlayingParagraphId(null);
     setActiveAudioCharIndex(-1);
-  }, []);
+  }, [clearAudioVisualTimer]);
 
   // Trigger background AI glossing
   const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
@@ -943,6 +1031,8 @@ export function TextReaderPage({
   // Open / select document from saved library modal
   const handleSelectSavedDocument = useCallback((doc) => {
     if (!doc) return;
+    audioPlaybackIdRef.current++;
+    clearAudioVisualTimer();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -951,6 +1041,7 @@ export function TextReaderPage({
       abortControllerRef.current = null;
     }
     setPlayingParagraphId(null);
+    setActiveAudioCharIndex(-1);
     setAudioErrorId(null);
     setDocument(doc);
     setInputText(doc.rawText || '');
@@ -1011,6 +1102,8 @@ export function TextReaderPage({
   // Delete document handler from library modal / view
   const handleDeleteDocumentFromLibrary = useCallback(async (deletedId) => {
     if (document && document.id === deletedId) {
+      audioPlaybackIdRef.current++;
+      clearAudioVisualTimer();
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -1025,6 +1118,8 @@ export function TextReaderPage({
       setDocument(null);
       setInputText('');
       setInputTitle('');
+      setPlayingParagraphId(null);
+      setActiveAudioCharIndex(-1);
       setGlossingProgress({
         total: 0,
         completed: 0,
@@ -1036,7 +1131,7 @@ export function TextReaderPage({
       navigateToView('library');
     }
     await refreshLibraryCount();
-  }, [document, refreshLibraryCount, navigateToView]);
+  }, [clearAudioVisualTimer, document, refreshLibraryCount, navigateToView]);
 
   // Start new document from modal
   const handleNewDocumentFromModal = useCallback(() => {
