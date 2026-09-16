@@ -81,6 +81,9 @@ export function ChatMessage({
     };
   };
 
+  const isChinese = targetLang === 'zh';
+  const allowsTransliteration = targetLang === 'zh' || targetLang === 'ar' || isArabic;
+
   // Helper for rendering transliteration in user bubble (luminous, clear rose-tinted white)
   const renderUserRubyWord = (word, translit, key) => {
     if (targetLang === 'zh') {
@@ -118,7 +121,10 @@ export function ChatMessage({
     }
 
     const isSaved = isWordSaved(word, targetLang);
-    const effectiveTranslit = translit || ((isArabic || /[\u0600-\u06FF]/.test(word)) ? getArabicTransliteration(word) : null);
+    const effectiveTranslit = (targetLang === 'ar' || (isArabic && targetLang !== 'ru'))
+      ? (translit || (/[\u0600-\u06FF]/.test(word) ? getArabicTransliteration(word) : null))
+      : null;
+
     if (showTransliteration && effectiveTranslit) {
       return (
         <ruby key={key} className="user-ruby mx-0.5 inline-flex flex-col items-center">
@@ -146,29 +152,47 @@ export function ChatMessage({
 
   const resolveTranslit = (token) => {
     if (!token) return null;
+    // Strictly disable transliteration for Russian ('ru') and all languages except Chinese and Arabic
+    if (targetLang === 'ru' || !allowsTransliteration) {
+      return null;
+    }
+
     if (typeof token === 'string') {
       const cleanStr = token.trim();
-      if (isArabic || targetLang === 'ar' || /[\u0600-\u06FF]/.test(cleanStr)) {
+      if (targetLang === 'ar' || /[\u0600-\u06FF]/.test(cleanStr)) {
         return getArabicTransliteration(cleanStr);
       }
       return null;
     }
-    if (token.translit && typeof token.translit === 'string' && token.translit.trim().length > 0) {
-      return token.translit.trim();
-    }
-    if (token.pinyin && typeof token.pinyin === 'string' && token.pinyin.trim().length > 0) {
-      return token.pinyin.trim();
-    }
-    if (token.auxiliary && typeof token.auxiliary === 'string' && token.auxiliary.trim().length > 0) {
-      return token.auxiliary.trim();
-    }
-    const wordStr = (token.text || token.word || token.clean_word || '').trim();
+
     if (targetLang === 'zh') {
+      if (token.pinyin && typeof token.pinyin === 'string' && token.pinyin.trim().length > 0) {
+        return token.pinyin.trim();
+      }
+      if (token.translit && typeof token.translit === 'string' && token.translit.trim().length > 0) {
+        return token.translit.trim();
+      }
+      if (token.auxiliary && typeof token.auxiliary === 'string' && token.auxiliary.trim().length > 0) {
+        return token.auxiliary.trim();
+      }
+      const wordStr = (token.text || token.word || token.clean_word || '').trim();
       if (PINYIN_LEXICON[wordStr]) return PINYIN_LEXICON[wordStr];
+      return null;
     }
-    if (isArabic || targetLang === 'ar' || /[\u0600-\u06FF]/.test(wordStr)) {
-      return getArabicTransliteration(wordStr);
+
+    if (targetLang === 'ar' || isArabic) {
+      if (token.translit && typeof token.translit === 'string' && token.translit.trim().length > 0) {
+        return token.translit.trim();
+      }
+      if (token.auxiliary && typeof token.auxiliary === 'string' && token.auxiliary.trim().length > 0) {
+        return token.auxiliary.trim();
+      }
+      const wordStr = (token.text || token.word || token.clean_word || '').trim();
+      if (/[\u0600-\u06FF]/.test(wordStr)) {
+        return getArabicTransliteration(wordStr);
+      }
     }
+
     return null;
   };
 
@@ -372,7 +396,6 @@ export function ChatMessage({
 
   // BOT MESSAGE BUBBLE
   let tokens = message.tokens || [];
-  const isChinese = targetLang === 'zh';
 
   // Fallback for missing tokens
   if (tokens.length === 0 && message.text) {

@@ -14,10 +14,15 @@ dotenv.config();
 function enrichArabicPayload(data, targetLang) {
   if (!data || typeof data !== 'object') return data;
   const isArabic = targetLang === 'ar';
+  const isChinese = targetLang === 'zh';
+  const allowsTranslit = isArabic || isChinese;
 
   if (data.user_correction?.diff_tokens && Array.isArray(data.user_correction.diff_tokens)) {
     data.user_correction.diff_tokens = data.user_correction.diff_tokens.map(token => {
       if (!token) return token;
+      if (!allowsTranslit) {
+        return { ...token, translit: null };
+      }
       const text = token.text || '';
       if ((isArabic || /[\u0600-\u06FF]/.test(text)) && !token.translit) {
         return {
@@ -32,6 +37,9 @@ function enrichArabicPayload(data, targetLang) {
   if (data.bot_response?.tokens && Array.isArray(data.bot_response.tokens)) {
     data.bot_response.tokens = data.bot_response.tokens.map(token => {
       if (!token) return token;
+      if (!allowsTranslit) {
+        return { ...token, translit: null };
+      }
       const text = token.word || token.text || token.clean_word || '';
       if ((isArabic || /[\u0600-\u06FF]/.test(text)) && !token.translit) {
         return {
@@ -455,8 +463,7 @@ export async function handleLookupWord(req, res) {
     const activeModel = getSanitizedGroqModel();
     const isChinese = targetLang === 'zh';
     const isArabic = targetLang === 'ar';
-    const isRussian = targetLang === 'ru';
-    const hasTranslit = isChinese || isArabic || isRussian;
+    const hasTranslit = isChinese || isArabic;
 
     if (word && effectiveApiKey) {
       console.log(`Groq model selected: ${activeModel}`);
@@ -465,7 +472,6 @@ export async function handleLookupWord(req, res) {
 Provide a clear, precise definition for the word "${word}" (in language "${targetLang}") translated to the student's native language "${nativeLang}".
 ${isChinese ? 'Provide the standard Pinyin with tone marks for this COMPLETE word in "translit" (e.g. "hěn gāoxìng", "nǐ hǎo").' : ''}
 ${isArabic ? 'Provide Latin romanization in "translit" or null.' : ''}
-${isRussian ? 'Provide Latin romanization in "translit" or null.' : ''}
 ${!hasTranslit ? 'Set "translit" to null.' : ''}
 
 Format strictly as valid JSON matching this schema:

@@ -31,7 +31,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'ar', name: 'Árabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
   { code: 'tr', name: 'Turco', speechCode: 'tr-TR', hasTranslit: false },
   { code: 'zh', name: 'Chino Mandarín', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
-  { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: true, translitName: 'Romanización' }
+  { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: false }
 ];
 
 const STORAGE_PREFIX = 'linguaflow_chat_';
@@ -423,16 +423,16 @@ export default function App() {
         text: 'Привет! Я рад практиковать русский язык с тобой. О чём ты хочешь поговорить?',
         translation: '¡Hola! Me alegra practicar ruso contigo. ¿De qué quieres hablar?',
         tokens: [
-          { word: 'Привет!', translit: 'Privet!', clean_word: 'привет' },
-          { word: 'Я', translit: 'Ya', clean_word: 'я' },
-          { word: 'рад', translit: 'rad', clean_word: 'рад' },
-          { word: 'практиковать', translit: 'praktikovat', clean_word: 'практиковать' },
-          { word: 'русский', translit: 'russkiy', clean_word: 'русский' },
-          { word: 'язык', translit: 'yazyk', clean_word: 'язык' }
+          { word: 'Привет!', translit: null, clean_word: 'привет' },
+          { word: 'Я', translit: null, clean_word: 'я' },
+          { word: 'рад', translit: null, clean_word: 'рад' },
+          { word: 'практиковать', translit: null, clean_word: 'практиковать' },
+          { word: 'русский', translit: null, clean_word: 'русский' },
+          { word: 'язык', translit: null, clean_word: 'язык' }
         ],
         vocabulary: {
-          'привет': { meaning: 'Hola (saludo cordial e informal)', part_of_speech: 'saludo', translit: 'privet' },
-          'рад': { meaning: 'Contento o complacido', part_of_speech: 'adjetivo breve', translit: 'rad' }
+          'привет': { meaning: 'Hola (saludo cordial e informal)', part_of_speech: 'saludo', translit: null },
+          'рад': { meaning: 'Contento o complacido', part_of_speech: 'adjetivo breve', translit: null }
         }
       };
     } else if (targetLang === 'nl') {

@@ -1,4 +1,4 @@
-﻿export const STUDY_GREETINGS = {
+export const STUDY_GREETINGS = {
   zh: { text: '你好', translit: 'Nǐ hǎo', langName: 'Chino Mandarín' },
   pl: { text: 'Cześć', translit: null, langName: 'Polaco' },
   en: { text: 'Hello', translit: null, langName: 'Inglés' },
@@ -7,7 +7,7 @@
   fr: { text: 'Bonjour', translit: null, langName: 'Francés' },
   it: { text: 'Ciao', translit: null, langName: 'Italiano' },
   nl: { text: 'Hallo', translit: null, langName: 'Nederlands' },
-  ru: { text: 'Привет', translit: 'Privet', langName: 'Ruso' },
+  ru: { text: 'Привет', translit: null, langName: 'Ruso' },
   ar: { text: 'مَرْحَبًا', translit: 'Marhaban', langName: 'Árabe', rtl: true },
   pt: { text: 'Olá', translit: null, langName: 'Portugués' },
   ja: { text: 'こんにちは', translit: 'Konnichiwa', langName: 'Japonés' },
