@@ -3,7 +3,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleSentenceBreakdown, handleBatchGloss } from './handlers.js';
 import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
-import { handleRealtimeSession } from './realtimeHandlers.js';
 import { handlePipelineChatStream, handlePipelineTTS } from './pipelineHandlers.js';
 
 dotenv.config();
@@ -49,11 +48,7 @@ app.post('/sentence-breakdown', handleSentenceBreakdown);
 app.post('/api/batch-gloss', handleBatchGloss);
 app.post('/batch-gloss', handleBatchGloss);
 
-// OpenAI Realtime WebRTC Session creation
-app.post('/api/realtime/session', handleRealtimeSession);
-app.post('/realtime/session', handleRealtimeSession);
-
-// Pipeline Call Endpoints (Fase 2: Low-Cost Voice Calls)
+// Voice Call Endpoints (Pipeline Architecture: STT + Groq LLM + Cartesia Sonic TTS)
 app.post('/api/pipeline/chat-stream', handlePipelineChatStream);
 app.post('/pipeline/chat-stream', handlePipelineChatStream);
 

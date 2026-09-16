@@ -229,15 +229,6 @@ export function CallDetailView({
           </div>
 
           <div className="flex items-center gap-2">
-            {callData?.mode && (
-              <span className={`px-2.5 py-1 rounded-full text-xs font-bold border shadow-xs ${
-                callData.mode === 'pipeline'
-                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
-              }`}>
-                {callData.mode === 'pipeline' ? (isSpanish ? 'Económico' : 'Pipeline') : 'Realtime'}
-              </span>
-            )}
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-xs">
               <Clock className="w-3.5 h-3.5" />
               <span>{callData?.duration || '00:00'}</span>

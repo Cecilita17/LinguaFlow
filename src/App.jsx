@@ -876,8 +876,8 @@ export default function App() {
     stopSpeaking();
   };
 
-  // Handle saving completed real-time call to unified history
-  const handleEndRealtimeCall = (sessionData) => {
+  // Handle saving completed voice call to unified history
+  const handleEndCall = (sessionData) => {
     if (sessionData && sessionData.transcript && sessionData.transcript.length > 0) {
       try {
         let storedCalls = [];
@@ -977,7 +977,7 @@ export default function App() {
             targetLang={targetLang}
             nativeLang={nativeLang}
             level={config?.level || 'A2/B1'}
-            onEndCall={handleEndRealtimeCall}
+            onEndCall={handleEndCall}
           />
         </main>
       ) : chatViewMode === 'call-detail' ? (

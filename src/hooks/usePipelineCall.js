@@ -77,9 +77,9 @@ function isLikelyEcho(transcript, aiText) {
  * Hook for managing Low-Cost Live Voice Calls (Pipeline Architecture) in LinguaFlow.
  * Flow:
  * - Client Microphone + Live STT (Streaming Speech Recognition + Auto-VAD)
- * - Real-time Streaming LLM (Groq openai/gpt-oss-120b with bounded history)
  * - Intelligent Sentence Boundary Chunker (dispatches sentences to TTS as they stream)
- * - Streaming TTS Synthesis (OpenAI tts-1 Audio Queue Player)
+ * - Streaming TTS Synthesis (/api/pipeline/tts Cartesia Sonic-3.6 Audio Queue Player)
+ * - Pedagogical sentence-level correction post-turn via grammarEngine
  * - Natural Barge-in / Interruption handling
  * - Word-by-word Glosses & Local Transliteration (Arabic/Chinese)
  * - Deduplicated Pedagogical Grammar Corrections
