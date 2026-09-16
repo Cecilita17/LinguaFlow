@@ -112,8 +112,7 @@ export function useSpeech({
   const mimeTypeRef = useRef('audio/webm');
   const mediaStreamPromiseRef = useRef(null);
   const speechFallbackTimerRef = useRef(null);
-  const lastBoundaryCharRef = useRef(0);
-  const lastBoundaryTimeRef = useRef(0);
+  const receivedBoundaryRef = useRef(false);
 
   const clearSpeechFallbackTimer = () => {
     if (speechFallbackTimerRef.current) {
@@ -404,8 +403,7 @@ export function useSpeech({
 
     setSpeakingText(cleanText);
     setSpeakingCharIndex(0);
-    lastBoundaryCharRef.current = 0;
-    lastBoundaryTimeRef.current = Date.now();
+    receivedBoundaryRef.current = false;
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = langCode;
@@ -417,30 +415,27 @@ export function useSpeech({
       utterance.voice = matchingVoice;
     }
 
+    const speechStartTime = Date.now();
     const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, rate);
-    const charsPerMs = Math.max(0.001, cleanText.length / Math.max(200, estimatedDurationMs));
 
     utterance.onstart = () => {
       setIsSpeaking(true);
       clearSpeechFallbackTimer();
-      lastBoundaryCharRef.current = 0;
-      lastBoundaryTimeRef.current = Date.now();
 
-      // Continuous progression timer that smoothly advances speakingCharIndex
-      // and recalibrates immediately whenever onboundary events arrive
+      // Start time-based progression fallback in case onboundary is not emitted by browser
       speechFallbackTimerRef.current = setInterval(() => {
-        const now = Date.now();
-        const elapsedSinceBoundary = now - lastBoundaryTimeRef.current;
-        const progressChars = Math.floor(elapsedSinceBoundary * charsPerMs);
-        const estIndex = Math.min(cleanText.length - 1, lastBoundaryCharRef.current + progressChars);
-        setSpeakingCharIndex(estIndex);
-      }, 40);
+        if (!receivedBoundaryRef.current) {
+          const elapsed = Date.now() - speechStartTime;
+          const progress = Math.min(0.99, elapsed / estimatedDurationMs);
+          const estIndex = Math.min(cleanText.length - 1, Math.floor(progress * cleanText.length));
+          setSpeakingCharIndex(estIndex);
+        }
+      }, 50);
     };
 
     utterance.onboundary = (event) => {
       if (typeof event.charIndex === 'number') {
-        lastBoundaryCharRef.current = event.charIndex;
-        lastBoundaryTimeRef.current = Date.now();
+        receivedBoundaryRef.current = true;
         setSpeakingCharIndex(event.charIndex);
       }
       if (onBoundaryCallback) {
