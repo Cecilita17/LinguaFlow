@@ -50,7 +50,7 @@ function mergeTurnText(confirmed, incoming) {
  * Used strictly as a short guard for the physical room acoustic tail
  * immediately after the speaker stops, without blocking genuine user speech.
  */
-const POST_TTS_ECHO_GUARD_MS = 250;
+const POST_TTS_ECHO_GUARD_MS = 350;
 
 /**
  * Conservative acoustic echo fallback detector.
@@ -135,7 +135,9 @@ export function usePipelineCall({
     finalized: false
   });
 
-  // Audio Playback & Streaming Queue Refs
+  // Half-Duplex Acoustic Protection & TTS Playback State Refs
+  const isSttPausedRef = useRef(false);
+  const isLlmStreamingRef = useRef(false);
   const audioContextRef = useRef(null);
   const activeAudioSourceRef = useRef(null);
   const activeAudioElementRef = useRef(null);
@@ -233,6 +235,8 @@ export function usePipelineCall({
       echoGuardTimerRef.current = null;
     }
     isEchoGuardActiveRef.current = false;
+    isLlmStreamingRef.current = false;
+    isSttPausedRef.current = false;
 
     if (llmAbortControllerRef.current) {
       try { llmAbortControllerRef.current.abort(); } catch (e) {}
@@ -272,6 +276,8 @@ export function usePipelineCall({
       echoGuardTimerRef.current = null;
     }
     isEchoGuardActiveRef.current = false;
+    isLlmStreamingRef.current = false;
+    isSttPausedRef.current = false;
     lastAiSpokenTextRef.current = '';
 
     interruptAssistant();
@@ -430,19 +436,28 @@ export function usePipelineCall({
   // Process sequential audio chunks in the Web Audio queue
   const playNextInAudioQueue = useCallback(async () => {
     if (isPlayingQueueRef.current || ttsQueueRef.current.length === 0) {
-      if (ttsQueueRef.current.length === 0 && !currentAiTurnIdRef.current) {
+      if (ttsQueueRef.current.length === 0 && !isLlmStreamingRef.current && !isPlayingQueueRef.current) {
         // Activate post-TTS acoustic echo guard to discard room feedback before returning to 'listening'
-        if (!isEchoGuardActiveRef.current && !isPlayingQueueRef.current) {
+        if (!isEchoGuardActiveRef.current) {
           isEchoGuardActiveRef.current = true;
+          isSttPausedRef.current = true;
+          console.log('[PipelineEchoGuard] TTS playback ended -> waiting for acoustic tail');
           lastAiSpokenTimestampRef.current = Date.now();
           if (echoGuardTimerRef.current) {
             clearTimeout(echoGuardTimerRef.current);
           }
           echoGuardTimerRef.current = setTimeout(() => {
             isEchoGuardActiveRef.current = false;
+            isSttPausedRef.current = false;
             echoGuardTimerRef.current = null;
             if (callStateRef.current !== 'idle' && callStateRef.current !== 'error') {
+              console.log('[PipelineEchoGuard] STT resumed -> listening');
               setCallState('listening');
+              if (isRecognitionActiveRef.current && recognitionRef.current) {
+                try {
+                  recognitionRef.current.start();
+                } catch (e) {}
+              }
             }
           }, POST_TTS_ECHO_GUARD_MS);
         }
@@ -455,6 +470,7 @@ export function usePipelineCall({
       echoGuardTimerRef.current = null;
     }
     isEchoGuardActiveRef.current = false;
+    isSttPausedRef.current = true;
 
     const nextItem = ttsQueueRef.current.shift();
     if (!nextItem || !nextItem.text) return;
@@ -601,6 +617,7 @@ export function usePipelineCall({
     const clean = (textChunk || '').trim();
     if (!clean) return;
 
+    isSttPausedRef.current = true;
     ttsQueueRef.current.push({ text: clean });
     if (!isPlayingQueueRef.current) {
       playNextInAudioQueue();
@@ -613,6 +630,14 @@ export function usePipelineCall({
     const cleanPrompt = userPrompt.trim();
 
     interruptAssistant();
+    isLlmStreamingRef.current = true;
+    isSttPausedRef.current = true;
+    console.log('[PipelineEchoGuard] TTS playback started -> STT paused');
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {}
+    }
     setCallState('thinking');
 
     // Reset currentTurnRef so subsequent user speech starts completely fresh
@@ -771,8 +796,13 @@ export function usePipelineCall({
       currentAiTurnIdRef.current = null;
       currentAiTurnTextRef.current = '';
       lastAiSpokenTimestampRef.current = Date.now();
+    } finally {
+      isLlmStreamingRef.current = false;
+      if (ttsQueueRef.current.length === 0 && !isPlayingQueueRef.current) {
+        playNextInAudioQueue();
+      }
     }
-  }, [targetLang, nativeLang, level, interruptAssistant, enqueueTextForTTS, triggerTurnGloss]);
+  }, [targetLang, nativeLang, level, interruptAssistant, enqueueTextForTTS, triggerTurnGloss, playNextInAudioQueue]);
 
   // Finalize and process a completed user speech turn
   const finalizeUserSpeechTurn = useCallback((userText, turnId) => {
@@ -893,8 +923,21 @@ export function usePipelineCall({
       console.log('[PipelineSTT] SpeechRecognition onresult received event, count:', event.results?.length);
       if (isMutedRef.current) return;
 
-      // 1. Post-TTS Echo Guard: Discard trailing speaker feedback immediately following AI speech
-      if (isEchoGuardActiveRef.current) {
+      // 1. Half-Duplex Acoustic Protection: Ignore speech recognition during TTS playback, LLM thinking/streaming, or post-TTS acoustic guard
+      const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
+      const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
+      const isQueueActive = ttsQueueRef.current.length > 0;
+      const isLlmActive = isLlmStreamingRef.current || Boolean(llmAbortControllerRef.current) || Boolean(currentAiTurnIdRef.current);
+
+      if (
+        isSttPausedRef.current ||
+        isPlaybackActive ||
+        isQueueActive ||
+        isLlmActive ||
+        isEchoGuardActiveRef.current ||
+        isSpeakingState
+      ) {
+        console.log('[PipelineEchoGuard] Ignoring SpeechRecognition result during TTS playback');
         for (let i = 0; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
             consumedFinalIndicesRef.current.add(i);
@@ -919,57 +962,16 @@ export function usePipelineCall({
       // If no new unconsumed speech was detected in changed results, nothing to process
       if (!newIncomingSpeech) return;
 
-      // 3. Active AI Playback / Generation / Recent Spoken Echo Check
-      const isAiSpeaking = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current) || callStateRef.current === 'speaking';
-      const isAiGenerating = Boolean(llmAbortControllerRef.current) || Boolean(currentAiTurnIdRef.current) || callStateRef.current === 'thinking';
-      const isRecentAiSpeech = (Date.now() - lastAiSpokenTimestampRef.current) < (POST_TTS_ECHO_GUARD_MS + 1000);
+      // 3. Fallback echo heuristic check (in case tail slightly exceeded timer)
       const aiSpokenText = (currentAiTurnTextRef.current || lastAiSpokenTextRef.current || '').trim();
-
-      if (isAiSpeaking || isAiGenerating || isRecentAiSpeech) {
-        if (isLikelyEcho(newIncomingSpeech, aiSpokenText)) {
-          // Acoustic echo from speaker: consume all final results so far, ignore completely
-          for (let i = 0; i < event.results.length; i++) {
-            if (event.results[i].isFinal) {
-              consumedFinalIndicesRef.current.add(i);
-            }
-          }
-          return;
-        }
-
-        // If AI is currently speaking/generating and user speaks genuine words (>= 2 chars not matching echo) -> BARGE-IN!
-        if (isAiSpeaking || isAiGenerating) {
-          const cleanSpeech = newIncomingSpeech.replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '').trim();
-          if (cleanSpeech.length >= 2) {
-            console.log('[PipelineSTT] Genuine user barge-in detected:', newIncomingSpeech);
-            interruptAssistant();
-
-            if (echoGuardTimerRef.current) {
-              clearTimeout(echoGuardTimerRef.current);
-              echoGuardTimerRef.current = null;
-            }
-            isEchoGuardActiveRef.current = false;
-
-            // Mark all prior finalized results before this event as consumed to isolate new turn
-            for (let i = 0; i < startIndex; i++) {
-              if (event.results[i].isFinal) {
-                consumedFinalIndicesRef.current.add(i);
-              }
-            }
-
-            // Explicitly reset currentTurnRef so the new turn starts completely fresh without previous text
-            currentTurnRef.current = {
-              id: null,
-              confirmedText: '',
-              text: '',
-              finalized: false
-            };
-
-            setCallState('listening');
-          } else {
-            // Short breath/click noise while AI speaking -> ignore
-            return;
+      if (isLikelyEcho(newIncomingSpeech, aiSpokenText)) {
+        console.log('[PipelineEchoGuard] Ignoring SpeechRecognition result matching recent AI spoken text');
+        for (let i = 0; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            consumedFinalIndicesRef.current.add(i);
           }
         }
+        return;
       }
 
       sessionMetricsRef.current.transcriptionEvents++;
@@ -1103,8 +1105,21 @@ export function usePipelineCall({
       // In a new recognition session, event.results indices start from 0 again
       consumedFinalIndicesRef.current.clear();
 
-      // Auto-restart recognition if call is still active
-      if (isRecognitionActiveRef.current) {
+      // Auto-restart recognition only if call is still active and STT is not paused for TTS / thinking
+      const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
+      const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
+      const isQueueActive = ttsQueueRef.current.length > 0;
+      const isLlmActive = isLlmStreamingRef.current || Boolean(llmAbortControllerRef.current) || Boolean(currentAiTurnIdRef.current);
+
+      if (
+        isRecognitionActiveRef.current &&
+        !isSttPausedRef.current &&
+        !isEchoGuardActiveRef.current &&
+        !isPlaybackActive &&
+        !isQueueActive &&
+        !isLlmActive &&
+        !isSpeakingState
+      ) {
         try {
           console.log('[PipelineSTT] Auto-restarting SpeechRecognition...');
           recognition.start();
