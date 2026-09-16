@@ -112,7 +112,9 @@ export function useSpeech({
   const mimeTypeRef = useRef('audio/webm');
   const mediaStreamPromiseRef = useRef(null);
   const speechFallbackTimerRef = useRef(null);
-  const receivedBoundaryRef = useRef(false);
+  const lastBoundaryCharRef = useRef(0);
+  const lastBoundaryTimeRef = useRef(0);
+  const currentCharIndexRef = useRef(0);
 
   const clearSpeechFallbackTimer = () => {
     if (speechFallbackTimerRef.current) {
@@ -403,7 +405,9 @@ export function useSpeech({
 
     setSpeakingText(cleanText);
     setSpeakingCharIndex(0);
-    receivedBoundaryRef.current = false;
+    lastBoundaryCharRef.current = 0;
+    lastBoundaryTimeRef.current = Date.now();
+    currentCharIndexRef.current = 0;
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = langCode;
@@ -415,28 +419,39 @@ export function useSpeech({
       utterance.voice = matchingVoice;
     }
 
-    const speechStartTime = Date.now();
     const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, rate);
+    const msPerChar = Math.max(15, estimatedDurationMs / Math.max(1, cleanText.length));
 
     utterance.onstart = () => {
       setIsSpeaking(true);
       clearSpeechFallbackTimer();
+      lastBoundaryCharRef.current = 0;
+      lastBoundaryTimeRef.current = Date.now();
+      currentCharIndexRef.current = 0;
 
-      // Start time-based progression fallback in case onboundary is not emitted by browser
+      // Smooth visual progression timer that advances between boundaries
       speechFallbackTimerRef.current = setInterval(() => {
-        if (!receivedBoundaryRef.current) {
-          const elapsed = Date.now() - speechStartTime;
-          const progress = Math.min(0.99, elapsed / estimatedDurationMs);
-          const estIndex = Math.min(cleanText.length - 1, Math.floor(progress * cleanText.length));
-          setSpeakingCharIndex(estIndex);
-        }
+        const now = Date.now();
+        const elapsedSinceBoundary = now - lastBoundaryTimeRef.current;
+        const progressChars = Math.floor(elapsedSinceBoundary / msPerChar);
+        const nextCharIndex = Math.min(
+          cleanText.length - 1,
+          Math.max(currentCharIndexRef.current, lastBoundaryCharRef.current + progressChars)
+        );
+        currentCharIndexRef.current = nextCharIndex;
+        setSpeakingCharIndex(nextCharIndex);
       }, 50);
     };
 
     utterance.onboundary = (event) => {
-      if (typeof event.charIndex === 'number') {
-        receivedBoundaryRef.current = true;
-        setSpeakingCharIndex(event.charIndex);
+      if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
+        const boundaryIndex = Math.min(cleanText.length - 1, event.charIndex);
+        lastBoundaryCharRef.current = boundaryIndex;
+        lastBoundaryTimeRef.current = Date.now();
+        if (boundaryIndex >= currentCharIndexRef.current) {
+          currentCharIndexRef.current = boundaryIndex;
+          setSpeakingCharIndex(boundaryIndex);
+        }
       }
       if (onBoundaryCallback) {
         onBoundaryCallback(event);
