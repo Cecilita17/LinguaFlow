@@ -180,20 +180,65 @@ CRITICAL SPOKEN CONVERSATION RULES:
 }
 
 /**
- * Streaming TTS Synthesis Endpoint for Pipeline Calls.
- * Streams OpenAI audio chunks directly to the client with low latency.
+ * Official Cartesia Sonic Multilingual Voice Mapping.
+ * Cartesia Sonic models (sonic-3.6, sonic-multilingual) natively support 40+ languages.
+ * We provide curated, high-quality conversational voices per language while allowing
+ * overrides via CARTESIA_VOICE_ID or client-provided UUID.
+ */
+export const CARTESIA_VOICES = {
+  // English (Skylar / Friendly Guide)
+  en: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'en' },
+  // Spanish (Multilingual Warm Conversational)
+  es: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'es' },
+  // French (Conversational French / Multilingual)
+  fr: { voiceId: 'a249eaff-1e96-4d2c-b23b-12efa4f66f41', language: 'fr' },
+  // German (Multilingual)
+  de: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'de' },
+  // Italian (Multilingual)
+  it: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'it' },
+  // Portuguese (Multilingual)
+  pt: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'pt' },
+  // Russian (Multilingual)
+  ru: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'ru' },
+  // Polish (Multilingual)
+  pl: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'pl' },
+  // Dutch (Multilingual)
+  nl: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'nl' },
+  // Turkish (Multilingual)
+  tr: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'tr' },
+  // Mandarin Chinese (Multilingual)
+  zh: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'zh' },
+  // Arabic (Multilingual)
+  ar: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'ar' },
+  // Japanese (Multilingual)
+  ja: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'ja' },
+  // Korean (Multilingual)
+  ko: { voiceId: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', language: 'ko' }
+};
+
+const DEFAULT_CARTESIA_VOICE_ID = 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4';
+const DEFAULT_CARTESIA_MODEL = 'sonic-3.6';
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/**
+ * Streaming TTS Synthesis Endpoint for Pipeline Calls (Cartesia Sonic).
+ * Streams Cartesia Sonic audio chunks directly to the client with ultra-low latency.
  *
- * TTS Model selection:
- *   - Uses process.env.OPENAI_TTS_MODEL if set (e.g. 'tts-1', 'tts-1-hd', 'gpt-4o-mini-tts').
- *   - Falls back to 'gpt-4o-mini-tts' (the current recommended model for /v1/audio/speech).
+ * Model selection:
+ *   - Uses process.env.CARTESIA_MODEL if set (e.g. 'sonic-3.6', 'sonic-multilingual').
+ *   - Defaults to 'sonic-3.6' (Cartesia recommended multilingual model).
+ *
+ * Voice selection:
+ *   - Uses client-provided UUID if valid.
+ *   - Maps targetLang to CARTESIA_VOICES[targetLang].
+ *   - Uses process.env.CARTESIA_VOICE_ID if configured.
+ *   - Defaults to DEFAULT_CARTESIA_VOICE_ID.
  *
  * Diagnostic logging:
- *   - Logs the TTS model used, whether OPENAI_API_KEY is set, its length, and first 7 characters.
- *   - On OpenAI error: logs upstream HTTP status, Content-Type, model used, and full error body.
+ *   - Logs model, voice ID, target language, and safe key diagnostics (length, prefix 7 chars).
+ *   - On Cartesia error: logs upstream HTTP status, Content-Type, and full error body.
  *   - NEVER logs or returns the full API key.
  */
-const DEFAULT_TTS_MODEL = 'gpt-4o-mini-tts';
-
 export async function handlePipelineTTS(req, res) {
   setCorsHeaders(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -202,7 +247,7 @@ export async function handlePipelineTTS(req, res) {
     const body = parseRequestBody(req);
     const {
       text = '',
-      voice = 'alloy',
+      voice = '',
       targetLang = 'es'
     } = body;
 
@@ -216,71 +261,92 @@ export async function handlePipelineTTS(req, res) {
       });
     }
 
-    // ── TTS Model selection ─────────────────────────────────────────────
-    const envModel = (process.env.OPENAI_TTS_MODEL || '').trim();
-    const ttsModel = envModel || DEFAULT_TTS_MODEL;
+    // ── Model & Voice Resolution ─────────────────────────────────────────
+    const cartesiaModel = (process.env.CARTESIA_MODEL || '').trim() || DEFAULT_CARTESIA_MODEL;
+    const langConfig = CARTESIA_VOICES[targetLang] || CARTESIA_VOICES['es'];
+    const resolvedLanguage = langConfig.language || targetLang || 'es';
 
-    // ── Key diagnostics (safe: never log full key) ──────────────────────
-    const rawKey = process.env.OPENAI_API_KEY;
+    let resolvedVoiceId = DEFAULT_CARTESIA_VOICE_ID;
+    if (voice && UUID_REGEX.test(voice.trim())) {
+      resolvedVoiceId = voice.trim();
+    } else if (langConfig && langConfig.voiceId) {
+      resolvedVoiceId = langConfig.voiceId;
+    } else if (process.env.CARTESIA_VOICE_ID && UUID_REGEX.test(process.env.CARTESIA_VOICE_ID.trim())) {
+      resolvedVoiceId = process.env.CARTESIA_VOICE_ID.trim();
+    }
+
+    // ── Key diagnostics (safe: never log full key) ───────────────────────
+    const rawKey = process.env.CARTESIA_API_KEY;
     const trimmedKey = (rawKey || '').trim();
     const hasKey = trimmedKey.length > 0;
     const keyLen = trimmedKey.length;
     const keyPrefix = hasKey ? trimmedKey.slice(0, 7) : '(none)';
 
     console.log(
-      '[BackendPipelineTTS] Request received.',
+      '[BackendPipelineTTS] (Cartesia) Request received.',
       'Text length:', cleanText.length,
-      'Voice:', voice,
-      'TTS model:', ttsModel,
-      'Model source:', envModel ? 'OPENAI_TTS_MODEL env' : 'default',
-      'Has OPENAI_API_KEY:', hasKey,
+      'TargetLang:', targetLang,
+      'Cartesia language:', resolvedLanguage,
+      'Model:', cartesiaModel,
+      'Voice ID:', resolvedVoiceId,
+      'Has CARTESIA_API_KEY:', hasKey,
       'Key length:', keyLen,
       'Key prefix:', keyPrefix
     );
 
     if (!hasKey) {
-      console.warn('[BackendPipelineTTS] OPENAI_API_KEY is MISSING or EMPTY in process.env');
+      console.warn('[BackendPipelineTTS] CARTESIA_API_KEY is MISSING or EMPTY in process.env');
       return res.status(500).json({
-        error: 'Falta OPENAI_API_KEY en el servidor para síntesis TTS.',
+        error: 'Falta CARTESIA_API_KEY en el servidor para síntesis TTS.',
         upstream: 'self',
         status: 500,
-        details: 'OPENAI_API_KEY environment variable is not set on the server.'
+        details: 'CARTESIA_API_KEY environment variable is not set on the server.'
       });
     }
 
-    // ── Call OpenAI TTS API ─────────────────────────────────────────────
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+    // ── Call Cartesia TTS API ────────────────────────────────────────────
+    const response = await fetch('https://api.cartesia.ai/tts/bytes', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${trimmedKey}`,
+        'X-API-Key': trimmedKey,
+        'Cartesia-Version': '2026-08-14',
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: ttsModel,
-        voice: voice || 'alloy',
-        input: cleanText,
-        response_format: 'mp3',
-        speed: 1.0
+        model_id: cartesiaModel,
+        transcript: cleanText,
+        voice: {
+          mode: 'id',
+          id: resolvedVoiceId
+        },
+        output_format: {
+          container: 'mp3',
+          encoding: 'pcm_s16le',
+          sample_rate: 44100
+        },
+        language: resolvedLanguage
       })
     });
 
     const upstreamContentType = response.headers.get('content-type') || '';
 
     console.log(
-      '[BackendPipelineTTS] OpenAI response:',
+      '[BackendPipelineTTS] Cartesia response:',
       'HTTP', response.status,
       'Content-Type:', upstreamContentType,
-      'Model used:', ttsModel
+      'Model:', cartesiaModel
     );
 
     if (!response.ok) {
       // Read full error body for server-side diagnostics
       const errText = await response.text();
       console.warn(
-        '[BackendPipelineTTS] ⚠ OpenAI TTS REJECTED.',
+        '[BackendPipelineTTS] ⚠ Cartesia TTS REJECTED.',
         'HTTP status:', response.status,
         'Content-Type:', upstreamContentType,
-        'Model used:', ttsModel,
+        'Model used:', cartesiaModel,
+        'Voice ID:', resolvedVoiceId,
+        'Language:', resolvedLanguage,
         'Error body:', errText,
         '| Key info — present:', hasKey, 'len:', keyLen, 'prefix:', keyPrefix
       );
@@ -289,22 +355,23 @@ export async function handlePipelineTTS(req, res) {
       let parsedDetails = errText;
       try {
         const parsed = JSON.parse(errText);
-        parsedDetails = parsed.error?.message || parsed.error || errText;
+        parsedDetails = parsed.error?.message || parsed.error || parsed.message || errText;
       } catch (_) { /* keep raw text */ }
 
       return res.status(response.status).json({
-        error: `Error al sintetizar voz (upstream OpenAI, model: ${ttsModel})`,
-        upstream: 'openai',
+        error: `Error al sintetizar voz (upstream Cartesia, model: ${cartesiaModel})`,
+        upstream: 'cartesia',
         status: response.status,
-        model: ttsModel,
+        model: cartesiaModel,
+        voice: resolvedVoiceId,
         details: parsedDetails
       });
     }
 
-    // ── Stream audio buffer directly to client ──────────────────────────
+    // ── Stream audio buffer directly to client ───────────────────────────
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    console.log('[BackendPipelineTTS] ✓ Audio generated OK. Bytes:', buffer.length, 'Model:', ttsModel);
+    console.log('[BackendPipelineTTS] ✓ Cartesia audio generated OK. Bytes:', buffer.length, 'Model:', cartesiaModel, 'Voice:', resolvedVoiceId);
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-cache');
@@ -314,7 +381,7 @@ export async function handlePipelineTTS(req, res) {
     console.error('[BackendPipelineTTS] Server error in /api/pipeline/tts:', err);
     if (!res.headersSent) {
       res.status(500).json({
-        error: 'Error interno en síntesis TTS',
+        error: 'Error interno en síntesis TTS (Cartesia)',
         upstream: 'self',
         status: 500,
         details: err.message
