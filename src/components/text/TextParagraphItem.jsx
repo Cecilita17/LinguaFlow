@@ -64,12 +64,12 @@ export function TextParagraphItem({
   };
 
   const tokenCharRanges = React.useMemo(() => {
-    return computeTokenCharRanges(tokens, text);
-  }, [tokens, text]);
+    return computeTokenCharRanges(text, tokens, targetLang);
+  }, [text, tokens, targetLang]);
 
   const activeTokenIndex = React.useMemo(() => {
     if (!isPlaying || activeAudioCharIndex < 0) return -1;
-    return findActiveTokenIndex(tokenCharRanges, activeAudioCharIndex);
+    return findActiveTokenIndex(activeAudioCharIndex, tokenCharRanges);
   }, [isPlaying, activeAudioCharIndex, tokenCharRanges]);
 
   let runningChunkPos = 0;
