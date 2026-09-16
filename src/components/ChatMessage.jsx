@@ -587,9 +587,9 @@ export function ChatMessage({
         <span className="text-xs font-semibold text-rose-200/80">LinguaBot</span>
       </div>
 
-      <div className="max-w-[88%] sm:max-w-[78%] bg-[#fffdfd] text-stone-900 border border-[#e8ded8] rounded-2xl rounded-tl-xs px-4 py-3 shadow-md shadow-black/20 hover:shadow-lg transition-all">
+      <div className="max-w-[88%] sm:max-w-[78%] bg-[var(--surface-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-2xl rounded-tl-xs px-4 py-3 shadow-md shadow-black/20 hover:shadow-lg transition-all">
         {/* Hint for interactive words */}
-        <div className="flex items-center space-x-1 text-[10px] text-stone-400 mb-1.5 font-normal select-none">
+        <div className="flex items-center space-x-1 text-[10px] text-stone-400 dark:text-[var(--text-muted)] mb-1.5 font-normal select-none">
           <BookOpen className="w-2.5 h-2.5 text-rose-500/80 shrink-0" />
           <span>{t('tap_word_meaning')}</span>
         </div>
@@ -601,7 +601,7 @@ export function ChatMessage({
             isArabic
               ? 'font-arabic text-right text-[22px] sm:text-[26px] leading-loose tracking-normal'
               : 'text-left text-[17px] sm:text-[18.5px] leading-relaxed tracking-wide font-normal'
-          } text-stone-900 flex flex-wrap items-baseline gap-x-0.5 gap-y-0.5 break-words [overflow-wrap:anywhere]`}
+          } text-[var(--text-primary)] flex flex-wrap items-baseline gap-x-0.5 gap-y-0.5 break-words [overflow-wrap:anywhere]`}
         >
           {botSegments.map((segment, idx) => {
             if (segment.type === 'space') {
@@ -617,7 +617,7 @@ export function ChatMessage({
 
             if (segment.type === 'punctuation') {
               return (
-                <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="text-stone-400 px-0.5 select-text text-[17px] sm:text-[18.5px]">
+                <span key={idx} dir={isArabic ? 'rtl' : 'ltr'} className="text-stone-400 dark:text-stone-400 px-0.5 select-text text-[17px] sm:text-[18.5px]">
                   {segment.text}
                 </span>
               );
@@ -648,7 +648,7 @@ export function ChatMessage({
                       type="button"
                       dir="ltr"
                       onClick={() => onWordClick(cleanForLookup, message.vocabulary?.[cleanForLookup] || null)}
-                      className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 transition-all cursor-pointer group/item text-left"
+                      className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 transition-all cursor-pointer group/item text-left"
                       title={isSaved ? `Palabra guardada: "${cleanForLookup}"` : `Clic para ver significado de "${cleanForLookup}"`}
                     >
                       {showTransliteration && cleanTranslit ? (
@@ -661,7 +661,7 @@ export function ChatMessage({
                             className={
                               isSaved
                                 ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
-                                : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
+                                : 'underline decoration-dotted decoration-stone-300 dark:decoration-stone-600 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
                             }
                           >
                             {baseWord}
@@ -673,7 +673,7 @@ export function ChatMessage({
                           className={
                             isSaved
                               ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
-                              : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
+                              : 'underline decoration-dotted decoration-stone-300 dark:decoration-stone-600 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
                           }
                         >
                           {baseWord}
@@ -682,7 +682,7 @@ export function ChatMessage({
                     </button>
                   )}
                   {punctuation && (
-                    <span className="text-stone-500 text-[17px] sm:text-[18.5px] font-normal select-text">
+                    <span className="text-stone-500 dark:text-stone-400 text-[17px] sm:text-[18.5px] font-normal select-text">
                       {punctuation}
                     </span>
                   )}
@@ -699,7 +699,7 @@ export function ChatMessage({
                 type="button"
                 dir={isArabic ? 'rtl' : 'ltr'}
                 onClick={() => onWordClick(clean, message.vocabulary?.[clean] || null)}
-                className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 transition-all cursor-pointer group/item"
+                className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 transition-all cursor-pointer group/item"
                 title={isSaved ? `Palabra guardada: "${clean}"` : `Clic para ver significado de "${clean}"`}
               >
                 {showTransliteration && tokenTranslit ? (
@@ -712,7 +712,7 @@ export function ChatMessage({
                       className={
                         isSaved
                           ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
-                          : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
+                          : 'underline decoration-dotted decoration-stone-300 dark:decoration-stone-600 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
                       }
                     >
                       {wordStr}
@@ -724,7 +724,7 @@ export function ChatMessage({
                     className={
                       isSaved
                         ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
-                        : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
+                        : 'underline decoration-dotted decoration-stone-300 dark:decoration-stone-600 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
                     }
                   >
                     {wordStr}
@@ -737,24 +737,24 @@ export function ChatMessage({
 
         {/* Translation Box (always LTR in native language) */}
         {showTranslation && message.translation && (
-          <div dir="ltr" className="mt-2.5 pt-2.5 border-t border-stone-100 bg-rose-50/70 -mx-4 -mb-3 p-3 rounded-b-2xl animate-fade-in text-xs sm:text-sm text-stone-850 flex items-start space-x-2 border-t border-rose-100 text-left">
+          <div dir="ltr" className="mt-2.5 pt-2.5 border-t border-stone-100 dark:border-[var(--border-primary)] bg-rose-50/70 dark:bg-rose-950/30 -mx-4 -mb-3 p-3 rounded-b-2xl animate-fade-in text-xs sm:text-sm text-stone-850 dark:text-[var(--text-secondary)] flex items-start space-x-2 border-t border-rose-100 dark:border-rose-900/40 text-left">
             <Globe className="w-3.5 h-3.5 text-rose-600 mt-0.5 flex-shrink-0" />
             <div>
-              <span className="text-[10px] font-bold text-rose-800 block uppercase tracking-wider mb-0.5">
+              <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 block uppercase tracking-wider mb-0.5">
                 {isSpanish ? 'Traducción completa:' : 'Full translation:'}
               </span>
-              <p className="font-medium text-stone-850 leading-snug">{message.translation}</p>
+              <p className="font-medium text-stone-850 dark:text-[var(--text-primary)] leading-snug">{message.translation}</p>
             </div>
           </div>
         )}
 
         {/* Action Buttons Toolbar */}
-        <div className="mt-2.5 pt-1.5 border-t border-stone-200/70 flex flex-wrap items-center justify-between gap-1.5 text-xs text-stone-500">
+        <div className="mt-2.5 pt-1.5 border-t border-stone-200/70 dark:border-[var(--border-primary)] flex flex-wrap items-center justify-between gap-1.5 text-xs text-stone-500 dark:text-[var(--text-muted)]">
           <div className="flex items-center space-x-1.5">
             {/* Audio Button */}
             <button
               onClick={() => onPlayAudio(message.text)}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-rose-100 hover:text-rose-900 text-stone-700 text-[11px] font-medium transition-colors cursor-pointer"
+              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-[var(--surface-primary)] hover:bg-rose-100 hover:text-rose-900 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 text-stone-700 dark:text-[var(--text-secondary)] text-[11px] font-medium transition-colors cursor-pointer border border-transparent dark:border-[var(--border-primary)]"
               title={isSpanish ? "Escuchar en voz alta" : "Listen aloud"}
             >
               <Volume2 className="w-3.5 h-3.5 text-rose-600" />
@@ -768,7 +768,7 @@ export function ChatMessage({
                 className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
                   showTranslation
                     ? 'bg-rose-600 text-white'
-                    : 'bg-stone-100 hover:bg-rose-100 hover:text-rose-900 text-stone-700'
+                    : 'bg-stone-100 dark:bg-[var(--surface-primary)] hover:bg-rose-100 hover:text-rose-900 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 text-stone-700 dark:text-[var(--text-secondary)] border border-transparent dark:border-[var(--border-primary)]'
                 }`}
                 title={isSpanish ? "Traducir la respuesta entera" : "Translate the entire response"}
               >
@@ -788,10 +788,10 @@ export function ChatMessage({
 
           <button
             onClick={handleCopy}
-            className="p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
+            className="p-1 text-stone-400 dark:text-[var(--text-muted)] hover:text-stone-700 dark:hover:text-[var(--text-primary)] hover:bg-stone-100 dark:hover:bg-[var(--surface-primary)] rounded-md transition-colors cursor-pointer"
             title={isSpanish ? "Copiar texto" : "Copy text"}
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-amber-600" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-3.5 h-3.5 text-amber-600" /> : <Copy className="w-3.5 h-3.5 text-stone-400 dark:text-[var(--text-muted)]" />}
           </button>
         </div>
       </div>
