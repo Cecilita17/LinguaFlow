@@ -45,12 +45,8 @@ export default function HomePage({
 
         {/* 1. DYNAMIC GREETING (prominent on mobile & desktop, immediately updates when targetLang changes) */}
         <div className="text-center mx-auto mb-4 sm:mb-6 animate-fade-in pt-1">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-300 text-[11px] font-bold tracking-wider uppercase mb-2">
-            <span>{greeting.langName || currentTargetMeta.name}</span>
-          </div>
-
           <h1
-            className="text-4xl sm:text-6xl font-black tracking-tight text-[var(--text-primary)] dark:text-white leading-tight transition-all text-center"
+            className="w-full text-center text-4xl sm:text-6xl font-black tracking-tight text-[var(--text-primary)] dark:text-white leading-tight transition-all"
             dir={greeting.rtl ? 'rtl' : 'ltr'}
           >
             <span className="bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 dark:from-rose-400 dark:via-pink-400 dark:to-amber-300 bg-clip-text text-transparent">
