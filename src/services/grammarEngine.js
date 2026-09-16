@@ -552,17 +552,33 @@ export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', 
 
     if (res.ok) {
       const json = await res.json();
+      const isFallback = json && (json.fallback === true || json.success === false);
       const cor = json?.data || json?.user_correction;
-      if (cor && (cor.corrected_text !== undefined || cor.diff_tokens)) {
-        const corrected = cor.corrected_text || clean;
-        const diffTokens = cor.diff_tokens && cor.diff_tokens.length > 0
+
+      if (cor && !isFallback && (cor.corrected_text !== undefined || cor.diff_tokens)) {
+        const corrected = (cor.corrected_text || clean).trim();
+        const hasDiffWithChanges = Array.isArray(cor.diff_tokens) &&
+          cor.diff_tokens.length > 0 &&
+          cor.diff_tokens.some((t) => t.changed);
+
+        const diffTokens = hasDiffWithChanges
           ? cor.diff_tokens
-          : computeWordDiff(clean, corrected);
+          : (corrected.toLowerCase() !== clean.toLowerCase()
+              ? computeWordDiff(clean, corrected)
+              : (Array.isArray(cor.diff_tokens) && cor.diff_tokens.length > 0
+                  ? cor.diff_tokens
+                  : computeWordDiff(clean, corrected)));
+
+        const hasErrors = Boolean(
+          cor.has_errors ||
+          diffTokens.some((t) => t.changed) ||
+          corrected.toLowerCase() !== clean.toLowerCase()
+        );
 
         return {
           original_text: cor.original_text || clean,
           corrected_text: corrected,
-          has_errors: Boolean(cor.has_errors || diffTokens.some((t) => t.changed) || corrected.toLowerCase() !== clean.toLowerCase()),
+          has_errors: hasErrors,
           diff_tokens: diffTokens
         };
       }

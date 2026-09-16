@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { getLiveCallPedagogicalCorrection } from '../services/grammarEngine.js';
+import { computeWordDiff } from '../services/diffUtils.js';
 import {
   tokenizeLiveCallTurn,
   glossLiveCallTurnAsync,
@@ -404,11 +405,24 @@ export function usePipelineCall({
       .then((correction) => {
         sessionMetricsRef.current.correctionSuccesses++;
         if (correction) {
-          const hasErrors = Boolean(correction.has_errors || correction.diff_tokens?.some((t) => t.changed));
-          const corrected = correction.corrected_text || cleanText;
-          const diffTokens = correction.diff_tokens && correction.diff_tokens.length > 0
+          const corrected = (correction.corrected_text || cleanText).trim();
+          const hasDiffWithChanges = Array.isArray(correction.diff_tokens) &&
+            correction.diff_tokens.length > 0 &&
+            correction.diff_tokens.some((t) => t.changed);
+
+          const diffTokens = hasDiffWithChanges
             ? correction.diff_tokens
-            : [{ text: cleanText, changed: false, original: null }];
+            : (corrected.toLowerCase() !== cleanText.toLowerCase()
+                ? computeWordDiff(cleanText, corrected)
+                : (Array.isArray(correction.diff_tokens) && correction.diff_tokens.length > 0
+                    ? correction.diff_tokens
+                    : computeWordDiff(cleanText, corrected)));
+
+          const hasErrors = Boolean(
+            correction.has_errors ||
+            diffTokens.some((t) => t.changed) ||
+            corrected.toLowerCase() !== cleanText.toLowerCase()
+          );
           const updatedTokens = tokenizeLiveCallTurn(corrected, targetLang, diffTokens);
 
           setLiveTranscript((prev) => {
