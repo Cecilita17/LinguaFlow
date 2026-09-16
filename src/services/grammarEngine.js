@@ -118,7 +118,7 @@ export const CODE_SWITCHING_LEXICON = {
     'leche': 'melk', 'milk': 'melk',
     'agua': 'water', 'water': 'water',
     'café': 'koffie', 'cafe': 'koffie', 'coffee': 'koffie',
-    'té': 'thee', 'te': 'thee', 'tea': 'thee',
+    'té': 'thee', 'tea': 'thee',
     'azúcar': 'suiker', 'azucar': 'suiker', 'sugar': 'suiker',
     'sal': 'zout', 'salt': 'zout',
     'pimienta': 'peper', 'pepper': 'peper',
@@ -134,7 +134,7 @@ export const CODE_SWITCHING_LEXICON = {
     'con': 'met', 'with': 'met',
     'sin': 'zonder', 'without': 'zonder',
     'para': 'voor', 'for': 'voor',
-    'de': 'van', 'from': 'van',
+    'from': 'van',
     'y': 'en', 'and': 'en',
     'o': 'of', 'or': 'of',
     'pero': 'maar', 'but': 'maar',
@@ -142,7 +142,7 @@ export const CODE_SWITCHING_LEXICON = {
     'hacer': 'maken', 'make': 'maken',
     'cocinar': 'koken', 'cook': 'koken',
     'comer': 'eten', 'eat': 'eten',
-    'beber': 'drinken', 'tomar': 'drinken', 'drink': 'drinken',
+    'beber': 'drinken', 'tomar': 'drinken',
     'casa': 'huis', 'house': 'huis',
     'amigo': 'vriend', 'amiga': 'vriendin', 'amigos': 'vrienden', 'friend': 'vriend',
     'libro': 'boek', 'libros': 'boeken', 'book': 'boek',
@@ -156,7 +156,7 @@ export const CODE_SWITCHING_LEXICON = {
   tr: {
     'sopa': 'çorba', 'verduras': 'sebze', 'vegetales': 'sebzeler', 'carne': 'et', 'pollo': 'tavuk',
     'pescado': 'balık', 'arroz': 'pirinç', 'pan': 'ekmek', 'queso': 'peynir', 'huevo': 'yumurta', 'leche': 'süt',
-    'agua': 'su', 'café': 'kahve', 'cafe': 'kahve', 'té': 'çay', 'te': 'çay', 'azúcar': 'şeker',
+    'agua': 'su', 'café': 'kahve', 'cafe': 'kahve', 'té': 'çay', 'tea': 'çay', 'azúcar': 'şeker',
     'con': 'ile', 'sin': 'olmadan', 'para': 'için', 'y': 've', 'pero': 'ama',
     'hacer': 'yapmak', 'cocinar': 'pişirmek', 'comer': 'yemek', 'beber': 'içmek', 'tomar': 'içmek',
     'casa': 'ev', 'amigo': 'arkadaş', 'libro': 'kitap'
@@ -164,7 +164,7 @@ export const CODE_SWITCHING_LEXICON = {
   pl: {
     'sopa': 'zupę', 'verduras': 'warzywa', 'vegetales': 'warzywa', 'carne': 'mięso', 'pollo': 'kurczaka',
     'pescado': 'rybę', 'arroz': 'ryż', 'pan': 'chleb', 'queso': 'ser', 'huevo': 'jajko', 'leche': 'mleko',
-    'agua': 'wodę', 'café': 'kawę', 'cafe': 'kawę', 'té': 'herbatę', 'te': 'herbatę', 'azúcar': 'cukier',
+    'agua': 'wodę', 'café': 'kawę', 'cafe': 'kawę', 'té': 'herbatę', 'tea': 'herbatę', 'azúcar': 'cukier',
     'con': 'z', 'sin': 'bez', 'para': 'dla', 'y': 'i', 'pero': 'ale',
     'hacer': 'robić', 'cocinar': 'gotować', 'comer': 'jeść', 'beber': 'pić', 'tomar': 'pić',
     'casa': 'dom', 'amigo': 'przyjaciel', 'libro': 'książkę'
@@ -172,7 +172,7 @@ export const CODE_SWITCHING_LEXICON = {
   de: {
     'sopa': 'Suppe', 'verduras': 'Gemüse', 'vegetales': 'Gemüse', 'carne': 'Fleisch', 'pollo': 'Hähnchen',
     'pescado': 'Fisch', 'arroz': 'Reis', 'pan': 'Brot', 'queso': 'Käse', 'huevo': 'Ei', 'leche': 'Milch',
-    'agua': 'Wasser', 'café': 'Kaffee', 'cafe': 'Kaffee', 'té': 'Tee', 'te': 'Tee', 'azúcar': 'Zucker',
+    'agua': 'Wasser', 'café': 'Kaffee', 'cafe': 'Kaffee', 'té': 'Tee', 'tea': 'Tee', 'azúcar': 'Zucker',
     'con': 'mit', 'sin': 'ohne', 'para': 'für', 'y': 'und', 'pero': 'aber',
     'hacer': 'machen', 'cocinar': 'kochen', 'comer': 'essen', 'beber': 'trinken', 'tomar': 'trinken',
     'casa': 'Haus', 'amigo': 'Freund', 'libro': 'Buch'
@@ -180,7 +180,7 @@ export const CODE_SWITCHING_LEXICON = {
   fr: {
     'sopa': 'soupe', 'verduras': 'légumes', 'vegetales': 'légumes', 'carne': 'viande', 'pollo': 'poulet',
     'pescado': 'poisson', 'arroz': 'riz', 'pan': 'pain', 'queso': 'fromage', 'huevo': 'œuf', 'leche': 'lait',
-    'agua': 'eau', 'café': 'café', 'cafe': 'café', 'té': 'thé', 'te': 'thé', 'azúcar': 'sucre',
+    'agua': 'eau', 'café': 'café', 'cafe': 'café', 'té': 'thé', 'tea': 'thé', 'azúcar': 'sucre',
     'con': 'avec', 'sin': 'sans', 'para': 'pour', 'y': 'et', 'pero': 'mais',
     'hacer': 'faire', 'cocinar': 'cuisiner', 'comer': 'manger', 'beber': 'boire', 'tomar': 'prendre',
     'casa': 'maison', 'amigo': 'ami', 'libro': 'livre'
@@ -188,7 +188,7 @@ export const CODE_SWITCHING_LEXICON = {
   it: {
     'sopa': 'zuppa', 'verduras': 'verdure', 'vegetales': 'verdure', 'carne': 'carne', 'pollo': 'pollo',
     'pescado': 'pesce', 'arroz': 'riso', 'pan': 'pane', 'queso': 'formaggio', 'huevo': 'uovo', 'leche': 'latte',
-    'agua': 'acqua', 'café': 'caffè', 'cafe': 'caffè', 'té': 'tè', 'te': 'tè', 'azúcar': 'zucchero',
+    'agua': 'acqua', 'café': 'caffè', 'cafe': 'caffè', 'té': 'tè', 'tea': 'tè', 'azúcar': 'zucchero',
     'con': 'con', 'sin': 'senza', 'para': 'per', 'y': 'e', 'pero': 'ma',
     'hacer': 'fare', 'cocinar': 'cucinare', 'comer': 'mangiare', 'beber': 'bere',
     'casa': 'casa', 'amigo': 'amico', 'libro': 'libro'
