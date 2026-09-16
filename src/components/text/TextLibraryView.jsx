@@ -132,6 +132,45 @@ export function TextLibraryView({
     }
   };
 
+  const getDocumentProgress = (doc) => {
+    if (!doc) return 0;
+
+    const paragraphs = Array.isArray(doc.paragraphs) ? doc.paragraphs : [];
+    const totalParas = paragraphs.length || doc.paragraphsCount || 0;
+    if (totalParas <= 0) return 0;
+
+    // Check both lastAudioPosition and lastReadingPosition, preferring the newer one
+    const audioTime = doc.lastAudioPosition?.updatedAt || 0;
+    const readingTime = doc.lastReadingPosition?.updatedAt || 0;
+    const primaryPosId = audioTime > readingTime
+      ? (doc.lastAudioPosition?.paragraphId || doc.lastReadingPosition?.paragraphId)
+      : (doc.lastReadingPosition?.paragraphId || doc.lastAudioPosition?.paragraphId);
+
+    if (!primaryPosId) return 0;
+
+    let currentParaIndex = -1;
+    if (paragraphs.length > 0) {
+      const idx = paragraphs.findIndex(p => p.id === primaryPosId);
+      if (idx !== -1) {
+        currentParaIndex = idx;
+      }
+    }
+
+    // Fallback: parse numeric ID if it matches p-X format (e.g. 'p-15' -> index 14)
+    if (currentParaIndex === -1 && typeof primaryPosId === 'string' && primaryPosId.startsWith('p-')) {
+      const parsedNum = parseInt(primaryPosId.replace('p-', ''), 10);
+      if (!isNaN(parsedNum) && parsedNum > 0) {
+        currentParaIndex = parsedNum - 1;
+      }
+    }
+
+    if (currentParaIndex >= 0) {
+      return Math.min(100, Math.max(0, Math.round(((currentParaIndex + 1) / totalParas) * 100)));
+    }
+
+    return 0;
+  };
+
   return (
     <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-hidden text-[var(--text-primary)]">
       {/* Top Header Bar: [ ← ]  Text Reader  [ + Add ] */}
@@ -287,12 +326,13 @@ export function TextLibraryView({
             const paraCount = doc.paragraphs?.length || doc.paragraphsCount || 0;
             const savedLanguages = doc.languageStates ? Object.keys(doc.languageStates) : [doc.targetLang];
             const isConfirming = confirmingDeleteId === doc.id;
+            const progressPercent = getDocumentProgress(doc);
 
             return (
               <div
                 key={doc.id}
                 onClick={() => !isConfirming && onSelectDocument(doc)}
-                className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group ${
+                className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group relative overflow-hidden ${
                   isCurrent
                     ? 'bg-rose-500/10 border-rose-500/80 shadow-md shadow-rose-950/20'
                     : 'bg-[var(--surface-primary)] border-[var(--border-primary)] hover:bg-[var(--surface-secondary)] hover:border-rose-500/40'
@@ -432,6 +472,14 @@ export function TextLibraryView({
                     </button>
                   </div>
                 )}
+
+                {/* Reading Progress Bar */}
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--border-primary)]/40 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
               </div>
             );
           })

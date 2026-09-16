@@ -102,6 +102,34 @@ export function YouTubeLibraryView({
     }
   };
 
+  const getPlaybackProgress = (item) => {
+    if (!item) return 0;
+    if (item.isComplete) return 100;
+
+    const subs = Array.isArray(item.subtitles) ? item.subtitles : [];
+    const lastSub = subs.length > 0 ? subs[subs.length - 1] : null;
+    const totalDuration = typeof item.duration === 'number' && item.duration > 0
+      ? item.duration
+      : (lastSub ? (lastSub.endTime || lastSub.startTime || 0) : 0);
+
+    const currentTime = typeof item.lastPlaybackTime === 'number' && !isNaN(item.lastPlaybackTime)
+      ? Math.max(0, item.lastPlaybackTime)
+      : 0;
+
+    if (totalDuration > 0 && currentTime > 0) {
+      return Math.min(100, Math.max(0, Math.round((currentTime / totalDuration) * 100)));
+    }
+
+    if (subs.length > 0 && item.lastSubtitleId) {
+      const subIdx = subs.findIndex(s => String(s.id) === String(item.lastSubtitleId));
+      if (subIdx !== -1) {
+        return Math.min(100, Math.max(0, Math.round(((subIdx + 1) / subs.length) * 100)));
+      }
+    }
+
+    return 0;
+  };
+
   return (
     <div className="flex flex-col h-full w-full max-w-5xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-hidden text-[var(--text-primary)]">
       {/* Top Header Bar */}
@@ -217,6 +245,7 @@ export function YouTubeLibraryView({
               const isComplete = Boolean(item.isComplete);
               const completedCount = item.completedLinesCount || item.subtitlesCount;
               const thumbUrl = `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`;
+              const progressPercent = getPlaybackProgress(item);
 
               return (
                 <div
@@ -266,6 +295,14 @@ export function YouTubeLibraryView({
                       <div className="w-11 h-11 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
                         <Play className="w-5 h-5 fill-white ml-0.5" />
                       </div>
+                    </div>
+
+                    {/* Playback Progress Bar */}
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/60 overflow-hidden z-10">
+                      <div
+                        className="h-full bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-300"
+                        style={{ width: `${progressPercent}%` }}
+                      />
                     </div>
                   </div>
 

@@ -639,6 +639,9 @@ export function YouTubeReaderPage({
 
   // Navigation helper: change view mode and update browser history
   const navigateToView = useCallback((newMode) => {
+    if (newMode === 'library') {
+      flushPlaybackPosition();
+    }
     setViewMode(newMode);
     try {
       if (newMode === 'library') {
@@ -651,7 +654,7 @@ export function YouTubeReaderPage({
         window.history.pushState({ viewMode: 'reader' }, '', '#reader');
       }
     } catch (e) {}
-  }, []);
+  }, [flushPlaybackPosition]);
 
   // Listen to browser back/forward buttons (popstate)
   useEffect(() => {
