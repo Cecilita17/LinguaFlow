@@ -334,7 +334,7 @@ export function usePipelineCall({
     const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
     const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
     const isQueueActive = ttsQueueRef.current.length > 0;
-    const isLlmActive = isLlmStreamingRef.current || Boolean(llmAbortControllerRef.current) || Boolean(currentAiTurnIdRef.current);
+    const isLlmActive = isLlmStreamingRef.current || Boolean(currentAiTurnIdRef.current);
 
     return Boolean(
       isRecognitionActiveRef.current &&
@@ -881,6 +881,7 @@ export function usePipelineCall({
       lastAiSpokenTimestampRef.current = Date.now();
     } finally {
       isLlmStreamingRef.current = false;
+      llmAbortControllerRef.current = null;
       if (ttsQueueRef.current.length === 0 && !isPlayingQueueRef.current) {
         playNextInAudioQueue();
       }
@@ -1012,7 +1013,7 @@ export function usePipelineCall({
       const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
       const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
       const isQueueActive = ttsQueueRef.current.length > 0;
-      const isLlmActive = isLlmStreamingRef.current || Boolean(llmAbortControllerRef.current) || Boolean(currentAiTurnIdRef.current);
+      const isLlmActive = isLlmStreamingRef.current || Boolean(currentAiTurnIdRef.current);
 
       if (
         isSttPausedRef.current ||
