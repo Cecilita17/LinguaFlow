@@ -391,19 +391,36 @@ export function TextReaderPage({
 
   // On mount: run migration from legacy localStorage to IndexedDB, refresh count, and schedule draft scroll restoration
   useEffect(() => {
-    migrateFromLocalStorage().then(() => {
-      refreshLibraryCount();
-    }).catch(() => {});
+    migrateFromLocalStorage().then(async () => {
+      await refreshLibraryCount();
 
-    // Restore scroll to last audio position or last reading position on initial mount / app reload
-    const draft = loadActiveDocumentDraft();
-    const targetPosId = draft?.lastAudioPosition?.paragraphId || draft?.lastReadingPosition?.paragraphId;
-    if (draft && targetPosId) {
-      const exists = Array.isArray(draft.paragraphs) && draft.paragraphs.some(p => p.id === targetPosId);
-      if (exists) {
-        setPendingScrollParagraphId(targetPosId);
+      // Hydrate full active document from IndexedDB if active draft is minimal or missing full paragraphs
+      const draft = loadActiveDocumentDraft();
+      if (draft && draft.id) {
+        try {
+          const fullDoc = await getTextDocumentById(draft.id);
+          if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
+            const merged = {
+              ...fullDoc,
+              lastAudioPosition: draft.lastAudioPosition || fullDoc.lastAudioPosition,
+              lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
+            };
+            setDocument(merged);
+            const targetPosId = merged.lastAudioPosition?.paragraphId || merged.lastReadingPosition?.paragraphId;
+            if (targetPosId) {
+              setPendingScrollParagraphId(targetPosId);
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to hydrate active document from IndexedDB:', err);
+        }
+      } else if (draft && Array.isArray(draft.paragraphs) && draft.paragraphs.length > 0) {
+        const targetPosId = draft.lastAudioPosition?.paragraphId || draft.lastReadingPosition?.paragraphId;
+        if (targetPosId) {
+          setPendingScrollParagraphId(targetPosId);
+        }
       }
-    }
+    }).catch(() => {});
   }, [refreshLibraryCount]);
 
   // Save active document state whenever document changes (syncs draft + IndexedDB)
@@ -612,29 +629,35 @@ export function TextReaderPage({
     setPlayingParagraphId(paragraph.id);
     setActiveAudioCharIndex(0);
 
-    // Save last audio position immediately (persists even if page closes or switches document)
-    setLastAudioParagraphId(paragraph.id);
-    setDocument(prev => {
-      if (!prev) return prev;
-      const posData = {
-        paragraphId: paragraph.id,
-        paragraphIndex: (prev.paragraphs || []).findIndex(p => p.id === paragraph.id),
-        updatedAt: Date.now()
-      };
-      const updated = {
-        ...prev,
-        lastAudioPosition: posData
-      };
-      // Persist immediately to active draft in localStorage
-      saveActiveDocumentDraft(updated);
-      // Persist immediately to IndexedDB
-      if (updated.id) {
-        saveTextDocument(updated).then(() => {
-          refreshLibraryCount();
-        }).catch(err => console.warn('Failed to save lastAudioPosition to library:', err));
-      }
-      return updated;
-    });
+    // Save last audio position safely (persists even if page closes or switches document)
+    try {
+      setLastAudioParagraphId(paragraph.id);
+      setDocument(prev => {
+        if (!prev) return prev;
+        const posData = {
+          paragraphId: paragraph.id,
+          paragraphIndex: (prev.paragraphs || []).findIndex(p => p.id === paragraph.id),
+          updatedAt: Date.now()
+        };
+        const updated = {
+          ...prev,
+          lastAudioPosition: posData
+        };
+        // Persist immediately to active draft in localStorage
+        try {
+          saveActiveDocumentDraft(updated);
+        } catch (draftErr) {}
+        // Persist immediately to IndexedDB
+        if (updated.id) {
+          saveTextDocument(updated).then(() => {
+            refreshLibraryCount();
+          }).catch(err => console.warn('Failed to save lastAudioPosition to library:', err));
+        }
+        return updated;
+      });
+    } catch (posErr) {
+      console.warn('Non-fatal error updating last audio position:', posErr);
+    }
 
     const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
     const speechCode = paragraph.tts?.speechCode || getLanguageMeta(docLang)?.speechCode || 'zh-CN';
@@ -696,7 +719,11 @@ export function TextReaderPage({
       }
     };
 
-    window.speechSynthesis.speak(utterance);
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (speakErr) {
+      console.warn('SpeechSynthesis speak call error:', speakErr);
+    }
   }, [activeDocLang, refreshLibraryCount, speechRate]);
 
   handlePlayParagraphRef.current = handlePlayParagraph;

@@ -438,8 +438,35 @@ export async function deleteDocument(id) {
 }
 
 /**
- * Save active document draft to localStorage (with in-memory fallback)
- * so user doesn't lose text/glosses on tab switch.
+ * Extracts a lightweight session metadata object for localStorage.
+ * Keeps localStorage usage to ~300 bytes instead of megabytes of paragraphs and glosses.
+ * Full document contents are stored safely in IndexedDB.
+ */
+export function extractMinimalDraft(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  return {
+    id: doc.id || null,
+    title: doc.title || '',
+    author: doc.author || '',
+    sourceType: doc.sourceType || doc.format || 'txt',
+    format: doc.format || doc.sourceType || 'txt',
+    targetLang: doc.targetLang || 'zh',
+    nativeLang: doc.nativeLang || 'es',
+    paragraphsCount: typeof doc.paragraphsCount === 'number'
+      ? doc.paragraphsCount
+      : (Array.isArray(doc.paragraphs) ? doc.paragraphs.length : 0),
+    lastAudioPosition: doc.lastAudioPosition || null,
+    lastReadingPosition: doc.lastReadingPosition || null,
+    createdAt: doc.createdAt || null,
+    updatedAt: doc.updatedAt || null,
+    isMinimalDraft: true
+  };
+}
+
+/**
+ * Save active document draft.
+ * - Stores the full document in memory (memoryActiveDraft) for immediate same-session access.
+ * - Stores ONLY lightweight session metadata in localStorage to prevent QuotaExceededError.
  * 
  * @param {object|null} doc
  */
@@ -454,43 +481,95 @@ export function saveActiveDocumentDraft(doc) {
     return;
   }
 
-  const normalized = normalizeDocument(doc);
-  memoryActiveDraft = normalized;
+  // Keep full normalized document in memory
+  try {
+    const normalized = normalizeDocument(doc);
+    memoryActiveDraft = normalized;
+  } catch (normErr) {
+    memoryActiveDraft = doc;
+  }
 
+  // Persist only minimal metadata in localStorage
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem(ACTIVE_DOC_STORAGE_KEY, JSON.stringify(normalized));
+      const minimal = extractMinimalDraft(doc);
+      localStorage.setItem(ACTIVE_DOC_STORAGE_KEY, JSON.stringify(minimal));
     }
   } catch (e) {
-    console.warn('Failed to save active text document draft to localStorage:', e);
+    // Silently ignore quota exceeded errors — never interrupt audio or UI
   }
 }
 
 /**
- * Load active document draft from localStorage (with in-memory fallback).
+ * Load active document draft (synchronous).
+ * Returns memoryActiveDraft if populated, or the parsed localStorage metadata.
  * 
  * @returns {object|null}
  */
 export function loadActiveDocumentDraft() {
+  if (memoryActiveDraft) {
+    return memoryActiveDraft;
+  }
+
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const raw = localStorage.getItem(ACTIVE_DOC_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.paragraphs)) {
-          const normalized = normalizeDocument(parsed);
-          if (normalized && normalized.id) {
-            memoryActiveDraft = normalized;
+        if (parsed && typeof parsed === 'object') {
+          // If legacy draft with full paragraphs array exists, normalize it
+          if (Array.isArray(parsed.paragraphs) && parsed.paragraphs.length > 0) {
+            const normalized = normalizeDocument(parsed);
+            if (normalized && normalized.id) {
+              memoryActiveDraft = normalized;
+            }
+            return normalized;
           }
-          return normalized;
+          // Otherwise return minimal draft metadata
+          return parsed;
         }
       }
     }
   } catch (e) {
-    console.warn('Failed to load active text document draft from localStorage:', e);
+    // Non-fatal
   }
 
   return memoryActiveDraft;
+}
+
+/**
+ * Loads the complete active document with all paragraphs and glosses from IndexedDB.
+ * 
+ * @returns {Promise<object|null>}
+ */
+export async function loadActiveDocumentFull() {
+  const draft = loadActiveDocumentDraft();
+  if (!draft) return null;
+
+  // If already in memory with full paragraphs, return immediately
+  if (Array.isArray(draft.paragraphs) && draft.paragraphs.length > 0) {
+    return draft;
+  }
+
+  // Hydrate from IndexedDB by document ID
+  if (draft.id) {
+    try {
+      const fullDoc = await getTextDocumentById(draft.id);
+      if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
+        const merged = {
+          ...fullDoc,
+          lastAudioPosition: draft.lastAudioPosition || fullDoc.lastAudioPosition,
+          lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
+        };
+        memoryActiveDraft = merged;
+        return merged;
+      }
+    } catch (err) {
+      console.warn('Failed to hydrate active document from IndexedDB:', err);
+    }
+  }
+
+  return draft;
 }
 
 /**

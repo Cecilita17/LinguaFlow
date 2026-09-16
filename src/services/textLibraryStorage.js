@@ -400,6 +400,39 @@ export async function migrateFromLocalStorage() {
     } else {
       localStorage.setItem('linguaflow_text_library_migrated_v1', 'true');
     }
+
+    // Check and compact active text doc draft in localStorage if it contains bloated paragraphs
+    try {
+      const rawActive = localStorage.getItem('linguaflow_active_text_doc_v1');
+      if (rawActive) {
+        const parsedActive = JSON.parse(rawActive);
+        if (parsedActive && typeof parsedActive === 'object' && Array.isArray(parsedActive.paragraphs) && parsedActive.paragraphs.length > 0) {
+          // Ensure saved in IndexedDB
+          if (parsedActive.id) {
+            await saveTextDocument(parsedActive);
+          }
+          // Compact to small metadata draft
+          const minimal = {
+            id: parsedActive.id || null,
+            title: parsedActive.title || '',
+            author: parsedActive.author || '',
+            sourceType: parsedActive.sourceType || parsedActive.format || 'txt',
+            format: parsedActive.format || parsedActive.sourceType || 'txt',
+            targetLang: parsedActive.targetLang || 'zh',
+            nativeLang: parsedActive.nativeLang || 'es',
+            paragraphsCount: parsedActive.paragraphs.length,
+            lastAudioPosition: parsedActive.lastAudioPosition || null,
+            lastReadingPosition: parsedActive.lastReadingPosition || null,
+            createdAt: parsedActive.createdAt || null,
+            updatedAt: parsedActive.updatedAt || null,
+            isMinimalDraft: true
+          };
+          localStorage.setItem('linguaflow_active_text_doc_v1', JSON.stringify(minimal));
+        }
+      }
+    } catch (compactErr) {
+      console.warn('[TextLibraryStorage] Non-fatal error compacting active draft:', compactErr);
+    }
   } catch (err) {
     console.warn('[TextLibraryStorage] Error migrating from localStorage:', err);
   }

@@ -120,7 +120,25 @@ export async function restoreBackupData(payload) {
   if (data.activeSessions && typeof data.activeSessions === 'object') {
     if (data.activeSessions.textDraft) {
       try {
-        localStorage.setItem('linguaflow_active_text_doc_v1', JSON.stringify(data.activeSessions.textDraft));
+        const rawDraft = data.activeSessions.textDraft;
+        const cleanDraft = (rawDraft && typeof rawDraft === 'object' && Array.isArray(rawDraft.paragraphs))
+          ? {
+              id: rawDraft.id || null,
+              title: rawDraft.title || '',
+              author: rawDraft.author || '',
+              sourceType: rawDraft.sourceType || rawDraft.format || 'txt',
+              format: rawDraft.format || rawDraft.sourceType || 'txt',
+              targetLang: rawDraft.targetLang || 'zh',
+              nativeLang: rawDraft.nativeLang || 'es',
+              paragraphsCount: rawDraft.paragraphs.length,
+              lastAudioPosition: rawDraft.lastAudioPosition || null,
+              lastReadingPosition: rawDraft.lastReadingPosition || null,
+              createdAt: rawDraft.createdAt || null,
+              updatedAt: rawDraft.updatedAt || null,
+              isMinimalDraft: true
+            }
+          : rawDraft;
+        localStorage.setItem('linguaflow_active_text_doc_v1', JSON.stringify(cleanDraft));
       } catch (e) {}
     }
     if (data.activeSessions.youtubeSession) {

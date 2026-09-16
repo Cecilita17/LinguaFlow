@@ -189,11 +189,35 @@ export async function createBackupPayload(user = null) {
     if (rawCalls) callHistory = JSON.parse(rawCalls);
   } catch (e) {}
 
-  // 5. Active Text Reader Draft
+  // 5. Active Text Reader Draft (Minimal session metadata)
   let activeTextDraft = null;
   try {
     const rawActiveDoc = localStorage.getItem('linguaflow_active_text_doc_v1');
-    if (rawActiveDoc) activeTextDraft = JSON.parse(rawActiveDoc);
+    if (rawActiveDoc) {
+      const parsed = JSON.parse(rawActiveDoc);
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.paragraphs)) {
+          // Compact legacy bloated draft if found
+          activeTextDraft = {
+            id: parsed.id || null,
+            title: parsed.title || '',
+            author: parsed.author || '',
+            sourceType: parsed.sourceType || parsed.format || 'txt',
+            format: parsed.format || parsed.sourceType || 'txt',
+            targetLang: parsed.targetLang || 'zh',
+            nativeLang: parsed.nativeLang || 'es',
+            paragraphsCount: parsed.paragraphs.length,
+            lastAudioPosition: parsed.lastAudioPosition || null,
+            lastReadingPosition: parsed.lastReadingPosition || null,
+            createdAt: parsed.createdAt || null,
+            updatedAt: parsed.updatedAt || null,
+            isMinimalDraft: true
+          };
+        } else {
+          activeTextDraft = parsed;
+        }
+      }
+    }
   } catch (e) {}
 
   // 6. Active YouTube Session
