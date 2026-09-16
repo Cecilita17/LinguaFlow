@@ -46,8 +46,16 @@ function mergeTurnText(confirmed, incoming) {
 }
 
 /**
- * Detects whether incoming speech recognition transcript is acoustic echo
- * of the AI's recent speech output rather than a genuine user utterance.
+ * Configurable post-TTS acoustic echo guard duration (ms).
+ * Used strictly as a short guard for the physical room acoustic tail
+ * immediately after the speaker stops, without blocking genuine user speech.
+ */
+const POST_TTS_ECHO_GUARD_MS = 250;
+
+/**
+ * Conservative acoustic echo fallback detector.
+ * Only flags unmistakable verbatim or consecutive reproduction of what the AI just spoke,
+ * never penalizing legitimate user responses that merely share vocabulary words.
  */
 function isLikelyEcho(transcript, aiText) {
   if (!transcript || !aiText) return false;
@@ -65,22 +73,21 @@ function isLikelyEcho(transcript, aiText) {
     .trim();
   if (!cleanTrans || !cleanAi) return false;
 
-  // 1. Direct substring match
-  if (cleanAi.includes(cleanTrans)) return true;
+  // 1. Direct exact full-phrase match
+  if (cleanTrans === cleanAi) return true;
 
-  // 2. Word overlap test (>= 50% matching words from AI speech)
-  const transWords = cleanTrans.split(/\s+/).filter((w) => w.length > 1);
-  if (transWords.length === 0) return true; // short noise / single letter
-
-  const aiWords = new Set(cleanAi.split(/\s+/).filter((w) => w.length > 1));
-  let matchCount = 0;
-  for (const word of transWords) {
-    if (aiWords.has(word)) {
-      matchCount++;
-    }
+  // 2. Exact consecutive substring match for substantial phrases (>= 3 words)
+  const transWords = cleanTrans.split(/\s+/).filter(Boolean);
+  if (transWords.length >= 3 && cleanAi.includes(cleanTrans)) {
+    return true;
   }
 
-  return (matchCount / transWords.length) >= 0.5;
+  // 3. For short utterances (1-2 words), only consider echo if AI utterance is identical
+  if (transWords.length < 3) {
+    return cleanAi === cleanTrans;
+  }
+
+  return false;
 }
 
 /**
@@ -115,6 +122,10 @@ export function usePipelineCall({
   const showGlossesRef = useRef(false);
   const isMutedRef = useRef(false);
   const callStateRef = useRef('idle');
+
+  // Microphone Stream & Track Refs
+  const micStreamRef = useRef(null);
+  const micTrackRef = useRef(null);
 
   // Speech Recognition & VAD Refs
   const recognitionRef = useRef(null);
@@ -268,6 +279,15 @@ export function usePipelineCall({
     lastAiSpokenTextRef.current = '';
 
     interruptAssistant();
+
+    // Stop and release persistent Microphone Stream
+    if (micStreamRef.current) {
+      try {
+        micStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch (e) {}
+      micStreamRef.current = null;
+      micTrackRef.current = null;
+    }
 
     // Stop Speech Recognition
     if (recognitionRef.current) {
@@ -424,7 +444,7 @@ export function usePipelineCall({
   const playNextInAudioQueue = useCallback(async () => {
     if (isPlayingQueueRef.current || ttsQueueRef.current.length === 0) {
       if (ttsQueueRef.current.length === 0 && !currentAiTurnIdRef.current) {
-        // Activate post-TTS acoustic echo guard (450ms) to discard room feedback before returning to 'listening'
+        // Activate post-TTS acoustic echo guard to discard room feedback before returning to 'listening'
         if (!isEchoGuardActiveRef.current && !isPlayingQueueRef.current) {
           isEchoGuardActiveRef.current = true;
           lastAiSpokenTimestampRef.current = Date.now();
@@ -437,7 +457,7 @@ export function usePipelineCall({
             if (callStateRef.current !== 'idle' && callStateRef.current !== 'error') {
               setCallState('listening');
             }
-          }, 450);
+          }, POST_TTS_ECHO_GUARD_MS);
         }
       }
       return;
@@ -863,6 +883,25 @@ export function usePipelineCall({
     dispatchAssistantResponse(cleanText);
   }, [targetLang, isSpanish, triggerCorrection, dispatchAssistantResponse]);
 
+  // Helper to start SpeechRecognition with MediaStreamTrack when supported, or graceful fallback
+  const startSpeechRecognition = useCallback(() => {
+    if (!recognitionRef.current) return;
+    const track = micTrackRef.current;
+    if (track) {
+      try {
+        recognitionRef.current.start(track);
+        console.log('[PipelineSTT] Starting recognition from processed MediaStreamTrack');
+        return;
+      } catch (trackStartErr) {
+        // MediaStreamTrack parameter not supported on this browser's SpeechRecognition implementation
+      }
+    }
+    console.log('[PipelineSTT] MediaStreamTrack recognition unsupported; using browser microphone fallback');
+    try {
+      recognitionRef.current.start();
+    } catch (e) {}
+  }, []);
+
   // Initialize Speech Recognition for Live VAD & Streaming STT
   const initSpeechRecognition = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -907,11 +946,12 @@ export function usePipelineCall({
       if (!newIncomingSpeech) return;
 
       // 3. Active AI Playback / Generation / Recent Spoken Echo Check
-      const isAiSpeaking = isPlayingQueueRef.current || callStateRef.current === 'speaking' || Boolean(currentAiTurnIdRef.current);
-      const isRecentAiSpeech = (Date.now() - lastAiSpokenTimestampRef.current) < 2000;
+      const isAiSpeaking = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current) || callStateRef.current === 'speaking';
+      const isAiGenerating = Boolean(llmAbortControllerRef.current) || Boolean(currentAiTurnIdRef.current) || callStateRef.current === 'thinking';
+      const isRecentAiSpeech = (Date.now() - lastAiSpokenTimestampRef.current) < (POST_TTS_ECHO_GUARD_MS + 1000);
       const aiSpokenText = (currentAiTurnTextRef.current || lastAiSpokenTextRef.current || '').trim();
 
-      if (isAiSpeaking || isRecentAiSpeech) {
+      if (isAiSpeaking || isAiGenerating || isRecentAiSpeech) {
         if (isLikelyEcho(newIncomingSpeech, aiSpokenText)) {
           // Acoustic echo from speaker: consume all final results so far, ignore completely
           for (let i = 0; i < event.results.length; i++) {
@@ -922,8 +962,8 @@ export function usePipelineCall({
           return;
         }
 
-        // If AI is currently speaking and user speaks genuine words (>= 2 chars not matching echo) -> BARGE-IN!
-        if (isAiSpeaking) {
+        // If AI is currently speaking/generating and user speaks genuine words (>= 2 chars not matching echo) -> BARGE-IN!
+        if (isAiSpeaking || isAiGenerating) {
           const cleanSpeech = newIncomingSpeech.replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '').trim();
           if (cleanSpeech.length >= 2) {
             console.log('[PipelineSTT] Genuine user barge-in detected:', newIncomingSpeech);
@@ -1077,14 +1117,12 @@ export function usePipelineCall({
 
       // Auto-restart recognition if call is still active
       if (isRecognitionActiveRef.current) {
-        try {
-          recognition.start();
-        } catch (e) {}
+        startSpeechRecognition();
       }
     };
 
     recognitionRef.current = recognition;
-  }, [targetLang, isSpanish, interruptAssistant, finalizeUserSpeechTurn]);
+  }, [targetLang, isSpanish, interruptAssistant, finalizeUserSpeechTurn, startSpeechRecognition]);
 
   // Start Pipeline Call
   const startCall = useCallback(async () => {
@@ -1165,10 +1203,29 @@ export function usePipelineCall({
         errors: []
       };
 
-      // Request microphone permissions
+      // Request microphone stream with voice-communication processing constraints
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop()); // Verification only
+        console.log('[PipelineMic] Requesting microphone with:', {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1
+        });
+
+        const micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1
+          }
+        });
+
+        micStreamRef.current = micStream;
+        micTrackRef.current = micStream.getAudioTracks()[0] || null;
+
+        console.log('[PipelineMic] capabilities:', micTrackRef.current?.getCapabilities?.());
+        console.log('[PipelineMic] settings:', micTrackRef.current?.getSettings?.());
       } catch (micErr) {
         throw new Error(
           isSpanish
@@ -1181,9 +1238,7 @@ export function usePipelineCall({
       initSpeechRecognition();
       if (recognitionRef.current) {
         isRecognitionActiveRef.current = true;
-        try {
-          recognitionRef.current.start();
-        } catch (e) {}
+        startSpeechRecognition();
       }
 
       startDurationTimer();
@@ -1195,7 +1250,7 @@ export function usePipelineCall({
       setCallState('error');
       setErrorMessage(err.message || 'Error desconocido al conectar la llamada.');
     }
-  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant]);
+  }, [isSpanish, cleanupResources, initSpeechRecognition, startSpeechRecognition, interruptAssistant]);
 
   // Toggle Mute / Unmute
   const toggleMute = useCallback(() => {
