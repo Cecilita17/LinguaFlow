@@ -98,32 +98,81 @@ export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null)
   return baseTokens;
 }
 
+const cleanDiffWord = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '').toLowerCase();
+const cleanDiffOriginal = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
+
 /**
  * Maps diffTokens annotations (changed, original) from grammar corrections onto tokens
  */
 function mapDiffTokensOntoTokens(tokens, diffTokens) {
   if (!Array.isArray(tokens) || !Array.isArray(diffTokens)) return tokens;
 
-  const changedMap = new Map();
-  diffTokens.forEach(dt => {
-    if (dt.changed && dt.text) {
-      const cleanW = dt.text.trim().toLowerCase();
-      changedMap.set(cleanW, dt);
+  // Flatten diff tokens that might contain multiple words into individual word diff entries
+  const flattenedDiffs = [];
+  diffTokens.forEach((dt) => {
+    if (!dt.text && dt.original) {
+      // Deletion
+      return;
+    }
+    const words = (dt.text || '').trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return;
+
+    if (words.length === 1) {
+      flattenedDiffs.push({
+        word: cleanDiffWord(words[0]),
+        rawText: words[0],
+        changed: Boolean(dt.changed),
+        original: dt.original ? cleanDiffOriginal(dt.original) : null
+      });
+    } else {
+      // Multi-word replacement
+      words.forEach((w, idx) => {
+        flattenedDiffs.push({
+          word: cleanDiffWord(w),
+          rawText: w,
+          changed: Boolean(dt.changed),
+          original: idx === 0 && dt.original ? cleanDiffOriginal(dt.original) : (dt.original ? cleanDiffOriginal(dt.original) : null)
+        });
+      });
     }
   });
 
-  if (changedMap.size === 0) return tokens;
+  if (flattenedDiffs.length === 0 || !flattenedDiffs.some((d) => d.changed)) return tokens;
 
-  return tokens.map(t => {
-    const w = (t.text || t.word || '').trim().toLowerCase();
-    const diff = changedMap.get(w);
-    if (diff) {
+  // Map sequentially onto non-punctuation tokens
+  let diffIdx = 0;
+  return tokens.map((t) => {
+    if (t.isPunctuation) {
+      return t;
+    }
+
+    const tokenWord = cleanDiffWord(t.text || t.word || '');
+    if (!tokenWord) return t;
+
+    // Look for matching diff token at or near diffIdx
+    let matchedDiff = null;
+    if (diffIdx < flattenedDiffs.length && flattenedDiffs[diffIdx].word === tokenWord) {
+      matchedDiff = flattenedDiffs[diffIdx];
+      diffIdx++;
+    } else {
+      // Fallback search forward slightly in case of slight alignment offset
+      for (let k = diffIdx; k < Math.min(flattenedDiffs.length, diffIdx + 3); k++) {
+        if (flattenedDiffs[k].word === tokenWord) {
+          matchedDiff = flattenedDiffs[k];
+          diffIdx = k + 1;
+          break;
+        }
+      }
+    }
+
+    if (matchedDiff && matchedDiff.changed) {
       return {
         ...t,
         changed: true,
-        original: diff.original
+        original: matchedDiff.original
       };
     }
+
     return t;
   });
 }

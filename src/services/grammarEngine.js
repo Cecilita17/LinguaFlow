@@ -1,5 +1,6 @@
 import { computeWordDiff } from './diffUtils.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
+import { getEffectiveApiKey } from './subtitleGlossService.js';
 
 const LT_LANG_MAP = {
   es: 'es',
@@ -513,7 +514,7 @@ export async function reanalyzeGrammarStrictly(text, targetLang = 'pl', nativeLa
  * Queries the dedicated, lightweight /api/pedagogical-correct endpoint (Groq openai/gpt-oss-120b).
  * If unavailable or times out, seamlessly falls back to LanguageTool + deterministic grammar engine.
  */
-export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', nativeLang = 'es', level = 'A2/B1') {
+export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', nativeLang = 'es', level = 'A2/B1', apiKey = '') {
   const clean = (text || '').trim();
   if (!clean) {
     return {
@@ -524,6 +525,8 @@ export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', 
     };
   }
 
+  const effectiveKey = getEffectiveApiKey(apiKey);
+
   // 1. Attempt lightweight pedagogical correction via dedicated /api/pedagogical-correct
   try {
     const controller = new AbortController();
@@ -531,12 +534,16 @@ export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', 
 
     const res = await fetch('/api/pedagogical-correct', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(effectiveKey ? { 'x-api-key': effectiveKey } : {})
+      },
       body: JSON.stringify({
         text: clean,
         targetLang,
         nativeLang,
-        level
+        level,
+        apiKey: effectiveKey
       }),
       signal: controller.signal
     });
@@ -565,7 +572,7 @@ export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', 
   }
 
   // 2. Deterministic linguistic rules & LanguageTool fallback
-  return performFullGrammarCorrection(clean, targetLang, nativeLang);
+  return performFullGrammarCorrection(clean, targetLang, nativeLang, effectiveKey);
 }
 
 /**
