@@ -204,7 +204,8 @@ export function TextReaderPage({
   const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
   const [audioErrorId, setAudioErrorId] = useState(null);
   const audioFallbackTimerRef = useRef(null);
-  const receivedBoundaryRef = useRef(false);
+  const lastAudioBoundaryCharRef = useRef(0);
+  const lastAudioBoundaryTimeRef = useRef(0);
 
   const clearAudioFallbackTimer = () => {
     if (audioFallbackTimerRef.current) {
@@ -661,25 +662,29 @@ export function TextReaderPage({
       utterance.voice = matchingVoice;
     }
 
-    const speechStartTime = Date.now();
     const estimatedDurationMs = estimateSpeechDurationMs(cleanText, activeDocLang, speechRateRef.current || speechRate || 1.0);
+    const charsPerMs = Math.max(0.001, cleanText.length / Math.max(200, estimatedDurationMs));
 
     utterance.onstart = () => {
       clearAudioFallbackTimer();
-      // Start time-based progression fallback in case onboundary does not fire in browser
+      lastAudioBoundaryCharRef.current = 0;
+      lastAudioBoundaryTimeRef.current = Date.now();
+
+      // Continuous progression timer that smoothly advances activeAudioCharIndex
+      // and recalibrates immediately whenever onboundary events arrive
       audioFallbackTimerRef.current = setInterval(() => {
-        if (!receivedBoundaryRef.current) {
-          const elapsed = Date.now() - speechStartTime;
-          const progress = Math.min(0.99, elapsed / estimatedDurationMs);
-          const estIndex = Math.min(cleanText.length - 1, Math.floor(progress * cleanText.length));
-          setActiveAudioCharIndex(estIndex);
-        }
-      }, 50);
+        const now = Date.now();
+        const elapsedSinceBoundary = now - lastAudioBoundaryTimeRef.current;
+        const progressChars = Math.floor(elapsedSinceBoundary * charsPerMs);
+        const estIndex = Math.min(cleanText.length - 1, lastAudioBoundaryCharRef.current + progressChars);
+        setActiveAudioCharIndex(estIndex);
+      }, 40);
     };
 
     utterance.onboundary = (event) => {
       if (typeof event.charIndex === 'number') {
-        receivedBoundaryRef.current = true;
+        lastAudioBoundaryCharRef.current = event.charIndex;
+        lastAudioBoundaryTimeRef.current = Date.now();
         setActiveAudioCharIndex(event.charIndex);
       }
     };
