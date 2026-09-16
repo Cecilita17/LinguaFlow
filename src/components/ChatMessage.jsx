@@ -5,8 +5,6 @@ import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { normalizeChineseMessageTokens } from '../services/chineseTokenNormalizer.js';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 import { getArabicTransliteration } from '../services/arabicTransliteration.js';
-import { normalizeAudioText } from '../utils/audioWordSync.js';
-import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
 
 export function ChatMessage({
   message,
@@ -23,7 +21,6 @@ export function ChatMessage({
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const { isWordSaved } = useSavedWords();
-  const { wordHighlightEnabled } = useAudioSettings();
   const [showTranslation, setShowTranslation] = useState(false);
   const [copied, setCopied] = useState(false);
   const [writingPracticeOpen, setWritingPracticeOpen] = useState(false);
@@ -69,7 +66,7 @@ export function ChatMessage({
     }
     cleanTranslit = cleanTranslit.replace(/[，。！？；：、“”‘’（）《》…—,.!?;:'"()\-~]+/g, '').trim();
 
-    // 2. Check if word itself contains trailing punctuation
+    // 2. Separate base Chinese characters from trailing punctuation in the original word
     let baseWord = (word || '').trim();
     const wordPuncMatch = baseWord.match(/[，。！？；：、“”‘’（）《》…—,.!?;:'"()\-~]+$/);
     if (wordPuncMatch) {
@@ -85,7 +82,7 @@ export function ChatMessage({
   };
 
   // Helper for rendering transliteration in user bubble (luminous, clear rose-tinted white)
-  const renderUserRubyWord = (word, translit, key, isAudioActive = false) => {
+  const renderUserRubyWord = (word, translit, key) => {
     if (targetLang === 'zh') {
       const { baseWord, cleanTranslit, punctuation } = splitChineseWordAndPunctuation(word, translit);
 
@@ -106,10 +103,10 @@ export function ChatMessage({
               <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
                 {cleanTranslit}
               </rt>
-              <span dir="ltr" className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''} ${isAudioActive ? 'audio-word-active' : ''}`}>{baseWord}</span>
+              <span dir="ltr" className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
             </ruby>
           ) : (
-            <span dir="ltr" className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''} ${isAudioActive ? 'audio-word-active' : ''}`}>{baseWord}</span>
+            <span dir="ltr" className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
           )}
           {punctuation && (
             <span className="text-white/90 text-[17px] sm:text-[18.5px] font-normal select-text">
@@ -128,11 +125,11 @@ export function ChatMessage({
           <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
             {effectiveTranslit}
           </rt>
-          <span dir={isArabic ? 'rtl' : 'ltr'} className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''} ${isAudioActive ? 'audio-word-active' : ''}`}>{word}</span>
+          <span dir={isArabic ? 'rtl' : 'ltr'} className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{word}</span>
         </ruby>
       );
     }
-    return <span key={key} dir={isArabic ? 'rtl' : 'ltr'} className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''} ${isAudioActive ? 'audio-word-active' : ''}`}>{word}</span>;
+    return <span key={key} dir={isArabic ? 'rtl' : 'ltr'} className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{word}</span>;
   };
 
   // Common Chinese Pinyin lexicon for guaranteed fallback
@@ -180,23 +177,6 @@ export function ChatMessage({
     const diffTokens = message.diffTokens || [];
     const hasCorrection = message.hasCorrection || diffTokens.some(t => t.changed);
     const isChinese = targetLang === 'zh';
-    const userSpokenTarget = normalizeAudioText(message.correctedText || message.text);
-    const isThisUserPlaying = Boolean(isAudioPlaying) && Boolean(speakingText) && (
-      normalizeAudioText(speakingText) === userSpokenTarget
-    );
-
-    let runningCharPos = 0;
-    const tokenCharRanges = diffTokens.map((token, idx) => {
-      const rawWord = token.text || '';
-      const cleanWord = rawWord.trim();
-      if (!cleanWord) return { startChar: -1, endChar: -1 };
-      const needsSpace = !isChinese && idx > 0;
-      if (needsSpace) runningCharPos += 1;
-      const start = runningCharPos;
-      const end = runningCharPos + cleanWord.length;
-      runningCharPos = end;
-      return { startChar: start, endChar: end };
-    });
 
     return (
       <div className="flex flex-col items-end my-4 animate-fade-in group">
@@ -246,8 +226,6 @@ export function ChatMessage({
                 if (!cleanWord) return null;
                 const needsSpace = !isChinese && idx > 0;
                 const tokenTranslit = resolveTranslit(token) || ((isArabic || /[\u0600-\u06FF]/.test(cleanWord)) ? getArabicTransliteration(cleanWord) : null);
-                const range = tokenCharRanges[idx];
-                const isAudioActive = Boolean(wordHighlightEnabled) && Boolean(isThisUserPlaying) && speakingCharIndex >= 0 && range && range.startChar <= speakingCharIndex && speakingCharIndex < range.endChar;
 
                 if (token.changed) {
                   if (isChinese) {
@@ -265,10 +243,10 @@ export function ChatMessage({
                               <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] text-amber-200 font-black leading-tight select-none">
                                 {cleanTranslit}
                               </rt>
-                              <span className={isAudioActive ? 'audio-word-active' : ''}>{baseWord}</span>
+                              <span>{baseWord}</span>
                             </ruby>
                           ) : (
-                            <span className={isAudioActive ? 'audio-word-active' : ''}>{baseWord}</span>
+                            <span>{baseWord}</span>
                           )}
                           {token.original && (
                             <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[11px] px-2 py-0.5 rounded shadow-lg border border-stone-700">
@@ -298,10 +276,10 @@ export function ChatMessage({
                             <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] text-amber-200 font-black leading-tight select-none">
                               {tokenTranslit}
                             </rt>
-                            <span dir={isArabic ? 'rtl' : 'ltr'} className={isAudioActive ? 'audio-word-active' : ''}>{cleanWord}</span>
+                            <span dir={isArabic ? 'rtl' : 'ltr'}>{cleanWord}</span>
                           </ruby>
                         ) : (
-                          <span dir={isArabic ? 'rtl' : 'ltr'} className={isAudioActive ? 'audio-word-active' : ''}>{cleanWord}</span>
+                          <span dir={isArabic ? 'rtl' : 'ltr'}>{cleanWord}</span>
                         )}
                         {token.original && (
                           <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[11px] px-2 py-0.5 rounded shadow-lg border border-stone-700">
@@ -316,7 +294,7 @@ export function ChatMessage({
                 return (
                   <React.Fragment key={idx}>
                     {needsSpace && ' '}
-                    {renderUserRubyWord(cleanWord, tokenTranslit, idx, isAudioActive)}
+                    {renderUserRubyWord(cleanWord, tokenTranslit, idx)}
                   </React.Fragment>
                 );
               })
@@ -577,11 +555,6 @@ export function ChatMessage({
     return result;
   }, [message.text, tokens, targetLang]);
 
-  const botSpokenTarget = normalizeAudioText(message.text);
-  const isThisBotPlaying = Boolean(isAudioPlaying) && Boolean(speakingText) && (
-    normalizeAudioText(speakingText) === botSpokenTarget
-  );
-
   return (
     <div className="flex flex-col items-start my-4 animate-fade-in group">
       <div className="flex items-center space-x-1.5 mb-1 px-1">
@@ -638,7 +611,6 @@ export function ChatMessage({
             const tokenObj = segment.token || { word: segment.text };
             const wordStr = segment.text;
             const clean = tokenObj.clean_word || wordStr.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '').trim();
-            const isAudioActive = Boolean(wordHighlightEnabled) && Boolean(isThisBotPlaying) && speakingCharIndex >= 0 && segment.startChar <= speakingCharIndex && speakingCharIndex < segment.endChar;
 
             if (targetLang === 'zh') {
               const tokenTranslit = resolveTranslit(tokenObj);
@@ -663,11 +635,11 @@ export function ChatMessage({
                           </rt>
                           <span
                             dir="ltr"
-                            className={`${
+                            className={
                               isSaved
                                 ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
                                 : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
-                            } ${isAudioActive ? 'audio-word-active' : ''}`}
+                            }
                           >
                             {baseWord}
                           </span>
@@ -675,11 +647,11 @@ export function ChatMessage({
                       ) : (
                         <span
                           dir="ltr"
-                          className={`${
+                          className={
                             isSaved
                               ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
                               : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
-                          } ${isAudioActive ? 'audio-word-active' : ''}`}
+                          }
                         >
                           {baseWord}
                         </span>
@@ -714,11 +686,11 @@ export function ChatMessage({
                     </rt>
                     <span
                       dir={isArabic ? 'rtl' : 'ltr'}
-                      className={`${
+                      className={
                         isSaved
                           ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
                           : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
-                      } ${isAudioActive ? 'audio-word-active' : ''}`}
+                      }
                     >
                       {wordStr}
                     </span>
@@ -726,11 +698,11 @@ export function ChatMessage({
                 ) : (
                   <span
                     dir={isArabic ? 'rtl' : 'ltr'}
-                    className={`${
+                    className={
                       isSaved
                         ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
                         : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
-                    } ${isAudioActive ? 'audio-word-active' : ''}`}
+                    }
                   >
                     {wordStr}
                   </span>
