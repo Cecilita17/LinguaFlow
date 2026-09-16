@@ -524,6 +524,7 @@ export function usePipelineCall({
             echoGuardTimerRef.current = null;
             if (callStateRef.current !== 'idle' && callStateRef.current !== 'error') {
               console.log('[PipelineEchoGuard] STT resumed -> listening');
+              callStateRef.current = 'listening';
               setCallState('listening');
               startSpeechRecognitionIfReady();
             }
@@ -544,6 +545,7 @@ export function usePipelineCall({
     if (!nextItem || !nextItem.text) return;
 
     isPlayingQueueRef.current = true;
+    callStateRef.current = 'speaking';
     setCallState('speaking');
 
     try {
@@ -718,6 +720,7 @@ export function usePipelineCall({
         recognitionRef.current.abort();
       } catch (e) {}
     }
+    callStateRef.current = 'thinking';
     setCallState('thinking');
 
     // Reset currentTurnRef so subsequent user speech starts completely fresh
@@ -1314,11 +1317,12 @@ export function usePipelineCall({
       initSpeechRecognition();
       if (recognitionRef.current) {
         isRecognitionActiveRef.current = true;
+        callStateRef.current = 'listening';
+        setCallState('listening');
         startSpeechRecognitionIfReady();
       }
 
       startDurationTimer();
-      setCallState('listening');
 
     } catch (err) {
       console.error('❌ Error in startPipelineCall:', err);
