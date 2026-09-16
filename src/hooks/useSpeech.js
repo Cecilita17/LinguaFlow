@@ -112,8 +112,10 @@ export function useSpeech({
   const mimeTypeRef = useRef('audio/webm');
   const mediaStreamPromiseRef = useRef(null);
   const speechFallbackTimerRef = useRef(null);
+  const visualCharRef = useRef(0);
   const lastBoundaryCharRef = useRef(0);
   const lastBoundaryTimeRef = useRef(0);
+  const msPerCharRef = useRef(70);
   const currentCharIndexRef = useRef(0);
 
   const clearSpeechFallbackTimer = () => {
@@ -420,37 +422,65 @@ export function useSpeech({
     }
 
     const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, rate);
-    const msPerChar = Math.max(15, estimatedDurationMs / Math.max(1, cleanText.length));
+    const initialMsPerChar = Math.max(15, estimatedDurationMs / Math.max(1, cleanText.length));
+
+    visualCharRef.current = 0;
+    lastBoundaryCharRef.current = 0;
+    lastBoundaryTimeRef.current = 0;
+    msPerCharRef.current = initialMsPerChar;
 
     utterance.onstart = () => {
       setIsSpeaking(true);
       clearSpeechFallbackTimer();
-      lastBoundaryCharRef.current = 0;
-      lastBoundaryTimeRef.current = Date.now();
-      currentCharIndexRef.current = 0;
 
-      // Smooth visual progression timer that advances between boundaries
+      const startTime = Date.now();
+      lastBoundaryTimeRef.current = startTime;
+      lastBoundaryCharRef.current = 0;
+      visualCharRef.current = 0;
+
+      let lastTickTime = startTime;
+
+      // Smooth visual progression timer running at ~30ms
       speechFallbackTimerRef.current = setInterval(() => {
         const now = Date.now();
-        const elapsedSinceBoundary = now - lastBoundaryTimeRef.current;
-        const progressChars = Math.floor(elapsedSinceBoundary / msPerChar);
-        const nextCharIndex = Math.min(
-          cleanText.length - 1,
-          Math.max(currentCharIndexRef.current, lastBoundaryCharRef.current + progressChars)
-        );
-        currentCharIndexRef.current = nextCharIndex;
-        setSpeakingCharIndex(nextCharIndex);
-      }, 50);
+        const dt = now - lastTickTime;
+        lastTickTime = now;
+
+        // Step visual character forward using the calibrated msPerChar rate
+        const step = dt / Math.max(15, msPerCharRef.current);
+        const nextChar = Math.min(cleanText.length - 1, visualCharRef.current + step);
+
+        // Never move backwards
+        if (nextChar > visualCharRef.current) {
+          visualCharRef.current = nextChar;
+          setSpeakingCharIndex(Math.floor(nextChar));
+        }
+      }, 30);
     };
 
     utterance.onboundary = (event) => {
       if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
-        const boundaryIndex = Math.min(cleanText.length - 1, event.charIndex);
-        lastBoundaryCharRef.current = boundaryIndex;
-        lastBoundaryTimeRef.current = Date.now();
-        if (boundaryIndex >= currentCharIndexRef.current) {
-          currentCharIndexRef.current = boundaryIndex;
-          setSpeakingCharIndex(boundaryIndex);
+        const newBoundaryChar = Math.min(cleanText.length - 1, event.charIndex);
+        const now = Date.now();
+
+        // Calculate real measured speed between consecutive boundaries
+        if (lastBoundaryTimeRef.current > 0 && newBoundaryChar > lastBoundaryCharRef.current) {
+          const charDelta = newBoundaryChar - lastBoundaryCharRef.current;
+          const timeDelta = now - lastBoundaryTimeRef.current;
+          if (timeDelta > 40 && charDelta > 0) {
+            const measuredMsPerChar = timeDelta / charDelta;
+            // Adapt real rate with exponential moving average
+            msPerCharRef.current = Math.max(15, Math.min(300, measuredMsPerChar * 0.7 + msPerCharRef.current * 0.3));
+          }
+        }
+
+        lastBoundaryCharRef.current = newBoundaryChar;
+        lastBoundaryTimeRef.current = now;
+
+        // Smoothly align visual tracker towards boundary without skipping intermediate words
+        if (newBoundaryChar > visualCharRef.current) {
+          visualCharRef.current = Math.max(visualCharRef.current, newBoundaryChar - 1);
+          setSpeakingCharIndex(Math.floor(visualCharRef.current));
         }
       }
       if (onBoundaryCallback) {

@@ -204,7 +204,10 @@ export function TextReaderPage({
   const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
   const [audioErrorId, setAudioErrorId] = useState(null);
   const audioFallbackTimerRef = useRef(null);
-  const receivedBoundaryRef = useRef(false);
+  const visualAudioCharRef = useRef(0);
+  const lastAudioBoundaryCharRef = useRef(0);
+  const lastAudioBoundaryTimeRef = useRef(0);
+  const audioMsPerCharRef = useRef(70);
 
   const clearAudioFallbackTimer = () => {
     if (audioFallbackTimerRef.current) {
@@ -661,26 +664,62 @@ export function TextReaderPage({
       utterance.voice = matchingVoice;
     }
 
-    const speechStartTime = Date.now();
     const estimatedDurationMs = estimateSpeechDurationMs(cleanText, activeDocLang, speechRateRef.current || speechRate || 1.0);
+    const initialMsPerChar = Math.max(15, estimatedDurationMs / Math.max(1, cleanText.length));
+
+    visualAudioCharRef.current = 0;
+    lastAudioBoundaryCharRef.current = 0;
+    lastAudioBoundaryTimeRef.current = 0;
+    audioMsPerCharRef.current = initialMsPerChar;
+
+    setActiveAudioCharIndex(0);
 
     utterance.onstart = () => {
       clearAudioFallbackTimer();
-      // Start time-based progression fallback in case onboundary does not fire in browser
+      const startTime = Date.now();
+      lastAudioBoundaryTimeRef.current = startTime;
+      lastAudioBoundaryCharRef.current = 0;
+      visualAudioCharRef.current = 0;
+
+      let lastTickTime = startTime;
+
+      // Smooth visual progression timer running at ~30ms
       audioFallbackTimerRef.current = setInterval(() => {
-        if (!receivedBoundaryRef.current) {
-          const elapsed = Date.now() - speechStartTime;
-          const progress = Math.min(0.99, elapsed / estimatedDurationMs);
-          const estIndex = Math.min(cleanText.length - 1, Math.floor(progress * cleanText.length));
-          setActiveAudioCharIndex(estIndex);
+        const now = Date.now();
+        const dt = now - lastTickTime;
+        lastTickTime = now;
+
+        const step = dt / Math.max(15, audioMsPerCharRef.current);
+        const nextChar = Math.min(cleanText.length - 1, visualAudioCharRef.current + step);
+
+        if (nextChar > visualAudioCharRef.current) {
+          visualAudioCharRef.current = nextChar;
+          setActiveAudioCharIndex(Math.floor(nextChar));
         }
-      }, 50);
+      }, 30);
     };
 
     utterance.onboundary = (event) => {
-      if (typeof event.charIndex === 'number') {
-        receivedBoundaryRef.current = true;
-        setActiveAudioCharIndex(event.charIndex);
+      if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
+        const newBoundaryChar = Math.min(cleanText.length - 1, event.charIndex);
+        const now = Date.now();
+
+        if (lastAudioBoundaryTimeRef.current > 0 && newBoundaryChar > lastAudioBoundaryCharRef.current) {
+          const charDelta = newBoundaryChar - lastAudioBoundaryCharRef.current;
+          const timeDelta = now - lastAudioBoundaryTimeRef.current;
+          if (timeDelta > 40 && charDelta > 0) {
+            const measuredMsPerChar = timeDelta / charDelta;
+            audioMsPerCharRef.current = Math.max(15, Math.min(300, measuredMsPerChar * 0.7 + audioMsPerCharRef.current * 0.3));
+          }
+        }
+
+        lastAudioBoundaryCharRef.current = newBoundaryChar;
+        lastAudioBoundaryTimeRef.current = now;
+
+        if (newBoundaryChar > visualAudioCharRef.current) {
+          visualAudioCharRef.current = Math.max(visualAudioCharRef.current, newBoundaryChar - 1);
+          setActiveAudioCharIndex(Math.floor(visualAudioCharRef.current));
+        }
       }
     };
 
