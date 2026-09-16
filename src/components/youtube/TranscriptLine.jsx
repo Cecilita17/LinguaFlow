@@ -5,6 +5,7 @@ import { getArabicTransliteration } from '../../services/arabicTransliteration.j
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
+import { useAudioSettings } from '../../context/AudioSettingsContext.jsx';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 
 export function TranscriptLine({
@@ -26,6 +27,7 @@ export function TranscriptLine({
   onWordClick = null
 }) {
   const { isWordSaved } = useSavedWords();
+  const { wordHighlightEnabled } = useAudioSettings();
   if (!line || typeof line !== 'object') return null;
   const startTime = typeof line.startTime === 'number' && !isNaN(line.startTime) ? line.startTime : 0;
   const rawText = typeof line.text === 'string' ? line.text : (line.text != null ? String(line.text) : '');
@@ -298,7 +300,7 @@ export function TranscriptLine({
                       {/* Tier 2 (CENTER): Word (Arabic with diacritics/tashkeel in RTL, Russian/Polish/Latin scripts in LTR) */}
                       {(() => {
                         const isSaved = !isPunctuation && isWordSaved(word, targetLang);
-                        const isAudioActive = isActive && activeTokenIndex === idx;
+                        const isAudioActive = wordHighlightEnabled && isActive && activeTokenIndex === idx;
                         return (
                           <span
                             dir={textDirection}
@@ -343,7 +345,7 @@ export function TranscriptLine({
             {text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/).map((chunk, cIdx) => {
               if (!chunk) return null;
               const cleanWord = chunk.trim();
-              const isAudioActive = isActive && activeChunkIndex === cIdx;
+              const isAudioActive = wordHighlightEnabled && isActive && activeChunkIndex === cIdx;
               if (cleanWord && isWordSaved(cleanWord, targetLang)) {
                 return (
                   <span

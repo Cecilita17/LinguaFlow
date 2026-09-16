@@ -41,11 +41,15 @@ import {
   ArrowDown,
   Search,
   X,
-  Upload
+  Upload,
+  Settings,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { ErrorBoundary } from '../components/common/ErrorBoundary.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
 
 const SESSION_STORAGE_KEY = 'linguaflow_youtube_reader_session';
 
@@ -92,6 +96,10 @@ export function YouTubeReaderPage({
   setActiveTab = null
 }) {
   const { isSpanish } = useSiteLanguage();
+  const {
+    wordHighlightEnabled,
+    setWordHighlightEnabled
+  } = useAudioSettings();
 
   // Navigation mode: 'library' | 'importer' | 'reader'
   // Default to 'library' when entering YouTube Reader
@@ -130,6 +138,7 @@ export function YouTubeReaderPage({
 
   // Hamburger actions menu state & ref
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [isSettingsSubmenuOpen, setIsSettingsSubmenuOpen] = useState(false);
   const actionsMenuRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -1057,100 +1066,147 @@ export function YouTubeReaderPage({
                       <span>{isSpanish ? 'Librería' : 'Library'}</span>
                     </button>
 
-                    {/* 3. Playback speed */}
+                    {/* ⚙️ Configuraciones */}
                     <button
                       type="button"
-                      onClick={cyclePlaybackRate}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsSettingsSubmenuOpen(prev => !prev);
+                      }}
+                      aria-expanded={isSettingsSubmenuOpen}
                       className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
                     >
                       <span className="flex items-center space-x-2.5">
-                        <Gauge className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
-                        <span>Playback speed</span>
+                        <Settings className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
+                        <span>{isSpanish ? 'Configuraciones' : 'Settings'}</span>
                       </span>
-                      <span className="text-[11px] font-mono font-bold text-rose-600 dark:text-rose-300 shrink-0">
-                        {playbackRate}×
-                      </span>
+                      {isSettingsSubmenuOpen ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+                      )}
                     </button>
 
-                    {/* 4. Transliterations [ON/OFF] */}
-                    <button
-                      type="button"
-                      onClick={() => setInterlinearMode(!interlinearMode)}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                    >
-                      <span className="flex items-center space-x-2.5">
-                        <span className="w-4 h-4 flex items-center justify-center font-bold text-[12px] leading-none text-rose-500 dark:text-rose-400 shrink-0">A文</span>
-                        <span>Transliterations</span>
-                      </span>
-                      <span
-                        className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
-                          interlinearMode
-                            ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
-                            : 'bg-[var(--surface-secondary)] justify-start'
-                        }`}
-                      >
-                        <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
-                      </span>
-                    </button>
+                    {isSettingsSubmenuOpen && (
+                      <div className="ml-3 pl-2 border-l border-[var(--border-subtle)]/60 space-y-0.5 mt-0.5">
+                        {/* Subrayado de palabras (Sincronización visual) */}
+                        <button
+                          type="button"
+                          onClick={() => setWordHighlightEnabled(!wordHighlightEnabled)}
+                          className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                          title={isSpanish ? 'Activar/desactivar subrayado visual de palabras durante la reproducción' : 'Enable/disable visual word highlight during playback'}
+                        >
+                          <span className="flex items-center space-x-2.5">
+                            <Sparkles className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
+                            <span>{isSpanish ? 'Subrayado de palabras' : 'Word highlighting'}</span>
+                          </span>
+                          <span
+                            className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
+                              wordHighlightEnabled
+                                ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
+                                : 'bg-[var(--surface-secondary)] justify-start'
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                          </span>
+                        </button>
 
-                    {/* 5. Text size */}
-                    <button
-                      type="button"
-                      onClick={cycleFontSize}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                    >
-                      <span className="flex items-center space-x-2.5">
-                        <span className="w-4 h-4 flex items-center justify-center font-bold text-[12px] leading-none text-rose-500 dark:text-rose-400 shrink-0">A±</span>
-                        <span>Text size</span>
-                      </span>
-                      <span className="text-[11px] font-mono font-bold uppercase text-rose-600 dark:text-rose-300 shrink-0">
-                        {fontSize}
-                      </span>
-                    </button>
+                        {/* Playback speed */}
+                        <button
+                          type="button"
+                          onClick={cyclePlaybackRate}
+                          className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                        >
+                          <span className="flex items-center space-x-2.5">
+                            <Gauge className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
+                            <span>Playback speed</span>
+                          </span>
+                          <span className="text-[11px] font-mono font-bold text-rose-600 dark:text-rose-300 shrink-0">
+                            {playbackRate}×
+                          </span>
+                        </button>
 
-                    {/* 6. Auto glossing [ON/OFF] */}
-                    <button
-                      type="button"
-                      onClick={handleToggleAutoGlossing}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                    >
-                      <span className="flex items-center space-x-2.5">
-                        <Sparkles className={`w-4 h-4 shrink-0 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500' : 'text-rose-500 dark:text-rose-400'}`} />
-                        <span>Auto glossing</span>
-                      </span>
-                      <span
-                        className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
-                          isAutoGlossing
-                            ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 justify-end'
-                            : 'bg-[var(--surface-secondary)] justify-start'
-                        }`}
-                      >
-                        <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
-                      </span>
-                    </button>
+                        {/* Transliterations [ON/OFF] */}
+                        <button
+                          type="button"
+                          onClick={() => setInterlinearMode(!interlinearMode)}
+                          className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                        >
+                          <span className="flex items-center space-x-2.5">
+                            <span className="w-3.5 h-3.5 flex items-center justify-center font-bold text-[12px] leading-none text-rose-500 dark:text-rose-400 shrink-0">A文</span>
+                            <span>Transliterations</span>
+                          </span>
+                          <span
+                            className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
+                              interlinearMode
+                                ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
+                                : 'bg-[var(--surface-secondary)] justify-start'
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                          </span>
+                        </button>
+
+                        {/* Text size */}
+                        <button
+                          type="button"
+                          onClick={cycleFontSize}
+                          className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                        >
+                          <span className="flex items-center space-x-2.5">
+                            <span className="w-3.5 h-3.5 flex items-center justify-center font-bold text-[12px] leading-none text-rose-500 dark:text-rose-400 shrink-0">A±</span>
+                            <span>Text size</span>
+                          </span>
+                          <span className="text-[11px] font-mono font-bold uppercase text-rose-600 dark:text-rose-300 shrink-0">
+                            {fontSize}
+                          </span>
+                        </button>
+
+                        {/* Auto glossing [ON/OFF] */}
+                        <button
+                          type="button"
+                          onClick={handleToggleAutoGlossing}
+                          className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                        >
+                          <span className="flex items-center space-x-2.5">
+                            <Sparkles className={`w-3.5 h-3.5 shrink-0 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500' : 'text-rose-500 dark:text-rose-400'}`} />
+                            <span>Auto glossing</span>
+                          </span>
+                          <span
+                            className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
+                              isAutoGlossing
+                                ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 justify-end'
+                                : 'bg-[var(--surface-secondary)] justify-start'
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                          </span>
+                        </button>
+
+                        {/* Auto-scroll [ON/OFF] */}
+                        <button
+                          type="button"
+                          onClick={() => setAutoScroll(!autoScroll)}
+                          className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                        >
+                          <span className="flex items-center space-x-2.5">
+                            <ArrowDown className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
+                            <span>Auto-scroll</span>
+                          </span>
+                          <span
+                            className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
+                              autoScroll
+                                ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
+                                : 'bg-[var(--surface-secondary)] justify-start'
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                          </span>
+                        </button>
+                      </div>
+                    )}
 
                     <div className="my-1 border-t border-[var(--border-subtle)]/60" />
-
-                    {/* 7. Auto-scroll [ON/OFF] */}
-                    <button
-                      type="button"
-                      onClick={() => setAutoScroll(!autoScroll)}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                    >
-                      <span className="flex items-center space-x-2.5">
-                        <ArrowDown className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
-                        <span>Auto-scroll</span>
-                      </span>
-                      <span
-                        className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
-                          autoScroll
-                            ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
-                            : 'bg-[var(--surface-secondary)] justify-start'
-                        }`}
-                      >
-                        <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
-                      </span>
-                    </button>
 
                     {/* 8. Ir al inicio del vídeo */}
                     <button

@@ -73,6 +73,8 @@ export function TextReaderPage({
     setSpeechRate,
     autoPlayTextReader,
     setAutoPlayTextReader,
+    wordHighlightEnabled,
+    setWordHighlightEnabled,
     speechRateOptions
   } = useAudioSettings();
   const speechRateRef = useRef(speechRate);
@@ -1698,6 +1700,28 @@ export function TextReaderPage({
                         <span
                           className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
                             autoPlayTextReader
+                              ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
+                              : 'bg-[var(--surface-secondary)] justify-start'
+                          }`}
+                        >
+                          <span className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                        </span>
+                      </button>
+
+                      {/* Subrayado de palabras (Sincronización visual) */}
+                      <button
+                        type="button"
+                        onClick={() => setWordHighlightEnabled(!wordHighlightEnabled)}
+                        className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                        title={isSpanish ? 'Activar/desactivar subrayado visual de palabras durante el audio' : 'Enable/disable visual word highlight during audio'}
+                      >
+                        <span className="flex items-center space-x-2.5">
+                          <Sparkles className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
+                          <span>{isSpanish ? 'Subrayado de palabras' : 'Word highlighting'}</span>
+                        </span>
+                        <span
+                          className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
+                            wordHighlightEnabled
                               ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end'
                               : 'bg-[var(--surface-secondary)] justify-start'
                           }`}

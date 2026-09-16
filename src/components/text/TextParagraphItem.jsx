@@ -70,9 +70,9 @@ export function TextParagraphItem({
   }, [text, tokens, targetLang]);
 
   const activeTokenIndex = React.useMemo(() => {
-    if (!wordHighlightEnabled || !isPlaying || activeAudioCharIndex < 0) return -1;
+    if (!isPlaying || activeAudioCharIndex < 0) return -1;
     return findActiveTokenIndex(activeAudioCharIndex, tokenCharRanges);
-  }, [wordHighlightEnabled, isPlaying, activeAudioCharIndex, tokenCharRanges]);
+  }, [isPlaying, activeAudioCharIndex, tokenCharRanges]);
 
   let runningChunkPos = 0;
 
@@ -147,7 +147,7 @@ export function TextParagraphItem({
                   );
                 }
 
-                const isAudioActive = isPlaying && activeTokenIndex === idx;
+                const isAudioActive = wordHighlightEnabled && isPlaying && activeTokenIndex === idx;
 
                 return (
                   <div
