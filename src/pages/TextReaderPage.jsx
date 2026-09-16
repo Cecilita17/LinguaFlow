@@ -83,6 +83,39 @@ export function TextReaderPage({
   const visibleParagraphsRef = useRef([]);
   const handlePlayParagraphRef = useRef(null);
 
+  // Audio TTS states & visual timer refs
+  const [playingParagraphId, setPlayingParagraphId] = useState(null);
+  const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
+  const [audioErrorId, setAudioErrorId] = useState(null);
+  const audioPlaybackIdRef = useRef(0);
+  const audioVisualTimerRef = useRef(null);
+  const audioVisualCharRef = useRef(0);
+  const lastAudioBoundaryCharRef = useRef(0);
+  const lastAudioBoundaryTimeRef = useRef(0);
+  const audioMsPerCharRef = useRef(70);
+
+  const clearAudioVisualTimer = useCallback(() => {
+    if (audioVisualTimerRef.current) {
+      clearInterval(audioVisualTimerRef.current);
+      audioVisualTimerRef.current = null;
+    }
+  }, []);
+
+  // Glossing progress & controller
+  const [glossingProgress, setGlossingProgress] = useState({
+    total: 0,
+    completed: 0,
+    isGlossing: false,
+    isPaused: false,
+    isComplete: false,
+    failed: 0
+  });
+  const [isAutoGlossing, setIsAutoGlossing] = useState(false);
+  const [glossingParagraphIds, setGlossingParagraphIds] = useState(new Set());
+  const loadingParagraphIds = glossingParagraphIds; // Alias for backward compatibility
+  const setLoadingParagraphIds = setGlossingParagraphIds;
+  const abortControllerRef = useRef(null);
+
   // Load existing draft if available
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
 
@@ -202,23 +235,6 @@ export function TextReaderPage({
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState('');
 
-  // Audio TTS states
-  const [playingParagraphId, setPlayingParagraphId] = useState(null);
-  const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
-  const [audioErrorId, setAudioErrorId] = useState(null);
-  const audioPlaybackIdRef = useRef(0);
-  const audioVisualTimerRef = useRef(null);
-  const audioVisualCharRef = useRef(0);
-  const lastAudioBoundaryCharRef = useRef(0);
-  const lastAudioBoundaryTimeRef = useRef(0);
-  const audioMsPerCharRef = useRef(70);
-
-  const clearAudioVisualTimer = useCallback(() => {
-    if (audioVisualTimerRef.current) {
-      clearInterval(audioVisualTimerRef.current);
-      audioVisualTimerRef.current = null;
-    }
-  }, []);
 
   // Last audio position bookmark — persisted in document.lastAudioPosition
   const [lastAudioParagraphId, setLastAudioParagraphId] = useState(
@@ -367,20 +383,6 @@ export function TextReaderPage({
     }
   }, [chapters]);
 
-  // Glossing progress & controller
-  const [glossingProgress, setGlossingProgress] = useState({
-    total: 0,
-    completed: 0,
-    isGlossing: false,
-    isPaused: false,
-    isComplete: false,
-    failed: 0
-  });
-  const [isAutoGlossing, setIsAutoGlossing] = useState(false);
-  const [glossingParagraphIds, setGlossingParagraphIds] = useState(new Set());
-  const loadingParagraphIds = glossingParagraphIds; // Alias for backward compatibility
-  const setLoadingParagraphIds = setGlossingParagraphIds;
-  const abortControllerRef = useRef(null);
 
   // Cleanup speech synthesis, glossing & timers on unmount
   useEffect(() => {
