@@ -5,7 +5,8 @@ import {
   tokenizeLiveCallTurn,
   glossLiveCallTurnAsync,
   extractTurnTransliteration,
-  extractTurnGlosses
+  extractTurnGlosses,
+  punctuateSpeechTurn
 } from '../services/liveCallGlossService.js';
 import { isGlossComplete } from '../services/subtitleGlossService.js';
 import { cleanDuplicatePhrases } from './useSpeech.js';
@@ -908,6 +909,9 @@ export function usePipelineCall({
     const cleanText = userText.trim();
     if (!cleanText) return;
 
+    // Apply zero-latency natural speech punctuation exclusively for Live Call user transcript
+    const punctuatedText = punctuateSpeechTurn(cleanText, targetLang);
+
     const activeTurn = currentTurnRef.current;
     const currentId = turnId || activeTurn.id || `user-${Date.now()}`;
 
@@ -924,8 +928,8 @@ export function usePipelineCall({
     // 2. Mark active turn as finalized and reset currentTurnRef for the next turn
     if (activeTurn.id === currentId) {
       activeTurn.finalized = true;
-      activeTurn.text = cleanText;
-      activeTurn.confirmedText = cleanText;
+      activeTurn.text = punctuatedText;
+      activeTurn.confirmedText = punctuatedText;
     }
     currentTurnRef.current = {
       id: null,
@@ -939,7 +943,7 @@ export function usePipelineCall({
     }
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const initialTokens = tokenizeLiveCallTurn(cleanText, targetLang);
+    const initialTokens = tokenizeLiveCallTurn(punctuatedText, targetLang);
     const initialTranslit = extractTurnTransliteration(initialTokens, targetLang);
     const initialGlosses = extractTurnGlosses(initialTokens);
 
@@ -959,10 +963,10 @@ export function usePipelineCall({
         updated[targetIdx] = {
           ...updated[targetIdx],
           id: currentId,
-          text: cleanText,
-          originalText: cleanText,
-          correctedText: cleanText,
-          diffTokens: [{ text: cleanText, changed: false, original: null }],
+          text: punctuatedText,
+          originalText: punctuatedText,
+          correctedText: punctuatedText,
+          diffTokens: [{ text: punctuatedText, changed: false, original: null }],
           tokens: initialTokens,
           transliteration: initialTranslit,
           glosses: initialGlosses,
@@ -976,15 +980,15 @@ export function usePipelineCall({
         id: currentId,
         sender: 'user',
         speaker: isSpanish ? 'Tú' : 'You',
-        text: cleanText,
+        text: punctuatedText,
         timestamp: timeStr,
         hasCorrection: false,
-        diffTokens: [{ text: cleanText, changed: false, original: null }],
+        diffTokens: [{ text: punctuatedText, changed: false, original: null }],
         tokens: initialTokens,
         transliteration: initialTranslit,
         glosses: initialGlosses,
-        originalText: cleanText,
-        correctedText: cleanText,
+        originalText: punctuatedText,
+        correctedText: punctuatedText,
         isCorrecting: true,
         isTranscribing: false
       };
@@ -992,10 +996,10 @@ export function usePipelineCall({
     });
 
     // Asynchronously trigger single pedagogical correction
-    triggerCorrection(cleanText, currentId);
+    triggerCorrection(punctuatedText, currentId);
 
     // Dispatch assistant conversational response
-    dispatchAssistantResponse(cleanText);
+    dispatchAssistantResponse(punctuatedText);
   }, [targetLang, isSpanish, triggerCorrection, dispatchAssistantResponse]);
 
   // Initialize Speech Recognition for Live VAD & Streaming STT
