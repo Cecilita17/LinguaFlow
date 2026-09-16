@@ -44,18 +44,18 @@ export default function HomePage({
       <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col justify-center">
 
         {/* 1. DYNAMIC GREETING (prominent on mobile & desktop, immediately updates when targetLang changes) */}
-        <div className="text-center mx-auto mb-4 sm:mb-6 animate-fade-in pt-1">
+        <div className="w-full flex flex-col items-center justify-center text-center mx-auto mb-4 sm:mb-6 animate-fade-in pt-1">
           <h1
-            className="w-full text-center text-4xl sm:text-6xl font-black tracking-tight text-[var(--text-primary)] dark:text-white leading-tight transition-all"
+            className="w-full flex items-center justify-center text-center text-4xl sm:text-6xl font-black tracking-tight text-[var(--text-primary)] dark:text-white leading-tight transition-all"
             dir={greeting.rtl ? 'rtl' : 'ltr'}
           >
-            <span className="bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 dark:from-rose-400 dark:via-pink-400 dark:to-amber-300 bg-clip-text text-transparent">
+            <span className="inline-block text-center bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 dark:from-rose-400 dark:via-pink-400 dark:to-amber-300 bg-clip-text text-transparent">
               {greeting.text}
             </span>
           </h1>
 
           {greeting.translit && (
-            <p className="text-xs sm:text-sm font-medium text-rose-500/80 dark:text-rose-300/80 mt-1 font-mono tracking-wide">
+            <p className="text-xs sm:text-sm font-medium text-rose-500/80 dark:text-rose-300/80 mt-1 font-mono tracking-wide text-center">
               {greeting.translit}
             </p>
           )}
