@@ -160,8 +160,8 @@ export function CallDetailView({
                   dir={textDirection}
                   className={`leading-tight select-text ${
                     isUser
-                      ? 'text-white font-semibold text-sm sm:text-base'
-                      : 'text-[var(--text-primary)] font-semibold text-sm sm:text-base'
+                      ? 'text-white font-semibold'
+                      : 'text-[var(--text-primary)] font-semibold'
                   } ${isArabic ? 'font-arabic text-base sm:text-lg' : ''}`}
                 >
                   {word}
