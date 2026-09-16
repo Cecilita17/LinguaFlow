@@ -126,6 +126,9 @@ export function usePipelineCall({
   // Speech Recognition & VAD Refs
   const recognitionRef = useRef(null);
   const isRecognitionActiveRef = useRef(false);
+  const isSpeechRecognitionRunningRef = useRef(false);
+  const speechRecognitionRestartPendingRef = useRef(false);
+  const restartRetryTimeoutRef = useRef(null);
   const silenceTimeoutRef = useRef(null);
   const consumedFinalIndicesRef = useRef(new Set());
   const currentTurnRef = useRef({
@@ -230,6 +233,10 @@ export function usePipelineCall({
 
   // Cancel active AI generation & playback (Barge-in / Interruption)
   const interruptAssistant = useCallback(() => {
+    if (restartRetryTimeoutRef.current) {
+      clearTimeout(restartRetryTimeoutRef.current);
+      restartRetryTimeoutRef.current = null;
+    }
     if (echoGuardTimerRef.current) {
       clearTimeout(echoGuardTimerRef.current);
       echoGuardTimerRef.current = null;
@@ -237,6 +244,7 @@ export function usePipelineCall({
     isEchoGuardActiveRef.current = false;
     isLlmStreamingRef.current = false;
     isSttPausedRef.current = false;
+    speechRecognitionRestartPendingRef.current = false;
 
     if (llmAbortControllerRef.current) {
       try { llmAbortControllerRef.current.abort(); } catch (e) {}
@@ -266,6 +274,10 @@ export function usePipelineCall({
   // Teardown all resources
   const cleanupResources = useCallback(() => {
     stopDurationTimer();
+    if (restartRetryTimeoutRef.current) {
+      clearTimeout(restartRetryTimeoutRef.current);
+      restartRetryTimeoutRef.current = null;
+    }
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = null;
@@ -278,6 +290,8 @@ export function usePipelineCall({
     isEchoGuardActiveRef.current = false;
     isLlmStreamingRef.current = false;
     isSttPausedRef.current = false;
+    isSpeechRecognitionRunningRef.current = false;
+    speechRecognitionRestartPendingRef.current = false;
     lastAiSpokenTextRef.current = '';
 
     interruptAssistant();
@@ -314,6 +328,64 @@ export function usePipelineCall({
       finalized: false
     };
   }, [interruptAssistant]);
+
+  // Determine if Speech Recognition can be safely active and listening
+  const canRunSpeechRecognition = useCallback(() => {
+    const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
+    const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
+    const isQueueActive = ttsQueueRef.current.length > 0;
+    const isLlmActive = isLlmStreamingRef.current || Boolean(llmAbortControllerRef.current) || Boolean(currentAiTurnIdRef.current);
+
+    return Boolean(
+      isRecognitionActiveRef.current &&
+      recognitionRef.current &&
+      !isSttPausedRef.current &&
+      !isEchoGuardActiveRef.current &&
+      !isPlaybackActive &&
+      !isQueueActive &&
+      !isLlmActive &&
+      !isSpeakingState &&
+      callStateRef.current !== 'idle' &&
+      callStateRef.current !== 'error'
+    );
+  }, []);
+
+  // Safely start Speech Recognition if ready, handling Chrome state races and retries
+  const startSpeechRecognitionIfReady = useCallback(() => {
+    if (restartRetryTimeoutRef.current) {
+      clearTimeout(restartRetryTimeoutRef.current);
+      restartRetryTimeoutRef.current = null;
+    }
+
+    if (!canRunSpeechRecognition()) {
+      console.log('[PipelineSTT] startSpeechRecognitionIfReady: not ready to run STT currently (paused/speaking/thinking)');
+      return;
+    }
+
+    if (isSpeechRecognitionRunningRef.current) {
+      console.log('[PipelineSTT] SpeechRecognition is already running');
+      return;
+    }
+
+    try {
+      console.log('[PipelineSTT] Starting SpeechRecognition...');
+      speechRecognitionRestartPendingRef.current = false;
+      recognitionRef.current.start();
+      isSpeechRecognitionRunningRef.current = true;
+      console.log('[PipelineSTT] SpeechRecognition.start() initiated successfully');
+    } catch (err) {
+      console.warn('[PipelineSTT] SpeechRecognition.start() notice:', err?.name || err);
+      // If error is InvalidStateError or recognition is in a transitional closing state, mark pending and retry safely
+      if (err?.name === 'InvalidStateError' || (err?.message && err.message.includes('already started'))) {
+        speechRecognitionRestartPendingRef.current = true;
+        restartRetryTimeoutRef.current = setTimeout(() => {
+          if (canRunSpeechRecognition() && !isSpeechRecognitionRunningRef.current) {
+            startSpeechRecognitionIfReady();
+          }
+        }, 150);
+      }
+    }
+  }, [canRunSpeechRecognition]);
 
   // Trigger pedagogical correction asynchronously for a user voice turn
   const triggerCorrection = useCallback((userText, turnId) => {
@@ -453,11 +525,7 @@ export function usePipelineCall({
             if (callStateRef.current !== 'idle' && callStateRef.current !== 'error') {
               console.log('[PipelineEchoGuard] STT resumed -> listening');
               setCallState('listening');
-              if (isRecognitionActiveRef.current && recognitionRef.current) {
-                try {
-                  recognitionRef.current.start();
-                } catch (e) {}
-              }
+              startSpeechRecognitionIfReady();
             }
           }, POST_TTS_ECHO_GUARD_MS);
         }
@@ -499,102 +567,114 @@ export function usePipelineCall({
       console.log('[PipelineTTS] Content-Type:', contentType);
 
       if (!ttsResponse.ok) {
-        const errBody = await ttsResponse.text();
-        // Parse structured error from backend for better diagnostics
-        let errInfo = errBody;
-        try { errInfo = JSON.parse(errBody); } catch (_) {}
-        console.warn(
-          '[PipelineTTS] ⚠ TTS FAILED. HTTP', ttsResponse.status,
-          '| upstream:', errInfo?.upstream || 'unknown',
-          '| details:', errInfo?.details || errBody
-        );
-        isPlayingQueueRef.current = false;
-        playNextInAudioQueue();
-        return;
-      }
-
-      const audioBuffer = await ttsResponse.arrayBuffer();
-      console.log('[PipelineTTS] Audio bytes:', audioBuffer ? audioBuffer.byteLength : 0);
-
-      if (!audioBuffer || audioBuffer.byteLength === 0) {
-        console.warn('[PipelineTTS] Playback failed: TTS returned 0 audio bytes');
-        isPlayingQueueRef.current = false;
-        playNextInAudioQueue();
-        return;
-      }
-
-      // 1. Try Web Audio API playback
-      let webAudioStarted = false;
-      const ctx = audioContextRef.current;
-
-      if (ctx) {
+        let errBody = '';
         try {
-          if (ctx.state === 'suspended') {
-            await ctx.resume();
-          }
-          if (ctx.state === 'running') {
-            // Use a slice of the ArrayBuffer so decode failure does not detach the buffer
-            const decodedBuffer = await ctx.decodeAudioData(audioBuffer.slice(0));
-            if (decodedBuffer) {
-              console.log('[PipelineAudio] decodeAudioData success');
-              const sourceNode = ctx.createBufferSource();
-              sourceNode.buffer = decodedBuffer;
-              sourceNode.connect(ctx.destination);
-              activeAudioSourceRef.current = sourceNode;
-
-              sourceNode.onended = () => {
-                console.log('[PipelineAudio] playback ended (Web Audio)');
-                activeAudioSourceRef.current = null;
-                isPlayingQueueRef.current = false;
-                playNextInAudioQueue();
-              };
-
-              sourceNode.start(0);
-              webAudioStarted = true;
-            }
-          }
-        } catch (webAudioErr) {
-          console.warn('[PipelineAudio] decodeAudioData failed, falling back to HTML5 Audio:', webAudioErr);
+          errBody = await ttsResponse.text();
+        } catch (readErr) {
+          errBody = readErr.message;
         }
+        console.error(`[PipelineTTS] Backend error (HTTP ${ttsResponse.status}):`, errBody);
+        throw new Error(`TTS service returned HTTP ${ttsResponse.status}: ${errBody}`);
       }
 
-      // 2. Fallback to HTML5 Audio Element if Web Audio was unavailable or failed
-      if (!webAudioStarted) {
-        console.log('[PipelineAudio] HTML5 fallback');
-        const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-        const audioUrl = URL.createObjectURL(blob);
-        const audio = new Audio();
-        audio.src = audioUrl;
-        audio.preload = 'auto';
-        activeAudioElementRef.current = audio;
+      // Check for audio/wav or audio/mpeg
+      if (contentType.includes('audio/wav') || contentType.includes('audio/mpeg') || contentType.includes('audio/mp3') || contentType.includes('audio/webm')) {
+        const audioBlob = await ttsResponse.blob();
+        console.log('[PipelineTTS] Received audio blob size:', audioBlob.size, 'bytes, type:', audioBlob.type);
 
-        audio.onended = () => {
-          console.log('[PipelineAudio] playback ended (HTML5 Audio)');
-          URL.revokeObjectURL(audioUrl);
-          activeAudioElementRef.current = null;
-          isPlayingQueueRef.current = false;
-          playNextInAudioQueue();
-        };
+        if (audioBlob.size === 0) {
+          throw new Error('Received 0-byte audio stream from TTS');
+        }
 
-        audio.onerror = (e) => {
-          const code = audio.error?.code;
-          const message = audio.error?.message;
-          console.warn('[PipelineAudio] audio.play failed / HTML5 error:', { code, message, errorEvent: e });
-          URL.revokeObjectURL(audioUrl);
-          activeAudioElementRef.current = null;
-          isPlayingQueueRef.current = false;
-          playNextInAudioQueue();
-        };
+        // Play via Web Audio Context if available for lower latency
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+          try {
+            if (audioContextRef.current.state === 'suspended') {
+              await audioContextRef.current.resume();
+            }
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const decodedBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
 
-        try {
+            const source = audioContextRef.current.createBufferSource();
+            source.buffer = decodedBuffer;
+            source.connect(audioContextRef.current.destination);
+
+            activeAudioSourceRef.current = source;
+
+            source.onended = () => {
+              activeAudioSourceRef.current = null;
+              isPlayingQueueRef.current = false;
+              playNextInAudioQueue();
+            };
+
+            source.start(0);
+          } catch (decodeErr) {
+            console.warn('[PipelineTTS] Web Audio decode notice, fallback to HTMLAudio:', decodeErr);
+            // Fallback to HTMLAudioElement
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            activeAudioElementRef.current = audio;
+
+            audio.onended = () => {
+              URL.revokeObjectURL(audioUrl);
+              activeAudioElementRef.current = null;
+              isPlayingQueueRef.current = false;
+              playNextInAudioQueue();
+            };
+
+            audio.onerror = (e) => {
+              console.warn('[PipelineTTS] HTMLAudio error:', e);
+              URL.revokeObjectURL(audioUrl);
+              activeAudioElementRef.current = null;
+              isPlayingQueueRef.current = false;
+              playNextInAudioQueue();
+            };
+
+            await audio.play();
+          }
+        } else {
+          // Standard HTMLAudioElement playback
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          activeAudioElementRef.current = audio;
+
+          audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            activeAudioElementRef.current = null;
+            isPlayingQueueRef.current = false;
+            playNextInAudioQueue();
+          };
+
+          audio.onerror = (e) => {
+            console.warn('[PipelineTTS] HTMLAudio error:', e);
+            URL.revokeObjectURL(audioUrl);
+            activeAudioElementRef.current = null;
+            isPlayingQueueRef.current = false;
+            playNextInAudioQueue();
+          };
+
           await audio.play();
-          console.log('[PipelineAudio] audio.play success');
-        } catch (playErr) {
-          console.warn('[PipelineAudio] audio.play failed:', {
-            name: playErr.name,
-            message: playErr.message,
-            code: audio.error?.code,
-            mediaErrorMessage: audio.error?.message
+        }
+      } else {
+        // Handle JSON response (Cartesia / OpenAI base64 or alternative)
+        const data = await ttsResponse.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        if (data.audioContent) {
+          const audioBlob = base64ToBlob(data.audioContent, 'audio/mp3');
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          activeAudioElementRef.current = audio;
+
+          await new Promise((resolve) => {
+            audio.onended = resolve;
+            audio.onerror = resolve;
+            audio.play().catch((e) => {
+              console.warn('[PipelineTTS] Audio.play notice:', e);
+              resolve();
+            });
           });
           URL.revokeObjectURL(audioUrl);
           activeAudioElementRef.current = null;
@@ -610,7 +690,7 @@ export function usePipelineCall({
       isPlayingQueueRef.current = false;
       playNextInAudioQueue();
     }
-  }, [voice, targetLang]);
+  }, [voice, targetLang, startSpeechRecognitionIfReady]);
 
   // Enqueue a sentence chunk for TTS synthesis and playback
   const enqueueTextForTTS = useCallback((textChunk) => {
@@ -917,6 +997,8 @@ export function usePipelineCall({
 
     recognition.onstart = () => {
       console.log('[PipelineSTT] SpeechRecognition onstart fired - actively listening to microphone');
+      isSpeechRecognitionRunningRef.current = true;
+      speechRecognitionRestartPendingRef.current = false;
     };
 
     recognition.onresult = (event) => {
@@ -1084,6 +1166,8 @@ export function usePipelineCall({
     recognition.onerror = (event) => {
       console.warn('[PipelineSTT] SpeechRecognition onerror:', event.error, event.message || '');
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        isRecognitionActiveRef.current = false;
+        isSpeechRecognitionRunningRef.current = false;
         setCallState('error');
         setErrorMessage(
           isSpanish
@@ -1091,47 +1175,35 @@ export function usePipelineCall({
             : 'Microphone permission denied for speech recognition.'
         );
       } else if (event.error === 'audio-capture') {
+        isRecognitionActiveRef.current = false;
+        isSpeechRecognitionRunningRef.current = false;
         setCallState('error');
         setErrorMessage(
           isSpanish
             ? 'No se detectó ningún micrófono o está bloqueado por otra aplicación.'
             : 'No microphone was found or microphone is busy.'
         );
+      } else if (event.error === 'aborted') {
+        isSpeechRecognitionRunningRef.current = false;
       }
     };
 
     recognition.onend = () => {
       console.log('[PipelineSTT] SpeechRecognition onend fired');
-      // In a new recognition session, event.results indices start from 0 again
+      isSpeechRecognitionRunningRef.current = false;
       consumedFinalIndicesRef.current.clear();
 
       // Auto-restart recognition only if call is still active and STT is not paused for TTS / thinking
-      const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
-      const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
-      const isQueueActive = ttsQueueRef.current.length > 0;
-      const isLlmActive = isLlmStreamingRef.current || Boolean(llmAbortControllerRef.current) || Boolean(currentAiTurnIdRef.current);
-
-      if (
-        isRecognitionActiveRef.current &&
-        !isSttPausedRef.current &&
-        !isEchoGuardActiveRef.current &&
-        !isPlaybackActive &&
-        !isQueueActive &&
-        !isLlmActive &&
-        !isSpeakingState
-      ) {
-        try {
-          console.log('[PipelineSTT] Auto-restarting SpeechRecognition...');
-          recognition.start();
-          console.log('[PipelineSTT] SpeechRecognition restart initiated');
-        } catch (e) {
-          console.warn('[PipelineSTT] Auto-restart notice:', e);
-        }
+      if (canRunSpeechRecognition()) {
+        console.log('[PipelineSTT] STT ended while ready -> auto-restarting');
+        startSpeechRecognitionIfReady();
+      } else {
+        console.log('[PipelineSTT] STT ended while paused/busy; will restart when AI completes turn');
       }
     };
 
     recognitionRef.current = recognition;
-  }, [targetLang, isSpanish, interruptAssistant, finalizeUserSpeechTurn]);
+  }, [targetLang, isSpanish, finalizeUserSpeechTurn, canRunSpeechRecognition, startSpeechRecognitionIfReady]);
 
   // Start Pipeline Call
   const startCall = useCallback(async () => {
@@ -1242,13 +1314,7 @@ export function usePipelineCall({
       initSpeechRecognition();
       if (recognitionRef.current) {
         isRecognitionActiveRef.current = true;
-        console.log('[PipelineSTT] Starting SpeechRecognition...');
-        try {
-          recognitionRef.current.start();
-          console.log('[PipelineSTT] SpeechRecognition.start() executed successfully');
-        } catch (startErr) {
-          console.warn('[PipelineSTT] SpeechRecognition.start() notice:', startErr);
-        }
+        startSpeechRecognitionIfReady();
       }
 
       startDurationTimer();
@@ -1260,7 +1326,7 @@ export function usePipelineCall({
       setCallState('error');
       setErrorMessage(err.message || 'Error desconocido al conectar la llamada.');
     }
-  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant]);
+  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant, startSpeechRecognitionIfReady]);
 
   // Toggle Mute / Unmute
   const toggleMute = useCallback(() => {
