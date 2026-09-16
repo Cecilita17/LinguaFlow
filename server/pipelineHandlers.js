@@ -321,8 +321,8 @@ export async function handlePipelineTTS(req, res) {
         },
         output_format: {
           container: 'mp3',
-          encoding: 'pcm_s16le',
-          sample_rate: 44100
+          sample_rate: 44100,
+          bit_rate: 128000
         },
         language: resolvedLanguage
       })
