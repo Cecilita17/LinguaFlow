@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { transcribeAudioApi } from '../services/chatService.js';
 import { mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
-import { estimateSpeechDurationMs } from '../utils/audioWordSync.js';
 
 /**
  * Intelligent phrase and n-gram deduplication to fix Android Chrome / mobile WebKit
@@ -111,19 +110,7 @@ export function useSpeech({
   const audioStreamRef = useRef(null);
   const mimeTypeRef = useRef('audio/webm');
   const mediaStreamPromiseRef = useRef(null);
-  const speechFallbackTimerRef = useRef(null);
-  const visualCharRef = useRef(0);
-  const lastBoundaryCharRef = useRef(0);
-  const lastBoundaryTimeRef = useRef(0);
-  const msPerCharRef = useRef(70);
-  const currentCharIndexRef = useRef(0);
-
-  const clearSpeechFallbackTimer = () => {
-    if (speechFallbackTimerRef.current) {
-      clearInterval(speechFallbackTimerRef.current);
-      speechFallbackTimerRef.current = null;
-    }
-  };
+  const playbackIdRef = useRef(0);
 
   isHandsFreeRef.current = handsFree;
   isSpeakingRef.current = isSpeaking;
@@ -297,7 +284,8 @@ export function useSpeech({
   const startRecording = useCallback(async () => {
     if (isProcessing) return;
 
-    clearSpeechFallbackTimer();
+    // Increment playbackId to discard callbacks from any in-flight utterance
+    playbackIdRef.current++;
 
     // Cancel any active bot speaking
     if (window.speechSynthesis) {
@@ -397,9 +385,9 @@ export function useSpeech({
 
   // Text to Speech (TTS)
   const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback) => {
+    const playbackId = ++playbackIdRef.current;
     if (!window.speechSynthesis) return;
 
-    clearSpeechFallbackTimer();
     window.speechSynthesis.cancel();
 
     const cleanText = text.replace(/<[^>]*>/g, '').trim();
@@ -407,9 +395,6 @@ export function useSpeech({
 
     setSpeakingText(cleanText);
     setSpeakingCharIndex(0);
-    lastBoundaryCharRef.current = 0;
-    lastBoundaryTimeRef.current = Date.now();
-    currentCharIndexRef.current = 0;
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = langCode;
@@ -421,67 +406,16 @@ export function useSpeech({
       utterance.voice = matchingVoice;
     }
 
-    const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, rate);
-    const initialMsPerChar = Math.max(15, estimatedDurationMs / Math.max(1, cleanText.length));
-
-    visualCharRef.current = 0;
-    lastBoundaryCharRef.current = 0;
-    lastBoundaryTimeRef.current = 0;
-    msPerCharRef.current = initialMsPerChar;
-
     utterance.onstart = () => {
+      if (playbackId !== playbackIdRef.current) return;
       setIsSpeaking(true);
-      clearSpeechFallbackTimer();
-
-      const startTime = Date.now();
-      lastBoundaryTimeRef.current = startTime;
-      lastBoundaryCharRef.current = 0;
-      visualCharRef.current = 0;
-
-      let lastTickTime = startTime;
-
-      // Smooth visual progression timer running at ~30ms
-      speechFallbackTimerRef.current = setInterval(() => {
-        const now = Date.now();
-        const dt = now - lastTickTime;
-        lastTickTime = now;
-
-        // Step visual character forward using the calibrated msPerChar rate
-        const step = dt / Math.max(15, msPerCharRef.current);
-        const nextChar = Math.min(cleanText.length - 1, visualCharRef.current + step);
-
-        // Never move backwards
-        if (nextChar > visualCharRef.current) {
-          visualCharRef.current = nextChar;
-          setSpeakingCharIndex(Math.floor(nextChar));
-        }
-      }, 30);
+      setSpeakingCharIndex(0);
     };
 
     utterance.onboundary = (event) => {
+      if (playbackId !== playbackIdRef.current) return;
       if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
-        const newBoundaryChar = Math.min(cleanText.length - 1, event.charIndex);
-        const now = Date.now();
-
-        // Calculate real measured speed between consecutive boundaries
-        if (lastBoundaryTimeRef.current > 0 && newBoundaryChar > lastBoundaryCharRef.current) {
-          const charDelta = newBoundaryChar - lastBoundaryCharRef.current;
-          const timeDelta = now - lastBoundaryTimeRef.current;
-          if (timeDelta > 40 && charDelta > 0) {
-            const measuredMsPerChar = timeDelta / charDelta;
-            // Adapt real rate with exponential moving average
-            msPerCharRef.current = Math.max(15, Math.min(300, measuredMsPerChar * 0.7 + msPerCharRef.current * 0.3));
-          }
-        }
-
-        lastBoundaryCharRef.current = newBoundaryChar;
-        lastBoundaryTimeRef.current = now;
-
-        // Smoothly align visual tracker towards boundary without skipping intermediate words
-        if (newBoundaryChar > visualCharRef.current) {
-          visualCharRef.current = Math.max(visualCharRef.current, newBoundaryChar - 1);
-          setSpeakingCharIndex(Math.floor(visualCharRef.current));
-        }
+        setSpeakingCharIndex(event.charIndex);
       }
       if (onBoundaryCallback) {
         onBoundaryCallback(event);
@@ -489,31 +423,31 @@ export function useSpeech({
     };
 
     utterance.onend = () => {
-      clearSpeechFallbackTimer();
+      if (playbackId !== playbackIdRef.current) return;
       setIsSpeaking(false);
       setSpeakingCharIndex(-1);
       setSpeakingText('');
       if (onEndCallback) onEndCallback();
     };
 
-    utterance.onerror = () => {
-      clearSpeechFallbackTimer();
+    utterance.onerror = (e) => {
+      if (playbackId !== playbackIdRef.current) return;
       setIsSpeaking(false);
       setSpeakingCharIndex(-1);
       setSpeakingText('');
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [targetLangCode, targetLang]);
+  }, [targetLangCode]);
 
   const stopSpeaking = useCallback(() => {
-    clearSpeechFallbackTimer();
+    playbackIdRef.current++;
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-      setSpeakingCharIndex(-1);
-      setSpeakingText('');
     }
+    setIsSpeaking(false);
+    setSpeakingCharIndex(-1);
+    setSpeakingText('');
   }, []);
 
   return {

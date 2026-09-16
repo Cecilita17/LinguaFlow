@@ -56,7 +56,6 @@ import {
 } from '../services/textGlossService.js';
 import { parseEpubFile } from '../services/epubService.js';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
-import { estimateSpeechDurationMs } from '../utils/audioWordSync.js';
 
 export function TextReaderPage({
   targetLang = 'zh',
@@ -203,18 +202,7 @@ export function TextReaderPage({
   const [playingParagraphId, setPlayingParagraphId] = useState(null);
   const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
   const [audioErrorId, setAudioErrorId] = useState(null);
-  const audioFallbackTimerRef = useRef(null);
-  const visualAudioCharRef = useRef(0);
-  const lastAudioBoundaryCharRef = useRef(0);
-  const lastAudioBoundaryTimeRef = useRef(0);
-  const audioMsPerCharRef = useRef(70);
-
-  const clearAudioFallbackTimer = () => {
-    if (audioFallbackTimerRef.current) {
-      clearInterval(audioFallbackTimerRef.current);
-      audioFallbackTimerRef.current = null;
-    }
-  };
+  const audioPlaybackIdRef = useRef(0);
 
   // Last audio position bookmark — persisted in document.lastAudioPosition
   const [lastAudioParagraphId, setLastAudioParagraphId] = useState(
@@ -378,7 +366,7 @@ export function TextReaderPage({
   // Cleanup speech synthesis, glossing & timers on unmount
   useEffect(() => {
     return () => {
-      clearAudioFallbackTimer();
+      audioPlaybackIdRef.current++;
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -610,6 +598,7 @@ export function TextReaderPage({
   // Handle single-paragraph TTS playback
   const handlePlayParagraph = useCallback((paragraph) => {
     if (!paragraph || !paragraph.text) return;
+    const playbackId = ++audioPlaybackIdRef.current;
     if (!window.speechSynthesis) {
       setAudioErrorId(paragraph.id);
       return; // No position saved — TTS not available
@@ -617,13 +606,11 @@ export function TextReaderPage({
 
     userStoppedRef.current = false;
 
-    clearAudioFallbackTimer();
     // Cancel any current utterance
     window.speechSynthesis.cancel();
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
     setActiveAudioCharIndex(0);
-    receivedBoundaryRef.current = false;
 
     // Save last audio position immediately (persists even if page closes or switches document)
     setLastAudioParagraphId(paragraph.id);
@@ -664,67 +651,20 @@ export function TextReaderPage({
       utterance.voice = matchingVoice;
     }
 
-    const estimatedDurationMs = estimateSpeechDurationMs(cleanText, activeDocLang, speechRateRef.current || speechRate || 1.0);
-    const initialMsPerChar = Math.max(15, estimatedDurationMs / Math.max(1, cleanText.length));
-
-    visualAudioCharRef.current = 0;
-    lastAudioBoundaryCharRef.current = 0;
-    lastAudioBoundaryTimeRef.current = 0;
-    audioMsPerCharRef.current = initialMsPerChar;
-
-    setActiveAudioCharIndex(0);
-
     utterance.onstart = () => {
-      clearAudioFallbackTimer();
-      const startTime = Date.now();
-      lastAudioBoundaryTimeRef.current = startTime;
-      lastAudioBoundaryCharRef.current = 0;
-      visualAudioCharRef.current = 0;
-
-      let lastTickTime = startTime;
-
-      // Smooth visual progression timer running at ~30ms
-      audioFallbackTimerRef.current = setInterval(() => {
-        const now = Date.now();
-        const dt = now - lastTickTime;
-        lastTickTime = now;
-
-        const step = dt / Math.max(15, audioMsPerCharRef.current);
-        const nextChar = Math.min(cleanText.length - 1, visualAudioCharRef.current + step);
-
-        if (nextChar > visualAudioCharRef.current) {
-          visualAudioCharRef.current = nextChar;
-          setActiveAudioCharIndex(Math.floor(nextChar));
-        }
-      }, 30);
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      setActiveAudioCharIndex(0);
     };
 
     utterance.onboundary = (event) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
       if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
-        const newBoundaryChar = Math.min(cleanText.length - 1, event.charIndex);
-        const now = Date.now();
-
-        if (lastAudioBoundaryTimeRef.current > 0 && newBoundaryChar > lastAudioBoundaryCharRef.current) {
-          const charDelta = newBoundaryChar - lastAudioBoundaryCharRef.current;
-          const timeDelta = now - lastAudioBoundaryTimeRef.current;
-          if (timeDelta > 40 && charDelta > 0) {
-            const measuredMsPerChar = timeDelta / charDelta;
-            audioMsPerCharRef.current = Math.max(15, Math.min(300, measuredMsPerChar * 0.7 + audioMsPerCharRef.current * 0.3));
-          }
-        }
-
-        lastAudioBoundaryCharRef.current = newBoundaryChar;
-        lastAudioBoundaryTimeRef.current = now;
-
-        if (newBoundaryChar > visualAudioCharRef.current) {
-          visualAudioCharRef.current = Math.max(visualAudioCharRef.current, newBoundaryChar - 1);
-          setActiveAudioCharIndex(Math.floor(visualAudioCharRef.current));
-        }
+        setActiveAudioCharIndex(event.charIndex);
       }
     };
 
     utterance.onend = () => {
-      clearAudioFallbackTimer();
+      if (playbackId !== audioPlaybackIdRef.current) return;
       setPlayingParagraphId(null);
       setActiveAudioCharIndex(-1);
       // If Auto-play is ON and user did NOT manually pause/stop, advance to next paragraph
@@ -747,7 +687,7 @@ export function TextReaderPage({
     };
 
     utterance.onerror = (e) => {
-      clearAudioFallbackTimer();
+      if (playbackId !== audioPlaybackIdRef.current) return;
       setPlayingParagraphId(null);
       setActiveAudioCharIndex(-1);
       if (!userStoppedRef.current) {
@@ -763,7 +703,7 @@ export function TextReaderPage({
 
   const handleStopAudio = useCallback(() => {
     userStoppedRef.current = true;
-    clearAudioFallbackTimer();
+    audioPlaybackIdRef.current++;
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }

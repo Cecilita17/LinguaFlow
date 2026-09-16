@@ -43,6 +43,7 @@ export function mapSpeechRateToUtteranceRate(displayRate) {
 export const STORAGE_KEY_RATE = 'linguaflow_global_speech_rate';
 export const STORAGE_KEY_AUTOPLAY = 'linguaflow_auto_play_ai';
 export const STORAGE_KEY_AUTOPLAY_READER = 'linguaflow_auto_play_text_reader';
+export const STORAGE_KEY_WORD_HIGHLIGHT = 'linguaflow_word_highlight_v1';
 
 const AudioSettingsContext = createContext({
   speechRate: DEFAULT_SPEECH_RATE,
@@ -51,6 +52,8 @@ const AudioSettingsContext = createContext({
   setAutoPlayAi: () => {},
   autoPlayTextReader: false,
   setAutoPlayTextReader: () => {},
+  wordHighlightEnabled: true,
+  setWordHighlightEnabled: () => {},
   speechRateOptions: SPEECH_RATE_OPTIONS
 });
 
@@ -90,6 +93,23 @@ export function AudioSettingsProvider({ children }) {
     }
   });
 
+  const [wordHighlightEnabled, setWordHighlightEnabledState] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_WORD_HIGHLIGHT);
+      if (saved !== null) {
+        return saved === 'true';
+      }
+      const legacyConfig = localStorage.getItem('linguaflow_config');
+      if (legacyConfig) {
+        const parsed = JSON.parse(legacyConfig);
+        if (typeof parsed.wordHighlightEnabled === 'boolean') {
+          return parsed.wordHighlightEnabled;
+        }
+      }
+    } catch (e) {}
+    return true;
+  });
+
   const setSpeechRate = (newRate) => {
     const rateNum = parseFloat(newRate);
     if (!isNaN(rateNum) && SPEECH_RATE_OPTIONS.includes(rateNum)) {
@@ -126,6 +146,22 @@ export function AudioSettingsProvider({ children }) {
     });
   };
 
+  const setWordHighlightEnabled = (newVal) => {
+    setWordHighlightEnabledState((prev) => {
+      const boolVal = typeof newVal === 'function' ? newVal(prev) : Boolean(newVal);
+      try {
+        localStorage.setItem(STORAGE_KEY_WORD_HIGHLIGHT, boolVal ? 'true' : 'false');
+        const legacyConfig = localStorage.getItem('linguaflow_config');
+        if (legacyConfig) {
+          const parsed = JSON.parse(legacyConfig);
+          parsed.wordHighlightEnabled = boolVal;
+          localStorage.setItem('linguaflow_config', JSON.stringify(parsed));
+        }
+      } catch (e) {}
+      return boolVal;
+    });
+  };
+
   return (
     <AudioSettingsContext.Provider
       value={{
@@ -135,6 +171,8 @@ export function AudioSettingsProvider({ children }) {
         setAutoPlayAi,
         autoPlayTextReader,
         setAutoPlayTextReader,
+        wordHighlightEnabled,
+        setWordHighlightEnabled,
         speechRateOptions: SPEECH_RATE_OPTIONS
       }}
     >

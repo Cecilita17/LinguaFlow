@@ -14,7 +14,9 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
     speechRate: globalSpeechRate,
     setSpeechRate: setGlobalSpeechRate,
     autoPlayTextReader,
-    setAutoPlayTextReader
+    setAutoPlayTextReader,
+    wordHighlightEnabled,
+    setWordHighlightEnabled
   } = useAudioSettings();
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [level, setLevel] = useState(config.level || 'A2/B1');
@@ -297,7 +299,9 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
                     Auto-play Text Reader
                   </div>
                   <p className="text-[11px] text-stone-500 mt-0.5 leading-snug">
-                    Automatically play the next paragraph when the current paragraph finishes.
+                    {isSpanish
+                      ? 'Reproduce automáticamente el siguiente párrafo al finalizar el actual.'
+                      : 'Automatically play the next paragraph when the current paragraph finishes.'}
                   </p>
                 </div>
               </div>
@@ -311,6 +315,40 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
                 }`}
               >
                 {autoPlayTextReader ? (
+                  <span className="text-[10px] font-bold text-white tracking-wide">ON</span>
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-white shadow-xs" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Visual Word Highlight / Sincronización visual de palabras */}
+          <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-start space-x-2">
+                <Sparkles className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-stone-800 text-xs sm:text-sm">
+                    {isSpanish ? 'Sincronización visual de palabras' : 'Visual Word Highlighting'}
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-0.5 leading-snug">
+                    {isSpanish
+                      ? 'Subraya visualmente cada palabra al ritmo del audio en Chat y Text Reader.'
+                      : 'Visually highlights each word in sync with audio in Chat and Text Reader.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWordHighlightEnabled(!wordHighlightEnabled)}
+                className={`w-12 h-6 rounded-full transition-all flex items-center px-0.5 shrink-0 ml-3 cursor-pointer ${
+                  wordHighlightEnabled
+                    ? 'bg-gradient-to-r from-rose-500 to-pink-500 justify-end pr-1.5'
+                    : 'bg-stone-300 justify-start pl-0.5'
+                }`}
+              >
+                {wordHighlightEnabled ? (
                   <span className="text-[10px] font-bold text-white tracking-wide">ON</span>
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-white shadow-xs" />

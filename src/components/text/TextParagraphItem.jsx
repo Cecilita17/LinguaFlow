@@ -6,6 +6,7 @@ import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
+import { useAudioSettings } from '../../context/AudioSettingsContext.jsx';
 import { computeTokenCharRanges, findActiveTokenIndex } from '../../utils/audioWordSync.js';
 
 /**
@@ -38,6 +39,7 @@ export function TextParagraphItem({
   onGlossParagraph = null
 }) {
   const { isWordSaved } = useSavedWords();
+  const { wordHighlightEnabled } = useAudioSettings();
   const { text, tokens = [] } = paragraph;
   const isChinese = targetLang === 'zh';
   const isRtl = isRtlLanguage(targetLang);
@@ -68,9 +70,9 @@ export function TextParagraphItem({
   }, [text, tokens, targetLang]);
 
   const activeTokenIndex = React.useMemo(() => {
-    if (!isPlaying || activeAudioCharIndex < 0) return -1;
+    if (!wordHighlightEnabled || !isPlaying || activeAudioCharIndex < 0) return -1;
     return findActiveTokenIndex(activeAudioCharIndex, tokenCharRanges);
-  }, [isPlaying, activeAudioCharIndex, tokenCharRanges]);
+  }, [wordHighlightEnabled, isPlaying, activeAudioCharIndex, tokenCharRanges]);
 
   let runningChunkPos = 0;
 
@@ -223,7 +225,7 @@ export function TextParagraphItem({
                 const chunkStart = runningChunkPos;
                 const chunkEnd = runningChunkPos + chunk.length;
                 runningChunkPos = chunkEnd;
-                const isAudioActive = isPlaying && activeAudioCharIndex >= 0 && chunkStart <= activeAudioCharIndex && activeAudioCharIndex < chunkEnd;
+                const isAudioActive = wordHighlightEnabled && isPlaying && activeAudioCharIndex >= 0 && chunkStart <= activeAudioCharIndex && activeAudioCharIndex < chunkEnd;
 
                 if (cleanWord && isWordSaved(cleanWord, targetLang)) {
                   return (

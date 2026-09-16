@@ -6,6 +6,7 @@ import { normalizeChineseMessageTokens } from '../services/chineseTokenNormalize
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 import { getArabicTransliteration } from '../services/arabicTransliteration.js';
 import { normalizeAudioText } from '../utils/audioWordSync.js';
+import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
 
 export function ChatMessage({
   message,
@@ -22,6 +23,7 @@ export function ChatMessage({
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const { isWordSaved } = useSavedWords();
+  const { wordHighlightEnabled } = useAudioSettings();
   const [showTranslation, setShowTranslation] = useState(false);
   const [copied, setCopied] = useState(false);
   const [writingPracticeOpen, setWritingPracticeOpen] = useState(false);
@@ -245,7 +247,7 @@ export function ChatMessage({
                 const needsSpace = !isChinese && idx > 0;
                 const tokenTranslit = resolveTranslit(token) || ((isArabic || /[\u0600-\u06FF]/.test(cleanWord)) ? getArabicTransliteration(cleanWord) : null);
                 const range = tokenCharRanges[idx];
-                const isAudioActive = Boolean(isThisUserPlaying) && speakingCharIndex >= 0 && range && range.startChar <= speakingCharIndex && speakingCharIndex < range.endChar;
+                const isAudioActive = Boolean(wordHighlightEnabled) && Boolean(isThisUserPlaying) && speakingCharIndex >= 0 && range && range.startChar <= speakingCharIndex && speakingCharIndex < range.endChar;
 
                 if (token.changed) {
                   if (isChinese) {
@@ -636,7 +638,7 @@ export function ChatMessage({
             const tokenObj = segment.token || { word: segment.text };
             const wordStr = segment.text;
             const clean = tokenObj.clean_word || wordStr.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '').trim();
-            const isAudioActive = Boolean(isThisBotPlaying) && speakingCharIndex >= 0 && segment.startChar <= speakingCharIndex && speakingCharIndex < segment.endChar;
+            const isAudioActive = Boolean(wordHighlightEnabled) && Boolean(isThisBotPlaying) && speakingCharIndex >= 0 && segment.startChar <= speakingCharIndex && speakingCharIndex < segment.endChar;
 
             if (targetLang === 'zh') {
               const tokenTranslit = resolveTranslit(tokenObj);
