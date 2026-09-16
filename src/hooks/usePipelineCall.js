@@ -123,10 +123,6 @@ export function usePipelineCall({
   const isMutedRef = useRef(false);
   const callStateRef = useRef('idle');
 
-  // Microphone Stream & Track Refs
-  const micStreamRef = useRef(null);
-  const micTrackRef = useRef(null);
-
   // Speech Recognition & VAD Refs
   const recognitionRef = useRef(null);
   const isRecognitionActiveRef = useRef(false);
@@ -279,15 +275,6 @@ export function usePipelineCall({
     lastAiSpokenTextRef.current = '';
 
     interruptAssistant();
-
-    // Stop and release persistent Microphone Stream
-    if (micStreamRef.current) {
-      try {
-        micStreamRef.current.getTracks().forEach((track) => track.stop());
-      } catch (e) {}
-      micStreamRef.current = null;
-      micTrackRef.current = null;
-    }
 
     // Stop Speech Recognition
     if (recognitionRef.current) {
@@ -883,40 +870,27 @@ export function usePipelineCall({
     dispatchAssistantResponse(cleanText);
   }, [targetLang, isSpanish, triggerCorrection, dispatchAssistantResponse]);
 
-  // Helper to start SpeechRecognition with MediaStreamTrack when supported, or graceful fallback
-  const startSpeechRecognition = useCallback(() => {
-    if (!recognitionRef.current) return;
-    const track = micTrackRef.current;
-    if (track) {
-      try {
-        recognitionRef.current.start(track);
-        console.log('[PipelineSTT] Starting recognition from processed MediaStreamTrack');
-        return;
-      } catch (trackStartErr) {
-        // MediaStreamTrack parameter not supported on this browser's SpeechRecognition implementation
-      }
-    }
-    console.log('[PipelineSTT] MediaStreamTrack recognition unsupported; using browser microphone fallback');
-    try {
-      recognitionRef.current.start();
-    } catch (e) {}
-  }, []);
-
   // Initialize Speech Recognition for Live VAD & Streaming STT
   const initSpeechRecognition = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      console.warn('SpeechRecognition not supported in browser');
+      console.warn('[PipelineSTT] SpeechRecognition not supported in browser');
       return;
     }
 
+    console.log('[PipelineSTT] Creating SpeechRecognition instance for language:', targetLang);
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = targetLang;
     recognition.maxAlternatives = 1;
 
+    recognition.onstart = () => {
+      console.log('[PipelineSTT] SpeechRecognition onstart fired - actively listening to microphone');
+    };
+
     recognition.onresult = (event) => {
+      console.log('[PipelineSTT] SpeechRecognition onresult received event, count:', event.results?.length);
       if (isMutedRef.current) return;
 
       // 1. Post-TTS Echo Guard: Discard trailing speaker feedback immediately following AI speech
@@ -1106,23 +1080,43 @@ export function usePipelineCall({
     };
 
     recognition.onerror = (event) => {
-      if (event.error !== 'no-speech' && event.error !== 'aborted') {
-        console.warn('[PipelineSTT] Recognition event:', event.error);
+      console.warn('[PipelineSTT] SpeechRecognition onerror:', event.error, event.message || '');
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setCallState('error');
+        setErrorMessage(
+          isSpanish
+            ? 'Permiso de micrófono denegado para el reconocimiento de voz.'
+            : 'Microphone permission denied for speech recognition.'
+        );
+      } else if (event.error === 'audio-capture') {
+        setCallState('error');
+        setErrorMessage(
+          isSpanish
+            ? 'No se detectó ningún micrófono o está bloqueado por otra aplicación.'
+            : 'No microphone was found or microphone is busy.'
+        );
       }
     };
 
     recognition.onend = () => {
+      console.log('[PipelineSTT] SpeechRecognition onend fired');
       // In a new recognition session, event.results indices start from 0 again
       consumedFinalIndicesRef.current.clear();
 
       // Auto-restart recognition if call is still active
       if (isRecognitionActiveRef.current) {
-        startSpeechRecognition();
+        try {
+          console.log('[PipelineSTT] Auto-restarting SpeechRecognition...');
+          recognition.start();
+          console.log('[PipelineSTT] SpeechRecognition restart initiated');
+        } catch (e) {
+          console.warn('[PipelineSTT] Auto-restart notice:', e);
+        }
       }
     };
 
     recognitionRef.current = recognition;
-  }, [targetLang, isSpanish, interruptAssistant, finalizeUserSpeechTurn, startSpeechRecognition]);
+  }, [targetLang, isSpanish, interruptAssistant, finalizeUserSpeechTurn]);
 
   // Start Pipeline Call
   const startCall = useCallback(async () => {
@@ -1203,30 +1197,25 @@ export function usePipelineCall({
         errors: []
       };
 
-      // Request microphone stream with voice-communication processing constraints
+      // 2. Validate SpeechRecognition browser support
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        console.error('[PipelineSTT] SpeechRecognition is not supported in this browser.');
+        throw new Error(
+          isSpanish
+            ? 'Tu navegador no soporta reconocimiento de voz (SpeechRecognition). Por favor usa Google Chrome.'
+            : 'Your browser does not support SpeechRecognition. Please use Google Chrome.'
+        );
+      }
+
+      // 3. Request and verify microphone permissions, then immediately release the stream
       try {
-        console.log('[PipelineMic] Requesting microphone with:', {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1
-        });
-
-        const micStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            channelCount: 1
-          }
-        });
-
-        micStreamRef.current = micStream;
-        micTrackRef.current = micStream.getAudioTracks()[0] || null;
-
-        console.log('[PipelineMic] capabilities:', micTrackRef.current?.getCapabilities?.());
-        console.log('[PipelineMic] settings:', micTrackRef.current?.getSettings?.());
+        console.log('[PipelineMic] Requesting microphone permission...');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        console.log('[PipelineMic] Microphone permission granted; verification stream released successfully.');
       } catch (micErr) {
+        console.error('[PipelineMic] Microphone permission error:', micErr);
         throw new Error(
           isSpanish
             ? 'No se pudo acceder al micrófono. Por favor permite los permisos de audio en tu navegador.'
@@ -1234,11 +1223,17 @@ export function usePipelineCall({
         );
       }
 
-      // Initialize STT SpeechRecognition
+      // 4. Initialize and start SpeechRecognition
       initSpeechRecognition();
       if (recognitionRef.current) {
         isRecognitionActiveRef.current = true;
-        startSpeechRecognition();
+        console.log('[PipelineSTT] Starting SpeechRecognition...');
+        try {
+          recognitionRef.current.start();
+          console.log('[PipelineSTT] SpeechRecognition.start() executed successfully');
+        } catch (startErr) {
+          console.warn('[PipelineSTT] SpeechRecognition.start() notice:', startErr);
+        }
       }
 
       startDurationTimer();
@@ -1250,7 +1245,7 @@ export function usePipelineCall({
       setCallState('error');
       setErrorMessage(err.message || 'Error desconocido al conectar la llamada.');
     }
-  }, [isSpanish, cleanupResources, initSpeechRecognition, startSpeechRecognition, interruptAssistant]);
+  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant]);
 
   // Toggle Mute / Unmute
   const toggleMute = useCallback(() => {

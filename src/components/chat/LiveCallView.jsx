@@ -496,6 +496,23 @@ export function LiveCallView({
                   <div className="w-6 h-6 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
                   <span>{isSpanish ? 'Estableciendo enlace de audio en tiempo real...' : 'Establishing real-time audio connection...'}</span>
                 </>
+              ) : callState === 'error' ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-1">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <p className="font-semibold text-base text-red-600 dark:text-red-400 max-w-md">
+                    {errorMessage || (isSpanish ? 'Error al acceder al micrófono' : 'Error accessing microphone')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={startCall}
+                    className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>{isSpanish ? 'Reintentar conexión' : 'Retry connection'}</span>
+                  </button>
+                </>
               ) : (
                 <>
                   <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mb-1">
