@@ -10,7 +10,7 @@ import { TextReaderPage } from './pages/TextReaderPage';
 import { SettingsPage } from './pages/SettingsPage';
 import HomePage from './pages/HomePage';
 import { useSpeech } from './hooks/useSpeech';
-import { Sparkles, RotateCcw } from 'lucide-react';
+import { Sparkles, RotateCcw, ArrowLeft, ArrowUp } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
 import { normalizeChineseTokens, validateChineseTokens } from './services/chineseTokenNormalizer';
@@ -19,7 +19,6 @@ import { useAudioSettings } from './context/AudioSettingsContext.jsx';
 import { ChatHubView } from './components/chat/ChatHubView.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
-import { ArrowLeft } from 'lucide-react';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -153,6 +152,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => getActiveTabFromLocation());
   const [chatViewMode, setChatViewMode] = useState('hub'); // 'hub' | 'chat' | 'call' | 'call-detail'
   const [selectedCallData, setSelectedCallData] = useState(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   // Synchronize activeTab to URL and localStorage
   useEffect(() => {
@@ -616,6 +616,14 @@ export default function App() {
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     // Mark as user scrolled up if more than 100px from the bottom
     isUserScrolledUpRef.current = distanceFromBottom > 100;
+    // Show floating scroll to top button when scrolled down more than 300px
+    setShowScrollTop(container.scrollTop > 300);
+  };
+
+  const handleScrollToTop = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   // Robust chat auto-scroll on mount / tab switch to chat / language switch / conversation restoration:
@@ -1024,116 +1032,131 @@ export default function App() {
         </main>
       ) : (
         <>
-          {/* Main Chat Scroll Area */}
-          <main
-            ref={chatContainerRef}
-            onScroll={handleChatScroll}
-            className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
-          >
-            {/* Top Navigation Bar inside active chat to return to Chat Hub */}
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-primary)]/70">
-              <button
-                type="button"
-                onClick={() => setChatViewMode('hub')}
-                className="px-3.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs font-semibold shadow-xs active:scale-95"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{t('back_to_hub')}</span>
-              </button>
+          <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
+            {/* Main Chat Scroll Area */}
+            <main
+              ref={chatContainerRef}
+              onScroll={handleChatScroll}
+              className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
+            >
+              {/* Top Navigation Bar inside active chat to return to Chat Hub */}
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-primary)]/70">
+                <button
+                  type="button"
+                  onClick={() => setChatViewMode('hub')}
+                  className="px-3.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs font-semibold shadow-xs active:scale-95"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>{t('back_to_hub')}</span>
+                </button>
 
-              <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
-                <span className="text-sm">{currentLangObj.flag || '💬'}</span>
-                <span>{currentLangObj.name}</span>
+                <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
+                  <span className="text-sm">{currentLangObj.flag || '💬'}</span>
+                  <span>{currentLangObj.name}</span>
+                </div>
               </div>
-            </div>
 
-            {/* API Error Warning Banner */}
-            {apiWarning && (
-              <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in">
-                <div className="flex items-start space-x-2.5">
-                  <span className="text-base leading-none mt-0.5">⚠️</span>
+              {/* API Error Warning Banner */}
+              {apiWarning && (
+                <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in">
+                  <div className="flex items-start space-x-2.5">
+                    <span className="text-base leading-none mt-0.5">⚠️</span>
+                    <div>
+                      <p className="font-bold text-amber-100">
+                        Aviso de Groq AI: {apiWarning}
+                      </p>
+                      <p className="text-[11px] text-amber-200/80 mt-0.5">
+                        Haz clic en{' '}
+                        <button
+                          onClick={() => setActiveTab('settings')}
+                          className="underline font-bold text-white hover:text-amber-300"
+                        >
+                          Ajustes ⚙️
+                        </button>{' '}
+                        para verificar el estado del backend y la configuración de GROQ_API_KEY.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setApiWarning(null)}
+                    className="p-1 text-amber-300/70 hover:text-white rounded-lg transition-colors flex-shrink-0 ml-2"
+                    title="Cerrar aviso"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Helper Banner on top in Chocolate & Rose theme */}
+              <div className="mb-6 p-4 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-md shadow-black/30 flex items-start justify-between">
+                <div className="flex items-start space-x-3">
+                  <div className="p-2 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-md shadow-rose-950 mt-0.5">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
                   <div>
-                    <p className="font-bold text-amber-100">
-                      Aviso de Groq AI: {apiWarning}
-                    </p>
-                    <p className="text-[11px] text-amber-200/80 mt-0.5">
-                      Haz clic en{' '}
-                      <button
-                        onClick={() => setActiveTab('settings')}
-                        className="underline font-bold text-white hover:text-amber-300"
-                      >
-                        Ajustes ⚙️
-                      </button>{' '}
-                      para verificar el estado del backend y la configuración de GROQ_API_KEY.
-                    </p>
+                    <h2 className="text-sm font-bold text-rose-200">
+                      {t('practicing_banner_title', { lang: currentLangObj.name })}
+                    </h2>
+                    {isSpanish ? (
+                      <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
+                        Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinámicamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">dorado</span>.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
+                        Speak or write freely. Every message is dynamically analyzed and corrected with modified words highlighted in <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">gold</span>.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <button
-                  onClick={() => setApiWarning(null)}
-                  className="p-1 text-amber-300/70 hover:text-white rounded-lg transition-colors flex-shrink-0 ml-2"
-                  title="Cerrar aviso"
+                  onClick={handleResetChat}
+                  title={t('restart_tooltip')}
+                  className="p-1.5 text-rose-300/50 hover:text-rose-200 hover:bg-[#482216] rounded-lg transition-colors flex-shrink-0 cursor-pointer"
                 >
-                  ✕
+                  <RotateCcw className="w-4 h-4" />
                 </button>
               </div>
-            )}
 
-            {/* Helper Banner on top in Chocolate & Rose theme */}
-            <div className="mb-6 p-4 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-md shadow-black/30 flex items-start justify-between">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-md shadow-rose-950 mt-0.5">
-                  <Sparkles className="w-4 h-4" />
+              {/* Message Bubbles */}
+              {messages.filter(Boolean).map((msg) => (
+                <ChatMessage
+                  key={msg.id || `msg-${Math.random()}`}
+                  message={msg}
+                  targetLang={targetLang}
+                  nativeLang={nativeLang}
+                  showTransliteration={showTransliteration}
+                  onWordClick={handleWordClick}
+                  onPlayAudio={handlePlayAudio}
+                  isAudioPlaying={isSpeaking}
+                  onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
+                  onDeleteMessage={handleDeleteMessage}
+                />
+              ))}
+
+              {/* Processing indicator */}
+              {isProcessing && (
+                <div className="flex items-center space-x-2 my-4 px-2 animate-fade-in text-xs text-rose-300/60">
+                  <div className="w-4 h-4 rounded-full bg-rose-500 animate-pulse flex items-center justify-center text-[9px] text-white font-bold shadow-xs">
+                    L
+                  </div>
+                  <span className="font-medium">{t('bot_thinking')}</span>
                 </div>
-                <div>
-                  <h2 className="text-sm font-bold text-rose-200">
-                    {t('practicing_banner_title', { lang: currentLangObj.name })}
-                  </h2>
-                  {isSpanish ? (
-                    <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
-                      Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinámicamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">dorado</span>.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
-                      Speak or write freely. Every message is dynamically analyzed and corrected with modified words highlighted in <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">gold</span>.
-                    </p>
-                  )}
-                </div>
-              </div>
+              )}
+            </main>
+
+            {/* Floating Scroll-to-Top Button */}
+            {showScrollTop && (
               <button
-                onClick={handleResetChat}
-                title={t('restart_tooltip')}
-                className="p-1.5 text-rose-300/50 hover:text-rose-200 hover:bg-[#482216] rounded-lg transition-colors flex-shrink-0 cursor-pointer"
+                type="button"
+                onClick={handleScrollToTop}
+                className="absolute bottom-4 right-4 sm:right-6 w-10 h-10 rounded-full bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] hover:text-rose-500 border border-[var(--border-primary)] shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 z-30 cursor-pointer active:scale-90 animate-fade-in"
+                title={t('scroll_to_top') || (isSpanish ? 'Volver arriba' : 'Scroll to top')}
+                aria-label={t('scroll_to_top') || (isSpanish ? 'Volver arriba' : 'Scroll to top')}
               >
-                <RotateCcw className="w-4 h-4" />
+                <ArrowUp className="w-5 h-5" />
               </button>
-            </div>
-
-            {/* Message Bubbles */}
-            {messages.filter(Boolean).map((msg) => (
-              <ChatMessage
-                key={msg.id || `msg-${Math.random()}`}
-                message={msg}
-                targetLang={targetLang}
-                nativeLang={nativeLang}
-                showTransliteration={showTransliteration}
-                onWordClick={handleWordClick}
-                onPlayAudio={handlePlayAudio}
-                isAudioPlaying={isSpeaking}
-                onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
-                onDeleteMessage={handleDeleteMessage}
-              />
-            ))}
-
-            {/* Processing indicator */}
-            {isProcessing && (
-              <div className="flex items-center space-x-2 my-4 px-2 animate-fade-in text-xs text-rose-300/60">
-                <div className="w-4 h-4 rounded-full bg-rose-500 animate-pulse flex items-center justify-center text-[9px] text-white font-bold shadow-xs">
-                  L
-                </div>
-                <span className="font-medium">{t('bot_thinking')}</span>
-              </div>
             )}
-          </main>
+          </div>
 
           {/* Input Bar */}
           <InputBar

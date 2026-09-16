@@ -173,6 +173,7 @@ export const TRANSLATIONS = {
     delete_message: 'Eliminar mensaje',
     delete_chat: 'Eliminar chat',
     confirm_delete_chat: '¿Eliminar este chat del historial?',
+    scroll_to_top: 'Volver arriba',
     
     // Input Bar
     input_placeholder: 'Escribe un mensaje en {lang}...',
@@ -203,7 +204,8 @@ export const TRANSLATIONS = {
     save_settings: 'Guardar Ajustes',
     saved: '¡Guardado!',
     ui_language: 'Idioma del Sitio Web',
-    ui_language_desc: 'Idioma de los textos y botones de la plataforma'
+    ui_language_desc: 'Idioma de los textos y botones de la plataforma',
+    scroll_to_top: 'Volver arriba'
   },
   en: {
     // Header & Branding
@@ -375,6 +377,7 @@ export const TRANSLATIONS = {
     delete_message: 'Delete message',
     delete_chat: 'Delete chat',
     confirm_delete_chat: 'Delete this chat from history?',
+    scroll_to_top: 'Scroll to top',
     
     // Input Bar
     input_placeholder: 'Type a message in {lang}...',
@@ -405,6 +408,7 @@ export const TRANSLATIONS = {
     save_settings: 'Save Settings',
     saved: 'Saved!',
     ui_language: 'Website Language',
-    ui_language_desc: 'Platform text and button interface language'
+    ui_language_desc: 'Platform text and button interface language',
+    scroll_to_top: 'Scroll to top'
   }
 };
