@@ -46,6 +46,34 @@ function mergeTurnText(confirmed, incoming) {
 }
 
 /**
+ * Detects whether incoming speech recognition transcript is acoustic echo
+ * of the AI's recent speech output rather than a genuine user utterance.
+ */
+function isLikelyEcho(transcript, aiText) {
+  if (!transcript || !aiText) return false;
+  const cleanTrans = transcript.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '').trim();
+  const cleanAi = aiText.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '').trim();
+  if (!cleanTrans || !cleanAi) return false;
+
+  // 1. Direct substring match
+  if (cleanAi.includes(cleanTrans)) return true;
+
+  // 2. Word overlap test (>= 50% matching words from AI speech)
+  const transWords = cleanTrans.split(/\s+/).filter((w) => w.length > 1);
+  if (transWords.length === 0) return true; // short noise / single letter
+
+  const aiWords = new Set(cleanAi.split(/\s+/).filter((w) => w.length > 1));
+  let matchCount = 0;
+  for (const word of transWords) {
+    if (aiWords.has(word)) {
+      matchCount++;
+    }
+  }
+
+  return (matchCount / transWords.length) >= 0.5;
+}
+
+/**
  * Hook for managing Low-Cost Live Voice Calls (Pipeline Architecture) in LinguaFlow.
  * Flow:
  * - Client Microphone + Live STT (Streaming Speech Recognition + Auto-VAD)
@@ -100,6 +128,9 @@ export function usePipelineCall({
   const ttsAbortControllerRef = useRef(null);
   const currentAiTurnIdRef = useRef(null);
   const currentAiTurnTextRef = useRef('');
+  const lastAiSpokenTextRef = useRef('');
+  const isEchoGuardActiveRef = useRef(false);
+  const echoGuardTimerRef = useRef(null);
 
   // Deduplication & Lifecycle Sets
   const correctedTurnIdsRef = useRef(new Set());
@@ -179,6 +210,12 @@ export function usePipelineCall({
 
   // Cancel active AI generation & playback (Barge-in / Interruption)
   const interruptAssistant = useCallback(() => {
+    if (echoGuardTimerRef.current) {
+      clearTimeout(echoGuardTimerRef.current);
+      echoGuardTimerRef.current = null;
+    }
+    isEchoGuardActiveRef.current = false;
+
     if (llmAbortControllerRef.current) {
       try { llmAbortControllerRef.current.abort(); } catch (e) {}
       llmAbortControllerRef.current = null;
@@ -209,6 +246,13 @@ export function usePipelineCall({
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = null;
     }
+
+    if (echoGuardTimerRef.current) {
+      clearTimeout(echoGuardTimerRef.current);
+      echoGuardTimerRef.current = null;
+    }
+    isEchoGuardActiveRef.current = false;
+    lastAiSpokenTextRef.current = '';
 
     interruptAssistant();
 
@@ -367,10 +411,29 @@ export function usePipelineCall({
   const playNextInAudioQueue = useCallback(async () => {
     if (isPlayingQueueRef.current || ttsQueueRef.current.length === 0) {
       if (ttsQueueRef.current.length === 0 && !currentAiTurnIdRef.current) {
-        setCallState('listening');
+        // Activate post-TTS acoustic echo guard (450ms) to discard room feedback before returning to 'listening'
+        if (!isEchoGuardActiveRef.current && !isPlayingQueueRef.current) {
+          isEchoGuardActiveRef.current = true;
+          if (echoGuardTimerRef.current) {
+            clearTimeout(echoGuardTimerRef.current);
+          }
+          echoGuardTimerRef.current = setTimeout(() => {
+            isEchoGuardActiveRef.current = false;
+            echoGuardTimerRef.current = null;
+            if (callStateRef.current !== 'idle' && callStateRef.current !== 'error') {
+              setCallState('listening');
+            }
+          }, 450);
+        }
       }
       return;
     }
+
+    if (echoGuardTimerRef.current) {
+      clearTimeout(echoGuardTimerRef.current);
+      echoGuardTimerRef.current = null;
+    }
+    isEchoGuardActiveRef.current = false;
 
     const nextItem = ttsQueueRef.current.shift();
     if (!nextItem || !nextItem.text) return;
@@ -603,6 +666,7 @@ export function usePipelineCall({
             }
             if (data.delta) {
               currentAiTurnTextRef.current += data.delta;
+              lastAiSpokenTextRef.current = currentAiTurnTextRef.current;
               sentenceBuffer += data.delta;
 
               const fullText = currentAiTurnTextRef.current;
@@ -780,14 +844,55 @@ export function usePipelineCall({
     recognition.onresult = (event) => {
       if (isMutedRef.current) return;
 
-      // When the AI is actively speaking/playing audio, ignore STT feedback to prevent audio cutoffs and speaker echo
-      if (isPlayingQueueRef.current || callStateRef.current === 'speaking') {
+      // 1. Post-TTS Echo Guard: Discard trailing speaker feedback immediately following AI speech
+      if (isEchoGuardActiveRef.current) {
         for (let i = 0; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
             consumedFinalIndicesRef.current.add(i);
           }
         }
         return;
+      }
+
+      // 2. Active AI Playback / Generation: Distinguish Acoustic Echo from Genuine User Barge-in
+      const isAiSpeaking = isPlayingQueueRef.current || callStateRef.current === 'speaking' || Boolean(currentAiTurnIdRef.current);
+      if (isAiSpeaking) {
+        let incomingSpeech = '';
+        for (let i = 0; i < event.results.length; i++) {
+          if (!consumedFinalIndicesRef.current.has(i)) {
+            const t = event.results[i][0]?.transcript?.trim() || '';
+            if (t) {
+              incomingSpeech = (incomingSpeech ? incomingSpeech + ' ' : '') + t;
+            }
+          }
+        }
+        incomingSpeech = incomingSpeech.trim();
+
+        const aiSpokenText = (currentAiTurnTextRef.current || lastAiSpokenTextRef.current || '').trim();
+
+        if (isLikelyEcho(incomingSpeech, aiSpokenText)) {
+          // Acoustic echo from speaker: consume final indices so they are never re-processed, and ignore
+          for (let i = 0; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              consumedFinalIndicesRef.current.add(i);
+            }
+          }
+          return;
+        }
+
+        // Genuine User Interruption (Barge-in): User spoke substantive words that do not match the AI speech
+        if (incomingSpeech.length >= 2) {
+          console.log('[PipelineSTT] Genuine user barge-in detected:', incomingSpeech);
+          interruptAssistant();
+          if (echoGuardTimerRef.current) {
+            clearTimeout(echoGuardTimerRef.current);
+            echoGuardTimerRef.current = null;
+          }
+          isEchoGuardActiveRef.current = false;
+        } else {
+          // Short noise / breath while speaking -> ignore
+          return;
+        }
       }
 
       sessionMetricsRef.current.transcriptionEvents++;
