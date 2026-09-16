@@ -160,6 +160,7 @@ export function Transcript({
             <TranscriptLine
               line={line}
               isActive={isCurrentActive}
+              currentTime={currentTime}
               onSeek={onSeek}
               onGloss={handleGloss}
               onGlossLine={handleGloss}

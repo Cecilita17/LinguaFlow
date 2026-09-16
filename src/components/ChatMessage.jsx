@@ -14,6 +14,8 @@ export function ChatMessage({
   onWordClick,
   onPlayAudio,
   isAudioPlaying,
+  speakingCharIndex = -1,
+  speakingText = '',
   onOpenGrammarBreakdown,
   onDeleteMessage
 }) {
@@ -80,7 +82,7 @@ export function ChatMessage({
   };
 
   // Helper for rendering transliteration in user bubble (luminous, clear rose-tinted white)
-  const renderUserRubyWord = (word, translit, key) => {
+  const renderUserRubyWord = (word, translit, key, isAudioActive = false) => {
     if (targetLang === 'zh') {
       const { baseWord, cleanTranslit, punctuation } = splitChineseWordAndPunctuation(word, translit);
 
@@ -101,10 +103,10 @@ export function ChatMessage({
               <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
                 {cleanTranslit}
               </rt>
-              <span dir="ltr" className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
+              <span dir="ltr" className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''} ${isAudioActive ? 'audio-word-active' : ''}`}>{baseWord}</span>
             </ruby>
           ) : (
-            <span dir="ltr" className={isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}>{baseWord}</span>
+            <span dir="ltr" className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''} ${isAudioActive ? 'audio-word-active' : ''}`}>{baseWord}</span>
           )}
           {punctuation && (
             <span className="text-white/90 text-[17px] sm:text-[18.5px] font-normal select-text">
@@ -123,11 +125,11 @@ export function ChatMessage({
           <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
             {effectiveTranslit}
           </rt>
-          <span dir={isArabic ? 'rtl' : 'ltr'} className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{word}</span>
+          <span dir={isArabic ? 'rtl' : 'ltr'} className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''} ${isAudioActive ? 'audio-word-active' : ''}`}>{word}</span>
         </ruby>
       );
     }
-    return <span key={key} dir={isArabic ? 'rtl' : 'ltr'} className={isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}>{word}</span>;
+    return <span key={key} dir={isArabic ? 'rtl' : 'ltr'} className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''} ${isAudioActive ? 'audio-word-active' : ''}`}>{word}</span>;
   };
 
   // Common Chinese Pinyin lexicon for guaranteed fallback
@@ -175,6 +177,24 @@ export function ChatMessage({
     const diffTokens = message.diffTokens || [];
     const hasCorrection = message.hasCorrection || diffTokens.some(t => t.changed);
     const isChinese = targetLang === 'zh';
+    const userSpokenTarget = (message.correctedText || message.text || '').replace(/<[^>]*>/g, '').trim();
+    const isThisUserPlaying = Boolean(isAudioPlaying) && Boolean(speakingText) && (
+      speakingText === userSpokenTarget ||
+      speakingText === (message.correctedText || message.text || '').trim()
+    );
+
+    let runningCharPos = 0;
+    const tokenCharRanges = diffTokens.map((token, idx) => {
+      const rawWord = token.text || '';
+      const cleanWord = rawWord.trim();
+      if (!cleanWord) return { startChar: -1, endChar: -1 };
+      const needsSpace = !isChinese && idx > 0;
+      if (needsSpace) runningCharPos += 1;
+      const start = runningCharPos;
+      const end = runningCharPos + cleanWord.length;
+      runningCharPos = end;
+      return { startChar: start, endChar: end };
+    });
 
     return (
       <div className="flex flex-col items-end my-4 animate-fade-in group">
@@ -224,6 +244,8 @@ export function ChatMessage({
                 if (!cleanWord) return null;
                 const needsSpace = !isChinese && idx > 0;
                 const tokenTranslit = resolveTranslit(token) || ((isArabic || /[\u0600-\u06FF]/.test(cleanWord)) ? getArabicTransliteration(cleanWord) : null);
+                const range = tokenCharRanges[idx];
+                const isAudioActive = Boolean(isThisUserPlaying) && speakingCharIndex >= 0 && range && range.startChar <= speakingCharIndex && speakingCharIndex < range.endChar;
 
                 if (token.changed) {
                   if (isChinese) {
@@ -241,10 +263,10 @@ export function ChatMessage({
                               <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] text-amber-200 font-black leading-tight select-none">
                                 {cleanTranslit}
                               </rt>
-                              <span>{baseWord}</span>
+                              <span className={isAudioActive ? 'audio-word-active' : ''}>{baseWord}</span>
                             </ruby>
                           ) : (
-                            <span>{baseWord}</span>
+                            <span className={isAudioActive ? 'audio-word-active' : ''}>{baseWord}</span>
                           )}
                           {token.original && (
                             <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[11px] px-2 py-0.5 rounded shadow-lg border border-stone-700">
@@ -274,10 +296,10 @@ export function ChatMessage({
                             <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] text-amber-200 font-black leading-tight select-none">
                               {tokenTranslit}
                             </rt>
-                            <span dir={isArabic ? 'rtl' : 'ltr'}>{cleanWord}</span>
+                            <span dir={isArabic ? 'rtl' : 'ltr'} className={isAudioActive ? 'audio-word-active' : ''}>{cleanWord}</span>
                           </ruby>
                         ) : (
-                          <span dir={isArabic ? 'rtl' : 'ltr'}>{cleanWord}</span>
+                          <span dir={isArabic ? 'rtl' : 'ltr'} className={isAudioActive ? 'audio-word-active' : ''}>{cleanWord}</span>
                         )}
                         {token.original && (
                           <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[11px] px-2 py-0.5 rounded shadow-lg border border-stone-700">
@@ -292,7 +314,7 @@ export function ChatMessage({
                 return (
                   <React.Fragment key={idx}>
                     {needsSpace && ' '}
-                    {renderUserRubyWord(cleanWord, tokenTranslit, idx)}
+                    {renderUserRubyWord(cleanWord, tokenTranslit, idx, isAudioActive)}
                   </React.Fragment>
                 );
               })
@@ -348,17 +370,20 @@ export function ChatMessage({
             </div>
           </div>
         </div>
-      </div>
+        </div>
 
-        {/* Chinese Writing Practice Modal */}
-        {writingPracticeOpen && (
+        {/* Chinese Stroke Order Writing Practice Modal for User Correction / Sentence */}
+        {isChinese && (
           <ChineseWritingPractice
             isOpen={writingPracticeOpen}
             onClose={() => setWritingPracticeOpen(false)}
-            initialMode={writingPracticeMode}
-            correctedText={message.correctedText || message.text}
-            diffTokens={message.diffTokens || []}
-            showTransliteration={showTransliteration}
+            sentence={message.correctedText || message.text}
+            tokens={diffTokens.map(t => ({
+              word: (t.text || '').trim(),
+              pinyin: resolveTranslit(t),
+              translation: t.original ? `Original: ${t.original}` : ''
+            })).filter(t => t.word)}
+            mode={writingPracticeMode}
           />
         )}
       </div>
@@ -367,13 +392,28 @@ export function ChatMessage({
 
   // BOT MESSAGE BUBBLE
   let tokens = message.tokens || [];
+  const isChinese = targetLang === 'zh';
+
+  // Fallback for missing tokens
+  if (tokens.length === 0 && message.text) {
+    if (isChinese) {
+      // Split into single Hanzi characters or punctuation
+      const chars = Array.from(message.text);
+      tokens = chars.map(char => ({
+        word: char,
+        pinyin: PINYIN_LEXICON[char] || '',
+        meaning: ''
+      }));
+    } else {
+      tokens = message.text.split(/(\s+)/).map(t => ({ word: t, clean_word: t.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '') }));
+    }
+  }
 
   // Reconcile message.text with tokens to guarantee 100% full text rendering without truncation
   const botSegments = useMemo(() => {
     const rawText = message.text || '';
     if (!rawText) return [];
 
-    const isChinese = targetLang === 'zh';
     const result = [];
     let pos = 0;
     let tIdx = 0;
@@ -424,7 +464,9 @@ export function ChatMessage({
       if (spaceMatch) {
         result.push({
           type: 'space',
-          text: spaceMatch[1]
+          text: spaceMatch[1],
+          startChar: pos,
+          endChar: pos + spaceMatch[1].length
         });
         pos += spaceMatch[1].length;
         continue;
@@ -438,7 +480,9 @@ export function ChatMessage({
             type: 'word',
             text: rawText.slice(pos, pos + match.length),
             token: match.tokenObj,
-            matchedFromTokens: true
+            matchedFromTokens: true,
+            startChar: pos,
+            endChar: pos + match.length
           });
           pos += match.length;
           tIdx++;
@@ -454,14 +498,18 @@ export function ChatMessage({
           if (matchAfterPunct) {
             result.push({
               type: 'punctuation',
-              text: pStr
+              text: pStr,
+              startChar: pos,
+              endChar: pos + pStr.length
             });
             pos += pStr.length;
             result.push({
               type: 'word',
               text: rawText.slice(pos, pos + matchAfterPunct.length),
               token: matchAfterPunct.tokenObj,
-              matchedFromTokens: true
+              matchedFromTokens: true,
+              startChar: pos,
+              endChar: pos + matchAfterPunct.length
             });
             pos += matchAfterPunct.length;
             tIdx++;
@@ -475,7 +523,9 @@ export function ChatMessage({
       if (punctMatch) {
         result.push({
           type: 'punctuation',
-          text: punctMatch[1]
+          text: punctMatch[1],
+          startChar: pos,
+          endChar: pos + punctMatch[1].length
         });
         pos += punctMatch[1].length;
         continue;
@@ -488,7 +538,9 @@ export function ChatMessage({
           type: 'word',
           text: rawText[pos],
           token: { word: rawText[pos] },
-          matchedFromTokens: false
+          matchedFromTokens: false,
+          startChar: pos,
+          endChar: pos + 1
         });
         pos += 1;
         continue;
@@ -503,13 +555,17 @@ export function ChatMessage({
               word: wordStr,
               clean_word: wordStr.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '')
             },
-            matchedFromTokens: false
+            matchedFromTokens: false,
+            startChar: pos,
+            endChar: pos + wordStr.length
           });
           pos += wordStr.length;
         } else {
           result.push({
             type: 'text',
-            text: rawText[pos]
+            text: rawText[pos],
+            startChar: pos,
+            endChar: pos + 1
           });
           pos += 1;
         }
@@ -518,6 +574,12 @@ export function ChatMessage({
 
     return result;
   }, [message.text, tokens, targetLang]);
+
+  const botSpokenTarget = (message.text || '').replace(/<[^>]*>/g, '').trim();
+  const isThisBotPlaying = Boolean(isAudioPlaying) && Boolean(speakingText) && (
+    speakingText === botSpokenTarget ||
+    speakingText === (message.text || '').trim()
+  );
 
   return (
     <div className="flex flex-col items-start my-4 animate-fade-in group">
@@ -575,6 +637,7 @@ export function ChatMessage({
             const tokenObj = segment.token || { word: segment.text };
             const wordStr = segment.text;
             const clean = tokenObj.clean_word || wordStr.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '').trim();
+            const isAudioActive = Boolean(isThisBotPlaying) && speakingCharIndex >= 0 && segment.startChar <= speakingCharIndex && speakingCharIndex < segment.endChar;
 
             if (targetLang === 'zh') {
               const tokenTranslit = resolveTranslit(tokenObj);
@@ -599,11 +662,11 @@ export function ChatMessage({
                           </rt>
                           <span
                             dir="ltr"
-                            className={
+                            className={`${
                               isSaved
                                 ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
                                 : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
-                            }
+                            } ${isAudioActive ? 'audio-word-active' : ''}`}
                           >
                             {baseWord}
                           </span>
@@ -611,11 +674,11 @@ export function ChatMessage({
                       ) : (
                         <span
                           dir="ltr"
-                          className={
+                          className={`${
                             isSaved
                               ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
                               : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
-                          }
+                          } ${isAudioActive ? 'audio-word-active' : ''}`}
                         >
                           {baseWord}
                         </span>
@@ -650,11 +713,11 @@ export function ChatMessage({
                     </rt>
                     <span
                       dir={isArabic ? 'rtl' : 'ltr'}
-                      className={
+                      className={`${
                         isSaved
                           ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
                           : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
-                      }
+                      } ${isAudioActive ? 'audio-word-active' : ''}`}
                     >
                       {wordStr}
                     </span>
@@ -662,11 +725,11 @@ export function ChatMessage({
                 ) : (
                   <span
                     dir={isArabic ? 'rtl' : 'ltr'}
-                    className={
+                    className={`${
                       isSaved
                         ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
                         : 'underline decoration-dotted decoration-stone-300 group-hover/item:decoration-rose-500 underline-offset-2 font-medium'
-                    }
+                    } ${isAudioActive ? 'audio-word-active' : ''}`}
                   >
                     {wordStr}
                   </span>

@@ -200,6 +200,7 @@ export function TextReaderPage({
 
   // Audio TTS states
   const [playingParagraphId, setPlayingParagraphId] = useState(null);
+  const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
   const [audioErrorId, setAudioErrorId] = useState(null);
 
   // Last audio position bookmark — persisted in document.lastAudioPosition
@@ -606,6 +607,7 @@ export function TextReaderPage({
     window.speechSynthesis.cancel();
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
+    setActiveAudioCharIndex(-1);
 
     // Save last audio position immediately (persists even if page closes or switches document)
     setLastAudioParagraphId(paragraph.id);
@@ -646,8 +648,15 @@ export function TextReaderPage({
       utterance.voice = matchingVoice;
     }
 
+    utterance.onboundary = (event) => {
+      if (typeof event.charIndex === 'number') {
+        setActiveAudioCharIndex(event.charIndex);
+      }
+    };
+
     utterance.onend = () => {
       setPlayingParagraphId(null);
+      setActiveAudioCharIndex(-1);
       // If Auto-play is ON and user did NOT manually pause/stop, advance to next paragraph
       if (autoPlayTextReaderRef.current && !userStoppedRef.current) {
         const paras = visibleParagraphsRef.current || [];
@@ -669,6 +678,7 @@ export function TextReaderPage({
 
     utterance.onerror = (e) => {
       setPlayingParagraphId(null);
+      setActiveAudioCharIndex(-1);
       if (!userStoppedRef.current) {
         console.warn('TTS playback error for paragraph:', paragraph.id, e);
         setAudioErrorId(paragraph.id);
@@ -686,6 +696,7 @@ export function TextReaderPage({
       window.speechSynthesis.cancel();
     }
     setPlayingParagraphId(null);
+    setActiveAudioCharIndex(-1);
   }, []);
 
   // Trigger background AI glossing
@@ -1751,6 +1762,7 @@ export function TextReaderPage({
                       fontSize={fontSize}
                       interlinearMode={interlinearMode}
                       isPlaying={playingParagraphId === paragraph.id}
+                      activeAudioCharIndex={playingParagraphId === paragraph.id ? activeAudioCharIndex : -1}
                       isAudioError={audioErrorId === paragraph.id}
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang)}

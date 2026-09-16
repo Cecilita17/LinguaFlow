@@ -90,6 +90,8 @@ export function useSpeech({
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingCharIndex, setSpeakingCharIndex] = useState(-1);
+  const [speakingText, setSpeakingText] = useState('');
   const [speechSupported, setSpeechSupported] = useState(true);
   const [interimTranscript, setInterimTranscript] = useState('');
 
@@ -285,6 +287,8 @@ export function useSpeech({
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
+      setSpeakingCharIndex(-1);
+      setSpeakingText('');
     }
 
     fullTranscriptRef.current = '';
@@ -376,12 +380,15 @@ export function useSpeech({
   }, [stopRecordingInternal]);
 
   // Text to Speech (TTS)
-  const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback) => {
+  const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback) => {
     if (!window.speechSynthesis) return;
 
     window.speechSynthesis.cancel();
 
-    const cleanText = text.replace(/<[^>]*>/g, '');
+    const cleanText = text.replace(/<[^>]*>/g, '').trim();
+    setSpeakingText(cleanText);
+    setSpeakingCharIndex(-1);
+
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = langCode;
     utterance.rate = mapSpeechRateToUtteranceRate(rate);
@@ -393,11 +400,28 @@ export function useSpeech({
     }
 
     utterance.onstart = () => setIsSpeaking(true);
+
+    utterance.onboundary = (event) => {
+      if (typeof event.charIndex === 'number') {
+        setSpeakingCharIndex(event.charIndex);
+      }
+      if (onBoundaryCallback) {
+        onBoundaryCallback(event);
+      }
+    };
+
     utterance.onend = () => {
       setIsSpeaking(false);
+      setSpeakingCharIndex(-1);
+      setSpeakingText('');
       if (onEndCallback) onEndCallback();
     };
-    utterance.onerror = () => setIsSpeaking(false);
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setSpeakingCharIndex(-1);
+      setSpeakingText('');
+    };
 
     window.speechSynthesis.speak(utterance);
   }, [targetLangCode]);
@@ -406,6 +430,8 @@ export function useSpeech({
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
+      setSpeakingCharIndex(-1);
+      setSpeakingText('');
     }
   }, []);
 
@@ -414,6 +440,8 @@ export function useSpeech({
     recordingSeconds,
     isTranscribingAudio,
     isSpeaking,
+    speakingCharIndex,
+    speakingText,
     speechSupported,
     interimTranscript,
     startRecording,

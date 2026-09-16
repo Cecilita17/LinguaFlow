@@ -102,6 +102,20 @@ rt {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
+/* Sincronización visual sutil de palabra activa durante reproducción de audio */
+.audio-word-active {
+  text-decoration: underline !important;
+  text-decoration-color: #f43f5e !important;
+  text-decoration-thickness: 2px !important;
+  text-underline-offset: 3px !important;
+  transition: text-decoration-color 150ms ease-in-out;
+}
+
+[data-theme="dark"] .audio-word-active,
+.dark .audio-word-active {
+  text-decoration-color: #fb7185 !important;
+}
+
 /* RTL Specific Rules for Arabic */
 [dir="rtl"] {
   direction: rtl;

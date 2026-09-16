@@ -25,6 +25,7 @@ export function TextParagraphItem({
   interlinearMode = true,
   nativeLang = 'es',
   isPlaying = false,
+  activeAudioCharIndex = -1,
   isAudioError = false,
   isGlossing = false,
   hasGloss = false,
@@ -60,6 +61,26 @@ export function TextParagraphItem({
       if (onPlay) onPlay(paragraph);
     }
   };
+
+  const tokenCharRanges = React.useMemo(() => {
+    if (!tokens || tokens.length === 0) return [];
+    const cleanText = (text || '').replace(/<[^>]*>/g, '');
+    let pos = 0;
+    return tokens.map(tok => {
+      const w = typeof tok === 'string' ? tok : (tok.word || tok.text || '');
+      if (!w) return { startChar: -1, endChar: -1 };
+      const foundIdx = cleanText.indexOf(w, pos);
+      if (foundIdx !== -1) {
+        pos = foundIdx + w.length;
+        return { startChar: foundIdx, endChar: pos };
+      }
+      const start = pos;
+      pos += w.length;
+      return { startChar: start, endChar: pos };
+    });
+  }, [tokens, text]);
+
+  let runningChunkPos = 0;
 
   return (
     <div
@@ -132,6 +153,9 @@ export function TextParagraphItem({
                   );
                 }
 
+                const range = tokenCharRanges[idx];
+                const isAudioActive = isPlaying && activeAudioCharIndex >= 0 && range && range.startChar <= activeAudioCharIndex && activeAudioCharIndex < range.endChar;
+
                 return (
                   <div
                     key={idx}
@@ -172,7 +196,7 @@ export function TextParagraphItem({
                               : isPlaying
                               ? 'text-white font-bold drop-shadow-xs'
                               : 'text-[var(--text-primary)]'
-                          } ${fontClass}`}
+                          } ${isAudioActive ? 'audio-word-active' : ''} ${fontClass}`}
                         >
                           {word}
                         </span>
@@ -205,6 +229,11 @@ export function TextParagraphItem({
               {text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/).map((chunk, cIdx) => {
                 if (!chunk) return null;
                 const cleanWord = chunk.trim();
+                const chunkStart = runningChunkPos;
+                const chunkEnd = runningChunkPos + chunk.length;
+                runningChunkPos = chunkEnd;
+                const isAudioActive = isPlaying && activeAudioCharIndex >= 0 && chunkStart <= activeAudioCharIndex && activeAudioCharIndex < chunkEnd;
+
                 if (cleanWord && isWordSaved(cleanWord, targetLang)) {
                   return (
                     <span
@@ -215,14 +244,18 @@ export function TextParagraphItem({
                           onWordClick(cleanWord, null);
                         }
                       }}
-                      className="bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs cursor-pointer inline-block ring-1 ring-amber-400/60"
+                      className={`bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs cursor-pointer inline-block ring-1 ring-amber-400/60 ${isAudioActive ? 'audio-word-active' : ''}`}
                       title={`Palabra guardada: "${cleanWord}"`}
                     >
                       {chunk}
                     </span>
                   );
                 }
-                return chunk;
+                return (
+                  <span key={cIdx} className={isAudioActive ? 'audio-word-active' : ''}>
+                    {chunk}
+                  </span>
+                );
               })}
             </p>
           )}

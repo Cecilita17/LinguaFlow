@@ -258,6 +258,8 @@ export default function App() {
     recordingSeconds,
     isTranscribingAudio,
     isSpeaking,
+    speakingCharIndex,
+    speakingText,
     interimTranscript,
     startRecording,
     stopRecording,
@@ -1128,6 +1130,8 @@ export default function App() {
                   onWordClick={handleWordClick}
                   onPlayAudio={handlePlayAudio}
                   isAudioPlaying={isSpeaking}
+                  speakingCharIndex={speakingCharIndex}
+                  speakingText={speakingText}
                   onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
                   onDeleteMessage={handleDeleteMessage}
                 />

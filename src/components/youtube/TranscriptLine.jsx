@@ -10,6 +10,7 @@ import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 export function TranscriptLine({
   line,
   isActive = false,
+  currentTime = 0,
   onSeek,
   onGloss = null,
   onGlossLine = null,
@@ -36,6 +37,85 @@ export function TranscriptLine({
   const isComplete = hasGloss || isGlossComplete(line, targetLang);
   const handleGloss = onGloss || onGlossLine;
   const glossing = isGlossing || isGlossingThisLine;
+
+  const activeTokenIndex = React.useMemo(() => {
+    if (!isActive || !tokens || tokens.length === 0) return -1;
+    const time = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
+    const start = typeof line.startTime === 'number' ? line.startTime : 0;
+    const end = typeof line.endTime === 'number' && line.endTime > start ? line.endTime : start + 4.0;
+    
+    // Check if tokens have individual timestamps
+    const hasPerTokenTimestamps = tokens.some(t => t && typeof t === 'object' && typeof t.startTime === 'number');
+    if (hasPerTokenTimestamps) {
+      return tokens.findIndex(t => {
+        if (!t || typeof t !== 'object') return false;
+        const tStart = t.startTime ?? start;
+        const tEnd = t.endTime ?? end;
+        return time >= tStart && time <= tEnd;
+      });
+    }
+
+    // Proportional progress based on character count of non-punctuation tokens
+    const duration = Math.max(0.4, end - start);
+    const elapsed = Math.max(0, Math.min(duration, time - start));
+    const progress = elapsed / duration;
+
+    const tokenWeights = tokens.map(tok => {
+      if (!tok) return 0;
+      const rawWord = typeof tok === 'string' ? tok : (tok.word ?? tok.text ?? '');
+      const isPunct = tok && typeof tok === 'object' && typeof tok.isPunctuation === 'boolean'
+        ? tok.isPunctuation
+        : PUNCTUATION_REGEX.test(rawWord);
+      return isPunct ? 0 : Math.max(1, rawWord.length);
+    });
+
+    const totalWeight = tokenWeights.reduce((sum, w) => sum + w, 0);
+    if (totalWeight === 0) return -1;
+
+    const targetCharOffset = progress * totalWeight;
+    let accumulated = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      accumulated += tokenWeights[i];
+      if (tokenWeights[i] > 0 && targetCharOffset < accumulated) {
+        return i;
+      }
+    }
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      if (tokenWeights[i] > 0) return i;
+    }
+    return -1;
+  }, [isActive, tokens, currentTime, line.startTime, line.endTime]);
+
+  const activeChunkIndex = React.useMemo(() => {
+    if (!isActive || !text) return -1;
+    const chunks = text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/);
+    const time = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
+    const start = typeof line.startTime === 'number' ? line.startTime : 0;
+    const end = typeof line.endTime === 'number' && line.endTime > start ? line.endTime : start + 4.0;
+    const duration = Math.max(0.4, end - start);
+    const elapsed = Math.max(0, Math.min(duration, time - start));
+    const progress = elapsed / duration;
+
+    const chunkWeights = chunks.map(c => {
+      const trimmed = (c || '').trim();
+      return (trimmed && !PUNCTUATION_REGEX.test(trimmed)) ? Math.max(1, trimmed.length) : 0;
+    });
+    const totalWeight = chunkWeights.reduce((sum, w) => sum + w, 0);
+    if (totalWeight === 0) return -1;
+
+    const targetCharOffset = progress * totalWeight;
+    let accumulated = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      accumulated += chunkWeights[i];
+      if (chunkWeights[i] > 0 && targetCharOffset < accumulated) {
+        return i;
+      }
+    }
+    for (let i = chunks.length - 1; i >= 0; i--) {
+      if (chunkWeights[i] > 0) return i;
+    }
+    return -1;
+  }, [isActive, text, currentTime, line.startTime, line.endTime]);
 
   // Font size classes
   const fontClassMap = {
@@ -218,6 +298,7 @@ export function TranscriptLine({
                       {/* Tier 2 (CENTER): Word (Arabic with diacritics/tashkeel in RTL, Russian/Polish/Latin scripts in LTR) */}
                       {(() => {
                         const isSaved = !isPunctuation && isWordSaved(word, targetLang);
+                        const isAudioActive = isActive && activeTokenIndex === idx;
                         return (
                           <span
                             dir={textDirection}
@@ -229,7 +310,7 @@ export function TranscriptLine({
                                 : isActive
                                 ? 'text-white font-bold drop-shadow-xs'
                                 : 'text-[var(--text-primary)]'
-                            } ${fontClass}`}
+                            } ${isAudioActive ? 'audio-word-active' : ''} ${fontClass}`}
                           >
                             {renderHighlightedText(word)}
                           </span>
@@ -262,6 +343,7 @@ export function TranscriptLine({
             {text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/).map((chunk, cIdx) => {
               if (!chunk) return null;
               const cleanWord = chunk.trim();
+              const isAudioActive = isActive && activeChunkIndex === cIdx;
               if (cleanWord && isWordSaved(cleanWord, targetLang)) {
                 return (
                   <span
@@ -272,14 +354,18 @@ export function TranscriptLine({
                         onWordClick(cleanWord, null);
                       }
                     }}
-                    className="bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs cursor-pointer inline-block ring-1 ring-amber-400/60"
+                    className={`bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs cursor-pointer inline-block ring-1 ring-amber-400/60 ${isAudioActive ? 'audio-word-active' : ''}`}
                     title={`Palabra guardada: "${cleanWord}"`}
                   >
                     {chunk}
                   </span>
                 );
               }
-              return renderHighlightedText(chunk);
+              return (
+                <span key={cIdx} className={isAudioActive ? 'audio-word-active' : ''}>
+                  {renderHighlightedText(chunk)}
+                </span>
+              );
             })}
           </p>
         )}
