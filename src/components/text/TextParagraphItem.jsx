@@ -6,6 +6,7 @@ import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
+import { computeTokenCharRanges, findActiveTokenIndex } from '../../utils/audioWordSync.js';
 
 /**
  * TextParagraphItem
@@ -63,22 +64,13 @@ export function TextParagraphItem({
   };
 
   const tokenCharRanges = React.useMemo(() => {
-    if (!tokens || tokens.length === 0) return [];
-    const cleanText = (text || '').replace(/<[^>]*>/g, '');
-    let pos = 0;
-    return tokens.map(tok => {
-      const w = typeof tok === 'string' ? tok : (tok.word || tok.text || '');
-      if (!w) return { startChar: -1, endChar: -1 };
-      const foundIdx = cleanText.indexOf(w, pos);
-      if (foundIdx !== -1) {
-        pos = foundIdx + w.length;
-        return { startChar: foundIdx, endChar: pos };
-      }
-      const start = pos;
-      pos += w.length;
-      return { startChar: start, endChar: pos };
-    });
+    return computeTokenCharRanges(tokens, text);
   }, [tokens, text]);
+
+  const activeTokenIndex = React.useMemo(() => {
+    if (!isPlaying || activeAudioCharIndex < 0) return -1;
+    return findActiveTokenIndex(tokenCharRanges, activeAudioCharIndex);
+  }, [isPlaying, activeAudioCharIndex, tokenCharRanges]);
 
   let runningChunkPos = 0;
 
@@ -153,8 +145,7 @@ export function TextParagraphItem({
                   );
                 }
 
-                const range = tokenCharRanges[idx];
-                const isAudioActive = isPlaying && activeAudioCharIndex >= 0 && range && range.startChar <= activeAudioCharIndex && activeAudioCharIndex < range.endChar;
+                const isAudioActive = isPlaying && activeTokenIndex === idx;
 
                 return (
                   <div

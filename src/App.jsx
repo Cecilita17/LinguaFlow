@@ -279,6 +279,11 @@ export default function App() {
     }
   });
 
+  const handlePlayAudio = (textToSpeak) => {
+    if (!textToSpeak) return;
+    speakText(textToSpeak, currentLangObj.speechCode, speechRate);
+  };
+
   // Save config
   const handleSaveConfig = (newConfig) => {
     setConfig(newConfig);
@@ -867,10 +872,6 @@ export default function App() {
     });
   };
 
-  // Play audio helper
-  const handlePlayAudio = (textToSpeak) => {
-    speakText(textToSpeak, currentLangObj.speechCode, speechRate);
-  };
 
   // Pronounce single word helper (normal or slow)
   const handlePronounceWord = (word, rate = 1.0) => {

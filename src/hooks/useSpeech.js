@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { transcribeAudioApi } from '../services/chatService.js';
 import { mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
+import { estimateSpeechDurationMs } from '../utils/audioWordSync.js';
 
 /**
  * Intelligent phrase and n-gram deduplication to fix Android Chrome / mobile WebKit
@@ -110,6 +111,15 @@ export function useSpeech({
   const audioStreamRef = useRef(null);
   const mimeTypeRef = useRef('audio/webm');
   const mediaStreamPromiseRef = useRef(null);
+  const speechFallbackTimerRef = useRef(null);
+  const receivedBoundaryRef = useRef(false);
+
+  const clearSpeechFallbackTimer = () => {
+    if (speechFallbackTimerRef.current) {
+      clearInterval(speechFallbackTimerRef.current);
+      speechFallbackTimerRef.current = null;
+    }
+  };
 
   isHandsFreeRef.current = handsFree;
   isSpeakingRef.current = isSpeaking;
@@ -283,6 +293,8 @@ export function useSpeech({
   const startRecording = useCallback(async () => {
     if (isProcessing) return;
 
+    clearSpeechFallbackTimer();
+
     // Cancel any active bot speaking
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -383,11 +395,15 @@ export function useSpeech({
   const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback) => {
     if (!window.speechSynthesis) return;
 
+    clearSpeechFallbackTimer();
     window.speechSynthesis.cancel();
 
     const cleanText = text.replace(/<[^>]*>/g, '').trim();
+    if (!cleanText) return;
+
     setSpeakingText(cleanText);
-    setSpeakingCharIndex(-1);
+    setSpeakingCharIndex(0);
+    receivedBoundaryRef.current = false;
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = langCode;
@@ -399,10 +415,27 @@ export function useSpeech({
       utterance.voice = matchingVoice;
     }
 
-    utterance.onstart = () => setIsSpeaking(true);
+    const speechStartTime = Date.now();
+    const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, rate);
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      clearSpeechFallbackTimer();
+
+      // Start time-based progression fallback in case onboundary is not emitted by browser
+      speechFallbackTimerRef.current = setInterval(() => {
+        if (!receivedBoundaryRef.current) {
+          const elapsed = Date.now() - speechStartTime;
+          const progress = Math.min(0.99, elapsed / estimatedDurationMs);
+          const estIndex = Math.min(cleanText.length - 1, Math.floor(progress * cleanText.length));
+          setSpeakingCharIndex(estIndex);
+        }
+      }, 50);
+    };
 
     utterance.onboundary = (event) => {
       if (typeof event.charIndex === 'number') {
+        receivedBoundaryRef.current = true;
         setSpeakingCharIndex(event.charIndex);
       }
       if (onBoundaryCallback) {
@@ -411,6 +444,7 @@ export function useSpeech({
     };
 
     utterance.onend = () => {
+      clearSpeechFallbackTimer();
       setIsSpeaking(false);
       setSpeakingCharIndex(-1);
       setSpeakingText('');
@@ -418,15 +452,17 @@ export function useSpeech({
     };
 
     utterance.onerror = () => {
+      clearSpeechFallbackTimer();
       setIsSpeaking(false);
       setSpeakingCharIndex(-1);
       setSpeakingText('');
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [targetLangCode]);
+  }, [targetLangCode, targetLang]);
 
   const stopSpeaking = useCallback(() => {
+    clearSpeechFallbackTimer();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);

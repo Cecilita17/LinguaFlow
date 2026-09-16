@@ -5,6 +5,7 @@ import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { normalizeChineseMessageTokens } from '../services/chineseTokenNormalizer.js';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 import { getArabicTransliteration } from '../services/arabicTransliteration.js';
+import { normalizeAudioText } from '../utils/audioWordSync.js';
 
 export function ChatMessage({
   message,
@@ -177,10 +178,9 @@ export function ChatMessage({
     const diffTokens = message.diffTokens || [];
     const hasCorrection = message.hasCorrection || diffTokens.some(t => t.changed);
     const isChinese = targetLang === 'zh';
-    const userSpokenTarget = (message.correctedText || message.text || '').replace(/<[^>]*>/g, '').trim();
+    const userSpokenTarget = normalizeAudioText(message.correctedText || message.text);
     const isThisUserPlaying = Boolean(isAudioPlaying) && Boolean(speakingText) && (
-      speakingText === userSpokenTarget ||
-      speakingText === (message.correctedText || message.text || '').trim()
+      normalizeAudioText(speakingText) === userSpokenTarget
     );
 
     let runningCharPos = 0;
@@ -575,10 +575,9 @@ export function ChatMessage({
     return result;
   }, [message.text, tokens, targetLang]);
 
-  const botSpokenTarget = (message.text || '').replace(/<[^>]*>/g, '').trim();
+  const botSpokenTarget = normalizeAudioText(message.text);
   const isThisBotPlaying = Boolean(isAudioPlaying) && Boolean(speakingText) && (
-    speakingText === botSpokenTarget ||
-    speakingText === (message.text || '').trim()
+    normalizeAudioText(speakingText) === botSpokenTarget
   );
 
   return (

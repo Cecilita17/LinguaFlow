@@ -31,9 +31,9 @@ export function TranscriptLine({
   const rawText = typeof line.text === 'string' ? line.text : (line.text != null ? String(line.text) : '');
   const text = rawText;
   const tokens = Array.isArray(line.tokens) ? line.tokens : [];
-  const glosses = Array.isArray(line.glosses) ? line.glosses : [];
-  const isRtl = isRtlLanguage(targetLang);
-  const textDirection = getTextDirection(targetLang);
+  const isArabic = targetLang === 'ar' || /[\u0600-\u06FF]/.test(rawText || '');
+  const isRtl = isRtlLanguage(targetLang) || isArabic;
+  const textDirection = isRtl ? 'rtl' : 'ltr';
   const isComplete = hasGloss || isGlossComplete(line, targetLang);
   const handleGloss = onGloss || onGlossLine;
   const glossing = isGlossing || isGlossingThisLine;
@@ -290,7 +290,7 @@ export function TranscriptLine({
                     >
                       {/* Tier 1 (TOP): Pinyin for Chinese / Transliteration for Arabic */}
                       {(isChinese || isArabic) && auxiliary && (
-                        <span className="text-[12px] sm:text-[13px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
+                        <span dir="ltr" className="text-[12px] sm:text-[13px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                           {auxiliary}
                         </span>
                       )}
@@ -303,7 +303,7 @@ export function TranscriptLine({
                           <span
                             dir={textDirection}
                             className={`${
-                              isChinese ? 'font-medium tracking-normal' : 'font-semibold tracking-wide'
+                              isChinese ? 'font-medium tracking-normal' : isArabic ? 'font-semibold tracking-wide font-arabic' : 'font-semibold tracking-wide'
                             } select-text leading-tight ${
                               isSaved
                                 ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
