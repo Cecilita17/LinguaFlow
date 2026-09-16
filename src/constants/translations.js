@@ -171,6 +171,8 @@ export const TRANSLATIONS = {
     correction: 'Corrección',
     original: 'Original',
     delete_message: 'Eliminar mensaje',
+    delete_chat: 'Eliminar chat',
+    confirm_delete_chat: '¿Eliminar este chat del historial?',
     
     // Input Bar
     input_placeholder: 'Escribe un mensaje en {lang}...',
@@ -371,6 +373,8 @@ export const TRANSLATIONS = {
     correction: 'Correction',
     original: 'Original',
     delete_message: 'Delete message',
+    delete_chat: 'Delete chat',
+    confirm_delete_chat: 'Delete this chat from history?',
     
     // Input Bar
     input_placeholder: 'Type a message in {lang}...',

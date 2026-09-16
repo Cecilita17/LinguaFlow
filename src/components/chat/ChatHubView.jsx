@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   MessageSquare,
   Mic,
@@ -9,7 +9,8 @@ import {
   Calendar,
   ChevronRight,
   Languages,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLanguageMeta, LANGUAGE_FLAGS } from '../../constants/languages.js';
@@ -46,6 +47,79 @@ const DEFAULT_CALL_HISTORY = [
   }
 ];
 
+export function loadUnifiedHistory(isSpanish) {
+  const historyItems = [];
+
+  // 1. Gather existing chat conversations
+  if (typeof window !== 'undefined') {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('linguaflow_chat_')) {
+          const langCode = key.replace('linguaflow_chat_', '');
+          try {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                const lastMsg = parsed[parsed.length - 1];
+                const langMeta = getLanguageMeta(langCode);
+                const msgCount = parsed.length;
+
+                historyItems.push({
+                  id: `chat-${langCode}`,
+                  type: 'chat',
+                  lang: langCode,
+                  langName: langMeta.name || langCode.toUpperCase(),
+                  flag: langMeta.flag || LANGUAGE_FLAGS[langCode] || '🌐',
+                  lastMessage: lastMsg?.text || (isSpanish ? 'Conversación activa' : 'Active conversation'),
+                  date: isSpanish ? 'Conversación guardada' : 'Saved conversation',
+                  timestamp: lastMsg?.id ? parseInt(lastMsg.id.replace(/\D/g, '')) || Date.now() : Date.now(),
+                  msgCount
+                });
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+
+    // 2. Gather call sessions from separate call storage or defaults
+    try {
+      let storedCalls = [];
+      const rawCalls = localStorage.getItem(CALL_STORAGE_KEY);
+      if (rawCalls) {
+        try {
+          storedCalls = JSON.parse(rawCalls) || [];
+        } catch (err) {
+          storedCalls = [];
+        }
+      }
+
+      storedCalls.forEach((call) => {
+        const langMeta = getLanguageMeta(call.lang);
+        historyItems.push({
+          id: call.id,
+          type: 'call',
+          lang: call.lang,
+          langName: langMeta.name || call.lang.toUpperCase(),
+          flag: langMeta.flag || LANGUAGE_FLAGS[call.lang] || '🌐',
+          lastMessage: call.summary || (isSpanish ? `Llamada de voz (${call.duration})` : `Voice call (${call.duration})`),
+          date: call.date || (isSpanish ? 'Llamada reciente' : 'Recent call'),
+          duration: call.duration,
+          timestamp: call.timestamp || 0,
+          callData: call
+        });
+      });
+    } catch (e) {}
+  }
+
+  // Sort by most recent
+  historyItems.sort((a, b) => b.timestamp - a.timestamp);
+
+  return historyItems;
+}
+
 export function ChatHubView({
   targetLang,
   setTargetLang,
@@ -53,84 +127,56 @@ export function ChatHubView({
   onStartChat,
   onStartCall,
   onOpenChatSession,
-  onOpenCallDetail
+  onOpenCallDetail,
+  onDeleteChatSession,
+  onDeleteCallSession
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
 
-  // Read existing real chat sessions from localStorage (linguaflow_chat_<lang>)
-  const unifiedHistory = useMemo(() => {
-    const historyItems = [];
+  // Maintain local history state to reflect deletions immediately without reload
+  const [historyItems, setHistoryItems] = useState(() => loadUnifiedHistory(isSpanish));
 
-    // 1. Gather existing chat conversations
-    if (typeof window !== 'undefined') {
-      try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('linguaflow_chat_')) {
-            const langCode = key.replace('linguaflow_chat_', '');
-            try {
-              const raw = localStorage.getItem(key);
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  const lastMsg = parsed[parsed.length - 1];
-                  const langMeta = getLanguageMeta(langCode);
-                  const msgCount = parsed.length;
-
-                  historyItems.push({
-                    id: `chat-${langCode}`,
-                    type: 'chat',
-                    lang: langCode,
-                    langName: langMeta.name || langCode.toUpperCase(),
-                    flag: langMeta.flag || LANGUAGE_FLAGS[langCode] || '🌐',
-                    lastMessage: lastMsg?.text || (isSpanish ? 'Conversación activa' : 'Active conversation'),
-                    date: isSpanish ? 'Conversación guardada' : 'Saved conversation',
-                    timestamp: lastMsg?.id ? parseInt(lastMsg.id.replace(/\D/g, '')) || Date.now() : Date.now(),
-                    msgCount
-                  });
-                }
-              }
-            } catch (e) {}
-          }
-        }
-      } catch (e) {}
-
-      // 2. Gather call sessions from separate call storage or defaults
-      try {
-        let storedCalls = [];
-        const rawCalls = localStorage.getItem(CALL_STORAGE_KEY);
-        if (rawCalls) {
-          try {
-            storedCalls = JSON.parse(rawCalls) || [];
-          } catch (err) {
-            storedCalls = [];
-          }
-        }
-
-        storedCalls.forEach((call) => {
-          const langMeta = getLanguageMeta(call.lang);
-          historyItems.push({
-            id: call.id,
-            type: 'call',
-            lang: call.lang,
-            langName: langMeta.name || call.lang.toUpperCase(),
-            flag: langMeta.flag || LANGUAGE_FLAGS[call.lang] || '🌐',
-            lastMessage: call.summary || (isSpanish ? `Llamada de voz (${call.duration})` : `Voice call (${call.duration})`),
-            date: call.date || (isSpanish ? 'Llamada reciente' : 'Recent call'),
-            duration: call.duration,
-            timestamp: call.timestamp || 0,
-            callData: call
-          });
-        });
-      } catch (e) {}
-    }
-
-    // Sort by most recent
-    historyItems.sort((a, b) => b.timestamp - a.timestamp);
-
-    return historyItems;
+  useEffect(() => {
+    setHistoryItems(loadUnifiedHistory(isSpanish));
   }, [isSpanish]);
+
+  const handleDeleteItem = useCallback((e, item) => {
+    e.stopPropagation();
+
+    const confirmMsg = t('confirm_delete_chat') || (isSpanish
+      ? '¿Eliminar este chat del historial?'
+      : 'Delete this chat from history?');
+
+    if (window.confirm(confirmMsg)) {
+      if (item.type === 'chat') {
+        try {
+          localStorage.removeItem(`linguaflow_chat_${item.lang}`);
+        } catch (err) {
+          console.warn('Failed to remove chat from localStorage:', err);
+        }
+        if (onDeleteChatSession) {
+          onDeleteChatSession(item.lang);
+        }
+      } else if (item.type === 'call') {
+        try {
+          const raw = localStorage.getItem(CALL_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) || [];
+            const filtered = parsed.filter((c) => c.id !== item.id);
+            localStorage.setItem(CALL_STORAGE_KEY, JSON.stringify(filtered));
+          }
+        } catch (err) {
+          console.warn('Failed to remove call from localStorage:', err);
+        }
+        if (onDeleteCallSession) {
+          onDeleteCallSession(item.id);
+        }
+      }
+
+      setHistoryItems((prev) => prev.filter((h) => h.id !== item.id));
+    }
+  }, [isSpanish, t, onDeleteChatSession, onDeleteCallSession]);
 
   return (
     <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)] space-y-6">
@@ -231,17 +277,17 @@ export function ChatHubView({
             <span>{t('chat_history_title')}</span>
           </h2>
           <span className="text-[11px] text-[var(--text-muted)]">
-            {unifiedHistory.length} {isSpanish ? 'registros' : 'items'}
+            {historyItems.length} {isSpanish ? 'registros' : 'items'}
           </span>
         </div>
 
-        {unifiedHistory.length === 0 ? (
+        {historyItems.length === 0 ? (
           <div className="text-center py-8 text-xs text-[var(--text-muted)] bg-[var(--surface-secondary)] rounded-2xl border border-[var(--border-primary)] p-6">
             <p>{t('chat_history_empty')}</p>
           </div>
         ) : (
           <div className="space-y-2.5">
-            {unifiedHistory.map((item) => {
+            {historyItems.map((item) => {
               const isChat = item.type === 'chat';
 
               return (
@@ -297,11 +343,22 @@ export function ChatHubView({
                     </div>
                   </div>
 
-                  {/* Right: Date & Chevron */}
+                  {/* Right: Date, Delete Button & Chevron */}
                   <div className="flex items-center space-x-2 shrink-0 text-right">
                     <span className="text-[11px] text-[var(--text-muted)] hidden sm:inline font-mono">
                       {item.date}
                     </span>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteItem(e, item)}
+                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer active:scale-90"
+                      title={t('delete_chat') || (isSpanish ? 'Eliminar chat' : 'Delete chat')}
+                      aria-label={t('delete_chat') || (isSpanish ? 'Eliminar chat' : 'Delete chat')}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
                     <ChevronRight className="w-4 h-4 text-[var(--text-muted)] group-hover:text-rose-500 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </div>

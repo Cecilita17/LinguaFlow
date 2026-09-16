@@ -51,8 +51,18 @@ function mergeTurnText(confirmed, incoming) {
  */
 function isLikelyEcho(transcript, aiText) {
   if (!transcript || !aiText) return false;
-  const cleanTrans = transcript.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '').trim();
-  const cleanAi = aiText.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '').trim();
+  const cleanTrans = transcript
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '')
+    .trim();
+  const cleanAi = aiText
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '')
+    .trim();
   if (!cleanTrans || !cleanAi) return false;
 
   // 1. Direct substring match
@@ -129,6 +139,7 @@ export function usePipelineCall({
   const currentAiTurnIdRef = useRef(null);
   const currentAiTurnTextRef = useRef('');
   const lastAiSpokenTextRef = useRef('');
+  const lastAiSpokenTimestampRef = useRef(0);
   const isEchoGuardActiveRef = useRef(false);
   const echoGuardTimerRef = useRef(null);
 
@@ -228,11 +239,13 @@ export function usePipelineCall({
 
     stopAudioPlayback();
 
-    // Finalize any streaming AI turn in transcript
+    // Finalize non-empty streaming AI turn, or completely remove empty AI placeholder
     const currentAiId = currentAiTurnIdRef.current;
     if (currentAiId) {
       setLiveTranscript((prev) =>
-        prev.map((msg) => (msg.id === currentAiId ? { ...msg, isStreaming: false } : msg))
+        prev
+          .map((msg) => (msg.id === currentAiId ? { ...msg, isStreaming: false } : msg))
+          .filter((msg) => !(msg.id === currentAiId && (!msg.text || !msg.text.trim())))
       );
       currentAiTurnIdRef.current = null;
       currentAiTurnTextRef.current = '';
@@ -414,6 +427,7 @@ export function usePipelineCall({
         // Activate post-TTS acoustic echo guard (450ms) to discard room feedback before returning to 'listening'
         if (!isEchoGuardActiveRef.current && !isPlayingQueueRef.current) {
           isEchoGuardActiveRef.current = true;
+          lastAiSpokenTimestampRef.current = Date.now();
           if (echoGuardTimerRef.current) {
             clearTimeout(echoGuardTimerRef.current);
           }
@@ -594,6 +608,14 @@ export function usePipelineCall({
     interruptAssistant();
     setCallState('thinking');
 
+    // Reset currentTurnRef so subsequent user speech starts completely fresh
+    currentTurnRef.current = {
+      id: null,
+      confirmedText: '',
+      text: '',
+      finalized: false
+    };
+
     const aiTurnId = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     currentAiTurnIdRef.current = aiTurnId;
     currentAiTurnTextRef.current = '';
@@ -667,6 +689,7 @@ export function usePipelineCall({
             if (data.delta) {
               currentAiTurnTextRef.current += data.delta;
               lastAiSpokenTextRef.current = currentAiTurnTextRef.current;
+              lastAiSpokenTimestampRef.current = Date.now();
               sentenceBuffer += data.delta;
 
               const fullText = currentAiTurnTextRef.current;
@@ -711,19 +734,22 @@ export function usePipelineCall({
       const finalTokens = tokenizeLiveCallTurn(finalText, targetLang);
 
       setLiveTranscript((prev) =>
-        prev.map((msg) =>
-          msg.id === aiTurnId
-            ? { ...msg, text: finalText, tokens: finalTokens, isStreaming: false }
-            : msg
-        )
+        prev
+          .map((msg) =>
+            msg.id === aiTurnId
+              ? { ...msg, text: finalText, tokens: finalTokens, isStreaming: false }
+              : msg
+          )
+          .filter((msg) => !(msg.id === aiTurnId && (!msg.text || !msg.text.trim())))
       );
 
-      if (showGlossesRef.current) {
+      if (showGlossesRef.current && finalText.trim()) {
         triggerTurnGloss(aiTurnId, finalText, finalTokens);
       }
 
       currentAiTurnIdRef.current = null;
       currentAiTurnTextRef.current = '';
+      lastAiSpokenTimestampRef.current = Date.now();
 
     } catch (err) {
       if (err.name !== 'AbortError') {
@@ -731,9 +757,13 @@ export function usePipelineCall({
         sessionMetricsRef.current.errors.push(err.message);
       }
       setLiveTranscript((prev) =>
-        prev.map((msg) => (msg.id === aiTurnId ? { ...msg, isStreaming: false } : msg))
+        prev
+          .map((msg) => (msg.id === aiTurnId ? { ...msg, isStreaming: false } : msg))
+          .filter((msg) => !(msg.id === aiTurnId && (!msg.text || !msg.text.trim())))
       );
       currentAiTurnIdRef.current = null;
+      currentAiTurnTextRef.current = '';
+      lastAiSpokenTimestampRef.current = Date.now();
     }
   }, [targetLang, nativeLang, level, interruptAssistant, enqueueTextForTTS, triggerTurnGloss]);
 
@@ -756,12 +786,18 @@ export function usePipelineCall({
     processedUserTurnIdsRef.current.add(currentId);
     sessionMetricsRef.current.userTurns++;
 
-    // 2. Mark active turn as finalized
+    // 2. Mark active turn as finalized and reset currentTurnRef for the next turn
     if (activeTurn.id === currentId) {
       activeTurn.finalized = true;
       activeTurn.text = cleanText;
       activeTurn.confirmedText = cleanText;
     }
+    currentTurnRef.current = {
+      id: null,
+      confirmedText: '',
+      text: '',
+      finalized: false
+    };
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = null;
@@ -854,24 +890,30 @@ export function usePipelineCall({
         return;
       }
 
-      // 2. Active AI Playback / Generation: Distinguish Acoustic Echo from Genuine User Barge-in
-      const isAiSpeaking = isPlayingQueueRef.current || callStateRef.current === 'speaking' || Boolean(currentAiTurnIdRef.current);
-      if (isAiSpeaking) {
-        let incomingSpeech = '';
-        for (let i = 0; i < event.results.length; i++) {
-          if (!consumedFinalIndicesRef.current.has(i)) {
-            const t = event.results[i][0]?.transcript?.trim() || '';
-            if (t) {
-              incomingSpeech = (incomingSpeech ? incomingSpeech + ' ' : '') + t;
-            }
+      // 2. Extract strictly NEW speech from changed results in this event
+      let newIncomingSpeech = '';
+      const startIndex = typeof event.resultIndex === 'number' ? event.resultIndex : 0;
+      for (let i = startIndex; i < event.results.length; i++) {
+        if (!consumedFinalIndicesRef.current.has(i)) {
+          const t = event.results[i][0]?.transcript?.trim() || '';
+          if (t) {
+            newIncomingSpeech = (newIncomingSpeech ? newIncomingSpeech + ' ' : '') + t;
           }
         }
-        incomingSpeech = incomingSpeech.trim();
+      }
+      newIncomingSpeech = newIncomingSpeech.trim();
 
-        const aiSpokenText = (currentAiTurnTextRef.current || lastAiSpokenTextRef.current || '').trim();
+      // If no new unconsumed speech was detected in changed results, nothing to process
+      if (!newIncomingSpeech) return;
 
-        if (isLikelyEcho(incomingSpeech, aiSpokenText)) {
-          // Acoustic echo from speaker: consume final indices so they are never re-processed, and ignore
+      // 3. Active AI Playback / Generation / Recent Spoken Echo Check
+      const isAiSpeaking = isPlayingQueueRef.current || callStateRef.current === 'speaking' || Boolean(currentAiTurnIdRef.current);
+      const isRecentAiSpeech = (Date.now() - lastAiSpokenTimestampRef.current) < 2000;
+      const aiSpokenText = (currentAiTurnTextRef.current || lastAiSpokenTextRef.current || '').trim();
+
+      if (isAiSpeaking || isRecentAiSpeech) {
+        if (isLikelyEcho(newIncomingSpeech, aiSpokenText)) {
+          // Acoustic echo from speaker: consume all final results so far, ignore completely
           for (let i = 0; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
               consumedFinalIndicesRef.current.add(i);
@@ -880,24 +922,45 @@ export function usePipelineCall({
           return;
         }
 
-        // Genuine User Interruption (Barge-in): User spoke substantive words that do not match the AI speech
-        if (incomingSpeech.length >= 2) {
-          console.log('[PipelineSTT] Genuine user barge-in detected:', incomingSpeech);
-          interruptAssistant();
-          if (echoGuardTimerRef.current) {
-            clearTimeout(echoGuardTimerRef.current);
-            echoGuardTimerRef.current = null;
+        // If AI is currently speaking and user speaks genuine words (>= 2 chars not matching echo) -> BARGE-IN!
+        if (isAiSpeaking) {
+          const cleanSpeech = newIncomingSpeech.replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '').trim();
+          if (cleanSpeech.length >= 2) {
+            console.log('[PipelineSTT] Genuine user barge-in detected:', newIncomingSpeech);
+            interruptAssistant();
+
+            if (echoGuardTimerRef.current) {
+              clearTimeout(echoGuardTimerRef.current);
+              echoGuardTimerRef.current = null;
+            }
+            isEchoGuardActiveRef.current = false;
+
+            // Mark all prior finalized results before this event as consumed to isolate new turn
+            for (let i = 0; i < startIndex; i++) {
+              if (event.results[i].isFinal) {
+                consumedFinalIndicesRef.current.add(i);
+              }
+            }
+
+            // Explicitly reset currentTurnRef so the new turn starts completely fresh without previous text
+            currentTurnRef.current = {
+              id: null,
+              confirmedText: '',
+              text: '',
+              finalized: false
+            };
+
+            setCallState('listening');
+          } else {
+            // Short breath/click noise while AI speaking -> ignore
+            return;
           }
-          isEchoGuardActiveRef.current = false;
-        } else {
-          // Short noise / breath while speaking -> ignore
-          return;
         }
       }
 
       sessionMetricsRef.current.transcriptionEvents++;
 
-      // Ensure active unfinalized turn state
+      // 4. Ensure active unfinalized turn state (isolated fresh user turn)
       if (!currentTurnRef.current.id || currentTurnRef.current.finalized) {
         currentTurnRef.current = {
           id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -910,7 +973,7 @@ export function usePipelineCall({
       const activeTurn = currentTurnRef.current;
       const turnId = activeTurn.id;
 
-      // Process event results: consume newly confirmed final items, compute latest interim
+      // 5. Process event results: consume unconsumed final items, compute latest unconsumed interim
       let sessionInterim = '';
       for (let i = 0; i < event.results.length; i++) {
         const resultItem = event.results[i];
@@ -923,7 +986,9 @@ export function usePipelineCall({
             activeTurn.confirmedText = mergeTurnText(activeTurn.confirmedText, transcript);
           }
         } else {
-          sessionInterim = (sessionInterim ? sessionInterim + ' ' : '') + transcript;
+          if (!consumedFinalIndicesRef.current.has(i)) {
+            sessionInterim = (sessionInterim ? sessionInterim + ' ' : '') + transcript;
+          }
         }
       }
 
@@ -955,13 +1020,12 @@ export function usePipelineCall({
           return updated;
         }
 
-        // 2. Reuse any trailing transcribing user bubble to prevent multiple bubbles
+        // 2. Reuse trailing transcribing user bubble ONLY if it matches the current turn ID
         const lastIdx = prev.length - 1;
-        if (lastIdx >= 0 && prev[lastIdx].sender === 'user' && prev[lastIdx].isTranscribing) {
+        if (lastIdx >= 0 && prev[lastIdx].sender === 'user' && prev[lastIdx].id === turnId && prev[lastIdx].isTranscribing) {
           const updated = [...prev];
           updated[lastIdx] = {
             ...updated[lastIdx],
-            id: turnId,
             text: fullTurnText,
             tokens: previewTokens,
             isTranscribing: true

@@ -1009,6 +1009,17 @@ export default function App() {
               setSelectedCallData(callData);
               setChatViewMode('call-detail');
             }}
+            onDeleteChatSession={(deletedLang) => {
+              if (deletedLang === targetLang) {
+                const initialGreeting = getInitialBotMsg(targetLang);
+                setMessages([initialGreeting]);
+              }
+            }}
+            onDeleteCallSession={(callId) => {
+              if (selectedCallData && selectedCallData.id === callId) {
+                setSelectedCallData(null);
+              }
+            }}
           />
         </main>
       ) : (
