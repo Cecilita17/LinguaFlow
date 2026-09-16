@@ -77,6 +77,18 @@ export function findActiveTokenIndex(charIndex, tokenRanges) {
   for (let i = 0; i < tokenRanges.length; i++) {
     const range = tokenRanges[i];
     if (range && range.startChar !== -1 && charIndex >= range.startChar && charIndex < range.endChar) {
+      if (range.isPunctuation) {
+        for (let p = i - 1; p >= 0; p--) {
+          if (tokenRanges[p] && !tokenRanges[p].isPunctuation && tokenRanges[p].startChar !== -1) {
+            return p;
+          }
+        }
+        for (let n = i + 1; n < tokenRanges.length; n++) {
+          if (tokenRanges[n] && !tokenRanges[n].isPunctuation && tokenRanges[n].startChar !== -1) {
+            return n;
+          }
+        }
+      }
       return i;
     }
   }
@@ -85,9 +97,19 @@ export function findActiveTokenIndex(charIndex, tokenRanges) {
   for (let i = 0; i < tokenRanges.length; i++) {
     const range = tokenRanges[i];
     if (range && range.startChar !== -1 && range.startChar <= charIndex) {
-      closestIdx = i;
+      if (!range.isPunctuation) {
+        closestIdx = i;
+      }
     } else if (range && range.startChar > charIndex) {
       break;
+    }
+  }
+
+  if (closestIdx === -1) {
+    for (let i = 0; i < tokenRanges.length; i++) {
+      if (tokenRanges[i] && !tokenRanges[i].isPunctuation && tokenRanges[i].startChar !== -1) {
+        return i;
+      }
     }
   }
 
