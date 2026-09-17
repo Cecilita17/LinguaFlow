@@ -249,7 +249,7 @@ export function TranscriptLine({
 
                   const rawGlossVal = tokenObj && typeof tokenObj === 'object'
                     ? tokenObj.gloss
-                    : (glosses && glosses[idx]);
+                    : null;
                   const rawGloss = rawGlossVal != null ? String(rawGlossVal).trim() : null;
                   const rawGlossLower = rawGloss ? rawGloss.toLowerCase() : null;
 
