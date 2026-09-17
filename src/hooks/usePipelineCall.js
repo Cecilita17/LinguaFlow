@@ -47,6 +47,122 @@ function mergeTurnText(confirmed, incoming) {
 }
 
 /**
+ * Configurable silence timeout duration for natural pauses before finalizing user turn (ms).
+ * Set to 1800ms (1.8s) to accommodate natural thinking pauses, fillers, and hesitant speech.
+ */
+const SPEECH_SILENCE_TIMEOUT_MS = 1800;
+
+/**
+ * Universal & language-specific speech fillers, hesitations, and disfluencies.
+ * Only matched as whole, standalone tokens — never as substrings of real words.
+ */
+const BASE_SPEECH_FILLERS = new Set([
+  'um', 'uh', 'er', 'erm', 'eh', 'em', 'emm', 'emmm', 'mmm', 'mmmm', 'hmm', 'hmmm', 'uhm', 'uhh', 'umm'
+]);
+
+const LANGUAGE_SPECIFIC_FILLERS = {
+  en: ['ah', 'ahh', 'ahhh', 'ur', 'err'],
+  es: ['eeh', 'eemm', 'eem', 'ehm'],
+  fr: ['euh', 'euhh', 'euhm', 'hum', 'bah'],
+  de: ['äh', 'ähm', 'ehm', 'öhm', 'oehm'],
+  it: ['ehm', 'uhm'],
+  pt: ['ãh', 'éh', 'éé', 'hum'],
+  ru: ['эм', 'ээ', 'эээ', 'хм', 'ммм', 'аа', 'ааа'],
+  zh: ['嗯', '呃', '额', '唔'],
+  ja: ['えーと', 'あのー', 'えっと', 'うーん'],
+  ar: ['اممم', 'همم', 'إمم', 'ااه']
+};
+
+/**
+ * Checks if a single token is a speech filler / disfluency in the given language.
+ * Conservative matching protects short valid words (e.g. 'e' in Spanish/Italian, 'a' in English/Spanish, 'y' in Spanish).
+ */
+export function isSpeechFillerWord(word, lang = 'es') {
+  if (!word || typeof word !== 'string') return false;
+  const clean = word.toLowerCase().trim().replace(/^[.,/#!$%^&*;:{}=\-_`~()?'"¡¿…]+|[.,/#!$%^&*;:{}=\-_`~()?'"¡¿…]+$/g, '');
+  if (!clean) return false;
+
+  if (BASE_SPEECH_FILLERS.has(clean)) {
+    return true;
+  }
+
+  const langCode = (lang || 'es').toLowerCase().split('-')[0];
+  const langFillers = LANGUAGE_SPECIFIC_FILLERS[langCode];
+  if (langFillers && langFillers.includes(clean)) {
+    return true;
+  }
+
+  // Handle elongated fillers: e.g. mmmmm, eeeeh, uhhhhh, hmmmm
+  if (/^m{3,}$/i.test(clean) || /^h+m{2,}$/i.test(clean) || /^u+h{2,}$/i.test(clean) || /^e+h{2,}$/i.test(clean) || /^u+m{2,}$/i.test(clean)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Strips speech fillers and disfluencies from transcript text while preserving
+ * natural sentence grammar, genuine words, and appropriate punctuation.
+ */
+export function cleanSpeechTurnText(text, lang = 'es') {
+  if (!text || typeof text !== 'string') return '';
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+
+  const langCode = (lang || 'es').toLowerCase().split('-')[0];
+  if (langCode === 'zh') {
+    const withoutZhFillers = trimmed.replace(/^[嗯呃额唔…\s,，。]+|[嗯呃额唔…\s,，。]+$/g, '');
+    if (!withoutZhFillers) return '';
+  }
+
+  const tokens = trimmed.split(/\s+/);
+  const kept = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const raw = tokens[i];
+    if (!raw) continue;
+
+    if (isSpeechFillerWord(raw, lang)) {
+      // If the preceding kept word ended in hesitation punctuation (e.g. "to..." or "to,"), clean that trailing punctuation
+      if (kept.length > 0) {
+        kept[kept.length - 1] = kept[kept.length - 1].replace(/[,\.…]*$/g, '');
+      }
+      continue;
+    }
+
+    // Drop orphaned punctuation tokens (e.g. standalone "..." or ",")
+    const hasLetterOrDigit = /[\p{L}\p{N}]/u.test(raw);
+    if (!hasLetterOrDigit && (kept.length === 0 || i === tokens.length - 1)) {
+      continue;
+    }
+
+    kept.push(raw);
+  }
+
+  const filteredKept = kept.filter(Boolean);
+  if (filteredKept.length === 0) return '';
+
+  let result = filteredKept.join(' ').trim();
+  // Clean up punctuation artifacts caused by removed fillers
+  result = result
+    .replace(/^[,;:\-–—\s…\.]+/g, '')
+    .replace(/\s+([,;:\.!?])/g, '$1')
+    .replace(/([,;])\s*[,;]+/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  // If sentence starts with lowercase after removing leading filler, capitalize first letter if appropriate
+  if (result.length > 0 && /^[a-z]/i.test(result)) {
+    const firstChar = result.charAt(0);
+    if (firstChar === firstChar.toLowerCase() && /^[a-z]/.test(firstChar)) {
+      result = firstChar.toUpperCase() + result.slice(1);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Configurable post-TTS acoustic echo guard duration (ms).
  * Used strictly as a short guard for the physical room acoustic tail
  * immediately after the speaker stops, without blocking genuine user speech.
@@ -906,7 +1022,7 @@ export function usePipelineCall({
   // Finalize and process a completed user speech turn
   const finalizeUserSpeechTurn = useCallback((userText, turnId) => {
     if (!userText || !userText.trim()) return;
-    const cleanText = cleanDuplicatePhrases(userText.trim());
+    const cleanText = cleanSpeechTurnText(cleanDuplicatePhrases(userText.trim()), targetLang);
     if (!cleanText) return;
 
     const activeTurn = currentTurnRef.current;
@@ -1121,16 +1237,23 @@ export function usePipelineCall({
       activeTurn.text = fullTurnText;
       if (!fullTurnText) return;
 
-      const previewTokens = tokenizeLiveCallTurn(fullTurnText, targetLang);
+      // Clean speech fillers for visual display & live preview
+      const cleanTurnText = cleanSpeechTurnText(fullTurnText, targetLang);
+      const previewTokens = cleanTurnText ? tokenizeLiveCallTurn(cleanTurnText, targetLang) : [];
 
       setLiveTranscript((prev) => {
+        // If cleanTurnText is empty (e.g. user only said "um" so far), do not show empty bubble
+        if (!cleanTurnText) {
+          return prev.filter((m) => m.id !== turnId || !m.isTranscribing);
+        }
+
         // 1. Find active user bubble by ID
         const existingIdx = prev.findIndex((m) => m.id === turnId);
         if (existingIdx >= 0) {
           const updated = [...prev];
           updated[existingIdx] = {
             ...updated[existingIdx],
-            text: fullTurnText,
+            text: cleanTurnText,
             tokens: previewTokens,
             isTranscribing: true
           };
@@ -1143,7 +1266,7 @@ export function usePipelineCall({
           const updated = [...prev];
           updated[lastIdx] = {
             ...updated[lastIdx],
-            text: fullTurnText,
+            text: cleanTurnText,
             tokens: previewTokens,
             isTranscribing: true
           };
@@ -1157,7 +1280,7 @@ export function usePipelineCall({
             id: turnId,
             sender: 'user',
             speaker: isSpanish ? 'Tú' : 'You',
-            text: fullTurnText,
+            text: cleanTurnText,
             tokens: previewTokens,
             isTranscribing: true,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -1170,16 +1293,20 @@ export function usePipelineCall({
         clearTimeout(silenceTimeoutRef.current);
       }
 
-      // Auto-finalize turn ONLY after stable silence (950ms)
+      // Auto-finalize turn ONLY after stable silence (1800ms)
       const capturedTurnId = turnId;
       silenceTimeoutRef.current = setTimeout(() => {
         if (currentTurnRef.current.id === capturedTurnId && !currentTurnRef.current.finalized) {
-          const textToFinalize = currentTurnRef.current.text || fullTurnText;
-          if (textToFinalize && textToFinalize.trim()) {
-            finalizeUserSpeechTurn(textToFinalize.trim(), capturedTurnId);
+          const rawTextToFinalize = currentTurnRef.current.text || fullTurnText;
+          const cleanTextToFinalize = cleanSpeechTurnText(rawTextToFinalize, targetLang);
+          if (cleanTextToFinalize && cleanTextToFinalize.trim()) {
+            finalizeUserSpeechTurn(cleanTextToFinalize.trim(), capturedTurnId);
+          } else {
+            console.log('[PipelineSTT] Silence timeout: turn contains only speech fillers/disfluencies -> discarding placeholder, keeping listening');
+            setLiveTranscript((prev) => prev.filter((m) => m.id !== capturedTurnId || !m.isTranscribing));
           }
         }
-      }, 950);
+      }, SPEECH_SILENCE_TIMEOUT_MS);
     };
 
     recognition.onerror = (event) => {
