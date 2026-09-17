@@ -20,7 +20,9 @@ import {
   getTranscriptFromLibrary,
   computeSubtitleHash,
   updateTranscriptPlaybackPosition,
-  getLibraryKey
+  getLibraryKey,
+  getSharedPlaybackPosition,
+  saveSharedPlaybackPosition
 } from '../services/transcriptLibraryStorage.js';
 import {
   Youtube,
@@ -473,15 +475,19 @@ export function YouTubeReaderPage({
         if (parsed.subtitleFormat) setSubtitleFormat(parsed.subtitleFormat);
         if (parsed.subtitleSource) setSubtitleSource(parsed.subtitleSource);
 
-        if (typeof parsed.lastPlaybackTime === 'number' && parsed.lastPlaybackTime > 0) {
-          const savedTime = parsed.lastPlaybackTime;
+        const sharedPos = parsed.videoId ? getSharedPlaybackPosition(parsed.videoId) : null;
+        const parsedTime = typeof parsed.lastPlaybackTime === 'number' && parsed.lastPlaybackTime > 0 ? parsed.lastPlaybackTime : 0;
+        const savedTime = Math.max(parsedTime, sharedPos?.lastPlaybackTime || 0);
+        const savedSubId = parsed.lastSubtitleId || sharedPos?.lastSubtitleId || null;
+
+        if (savedTime > 0) {
           setCurrentTime(savedTime);
           setSeekToTime({ time: savedTime, autoPlay: false });
           latestPositionRef.current.time = savedTime;
         }
-        if (parsed.lastSubtitleId) {
-          setPendingScrollSubtitleId(parsed.lastSubtitleId);
-          latestPositionRef.current.subId = parsed.lastSubtitleId;
+        if (savedSubId) {
+          setPendingScrollSubtitleId(savedSubId);
+          latestPositionRef.current.subId = savedSubId;
         }
 
         if (parsed.preferences) {
@@ -504,17 +510,51 @@ export function YouTubeReaderPage({
     }
   }, [targetLang, nativeLang, refreshLibraryCount, launchProgressiveTokenization]);
 
-  // Dynamic target language switch: re-tokenize subtitles to reflect new target language
+  // Dynamic target language switch: preserve playback position and load/re-tokenize subtitles for new target language
   const prevTargetLangRef = useRef(targetLang);
   useEffect(() => {
     if (prevTargetLangRef.current !== targetLang) {
       prevTargetLangRef.current = targetLang;
-      if (Array.isArray(subtitles) && subtitles.length > 0) {
-        const resetTokens = subtitles.map(s => ({ ...s, tokens: [] }));
-        launchProgressiveTokenization(resetTokens, targetLang);
+      
+      const curTime = latestPositionRef.current?.time ?? currentTime;
+      const curSubId = latestPositionRef.current?.subId ?? pendingScrollSubtitleId;
+
+      if (videoId && Array.isArray(subtitles) && subtitles.length > 0) {
+        const subHash = computeSubtitleHash(subtitles);
+        const newRecId = getLibraryKey(videoId, subHash, targetLang);
+        setCurrentRecordId(newRecId);
+
+        // Check if a saved transcript already exists for the new target language ($0 Groq reuse)
+        getTranscriptFromLibrary(videoId, subHash, targetLang).then((existing) => {
+          if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
+            setSubtitles(existing.subtitles);
+            setGlossProgress({
+              total: existing.subtitles.length,
+              completed: existing.completedLinesCount || existing.subtitles.length,
+              isGlossing: false,
+              isComplete: Boolean(existing.isComplete),
+              failed: 0
+            });
+          } else {
+            // Re-tokenize offline tokens for new target language
+            const resetTokens = subtitles.map(s => ({ ...s, tokens: [] }));
+            launchProgressiveTokenization(resetTokens, targetLang);
+          }
+
+          // Ensure cross-language playback position is retained
+          if (curTime > 0) {
+            updateTranscriptPlaybackPosition(newRecId, curTime, curSubId).catch(() => {});
+          }
+        }).catch(() => {
+          const resetTokens = subtitles.map(s => ({ ...s, tokens: [] }));
+          launchProgressiveTokenization(resetTokens, targetLang);
+          if (curTime > 0) {
+            updateTranscriptPlaybackPosition(newRecId, curTime, curSubId).catch(() => {});
+          }
+        });
       }
     }
-  }, [targetLang, subtitles, launchProgressiveTokenization]);
+  }, [targetLang, videoId, subtitles, currentTime, pendingScrollSubtitleId, launchProgressiveTokenization]);
 
   // 2. Persist session when critical state changes (quota-safe)
   useEffect(() => {
@@ -566,13 +606,16 @@ export function YouTubeReaderPage({
       saveThrottlerRef.current.timer = null;
     }
     const { time, subId } = latestPositionRef.current;
+    if (videoId && typeof time === 'number') {
+      saveSharedPlaybackPosition(videoId, null, time, subId);
+    }
     if (currentRecordId && typeof time === 'number') {
       updateTranscriptPlaybackPosition(currentRecordId, time, subId).catch(err => {
         console.warn('Failed to flush playback position:', err);
       });
       saveThrottlerRef.current.lastSavedTime = Date.now();
     }
-  }, [currentRecordId]);
+  }, [currentRecordId, videoId]);
 
   const handleTimeUpdate = useCallback((newTime) => {
     setCurrentTime(newTime);
@@ -588,6 +631,10 @@ export function YouTubeReaderPage({
       if (activeLine?.id) {
         latestPositionRef.current.subId = activeLine.id;
       }
+    }
+
+    if (videoId && typeof newTime === 'number') {
+      saveSharedPlaybackPosition(videoId, null, newTime, latestPositionRef.current.subId);
     }
 
     if (!currentRecordId) return;
@@ -615,7 +662,7 @@ export function YouTubeReaderPage({
         }
       }, 2000);
     }
-  }, [currentRecordId, subtitles]);
+  }, [currentRecordId, videoId, subtitles]);
 
   // Flush position on pause (state 2) or end (state 0)
   const handlePlayerStateChange = useCallback((state) => {
@@ -743,8 +790,12 @@ export function YouTubeReaderPage({
     // Launch progressive non-blocking tokenization
     launchProgressiveTokenization(normalized, targetLang);
 
-    // Persist initial record in library with position 0
+    // Persist initial record in library with position (uses shared position if existing)
     try {
+      const sharedPos = videoId ? getSharedPlaybackPosition(videoId) : null;
+      const initialTime = sharedPos?.lastPlaybackTime || 0;
+      const initialSubId = sharedPos?.lastSubtitleId || null;
+
       await saveTranscriptToLibrary({
         id: recId,
         videoId: videoId || 'novideo',
@@ -759,8 +810,8 @@ export function YouTubeReaderPage({
         isComplete: false,
         format: format || 'srt',
         subtitles: normalized,
-        lastPlaybackTime: 0,
-        lastSubtitleId: null
+        lastPlaybackTime: initialTime,
+        lastSubtitleId: initialSubId
       });
       await refreshLibraryCount();
     } catch (e) {
@@ -822,11 +873,13 @@ export function YouTubeReaderPage({
       });
     }
 
-    // Restore saved playback position and subtitle marker
-    const savedTime = typeof record.lastPlaybackTime === 'number' && !isNaN(record.lastPlaybackTime)
+    // Restore saved playback position and subtitle marker from record or shared video position
+    const sharedPos = record.videoId ? getSharedPlaybackPosition(record.videoId) : null;
+    const recTime = typeof record.lastPlaybackTime === 'number' && !isNaN(record.lastPlaybackTime)
       ? Math.max(0, record.lastPlaybackTime)
       : 0;
-    const savedSubId = record.lastSubtitleId || null;
+    const savedTime = Math.max(recTime, sharedPos?.lastPlaybackTime || 0);
+    const savedSubId = record.lastSubtitleId || sharedPos?.lastSubtitleId || null;
 
     setCurrentTime(savedTime);
     setSeekToTime({ time: savedTime, autoPlay: false });

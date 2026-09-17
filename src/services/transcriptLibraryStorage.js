@@ -10,9 +10,76 @@
 const DB_NAME = 'LinguaFlow_Transcripts_DB';
 const DB_VERSION = 1;
 const STORE_NAME = 'saved_transcripts';
+const SHARED_PLAYBACK_STORAGE_KEY = 'linguaflow_yt_playback_positions_v1';
 
 // In-memory fallback if IndexedDB is blocked or running in SSR / testing environment
 const memoryStore = new Map();
+// In-memory fallback for shared video playback positions
+const sharedPlaybackMemory = new Map();
+
+/**
+ * Retrieves the shared playback position for a given videoId across all languages.
+ * @param {string} videoId
+ * @returns {{ videoId: string, lastPlaybackTime: number, lastSubtitleId: string|null, updatedAt: string } | null}
+ */
+export function getSharedPlaybackPosition(videoId) {
+  if (!videoId) return null;
+  const cleanId = String(videoId).trim();
+  
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(SHARED_PLAYBACK_STORAGE_KEY);
+      if (raw) {
+        const map = JSON.parse(raw);
+        if (map && map[cleanId]) {
+          return map[cleanId];
+        }
+      }
+    } catch (e) {
+      // Fall back to memory
+    }
+  }
+  return sharedPlaybackMemory.get(cleanId) || null;
+}
+
+/**
+ * Saves or updates the shared playback position for a given videoId.
+ * @param {string} videoId
+ * @param {string|null} subtitleHash
+ * @param {number} playbackTime
+ * @param {string|null} subtitleId
+ */
+export function saveSharedPlaybackPosition(videoId, subtitleHash = null, playbackTime = 0, subtitleId = null) {
+  if (!videoId) return;
+  const cleanId = String(videoId).trim();
+  const time = typeof playbackTime === 'number' && !isNaN(playbackTime) ? Math.max(0, playbackTime) : 0;
+  const subId = subtitleId ? String(subtitleId) : null;
+  const now = new Date().toISOString();
+
+  const posData = {
+    videoId: cleanId,
+    subtitleHash: subtitleHash || null,
+    lastPlaybackTime: time,
+    lastSubtitleId: subId,
+    updatedAt: now
+  };
+
+  sharedPlaybackMemory.set(cleanId, posData);
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(SHARED_PLAYBACK_STORAGE_KEY);
+      const map = raw ? JSON.parse(raw) : {};
+      map[cleanId] = {
+        ...map[cleanId],
+        ...posData
+      };
+      localStorage.setItem(SHARED_PLAYBACK_STORAGE_KEY, JSON.stringify(map));
+    } catch (e) {
+      console.warn('[TranscriptLibrary] Failed to save shared playback position:', e);
+    }
+  }
+}
 
 /**
  * Computes a fast, stable 32-bit FNV-1a hash from subtitle lines.
@@ -43,6 +110,32 @@ export function computeSubtitleHash(subtitles = []) {
 export function getLibraryKey(videoId = 'generic', subtitleHash = 'nohash', targetLang = 'zh') {
   const cleanId = (videoId || 'generic').replace(/[^a-zA-Z0-9_-]/g, '');
   return `${cleanId}_${subtitleHash}_${targetLang}`;
+}
+
+/**
+ * Parses a compound library key into its component parts: { videoId, subtitleHash, targetLang }.
+ * Accurately supports videoIds containing hyphens and underscores.
+ * 
+ * @param {string} compoundKey
+ * @returns {{ videoId: string, subtitleHash: string, targetLang: string }}
+ */
+export function parseLibraryKey(compoundKey) {
+  if (!compoundKey) return { videoId: '', subtitleHash: '', targetLang: '' };
+  const str = String(compoundKey).trim();
+  const lastUnderscore = str.lastIndexOf('_');
+  if (lastUnderscore === -1) return { videoId: str, subtitleHash: '', targetLang: '' };
+
+  const targetLang = str.slice(lastUnderscore + 1);
+  const remaining = str.slice(0, lastUnderscore);
+  const secondLastUnderscore = remaining.lastIndexOf('_');
+  if (secondLastUnderscore === -1) {
+    return { videoId: remaining, subtitleHash: '', targetLang };
+  }
+
+  const subtitleHash = remaining.slice(secondLastUnderscore + 1);
+  const videoId = remaining.slice(0, secondLastUnderscore);
+
+  return { videoId: videoId || str, subtitleHash, targetLang };
 }
 
 /**
@@ -102,26 +195,42 @@ export async function saveTranscriptToLibrary(record) {
     return false;
   }
 
+  const cleanVideoId = String(record.videoId).trim();
   const targetLang = record.targetLanguage || record.targetLang || 'zh';
   const subHash = record.subtitleHash || computeSubtitleHash(record.subtitles);
-  const id = record.id || getLibraryKey(record.videoId, subHash, targetLang);
+  const id = record.id || getLibraryKey(cleanVideoId, subHash, targetLang);
 
   const existingMemory = memoryStore.get(id);
+  const sharedPos = getSharedPlaybackPosition(cleanVideoId);
 
-  // Preserve existing lastPlaybackTime / lastSubtitleId if not specified in incoming record
-  const effectivePlaybackTime = typeof record.lastPlaybackTime === 'number' && !isNaN(record.lastPlaybackTime)
-    ? Math.max(0, record.lastPlaybackTime)
-    : (typeof existingMemory?.lastPlaybackTime === 'number' ? existingMemory.lastPlaybackTime : 0);
+  // Preserve existing lastPlaybackTime / lastSubtitleId or use shared playback position
+  let effectivePlaybackTime = 0;
+  if (typeof record.lastPlaybackTime === 'number' && !isNaN(record.lastPlaybackTime)) {
+    effectivePlaybackTime = Math.max(0, record.lastPlaybackTime);
+  } else if (typeof existingMemory?.lastPlaybackTime === 'number') {
+    effectivePlaybackTime = existingMemory.lastPlaybackTime;
+  } else if (sharedPos && typeof sharedPos.lastPlaybackTime === 'number') {
+    effectivePlaybackTime = sharedPos.lastPlaybackTime;
+  }
+
+  // If incoming was 0 but shared had progress, preserve shared progress
+  if (effectivePlaybackTime === 0 && sharedPos && typeof sharedPos.lastPlaybackTime === 'number' && sharedPos.lastPlaybackTime > 0) {
+    effectivePlaybackTime = sharedPos.lastPlaybackTime;
+  }
 
   const effectiveSubtitleId = record.lastSubtitleId !== undefined
     ? (record.lastSubtitleId ? String(record.lastSubtitleId) : null)
-    : (existingMemory?.lastSubtitleId || null);
+    : (existingMemory?.lastSubtitleId || sharedPos?.lastSubtitleId || null);
+
+  if (effectivePlaybackTime > 0 || effectiveSubtitleId) {
+    saveSharedPlaybackPosition(cleanVideoId, subHash, effectivePlaybackTime, effectiveSubtitleId);
+  }
 
   const cleanRecord = {
     id,
-    videoId: record.videoId,
-    videoTitle: record.videoTitle || `YouTube Video (${record.videoId})`,
-    videoUrl: record.videoUrl || `https://www.youtube.com/watch?v=${record.videoId}`,
+    videoId: cleanVideoId,
+    videoTitle: record.videoTitle || `YouTube Video (${cleanVideoId})`,
+    videoUrl: record.videoUrl || `https://www.youtube.com/watch?v=${cleanVideoId}`,
     targetLanguage: targetLang,
     nativeLanguage: record.nativeLanguage || record.nativeLang || 'es',
     sourceType: record.sourceType || 'srt',
@@ -164,31 +273,36 @@ export async function saveTranscriptToLibrary(record) {
 
 /**
  * Fast, lightweight updater for last playback position and subtitle marker.
- * Persists lastPlaybackTime and lastSubtitleId without modifying subtitle contents.
+ * Persists lastPlaybackTime and lastSubtitleId across all target languages for this video.
  * 
- * @param {string} id - Transcript record ID (e.g. videoId_hash_targetLang)
+ * @param {string} idOrVideoId - Transcript record ID (e.g. videoId_hash_targetLang) or raw videoId
  * @param {number} playbackTime - Current playback time in seconds
  * @param {string|null} subtitleId - Active subtitle line ID
  * @returns {Promise<boolean>}
  */
-export async function updateTranscriptPlaybackPosition(id, playbackTime, subtitleId = null) {
-  if (!id) return false;
+export async function updateTranscriptPlaybackPosition(idOrVideoId, playbackTime, subtitleId = null) {
+  if (!idOrVideoId) return false;
   const time = typeof playbackTime === 'number' && !isNaN(playbackTime) ? Math.max(0, playbackTime) : 0;
   const subId = subtitleId ? String(subtitleId) : null;
   const now = new Date().toISOString();
 
-  // 1. Update memoryStore immediately
-  if (memoryStore.has(id)) {
-    const mem = memoryStore.get(id);
-    if (mem) {
-      mem.lastPlaybackTime = time;
-      mem.lastSubtitleId = subId;
-      mem.lastUpdatedAt = now;
-      mem.updatedAt = now;
+  const mem = memoryStore.get(idOrVideoId);
+  const cleanVideoId = mem?.videoId || parseLibraryKey(idOrVideoId).videoId || String(idOrVideoId).trim();
+
+  // 1. Save to shared playback storage
+  saveSharedPlaybackPosition(cleanVideoId, null, time, subId);
+
+  // 2. Update memoryStore for all records matching this videoId or exact ID
+  for (const [key, item] of memoryStore.entries()) {
+    if (key === idOrVideoId || item.videoId === cleanVideoId) {
+      item.lastPlaybackTime = time;
+      item.lastSubtitleId = subId;
+      item.lastUpdatedAt = now;
+      item.updatedAt = now;
     }
   }
 
-  // 2. Persist to IndexedDB
+  // 3. Persist to IndexedDB
   const db = await openDatabase();
   if (!db) return true;
 
@@ -196,18 +310,35 @@ export async function updateTranscriptPlaybackPosition(id, playbackTime, subtitl
     try {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const getReq = store.get(id);
 
-      getReq.onsuccess = (e) => {
-        const record = e.target.result;
-        if (record) {
-          record.lastPlaybackTime = time;
-          record.lastSubtitleId = subId;
-          record.lastUpdatedAt = now;
-          record.updatedAt = now;
-          store.put(record);
-        }
-      };
+      if (store.indexNames.contains('videoId')) {
+        const index = store.index('videoId');
+        const req = index.openCursor(IDBKeyRange.only(cleanVideoId));
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const record = cursor.value;
+            record.lastPlaybackTime = time;
+            record.lastSubtitleId = subId;
+            record.lastUpdatedAt = now;
+            record.updatedAt = now;
+            cursor.update(record);
+            cursor.continue();
+          }
+        };
+      } else {
+        const getReq = store.get(idOrVideoId);
+        getReq.onsuccess = (e) => {
+          const record = e.target.result;
+          if (record) {
+            record.lastPlaybackTime = time;
+            record.lastSubtitleId = subId;
+            record.lastUpdatedAt = now;
+            record.updatedAt = now;
+            store.put(record);
+          }
+        };
+      }
 
       transaction.oncomplete = () => resolve(true);
       transaction.onerror = () => resolve(false);
@@ -229,32 +360,47 @@ export async function updateTranscriptPlaybackPosition(id, playbackTime, subtitl
  */
 export async function getTranscriptFromLibrary(videoId, subtitleHash, targetLang = 'zh') {
   if (!videoId) return null;
-  const id = getLibraryKey(videoId, subtitleHash, targetLang);
+  const cleanVideoId = String(videoId).trim();
+  const id = getLibraryKey(cleanVideoId, subtitleHash, targetLang);
 
   const db = await openDatabase();
+  let result = null;
+
   if (!db) {
-    return memoryStore.get(id) || null;
+    result = memoryStore.get(id) || null;
+  } else {
+    result = await new Promise((resolve) => {
+      try {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(id);
+
+        request.onsuccess = (event) => {
+          const res = event.target.result || memoryStore.get(id) || null;
+          resolve(res);
+        };
+
+        request.onerror = () => {
+          resolve(memoryStore.get(id) || null);
+        };
+      } catch (err) {
+        console.warn('[TranscriptLibrary] Error reading from IndexedDB:', err);
+        resolve(memoryStore.get(id) || null);
+      }
+    });
   }
 
-  return new Promise((resolve) => {
-    try {
-      const transaction = db.transaction([STORE_NAME], 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.get(id);
-
-      request.onsuccess = (event) => {
-        const result = event.target.result || memoryStore.get(id) || null;
-        resolve(result);
-      };
-
-      request.onerror = () => {
-        resolve(memoryStore.get(id) || null);
-      };
-    } catch (err) {
-      console.warn('[TranscriptLibrary] Error reading from IndexedDB:', err);
-      resolve(memoryStore.get(id) || null);
+  if (result) {
+    const sharedPos = getSharedPlaybackPosition(cleanVideoId);
+    if (sharedPos && typeof sharedPos.lastPlaybackTime === 'number') {
+      result.lastPlaybackTime = Math.max(result.lastPlaybackTime || 0, sharedPos.lastPlaybackTime);
+      if (sharedPos.lastSubtitleId && !result.lastSubtitleId) {
+        result.lastSubtitleId = sharedPos.lastSubtitleId;
+      }
     }
-  });
+  }
+
+  return result;
 }
 
 /**
@@ -280,44 +426,60 @@ export async function findTranscriptsByVideoId(videoId, targetLang = null) {
 
 /**
  * Get all saved transcripts in the library sorted newest first.
+ * Enriched with shared playback position across languages.
  * 
  * @returns {Promise<Array>}
  */
 export async function getAllSavedTranscripts() {
   const db = await openDatabase();
+  let results = [];
+
   if (!db) {
-    return Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    results = Array.from(memoryStore.values());
+  } else {
+    results = await new Promise((resolve) => {
+      try {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.getAll();
+
+        request.onsuccess = (event) => {
+          const raw = event.target.result || [];
+          memoryStore.clear();
+          for (const item of raw) {
+            if (item && item.id) {
+              memoryStore.set(item.id, item);
+            }
+          }
+          resolve(raw);
+        };
+
+        request.onerror = (e) => {
+          console.warn('[TranscriptLibrary] Error listing from IndexedDB:', e.target?.error);
+          resolve(Array.from(memoryStore.values()));
+        };
+      } catch (err) {
+        console.warn('[TranscriptLibrary] Error listing from IndexedDB:', err);
+        resolve(Array.from(memoryStore.values()));
+      }
+    });
   }
 
-  return new Promise((resolve) => {
-    try {
-      const transaction = db.transaction([STORE_NAME], 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.getAll();
-
-      request.onsuccess = (event) => {
-        const results = event.target.result || [];
-        // Keep memoryStore strictly in sync with IndexedDB so deleted records are never resurrected
-        memoryStore.clear();
-        for (const item of results) {
-          if (item && item.id) {
-            memoryStore.set(item.id, item);
-          }
-        }
-
-        const list = [...results].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-        resolve(list);
+  const enrichedList = results.map(item => {
+    if (!item) return item;
+    const sharedPos = getSharedPlaybackPosition(item.videoId);
+    if (sharedPos && typeof sharedPos.lastPlaybackTime === 'number') {
+      const effectiveTime = Math.max(item.lastPlaybackTime || 0, sharedPos.lastPlaybackTime);
+      return {
+        ...item,
+        lastPlaybackTime: effectiveTime,
+        lastSubtitleId: sharedPos.lastSubtitleId || item.lastSubtitleId
       };
-
-      request.onerror = (e) => {
-        console.warn('[TranscriptLibrary] Error listing from IndexedDB:', e.target?.error);
-        resolve(Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)));
-      };
-    } catch (err) {
-      console.warn('[TranscriptLibrary] Error listing from IndexedDB:', err);
-      resolve(Array.from(memoryStore.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)));
     }
+    return item;
   });
+
+  return enrichedList.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 }
 
 /**
@@ -382,6 +544,13 @@ export async function getSavedTranscriptsCount() {
  */
 export async function clearTranscriptLibrary() {
   memoryStore.clear();
+  sharedPlaybackMemory.clear();
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.removeItem(SHARED_PLAYBACK_STORAGE_KEY);
+    } catch (e) {}
+  }
+
   const db = await openDatabase();
   if (!db) return true;
 
