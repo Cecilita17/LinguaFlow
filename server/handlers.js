@@ -1036,19 +1036,15 @@ CRITICAL RULES:
 1. The entire text body MUST be written 100% in ${targetName} (${targetNativeName}). DO NOT include sentences, explanations, translations, or notes in any other language.
 2. The text MUST match the learner's requested proficiency level: ${level}.
 3. The length of the text should be ${lengthInstruction}.
-4. Separate distinct paragraphs using a double newline ("\\n\\n"). Each paragraph should be coherent and formatted cleanly.
+4. Separate distinct paragraphs using double newlines ("\\n\\n"). Each paragraph should be coherent and formatted cleanly.
 5. Provide a short, captivating title strictly in ${targetName}.
-6. Return your output STRICTLY as a JSON object with this exact schema:
-{
-  "title": "Title in ${targetName}",
-  "text": "First paragraph in ${targetName}...\\n\\nSecond paragraph in ${targetName}...\\n\\nThird paragraph in ${targetName}..."
-}`;
+6. Output format: Return a JSON object with {"title": "Title in ${targetName}", "text": "Paragraph 1...\\n\\nParagraph 2..."} or directly the titled text in ${targetName}.`;
 
       const userPrompt = `Student requested topic / prompt: "${trimmedTopic}".
 Proficiency level: ${level}.
 Target language: ${targetName} (${targetNativeName}, code: ${targetLang}).
 
-Write the complete reading text in ${targetName} now according to the required JSON schema.`;
+Write the complete reading text in ${targetName} now.`;
 
       try {
         const controller = new AbortController();
@@ -1067,7 +1063,6 @@ Write the complete reading text in ${targetName} now according to the required J
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ],
-            response_format: { type: 'json_object' },
             temperature: 0.7,
             max_tokens: 2500
           })
@@ -1077,7 +1072,9 @@ Write the complete reading text in ${targetName} now according to the required J
 
         if (response.ok) {
           const data = await response.json();
-          const rawContent = data?.choices?.[0]?.message?.content;
+          const rawContent = data?.choices?.[0]?.message?.content || '';
+
+          // 1. Try JSON parsing
           const parsed = cleanAndParseJSON(rawContent);
           if (parsed && typeof parsed.text === 'string' && parsed.text.trim()) {
             return res.status(200).json({
@@ -1085,6 +1082,26 @@ Write the complete reading text in ${targetName} now according to the required J
               source: `groq (${activeModel})`,
               title: (parsed.title || trimmedTopic).trim(),
               text: parsed.text.trim()
+            });
+          }
+
+          // 2. If raw text or markdown format
+          if (rawContent.trim()) {
+            const lines = rawContent.trim().split('\n').map(l => l.trim()).filter(Boolean);
+            let title = trimmedTopic;
+            let textLines = [...lines];
+
+            if (lines.length > 1 && (lines[0].startsWith('#') || (lines[0].length < 80 && !lines[0].endsWith('.')))) {
+              title = lines[0].replace(/^#+\s*/, '').replace(/^[*"']+|[*"']+$/g, '').trim();
+              textLines = lines.slice(1);
+            }
+
+            const cleanText = textLines.join('\n\n').trim() || rawContent.trim();
+            return res.status(200).json({
+              success: true,
+              source: `groq (${activeModel})`,
+              title: title || trimmedTopic,
+              text: cleanText
             });
           }
         } else {
