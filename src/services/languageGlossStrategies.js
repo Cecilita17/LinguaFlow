@@ -1108,6 +1108,7 @@ export class ChineseGlossStrategy {
             pinyin: entry.auxiliary || entry.pinyin || null,
             gloss: entry.gloss || null,
             glossSource: 'offline',
+            targetLang: 'zh',
             isPunctuation: false
           });
           i += len;
@@ -1128,6 +1129,7 @@ export class ChineseGlossStrategy {
           pinyin: entry?.auxiliary || entry?.pinyin || null,
           gloss: entry?.gloss || null,
           glossSource: entry ? 'offline' : null,
+          targetLang: 'zh',
           isPunctuation: false
         });
         i += 1;
@@ -1145,6 +1147,7 @@ export class ChineseGlossStrategy {
           pinyin: null,
           gloss: null,
           glossSource: null,
+          targetLang: 'zh',
           isPunctuation: false
         });
         i += w.length;
@@ -1161,6 +1164,7 @@ export class ChineseGlossStrategy {
         pinyin: null,
         gloss: null,
         glossSource: null,
+        targetLang: 'zh',
         isPunctuation: PUNCTUATION_REGEX.test(single)
       });
       i += single.length;
@@ -1179,6 +1183,11 @@ export class ChineseGlossStrategy {
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
+
+    // Cross-language protection: Token gloss from another language is invalid for this strategy
+    if (token.targetLang && token.targetLang !== 'zh') {
+      return false;
+    }
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
@@ -1243,6 +1252,7 @@ export class ArabicGlossStrategy {
             translit: translit,
             gloss: isPunctuation ? null : (entry?.gloss || null),
             glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+            targetLang: 'ar',
             isPunctuation
           });
         }
@@ -1270,6 +1280,7 @@ export class ArabicGlossStrategy {
         translit: translit,
         gloss: isPunctuation ? null : (entry?.gloss || null),
         glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+        targetLang: 'ar',
         isPunctuation
       });
     }
@@ -1290,6 +1301,11 @@ export class ArabicGlossStrategy {
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
+
+    // Cross-language protection: Token gloss from another language is invalid for this strategy
+    if (token.targetLang && token.targetLang !== 'ar') {
+      return false;
+    }
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
@@ -1353,6 +1369,7 @@ export class PolishGlossStrategy {
             translit: null,
             gloss: isPunctuation ? null : (entry?.gloss || null),
             glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+            targetLang: 'pl',
             isPunctuation
           });
         }
@@ -1379,6 +1396,7 @@ export class PolishGlossStrategy {
         translit: null,
         gloss: isPunctuation ? null : (entry?.gloss || null),
         glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+        targetLang: 'pl',
         isPunctuation
       });
     }
@@ -1396,6 +1414,11 @@ export class PolishGlossStrategy {
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
+
+    // Cross-language protection: Token gloss from another language is invalid for this strategy
+    if (token.targetLang && token.targetLang !== 'pl') {
+      return false;
+    }
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
@@ -1719,6 +1742,7 @@ export class TurkishGlossStrategy {
           tokens.push({
             text: w,
             word: w,
+            targetLang: 'tr',
             auxiliary: null,
             pinyin: null,
             translit: null,
@@ -1745,6 +1769,7 @@ export class TurkishGlossStrategy {
       tokens.push({
         text: w,
         word: w,
+        targetLang: 'tr',
         auxiliary: null,
         pinyin: null,
         translit: null,
@@ -1772,6 +1797,7 @@ export class TurkishGlossStrategy {
 
   isTokenComplete(token) {
     if (!token) return false;
+    if (token.targetLang && token.targetLang !== this.code) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
@@ -1823,6 +1849,7 @@ export class DefaultGlossStrategy {
           tokens.push({
             text: w,
             word: w,
+            targetLang: this.code,
             auxiliary: null,
             pinyin: null,
             translit: null,
@@ -1843,6 +1870,7 @@ export class DefaultGlossStrategy {
       return {
         text: w,
         word: w,
+        targetLang: this.code,
         auxiliary: null,
         pinyin: null,
         translit: null,
@@ -1859,6 +1887,7 @@ export class DefaultGlossStrategy {
 
   isTokenComplete(token) {
     if (!token) return false;
+    if (token.targetLang && token.targetLang !== this.code) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;

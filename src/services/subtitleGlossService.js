@@ -86,6 +86,7 @@ export function tokenizeAndGlossLineOffline(rawText, targetLang = 'zh') {
       return parts.map(w => ({
         text: w,
         word: w,
+        targetLang,
         auxiliary: null,
         pinyin: null,
         translit: null,
@@ -496,6 +497,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       if (isManual) {
         return {
           ...orig,
+          targetLang: orig.targetLang || targetLang,
           glossSource: 'manual'
         };
       }
@@ -503,6 +505,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       // 2. TIER 2: AI GLOSS COMPLETION
       return {
         ...orig,
+        targetLang: orig.targetLang || targetLang,
         auxiliary: match.auxiliary || orig.auxiliary || null,
         pinyin: match.pinyin || orig.pinyin || null,
         translit: match.translit || orig.translit || null,
@@ -513,6 +516,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
 
     return {
       ...orig,
+      targetLang: orig.targetLang || targetLang,
       auxiliary: orig.auxiliary || null,
       pinyin: orig.pinyin || null,
       translit: orig.translit || null
@@ -626,6 +630,7 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
       result.push({
         text: currentAiToken.word,
         word: currentAiToken.word,
+        targetLang: 'zh',
         auxiliary: aux,
         pinyin: aux,
         translit: null,
