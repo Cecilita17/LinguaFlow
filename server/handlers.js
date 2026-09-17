@@ -188,23 +188,24 @@ export async function handlePedagogicalCorrect(req, res) {
     if (effectiveApiKey) {
       console.log(`Pedagogical correction requested with Groq [${activeModel}] for lang: ${targetLang}`);
 
-      const systemPrompt = `You are an expert pedagogical grammar correction engine for language learners.
-Your ONLY task is to analyze user learner sentences, detect errors (grammar, conjugation, cases, diacritics, vocabulary, code-switching), and output structured JSON.
+      const systemPrompt = `You are an expert pedagogical grammar correction and translation engine for language learners.
+Your ONLY task is to analyze user learner sentences, detect errors (grammar, conjugation, cases, diacritics, vocabulary, code-switching/foreign words), and output structured JSON.
 CRITICAL RULES:
 - NEVER engage in conversation or roleplay.
 - NEVER explain or add conversational greetings.
 - Always output STRICTLY valid JSON matching the requested schema.`;
 
-      const userPrompt = `Analyze this sentence in ${targetName} spoken by a student whose native language is ${nativeName} (Level: ${level}):
+      const userPrompt = `Analyze this sentence spoken by a student learning ${targetName} (Native language: ${nativeName}, Level: ${level}):
 "${rawText}"
 
 Tasks:
 1. If the sentence is grammatically, lexically, and naturally correct in ${targetName}, set "corrected_text" identical to "${rawText.replace(/"/g, '\\"')}" and "has_errors": false.
-2. If it contains mistakes (verb tense, gender, case agreement, spelling, awkward phrasing, or words left in ${nativeName}), write the natural grammatically correct version in "corrected_text" and set "has_errors": true. Preserve the user's intended meaning without unnecessary stylistic overhauls.
+   * Note: Words that are legitimate and valid in ${targetName} (including shared cognates/loanwords like "no", "hotel", "radio", "taxi", "idea", "bus", "bar", "piano", etc.) must NEVER be marked as errors.
+2. If the student uses any word, term, or expression in another language (e.g., Spanish, English, or any non-${targetName} language), or makes grammatical/spelling mistakes, TRANSLATE and correct those words into natural ${targetName}, integrating them seamlessly into the sentence in ${targetName}. Set "has_errors": true and write the full natural ${targetName} sentence in "corrected_text". Preserve the user's intended meaning without unnecessary stylistic rewrites.
 3. Return STRICTLY valid JSON with no markdown wrapping:
 {
   "original_text": "${rawText.replace(/"/g, '\\"')}",
-  "corrected_text": "corrected sentence in ${targetName}",
+  "corrected_text": "corrected sentence strictly in ${targetName}",
   "has_errors": false
 }`;
 
