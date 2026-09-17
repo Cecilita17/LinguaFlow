@@ -503,9 +503,9 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       // 2. TIER 2: AI GLOSS COMPLETION
       return {
         ...orig,
-        auxiliary: null,
-        pinyin: null,
-        translit: null,
+        auxiliary: match.auxiliary || orig.auxiliary || null,
+        pinyin: match.pinyin || orig.pinyin || null,
+        translit: match.translit || orig.translit || null,
         gloss: match.gloss || orig.gloss || null,
         glossSource: 'ai'
       };
@@ -513,9 +513,9 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
 
     return {
       ...orig,
-      auxiliary: null,
-      pinyin: null,
-      translit: null
+      auxiliary: orig.auxiliary || null,
+      pinyin: orig.pinyin || null,
+      translit: orig.translit || null
     };
   });
 }

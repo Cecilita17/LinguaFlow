@@ -1107,6 +1107,7 @@ export class ChineseGlossStrategy {
             auxiliary: entry.auxiliary || entry.pinyin || null,
             pinyin: entry.auxiliary || entry.pinyin || null,
             gloss: entry.gloss || null,
+            glossSource: 'offline',
             isPunctuation: false
           });
           i += len;
@@ -1126,6 +1127,7 @@ export class ChineseGlossStrategy {
           auxiliary: entry?.auxiliary || entry?.pinyin || null,
           pinyin: entry?.auxiliary || entry?.pinyin || null,
           gloss: entry?.gloss || null,
+          glossSource: entry ? 'offline' : null,
           isPunctuation: false
         });
         i += 1;
@@ -1142,6 +1144,7 @@ export class ChineseGlossStrategy {
           auxiliary: null,
           pinyin: null,
           gloss: null,
+          glossSource: null,
           isPunctuation: false
         });
         i += w.length;
@@ -1157,6 +1160,7 @@ export class ChineseGlossStrategy {
         auxiliary: null,
         pinyin: null,
         gloss: null,
+        glossSource: null,
         isPunctuation: PUNCTUATION_REGEX.test(single)
       });
       i += single.length;
@@ -1178,14 +1182,28 @@ export class ChineseGlossStrategy {
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
-    if (!gloss || (gloss === w && w !== '的')) return false;
 
-    // Chinese characters must have tone-marked Pinyin in auxiliary
-    if (/[\u4E00-\u9FFF]/.test(w)) {
-      const aux = typeof (token.auxiliary || token.pinyin) === 'string' ? (token.auxiliary || token.pinyin).trim() : '';
-      if (!aux || aux === gloss) return false;
+    const aux = typeof (token.auxiliary || token.pinyin) === 'string' ? (token.auxiliary || token.pinyin).trim() : '';
+
+    // Verified AI gloss
+    if (token.glossSource === 'ai' && gloss && (gloss !== w || w === '的')) {
+      if (/[\u4E00-\u9FFF]/.test(w)) {
+        return Boolean(aux && aux !== gloss);
+      }
+      return true;
     }
-    return true;
+
+    // Verified offline dictionary gloss
+    const entry = this.lookupOffline(w);
+    if (entry && entry.gloss && (entry.gloss !== w || w === '的')) {
+      const entryAux = entry.auxiliary || entry.pinyin || aux;
+      if (/[\u4E00-\u9FFF]/.test(w)) {
+        return Boolean(entryAux && entryAux !== entry.gloss);
+      }
+      return true;
+    }
+
+    return false;
   }
 }
 
@@ -1224,6 +1242,7 @@ export class ArabicGlossStrategy {
             pinyin: null,
             translit: translit,
             gloss: isPunctuation ? null : (entry?.gloss || null),
+            glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
             isPunctuation
           });
         }
@@ -1250,6 +1269,7 @@ export class ArabicGlossStrategy {
         pinyin: null,
         translit: translit,
         gloss: isPunctuation ? null : (entry?.gloss || null),
+        glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
         isPunctuation
       });
     }
@@ -1273,14 +1293,28 @@ export class ArabicGlossStrategy {
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
-    if (!gloss || gloss === w) return false;
 
-    // Arabic words must have Latin transliteration in auxiliary / translit
-    if (/[\u0600-\u06FF]/.test(w)) {
-      const aux = typeof (token.auxiliary || token.translit) === 'string' ? (token.auxiliary || token.translit).trim() : '';
-      if (!aux || aux === gloss) return false;
+    const aux = typeof (token.auxiliary || token.translit) === 'string' ? (token.auxiliary || token.translit).trim() : '';
+
+    // Verified AI gloss
+    if (token.glossSource === 'ai' && gloss && gloss !== w) {
+      if (/[\u0600-\u06FF]/.test(w)) {
+        return Boolean(aux && aux !== gloss);
+      }
+      return true;
     }
-    return true;
+
+    // Verified offline dictionary gloss
+    const entry = this.lookupOffline(w);
+    if (entry && entry.gloss && entry.gloss !== w) {
+      const entryTranslit = entry.translit || aux;
+      if (/[\u0600-\u06FF]/.test(w)) {
+        return Boolean(entryTranslit && entryTranslit !== entry.gloss);
+      }
+      return true;
+    }
+
+    return false;
   }
 }
 
@@ -1318,6 +1352,7 @@ export class PolishGlossStrategy {
             pinyin: null,
             translit: null,
             gloss: isPunctuation ? null : (entry?.gloss || null),
+            glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
             isPunctuation
           });
         }
@@ -1343,6 +1378,7 @@ export class PolishGlossStrategy {
         pinyin: null,
         translit: null,
         gloss: isPunctuation ? null : (entry?.gloss || null),
+        glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
         isPunctuation
       });
     }
@@ -1363,8 +1399,19 @@ export class PolishGlossStrategy {
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
-    if (!gloss || gloss.toLowerCase() === w.toLowerCase()) return false;
-    return true;
+
+    // Verified AI gloss
+    if (token.glossSource === 'ai' && gloss && gloss.toLowerCase() !== w.toLowerCase()) {
+      return true;
+    }
+
+    // Verified offline dictionary gloss
+    const entry = this.lookupOffline(w);
+    if (entry && entry.gloss && entry.gloss.toLowerCase() !== w.toLowerCase()) {
+      return true;
+    }
+
+    return false;
   }
 }
 
@@ -1676,6 +1723,7 @@ export class TurkishGlossStrategy {
             pinyin: null,
             translit: null,
             gloss: isPunctuation ? null : (entry?.gloss || null),
+            glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
             isPunctuation
           });
         }
@@ -1701,6 +1749,7 @@ export class TurkishGlossStrategy {
         pinyin: null,
         translit: null,
         gloss: isPunctuation ? null : (entry?.gloss || null),
+        glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
         isPunctuation
       });
     }
@@ -1729,8 +1778,19 @@ export class TurkishGlossStrategy {
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
-    if (!gloss || gloss.toLocaleLowerCase('tr-TR') === w.toLocaleLowerCase('tr-TR')) return false;
-    return true;
+
+    // Verified AI gloss
+    if (token.glossSource === 'ai' && gloss && gloss.toLocaleLowerCase('tr-TR') !== w.toLocaleLowerCase('tr-TR')) {
+      return true;
+    }
+
+    // Verified offline dictionary gloss
+    const entry = this.lookupOffline(w);
+    if (entry && entry.gloss && entry.gloss.toLocaleLowerCase('tr-TR') !== w.toLocaleLowerCase('tr-TR')) {
+      return true;
+    }
+
+    return false;
   }
 }
 
@@ -1767,6 +1827,7 @@ export class DefaultGlossStrategy {
             pinyin: null,
             translit: null,
             gloss: null,
+            glossSource: null,
             isPunctuation
           });
         }
@@ -1786,6 +1847,7 @@ export class DefaultGlossStrategy {
         pinyin: null,
         translit: null,
         gloss: null,
+        glossSource: null,
         isPunctuation
       };
     });
@@ -1800,9 +1862,22 @@ export class DefaultGlossStrategy {
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
+
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
-    return Boolean(gloss && gloss.toLowerCase() !== w.toLowerCase());
+
+    // Verified AI gloss
+    if (token.glossSource === 'ai' && gloss && gloss.toLowerCase() !== w.toLowerCase()) {
+      return true;
+    }
+
+    // Verified offline dictionary gloss
+    const entry = this.lookupOffline(w);
+    if (entry && entry.gloss && entry.gloss.toLowerCase() !== w.toLowerCase()) {
+      return true;
+    }
+
+    return false;
   }
 }
 
