@@ -166,7 +166,7 @@ export function Transcript({
               onGlossLine={handleGloss}
               isGlossing={Boolean(activeGlossingIds && (activeGlossingIds instanceof Set ? activeGlossingIds.has(line.id) : activeGlossingIds[line.id]))}
               isGlossingThisLine={Boolean(activeGlossingIds && (activeGlossingIds instanceof Set ? activeGlossingIds.has(line.id) : activeGlossingIds[line.id]))}
-              hasGloss={isGlossComplete(line, targetLang)}
+              hasGloss={isGlossComplete(line, targetLang, nativeLang)}
               fontSize={fontSize}
               showTimestamps={showTimestamps}
               searchQuery={searchQuery}

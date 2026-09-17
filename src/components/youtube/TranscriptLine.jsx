@@ -36,7 +36,7 @@ export function TranscriptLine({
   const isArabic = targetLang === 'ar' || /[\u0600-\u06FF]/.test(rawText || '');
   const isRtl = isRtlLanguage(targetLang) || isArabic;
   const textDirection = isRtl ? 'rtl' : 'ltr';
-  const isComplete = hasGloss || isGlossComplete(line, targetLang);
+  const isComplete = hasGloss || isGlossComplete(line, targetLang, nativeLang);
   const handleGloss = onGloss || onGlossLine;
   const glossing = isGlossing || isGlossingThisLine;
 

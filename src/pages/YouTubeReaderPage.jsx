@@ -200,8 +200,8 @@ export function YouTubeReaderPage({
   // Count how many subtitle lines are completely glossed
   const completedLinesCount = useMemo(() => {
     if (!Array.isArray(subtitles)) return 0;
-    return subtitles.filter(s => isGlossComplete(s, targetLang)).length;
-  }, [subtitles, targetLang]);
+    return subtitles.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
+  }, [subtitles, targetLang, nativeLang]);
 
   // Abort controller ref to stop / pause glossing
   const glossAbortControllerRef = useRef(null);
@@ -246,7 +246,7 @@ export function YouTubeReaderPage({
       if (idx < INITIAL_SYNC_LIMIT) {
         return {
           ...sub,
-          tokens: tokenizeAndGlossLineOffline(sub.text, lang)
+          tokens: tokenizeAndGlossLineOffline(sub.text, lang, nativeLang)
         };
       }
       return sub;
@@ -254,7 +254,7 @@ export function YouTubeReaderPage({
 
     setSubtitles(initialItems);
 
-    const completed = initialItems.filter(s => isGlossComplete(s, lang)).length;
+    const completed = initialItems.filter(s => isGlossComplete(s, lang, nativeLang)).length;
     setGlossProgress({
       total: initialItems.length,
       completed,
@@ -411,7 +411,7 @@ export function YouTubeReaderPage({
   // Individual line glossing (runs only for that paragraph, works even when auto-glossing is OFF)
   const handleGlossSingleLine = useCallback(async (line) => {
     if (!line || !line.id) return;
-    if (isGlossComplete(line, targetLang)) return; // $0 Groq cost, already glossed!
+    if (isGlossComplete(line, targetLang, nativeLang)) return; // $0 Groq cost, already glossed!
 
     setLoadingLineIds(prev => new Set(prev).add(line.id));
 
@@ -426,7 +426,7 @@ export function YouTubeReaderPage({
       setSubtitles(prevSubtitles => {
         const updatedList = prevSubtitles.map(s => s.id === line.id ? updatedLine : s);
 
-        const completedCount = updatedList.filter(s => isGlossComplete(s, targetLang)).length;
+        const completedCount = updatedList.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
         saveTranscriptToLibrary({
           videoId,
           videoTitle,

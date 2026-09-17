@@ -1046,29 +1046,16 @@ export class ChineseGlossStrategy {
     this.offlineDict = CHINESE_OFFLINE_DICT;
   }
 
-  tokenize(text) {
+  tokenize(text, nativeLang = 'es') {
     if (!text || typeof text !== 'string') return [];
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
-    // Phase 1 (Provisional): Dictionary-first longest-prefix-match segmentation for 0ms offline rendering.
-    //
-    // Intl.Segmenter('zh-CN') is intentionally NOT used as primary here because:
-    // 1. It produces inconsistent results across browsers and Node.js environments.
-    // 2. In Chromium and many environments, it returns individual CJK characters as
-    //    separate isWordLike=true segments, breaking compound words like 喜欢 → [喜, 欢].
-    // 3. The offline dict covers HSK 1-3 high-frequency words reliably.
-    //
-    // Architecture Note:
-    // - Local tokens generated here are strictly PROVISIONAL for instant UI display.
-    // - Phase 2 (Authoritative): mergeAiTokensWithSegmented() in subtitleGlossService.js performs
-    //   authoritative text-coverage resegmentation based on AI lexical units, grouping multi-character
-    //   words (e.g. 喜欢, 学习, 中文) seamlessly.
-    // - Once AI results are merged, the merged tokens are persisted in IndexedDB and never re-split.
-    return this.tokenizeFallback(cleanStr);
+    return this.tokenizeFallback(cleanStr, nativeLang);
   }
 
-  tokenizeFallback(cleanStr) {
+  tokenizeFallback(cleanStr, nativeLang = 'es') {
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
     const tokens = [];
     let i = 0;
     while (i < cleanStr.length) {
@@ -1099,16 +1086,18 @@ export class ChineseGlossStrategy {
       let dictMatched = false;
       for (let len = Math.min(6, remaining.length); len >= 2; len--) {
         const candidate = remaining.slice(0, len);
-        const entry = this.lookupOffline(candidate);
+        const entry = this.offlineDict[candidate];
         if (entry) {
+          const offlineGloss = isSpanishNative ? (entry.gloss || null) : null;
           tokens.push({
             text: candidate,
             word: candidate,
             auxiliary: entry.auxiliary || entry.pinyin || null,
             pinyin: entry.auxiliary || entry.pinyin || null,
-            gloss: entry.gloss || null,
-            glossSource: 'offline',
+            gloss: offlineGloss,
+            glossSource: (isSpanishNative && offlineGloss) ? 'offline' : null,
             targetLang: 'zh',
+            nativeLang: nativeLang || 'es',
             isPunctuation: false
           });
           i += len;
@@ -1121,15 +1110,17 @@ export class ChineseGlossStrategy {
       // Single CJK Character
       if (/^[\u4E00-\u9FFF]/.test(remaining)) {
         const char = remaining[0];
-        const entry = this.lookupOffline(char);
+        const entry = this.offlineDict[char];
+        const offlineGloss = isSpanishNative ? (entry?.gloss || null) : null;
         tokens.push({
           text: char,
           word: char,
           auxiliary: entry?.auxiliary || entry?.pinyin || null,
           pinyin: entry?.auxiliary || entry?.pinyin || null,
-          gloss: entry?.gloss || null,
-          glossSource: entry ? 'offline' : null,
+          gloss: offlineGloss,
+          glossSource: (isSpanishNative && offlineGloss) ? 'offline' : null,
           targetLang: 'zh',
+          nativeLang: nativeLang || 'es',
           isPunctuation: false
         });
         i += 1;
@@ -1148,6 +1139,7 @@ export class ChineseGlossStrategy {
           gloss: null,
           glossSource: null,
           targetLang: 'zh',
+          nativeLang: nativeLang || 'es',
           isPunctuation: false
         });
         i += w.length;
@@ -1165,6 +1157,7 @@ export class ChineseGlossStrategy {
         gloss: null,
         glossSource: null,
         targetLang: 'zh',
+        nativeLang: nativeLang || 'es',
         isPunctuation: PUNCTUATION_REGEX.test(single)
       });
       i += single.length;
@@ -1172,39 +1165,66 @@ export class ChineseGlossStrategy {
     return tokens;
   }
 
-  lookupOffline(word) {
+  lookupOffline(word, nativeLang = 'es') {
     if (!word) return null;
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
+    if (!isSpanishNative) return null;
     const clean = word.trim();
     return this.offlineDict[clean] || null;
   }
 
-  isTokenComplete(token) {
+  isTokenComplete(token, nativeLang = 'es') {
     if (!token) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
-    if (token.glossSource === 'manual' && gloss) return true;
+    if (!gloss) return false;
+
+    if (token.glossSource === 'manual') return true;
+
+    const targetNative = (nativeLang || 'es').toLowerCase().split('-')[0];
+    const tokenNative = (token.nativeLang || '').toLowerCase().split('-')[0];
+    const tokenTarget = (token.targetLang || '').toLowerCase().split('-')[0];
+
+    if (tokenTarget && tokenTarget !== 'zh') return false;
 
     const aux = typeof (token.auxiliary || token.pinyin) === 'string' ? (token.auxiliary || token.pinyin).trim() : '';
 
-    // Verified AI gloss: MUST match active targetLang ('zh')
-    if (token.glossSource === 'ai' && token.targetLang === 'zh' && gloss && (gloss !== w || w === '的')) {
+    // Verified AI gloss: MUST match targetLang ('zh') and requested nativeLang
+    if (token.glossSource === 'ai') {
+      if (tokenNative && tokenNative !== targetNative) return false;
+      if (!tokenNative) return false;
       if (/[\u4E00-\u9FFF]/.test(w)) {
-        return Boolean(aux && aux !== gloss);
+        return Boolean(aux);
       }
       return true;
     }
 
-    // Verified offline dictionary gloss
-    const entry = this.lookupOffline(w);
-    if (entry && entry.gloss && (entry.gloss !== w || w === '的')) {
-      const entryAux = entry.auxiliary || entry.pinyin || aux;
-      if (/[\u4E00-\u9FFF]/.test(w)) {
-        return Boolean(entryAux && entryAux !== entry.gloss);
+    // Verified offline dictionary gloss: strictly valid ONLY when nativeLang === 'es'
+    if (token.glossSource === 'offline') {
+      if (targetNative !== 'es') return false;
+      const entry = this.lookupOffline(w, 'es');
+      if (entry && entry.gloss) {
+        const entryAux = entry.auxiliary || entry.pinyin || aux;
+        if (/[\u4E00-\u9FFF]/.test(w)) {
+          return Boolean(entryAux);
+        }
+        return true;
       }
-      return true;
+    }
+
+    // Direct offline fallback check for nativeLang === 'es'
+    if (targetNative === 'es') {
+      const entry = this.lookupOffline(w, 'es');
+      if (entry && entry.gloss) {
+        const entryAux = entry.auxiliary || entry.pinyin || aux;
+        if (/[\u4E00-\u9FFF]/.test(w)) {
+          return Boolean(entryAux);
+        }
+        return true;
+      }
     }
 
     return false;
@@ -1222,11 +1242,12 @@ export class ArabicGlossStrategy {
     this.offlineDict = ARABIC_OFFLINE_DICT;
   }
 
-  tokenize(text) {
+  tokenize(text, nativeLang = 'es') {
     if (!text || typeof text !== 'string') return [];
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
     const tokens = [];
     try {
       if (typeof Intl !== 'undefined' && Intl.Segmenter) {
@@ -1236,7 +1257,7 @@ export class ArabicGlossStrategy {
           const w = seg.segment.trim();
           if (!w) continue;
           const isPunctuation = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
-          const entry = isPunctuation ? null : this.lookupOffline(w);
+          const entry = isPunctuation ? null : this.lookupOffline(w, nativeLang);
           const translit = isPunctuation ? null : (entry?.translit || getArabicTransliteration(w));
 
           tokens.push({
@@ -1246,8 +1267,9 @@ export class ArabicGlossStrategy {
             pinyin: null,
             translit: translit,
             gloss: isPunctuation ? null : (entry?.gloss || null),
-            glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+            glossSource: isPunctuation ? undefined : ((isSpanishNative && entry?.gloss) ? 'offline' : null),
             targetLang: 'ar',
+            nativeLang: nativeLang || 'es',
             isPunctuation
           });
         }
@@ -1264,7 +1286,7 @@ export class ArabicGlossStrategy {
       const w = part.trim();
       if (!w) continue;
       const isPunctuation = PUNCTUATION_REGEX.test(w);
-      const entry = isPunctuation ? null : this.lookupOffline(w);
+      const entry = isPunctuation ? null : this.lookupOffline(w, nativeLang);
       const translit = isPunctuation ? null : (entry?.translit || getArabicTransliteration(w));
 
       tokens.push({
@@ -1274,16 +1296,19 @@ export class ArabicGlossStrategy {
         pinyin: null,
         translit: translit,
         gloss: isPunctuation ? null : (entry?.gloss || null),
-        glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+        glossSource: isPunctuation ? undefined : ((isSpanishNative && entry?.gloss) ? 'offline' : null),
         targetLang: 'ar',
+        nativeLang: nativeLang || 'es',
         isPunctuation
       });
     }
     return tokens;
   }
 
-  lookupOffline(word) {
+  lookupOffline(word, nativeLang = 'es') {
     if (!word) return null;
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
+    if (!isSpanishNative) return null;
     const clean = word.trim();
     if (this.offlineDict[clean]) return this.offlineDict[clean];
     const stripped = clean.replace(/[\u064B-\u065F\u0670]/g, '');
@@ -1291,33 +1316,58 @@ export class ArabicGlossStrategy {
     return null;
   }
 
-  isTokenComplete(token) {
+  isTokenComplete(token, nativeLang = 'es') {
     if (!token) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
-    if (token.glossSource === 'manual' && gloss) return true;
+    if (!gloss) return false;
+
+    if (token.glossSource === 'manual') return true;
+
+    const targetNative = (nativeLang || 'es').toLowerCase().split('-')[0];
+    const tokenNative = (token.nativeLang || '').toLowerCase().split('-')[0];
+    const tokenTarget = (token.targetLang || '').toLowerCase().split('-')[0];
+
+    if (tokenTarget && tokenTarget !== 'ar') return false;
 
     const aux = typeof (token.auxiliary || token.translit) === 'string' ? (token.auxiliary || token.translit).trim() : '';
 
-    // Verified AI gloss: MUST match active targetLang ('ar')
-    if (token.glossSource === 'ai' && token.targetLang === 'ar' && gloss && gloss !== w) {
+    // Verified AI gloss: MUST match active targetLang ('ar') and requested nativeLang
+    if (token.glossSource === 'ai') {
+      if (tokenNative && tokenNative !== targetNative) return false;
+      if (!tokenNative) return false;
       if (/[\u0600-\u06FF]/.test(w)) {
-        return Boolean(aux && aux !== gloss);
+        return Boolean(aux);
       }
       return true;
     }
 
-    // Verified offline dictionary gloss
-    const entry = this.lookupOffline(w);
-    if (entry && entry.gloss && entry.gloss !== w) {
-      const entryTranslit = entry.translit || aux;
-      if (/[\u0600-\u06FF]/.test(w)) {
-        return Boolean(entryTranslit && entryTranslit !== entry.gloss);
+    // Verified offline dictionary gloss: strictly valid ONLY when nativeLang === 'es'
+    if (token.glossSource === 'offline') {
+      if (targetNative !== 'es') return false;
+      const entry = this.lookupOffline(w, 'es');
+      if (entry && entry.gloss) {
+        const entryTranslit = entry.translit || aux;
+        if (/[\u0600-\u06FF]/.test(w)) {
+          return Boolean(entryTranslit);
+        }
+        return true;
       }
-      return true;
+    }
+
+    // Direct offline lookup fallback for nativeLang === 'es'
+    if (targetNative === 'es') {
+      const entry = this.lookupOffline(w, 'es');
+      if (entry && entry.gloss) {
+        const entryTranslit = entry.translit || aux;
+        if (/[\u0600-\u06FF]/.test(w)) {
+          return Boolean(entryTranslit);
+        }
+        return true;
+      }
     }
 
     return false;
@@ -1335,11 +1385,12 @@ export class PolishGlossStrategy {
     this.offlineDict = POLISH_OFFLINE_DICT;
   }
 
-  tokenize(text) {
+  tokenize(text, nativeLang = 'es') {
     if (!text || typeof text !== 'string') return [];
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
     try {
       if (typeof Intl !== 'undefined' && Intl.Segmenter) {
         const segmenter = new Intl.Segmenter('pl', { granularity: 'word' });
@@ -1349,7 +1400,7 @@ export class PolishGlossStrategy {
           const w = seg.segment.trim();
           if (!w) continue;
           const isPunctuation = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
-          const entry = isPunctuation ? null : this.lookupOffline(w);
+          const entry = isPunctuation ? null : this.lookupOffline(w, nativeLang);
 
           tokens.push({
             text: w,
@@ -1358,8 +1409,9 @@ export class PolishGlossStrategy {
             pinyin: null,
             translit: null,
             gloss: isPunctuation ? null : (entry?.gloss || null),
-            glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+            glossSource: isPunctuation ? undefined : ((isSpanishNative && entry?.gloss) ? 'offline' : null),
             targetLang: 'pl',
+            nativeLang: nativeLang || 'es',
             isPunctuation
           });
         }
@@ -1376,7 +1428,7 @@ export class PolishGlossStrategy {
       const w = part.trim();
       if (!w) continue;
       const isPunctuation = PUNCTUATION_REGEX.test(w);
-      const entry = isPunctuation ? null : this.lookupOffline(w);
+      const entry = isPunctuation ? null : this.lookupOffline(w, nativeLang);
 
       tokens.push({
         text: w,
@@ -1385,38 +1437,62 @@ export class PolishGlossStrategy {
         pinyin: null,
         translit: null,
         gloss: isPunctuation ? null : (entry?.gloss || null),
-        glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+        glossSource: isPunctuation ? undefined : ((isSpanishNative && entry?.gloss) ? 'offline' : null),
         targetLang: 'pl',
+        nativeLang: nativeLang || 'es',
         isPunctuation
       });
     }
     return tokens;
   }
 
-  lookupOffline(word) {
+  lookupOffline(word, nativeLang = 'es') {
     if (!word) return null;
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
+    if (!isSpanishNative) return null;
     const clean = word.trim().toLowerCase();
     return this.offlineDict[clean] || null;
   }
 
-  isTokenComplete(token) {
+  isTokenComplete(token, nativeLang = 'es') {
     if (!token) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
-    if (token.glossSource === 'manual' && gloss) return true;
+    if (!gloss) return false;
 
-    // Verified AI gloss: MUST match active targetLang ('pl')
-    if (token.glossSource === 'ai' && token.targetLang === 'pl' && gloss && gloss.toLowerCase() !== w.toLowerCase()) {
+    if (token.glossSource === 'manual') return true;
+
+    const targetNative = (nativeLang || 'es').toLowerCase().split('-')[0];
+    const tokenNative = (token.nativeLang || '').toLowerCase().split('-')[0];
+    const tokenTarget = (token.targetLang || '').toLowerCase().split('-')[0];
+
+    if (tokenTarget && tokenTarget !== 'pl') return false;
+
+    // Verified AI gloss: MUST match active targetLang ('pl') and requested nativeLang
+    if (token.glossSource === 'ai') {
+      if (tokenNative && tokenNative !== targetNative) return false;
+      if (!tokenNative) return false;
       return true;
     }
 
-    // Verified offline dictionary gloss
-    const entry = this.lookupOffline(w);
-    if (entry && entry.gloss && entry.gloss.toLowerCase() !== w.toLowerCase()) {
-      return true;
+    // Verified offline dictionary gloss: strictly valid ONLY when nativeLang === 'es'
+    if (token.glossSource === 'offline') {
+      if (targetNative !== 'es') return false;
+      const entry = this.lookupOffline(w, 'es');
+      if (entry && entry.gloss) {
+        return true;
+      }
+    }
+
+    // Direct offline lookup fallback for nativeLang === 'es'
+    if (targetNative === 'es') {
+      const entry = this.lookupOffline(w, 'es');
+      if (entry && entry.gloss) {
+        return true;
+      }
     }
 
     return false;
@@ -1708,11 +1784,12 @@ export class TurkishGlossStrategy {
     this.offlineDict = TURKISH_OFFLINE_DICT;
   }
 
-  tokenize(text) {
+  tokenize(text, nativeLang = 'es') {
     if (!text || typeof text !== 'string') return [];
     const cleanStr = text.trim();
     if (!cleanStr) return [];
 
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
     try {
       if (typeof Intl !== 'undefined' && Intl.Segmenter) {
         const segmenter = new Intl.Segmenter('tr', { granularity: 'word' });
@@ -1722,17 +1799,18 @@ export class TurkishGlossStrategy {
           const w = seg.segment.trim();
           if (!w) continue;
           const isPunctuation = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
-          const entry = isPunctuation ? null : this.lookupOffline(w);
+          const entry = isPunctuation ? null : this.lookupOffline(w, nativeLang);
 
           tokens.push({
             text: w,
             word: w,
             targetLang: 'tr',
+            nativeLang: nativeLang || 'es',
             auxiliary: null,
             pinyin: null,
             translit: null,
             gloss: isPunctuation ? null : (entry?.gloss || null),
-            glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+            glossSource: isPunctuation ? undefined : ((isSpanishNative && entry?.gloss) ? 'offline' : null),
             isPunctuation
           });
         }
@@ -1749,25 +1827,28 @@ export class TurkishGlossStrategy {
       const w = part.trim();
       if (!w) continue;
       const isPunctuation = PUNCTUATION_REGEX.test(w);
-      const entry = isPunctuation ? null : this.lookupOffline(w);
+      const entry = isPunctuation ? null : this.lookupOffline(w, nativeLang);
 
       tokens.push({
         text: w,
         word: w,
         targetLang: 'tr',
+        nativeLang: nativeLang || 'es',
         auxiliary: null,
         pinyin: null,
         translit: null,
         gloss: isPunctuation ? null : (entry?.gloss || null),
-        glossSource: isPunctuation ? undefined : (entry ? 'offline' : null),
+        glossSource: isPunctuation ? undefined : ((isSpanishNative && entry?.gloss) ? 'offline' : null),
         isPunctuation
       });
     }
     return tokens;
   }
 
-  lookupOffline(word) {
+  lookupOffline(word, nativeLang = 'es') {
     if (!word) return null;
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
+    if (!isSpanishNative) return null;
     const clean = word.trim().toLocaleLowerCase('tr-TR');
     if (this.offlineDict[clean]) return this.offlineDict[clean];
 
@@ -1780,24 +1861,45 @@ export class TurkishGlossStrategy {
     return null;
   }
 
-  isTokenComplete(token) {
+  isTokenComplete(token, nativeLang = 'es') {
     if (!token) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
+    if (!gloss) return false;
+
     if (token.glossSource === 'manual' && gloss) return true;
 
-    // Verified AI gloss: MUST match active targetLang ('tr')
-    if (token.glossSource === 'ai' && token.targetLang === 'tr' && gloss && gloss.toLocaleLowerCase('tr-TR') !== w.toLocaleLowerCase('tr-TR')) {
+    const targetNative = (nativeLang || 'es').toLowerCase().split('-')[0];
+    const tokenNative = (token.nativeLang || '').toLowerCase().split('-')[0];
+    const tokenTarget = (token.targetLang || '').toLowerCase().split('-')[0];
+
+    if (tokenTarget && tokenTarget !== 'tr') return false;
+
+    // Verified AI gloss: MUST match active targetLang ('tr') and requested nativeLang
+    if (token.glossSource === 'ai') {
+      if (tokenNative && tokenNative !== targetNative) return false;
+      if (!tokenNative) return false;
       return true;
     }
 
-    // Verified offline dictionary gloss
-    const entry = this.lookupOffline(w);
-    if (entry && entry.gloss && entry.gloss.toLocaleLowerCase('tr-TR') !== w.toLocaleLowerCase('tr-TR')) {
-      return true;
+    // Verified offline dictionary gloss: strictly valid ONLY when nativeLang === 'es'
+    if (token.glossSource === 'offline') {
+      if (targetNative !== 'es') return false;
+      const entry = this.lookupOffline(w, 'es');
+      if (entry && entry.gloss) {
+        return true;
+      }
+    }
+
+    // Direct offline lookup fallback for nativeLang === 'es'
+    if (targetNative === 'es') {
+      const entry = this.lookupOffline(w, 'es');
+      if (entry && entry.gloss) {
+        return true;
+      }
     }
 
     return false;
@@ -1815,7 +1917,7 @@ export class DefaultGlossStrategy {
     this.offlineDict = {};
   }
 
-  tokenize(text) {
+  tokenize(text, nativeLang = 'es') {
     if (!text || typeof text !== 'string') return [];
     const cleanStr = text.trim();
     if (!cleanStr) return [];
@@ -1834,6 +1936,7 @@ export class DefaultGlossStrategy {
             text: w,
             word: w,
             targetLang: this.code,
+            nativeLang: nativeLang || 'es',
             auxiliary: null,
             pinyin: null,
             translit: null,
@@ -1855,6 +1958,7 @@ export class DefaultGlossStrategy {
         text: w,
         word: w,
         targetLang: this.code,
+        nativeLang: nativeLang || 'es',
         auxiliary: null,
         pinyin: null,
         translit: null,
@@ -1869,23 +1973,28 @@ export class DefaultGlossStrategy {
     return null;
   }
 
-  isTokenComplete(token) {
+  isTokenComplete(token, nativeLang = 'es') {
     if (!token) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
+    if (!gloss) return false;
+
     if (token.glossSource === 'manual' && gloss) return true;
 
-    // Verified AI gloss: MUST match this strategy's active targetLang
-    if (token.glossSource === 'ai' && token.targetLang === this.code && gloss && gloss.toLowerCase() !== w.toLowerCase()) {
-      return true;
-    }
+    const targetNative = (nativeLang || 'es').toLowerCase().split('-')[0];
+    const tokenNative = (token.nativeLang || '').toLowerCase().split('-')[0];
+    const tokenTarget = (token.targetLang || '').toLowerCase().split('-')[0];
+    const strategyTarget = (this.code || '').toLowerCase().split('-')[0];
 
-    // Verified offline dictionary gloss
-    const entry = this.lookupOffline(w);
-    if (entry && entry.gloss && entry.gloss.toLowerCase() !== w.toLowerCase()) {
+    if (tokenTarget && tokenTarget !== strategyTarget) return false;
+
+    // Verified AI gloss: MUST match active targetLang and requested nativeLang
+    if (token.glossSource === 'ai') {
+      if (tokenNative && tokenNative !== targetNative) return false;
+      if (!tokenNative) return false;
       return true;
     }
 

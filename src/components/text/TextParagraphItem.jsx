@@ -44,7 +44,7 @@ export function TextParagraphItem({
   const isChinese = targetLang === 'zh';
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
-  const isComplete = hasGloss || isGlossComplete(paragraph, targetLang);
+  const isComplete = hasGloss || isGlossComplete(paragraph, targetLang, nativeLang);
   const handleGloss = onGloss || onGlossParagraph;
 
   // Responsive font size classes

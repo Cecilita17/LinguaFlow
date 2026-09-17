@@ -69,7 +69,7 @@ export function getEffectiveApiKey(explicitKey = '') {
  * Tokenize a single text line into words with offline Pinyin, transliteration, and glosses.
  * Uses language-tailored strategy (e.g. Intl.Segmenter for Chinese words, Arabic letters + vowels, Polish Latin words).
  */
-export function tokenizeAndGlossLineOffline(rawText, targetLang = 'zh') {
+export function tokenizeAndGlossLineOffline(rawText, targetLang = 'zh', nativeLang = 'es') {
   if (!rawText || typeof rawText !== 'string') return [];
   const text = rawText.trim();
   if (!text) return [];
@@ -77,7 +77,7 @@ export function tokenizeAndGlossLineOffline(rawText, targetLang = 'zh') {
   try {
     const strategy = getLanguageGlossStrategy(targetLang);
     if (!strategy || typeof strategy.tokenize !== 'function') return [];
-    const tokens = strategy.tokenize(text);
+    const tokens = strategy.tokenize(text, nativeLang);
     return Array.isArray(tokens) ? tokens : [];
   } catch (err) {
     console.warn(`[tokenizeAndGlossLineOffline] Fallback tokenization for lang "${targetLang}":`, err);
@@ -87,10 +87,12 @@ export function tokenizeAndGlossLineOffline(rawText, targetLang = 'zh') {
         text: w,
         word: w,
         targetLang,
+        nativeLang: nativeLang || 'es',
         auxiliary: null,
         pinyin: null,
         translit: null,
         gloss: null,
+        glossSource: null,
         isPunctuation: PUNCTUATION_REGEX.test(w)
       }));
     } catch {
@@ -103,7 +105,7 @@ export function tokenizeAndGlossLineOffline(rawText, targetLang = 'zh') {
  * Rigorously checks whether a subtitle line is completely and authentically glossed.
  * Evaluates completion according to the language-specific strategy rules.
  */
-export function isGlossComplete(sub, targetLang = 'zh') {
+export function isGlossComplete(sub, targetLang = 'zh', nativeLang = 'es') {
   if (!sub || typeof sub !== 'object') return false;
   if (!Array.isArray(sub.tokens) || sub.tokens.length === 0) return false;
 
@@ -120,7 +122,7 @@ export function isGlossComplete(sub, targetLang = 'zh') {
   if (substantiveTokens.length === 0) return true;
 
   for (const token of substantiveTokens) {
-    if (!strategy.isTokenComplete(token)) {
+    if (!strategy.isTokenComplete(token, nativeLang)) {
       return false;
     }
   }
@@ -143,7 +145,7 @@ export function isGlossComplete(sub, targetLang = 'zh') {
       if (
         w1.length === 1 && w2.length === 1 &&
         /[\u4e00-\u9fa5]/.test(w1) && /[\u4e00-\u9fa5]/.test(w2) &&
-        zhStrategy.lookupOffline(w1 + w2)
+        zhStrategy.lookupOffline(w1 + w2, 'es')
       ) {
         return false; // Adjacent chars form a compound word → segmentation needs correction
       }
@@ -153,7 +155,7 @@ export function isGlossComplete(sub, targetLang = 'zh') {
         if (
           w1.length === 1 && w2.length === 1 && w3.length === 1 &&
           /[\u4e00-\u9fa5]/.test(w3) &&
-          zhStrategy.lookupOffline(w1 + w2 + w3)
+          zhStrategy.lookupOffline(w1 + w2 + w3, 'es')
         ) {
           return false;
         }
@@ -197,7 +199,7 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
         .filter(t => !t.isPunctuation && (t.text || t.word))
         .map(t => t.text || t.word);
       const unknownTokens = (l.tokens || [])
-        .filter(t => !t.isPunctuation && (t.text || t.word) && !strategy.isTokenComplete(t))
+        .filter(t => !t.isPunctuation && (t.text || t.word) && !strategy.isTokenComplete(t, nativeLang))
         .map(t => t.text || t.word);
 
       return {
@@ -269,20 +271,22 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
 }
 
 /**
- * Cache key generator for persistent storage (version 3 ensures auxiliary-only schema)
+ * Cache key generator for persistent storage (version 4 ensures targetLang + nativeLang pair isolation)
  */
-function getStorageKey(videoId, subtitlesCount, targetLang = 'zh') {
+export function getStorageKey(videoId, subtitlesCount, targetLang = 'zh', nativeLang = 'es') {
   const cleanId = (videoId || 'generic').replace(/[^a-zA-Z0-9_-]/g, '');
-  return `linguaflow_yt_gloss_v3_${targetLang}_${cleanId}_${subtitlesCount}`;
+  const cleanTarget = (targetLang || 'zh').toLowerCase().split('-')[0];
+  const cleanNative = (nativeLang || 'es').toLowerCase().split('-')[0];
+  return `linguaflow_yt_gloss_v4_${cleanTarget}_${cleanNative}_${cleanId}_${subtitlesCount}`;
 }
 
 /**
  * Load cached gloss lines from localStorage
  */
-export function loadCachedGlosses(videoId, subtitlesCount, targetLang = 'zh') {
+export function loadCachedGlosses(videoId, subtitlesCount, targetLang = 'zh', nativeLang = 'es') {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return {};
-    const key = getStorageKey(videoId, subtitlesCount, targetLang);
+    const key = getStorageKey(videoId, subtitlesCount, targetLang, nativeLang);
     const saved = localStorage.getItem(key);
     if (saved) {
       const parsed = JSON.parse(saved);
@@ -299,10 +303,10 @@ export function loadCachedGlosses(videoId, subtitlesCount, targetLang = 'zh') {
 /**
  * Save cached gloss lines to localStorage
  */
-export function saveCachedGlosses(videoId, subtitlesCount, cacheMap, targetLang = 'zh') {
+export function saveCachedGlosses(videoId, subtitlesCount, cacheMap, targetLang = 'zh', nativeLang = 'es') {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
-    const key = getStorageKey(videoId, subtitlesCount, targetLang);
+    const key = getStorageKey(videoId, subtitlesCount, targetLang, nativeLang);
     localStorage.setItem(key, JSON.stringify(cacheMap));
   } catch (e) {
     console.warn('Failed to save glosses cache to storage:', e);
@@ -404,7 +408,7 @@ export function validateChineseAiSegmentation(originalText, aiTokens) {
  * @param {string} [originalText=''] - Raw original sentence text
  * @returns {Array} Final lexical tokens, or safe fallback if validation fails
  */
-export function mergeChineseAiTokensByCoverage(originalTokens = [], aiTokens = [], originalText = '') {
+export function mergeChineseAiTokensByCoverage(originalTokens = [], aiTokens = [], originalText = '', nativeLang = 'es') {
   if (!Array.isArray(aiTokens) || aiTokens.length === 0) {
     return originalTokens;
   }
@@ -425,7 +429,7 @@ export function mergeChineseAiTokensByCoverage(originalTokens = [], aiTokens = [
   }
 
   // 2. Resegment by coverage
-  const resegmented = tryChineseResegmentation(originalTokens, aiTokens, authoritativeText);
+  const resegmented = tryChineseResegmentation(originalTokens, aiTokens, authoritativeText, nativeLang);
   if (resegmented !== null && resegmented.length > 0) {
     return resegmented;
   }
@@ -449,9 +453,10 @@ export function mergeChineseAiTokensByCoverage(originalTokens = [], aiTokens = [
  * @param {Array} aiTokens - AI-returned tokens with lexical groupings
  * @param {string} targetLang - Target language code (e.g. 'zh', 'ar', 'pl')
  * @param {string} [originalText=''] - Optional raw original text of the sentence/paragraph
+ * @param {string} [nativeLang='es'] - User native language for gloss translation
  * @returns {Array} Final merged/resegmented tokens
  */
-export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], targetLang = 'zh', originalText = '') {
+export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], targetLang = 'zh', originalText = '', nativeLang = 'es') {
   if (!Array.isArray(aiTokens) || aiTokens.length === 0) {
     return originalTokens;
   }
@@ -460,7 +465,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
   // EXCLUSIVE CHINESE BRANCH (Coverage-based lexical merge)
   // ============================================================
   if (targetLang === 'zh') {
-    return mergeChineseAiTokensByCoverage(originalTokens, aiTokens, originalText);
+    return mergeChineseAiTokensByCoverage(originalTokens, aiTokens, originalText, nativeLang);
   }
 
   // ============================================================
@@ -507,6 +512,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       return {
         ...orig,
         targetLang: targetLang,
+        nativeLang: nativeLang || 'es',
         auxiliary: match.auxiliary || null,
         pinyin: match.pinyin || null,
         translit: match.translit || null,
@@ -521,12 +527,13 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       return orig;
     }
 
-    // If it's an offline dictionary match for the ACTIVE strategy, preserve/set it with targetLang
-    const offlineEntry = strategy.lookupOffline(w);
+    // If it's an offline dictionary match for the ACTIVE strategy and nativeLang, preserve/set it with targetLang & nativeLang
+    const offlineEntry = strategy.lookupOffline(w, nativeLang);
     if (offlineEntry && offlineEntry.gloss) {
       return {
         ...orig,
         targetLang: targetLang,
+        nativeLang: nativeLang || 'es',
         auxiliary: offlineEntry.auxiliary || offlineEntry.pinyin || offlineEntry.translit || null,
         pinyin: offlineEntry.pinyin || offlineEntry.auxiliary || null,
         translit: offlineEntry.translit || null,
@@ -535,15 +542,16 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       };
     }
 
-    // If the token was previously resolved with AI for the ACTIVE targetLang, keep it
-    if (orig.glossSource === 'ai' && orig.targetLang === targetLang && orig.gloss) {
+    // If the token was previously resolved with AI for the ACTIVE targetLang and nativeLang, keep it
+    if (orig.glossSource === 'ai' && orig.targetLang === targetLang && orig.nativeLang === (nativeLang || 'es') && orig.gloss) {
       return orig;
     }
 
-    // Otherwise, the token is unresolved for this targetLang (e.g. legacy token without targetLang or from different language)
+    // Otherwise, the token is unresolved for this targetLang/nativeLang pair
     return {
       ...orig,
       targetLang: targetLang,
+      nativeLang: nativeLang || 'es',
       auxiliary: null,
       pinyin: null,
       translit: null,
@@ -571,9 +579,10 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
  * @param {Array} originalTokens - Client-side provisional tokens
  * @param {Array} aiTokens - AI-returned tokens with lexical groupings
  * @param {string} [rawOriginalText=''] - Raw sentence text
+ * @param {string} [nativeLang='es'] - User native language
  * @returns {Array|null} New token array, or null if coverage validation fails
  */
-function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = '') {
+function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = '', nativeLang = 'es') {
   if (!Array.isArray(aiTokens) || aiTokens.length === 0) return null;
 
   // 1. Obtain authoritative full original text
@@ -660,6 +669,7 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
         text: currentAiToken.word,
         word: currentAiToken.word,
         targetLang: 'zh',
+        nativeLang: nativeLang || 'es',
         auxiliary: aux,
         pinyin: aux,
         translit: null,
@@ -738,7 +748,7 @@ export async function glossSingleSubtitleLine({
   if (!sub || typeof sub !== 'object') return sub;
 
   // If already complete, return immediately (zero API calls!)
-  if (isGlossComplete(sub, targetLang)) {
+  if (isGlossComplete(sub, targetLang, nativeLang)) {
     return {
       ...sub,
       glossStatus: 'glosado'
@@ -748,7 +758,7 @@ export async function glossSingleSubtitleLine({
   // Ensure tokens are tokenized offline if empty
   const currentTokens = Array.isArray(sub.tokens) && sub.tokens.length > 0
     ? sub.tokens
-    : tokenizeAndGlossLineOffline(sub.text || '', targetLang);
+    : tokenizeAndGlossLineOffline(sub.text || '', targetLang, nativeLang);
 
   const preparedSub = {
     ...sub,
@@ -760,7 +770,7 @@ export async function glossSingleSubtitleLine({
     if (Array.isArray(aiResults) && aiResults.length > 0) {
       const match = aiResults[0];
       if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
-        const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang, preparedSub.text || sub.text || '');
+        const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang, preparedSub.text || sub.text || '', nativeLang);
         return {
           ...preparedSub,
           tokens: mergedTokens,
@@ -775,7 +785,7 @@ export async function glossSingleSubtitleLine({
   // Return with existing tokens if API call failed or had no results
   return {
     ...preparedSub,
-    glossStatus: isGlossComplete(preparedSub, targetLang) ? 'glosado' : 'sin glosar'
+    glossStatus: isGlossComplete(preparedSub, targetLang, nativeLang) ? 'glosado' : 'sin glosar'
   };
 }
 
@@ -809,7 +819,7 @@ export function enrichSubtitlesWithGlosses({
   const strategy = getLanguageGlossStrategy(targetLang);
   const totalSubtitles = subtitles.length;
   const subHash = computeSubtitleHash(subtitles);
-  const cache = loadCachedGlosses(videoId, totalSubtitles, targetLang);
+  const cache = loadCachedGlosses(videoId, totalSubtitles, targetLang, nativeLang);
 
   // Phase 1: Apply offline tokenization & merge cached AI tokens if available
   const prepared = subtitles.map(sub => {
@@ -823,10 +833,10 @@ export function enrichSubtitlesWithGlosses({
       }
     }
 
-    const offlineTokens = tokenizeAndGlossLineOffline(sub.text, targetLang);
+    const offlineTokens = tokenizeAndGlossLineOffline(sub.text, targetLang, nativeLang);
 
     if (cache[sub.id] && Array.isArray(cache[sub.id]) && cache[sub.id].length > 0) {
-      const mergedTokens = mergeAiTokensWithSegmented(offlineTokens, cache[sub.id], targetLang, sub.text);
+      const mergedTokens = mergeAiTokensWithSegmented(offlineTokens, cache[sub.id], targetLang, sub.text, nativeLang);
       return {
         ...sub,
         tokens: mergedTokens
@@ -839,7 +849,7 @@ export function enrichSubtitlesWithGlosses({
     };
   });
 
-  const getCompletedCount = (subsList) => subsList.filter(s => isGlossComplete(s, targetLang)).length;
+  const getCompletedCount = (subsList) => subsList.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
   const initialCompleted = getCompletedCount(prepared);
 
   if (!onUpdate) {
@@ -873,7 +883,7 @@ export function enrichSubtitlesWithGlosses({
     // Check persistent library (IndexedDB)
     let savedRecord = null;
     try {
-      savedRecord = await getTranscriptFromLibrary(videoId, subHash, targetLang);
+      savedRecord = await getTranscriptFromLibrary(videoId, subHash, targetLang, nativeLang);
     } catch (e) {
       console.warn('Failed to check transcript library:', e);
     }
@@ -907,7 +917,7 @@ export function enrichSubtitlesWithGlosses({
             }
             return {
               ...sub,
-              tokens: mergeAiTokensWithSegmented(sub.tokens, matching.tokens, targetLang, sub.text)
+              tokens: mergeAiTokensWithSegmented(sub.tokens, matching.tokens, targetLang, sub.text, nativeLang)
             };
           }
           return sub;
@@ -919,7 +929,7 @@ export function enrichSubtitlesWithGlosses({
     }
 
     // Recalculate missing lines that still need AI glossing
-    const missingLines = currentSubtitles.filter(sub => !isGlossComplete(sub, targetLang));
+    const missingLines = currentSubtitles.filter(sub => !isGlossComplete(sub, targetLang, nativeLang));
     const nowCompleted = getCompletedCount(currentSubtitles);
 
     // Calculate metrics for logging
@@ -931,7 +941,7 @@ export function enrichSubtitlesWithGlosses({
       (sub.tokens || []).forEach(t => {
         if (!t.isPunctuation && (t.text || t.word)) {
           totalSubstantiveTokens++;
-          if (strategy.isTokenComplete(t)) {
+          if (strategy.isTokenComplete(t, nativeLang)) {
             locallyResolvedTokens++;
           }
         }
@@ -940,7 +950,7 @@ export function enrichSubtitlesWithGlosses({
 
     missingLines.forEach(sub => {
       (sub.tokens || []).forEach(t => {
-        if (!t.isPunctuation && (t.text || t.word) && !strategy.isTokenComplete(t)) {
+        if (!t.isPunctuation && (t.text || t.word) && !strategy.isTokenComplete(t, nativeLang)) {
           sentToGroqTokens++;
         }
       });
@@ -1018,7 +1028,7 @@ export function enrichSubtitlesWithGlosses({
             const idx = findMatchingSubtitleIndex(currentSubtitles, batch, item, itemIdx);
             if (idx !== -1) {
               const sub = currentSubtitles[idx];
-              const mergedTokens = mergeAiTokensWithSegmented(sub.tokens, item.tokens, targetLang, sub.text);
+              const mergedTokens = mergeAiTokensWithSegmented(sub.tokens, item.tokens, targetLang, sub.text, nativeLang);
               const candidateSub = {
                 ...sub,
                 tokens: mergedTokens
@@ -1028,7 +1038,7 @@ export function enrichSubtitlesWithGlosses({
               hasNewData = true;
 
               // Only persist to cache if verified complete
-              if (isGlossComplete(candidateSub, targetLang)) {
+              if (isGlossComplete(candidateSub, targetLang, nativeLang)) {
                 cache[sub.id] = mergedTokens;
               }
             }
@@ -1037,7 +1047,7 @@ export function enrichSubtitlesWithGlosses({
       }
 
       if (hasNewData) {
-        saveCachedGlosses(videoId, totalSubtitles, cache, targetLang);
+        saveCachedGlosses(videoId, totalSubtitles, cache, targetLang, nativeLang);
         const currentCompleted = getCompletedCount(currentSubtitles);
 
         // PERSIST IMMEDIATELY TO INDEXEDDB LIBRARY AFTER EACH BATCH
@@ -1079,7 +1089,7 @@ export function enrichSubtitlesWithGlosses({
       // Identify which lines in this batch are STILL incomplete
       const stillIncomplete = batch.filter(sub => {
         const current = currentSubtitles.find(s => s.id === sub.id) || sub;
-        return !isGlossComplete(current, targetLang);
+        return !isGlossComplete(current, targetLang, nativeLang);
       });
 
       return stillIncomplete;

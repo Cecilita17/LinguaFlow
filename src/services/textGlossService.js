@@ -97,14 +97,14 @@ export function enrichParagraphsWithGlosses({
     if (Array.isArray(p.tokens) && p.tokens.length > 0) {
       return p;
     }
-    const offlineTokens = tokenizeAndGlossLineOffline(p.text, targetLang);
+    const offlineTokens = tokenizeAndGlossLineOffline(p.text, targetLang, nativeLang);
     return {
       ...p,
       tokens: offlineTokens
     };
   });
 
-  const getCompletedCount = (pList) => pList.filter(p => isGlossComplete(p, targetLang)).length;
+  const getCompletedCount = (pList) => pList.filter(p => isGlossComplete(p, targetLang, nativeLang)).length;
   const initialCompleted = getCompletedCount(prepared);
 
   if (!onUpdate) {
@@ -149,7 +149,7 @@ export function enrichParagraphsWithGlosses({
       return;
     }
 
-    const missingParagraphs = currentParagraphs.filter(p => !isGlossComplete(p, targetLang));
+    const missingParagraphs = currentParagraphs.filter(p => !isGlossComplete(p, targetLang, nativeLang));
 
     if (onProgress) {
       onProgress({
@@ -196,7 +196,7 @@ export function enrichParagraphsWithGlosses({
 
             if (idx !== -1) {
               const p = currentParagraphs[idx];
-              const mergedTokens = mergeAiTokensWithSegmented(p.tokens, item.tokens, targetLang, p.text || item.text);
+              const mergedTokens = mergeAiTokensWithSegmented(p.tokens, item.tokens, targetLang, p.text || item.text, nativeLang);
               currentParagraphs[idx] = {
                 ...p,
                 tokens: mergedTokens
@@ -224,7 +224,7 @@ export function enrichParagraphsWithGlosses({
 
       return batch.filter(p => {
         const current = currentParagraphs.find(cp => cp.id === p.id) || p;
-        return !isGlossComplete(current, targetLang);
+        return !isGlossComplete(current, targetLang, nativeLang);
       });
     };
 

@@ -109,35 +109,34 @@ export function computeSubtitleHash(subtitles = []) {
 /**
  * Generates compound key for a saved transcript.
  */
-export function getLibraryKey(videoId = 'generic', subtitleHash = 'nohash', targetLang = 'zh') {
+export function getLibraryKey(videoId = 'generic', subtitleHash = 'nohash', targetLang = 'zh', nativeLang = 'es') {
   const cleanId = (videoId || 'generic').replace(/[^a-zA-Z0-9_-]/g, '');
-  return `${cleanId}_${subtitleHash}_${targetLang}`;
+  const cleanTarget = (targetLang || 'zh').replace(/[^a-zA-Z0-9_-]/g, '');
+  const cleanNative = (nativeLang || 'es').replace(/[^a-zA-Z0-9_-]/g, '');
+  return `${cleanId}_${subtitleHash}_${cleanTarget}_${cleanNative}`;
 }
 
 /**
- * Parses a compound library key into its component parts: { videoId, subtitleHash, targetLang }.
+ * Parses a compound library key into its component parts: { videoId, subtitleHash, targetLang, nativeLang }.
  * Accurately supports videoIds containing hyphens and underscores.
  * 
  * @param {string} compoundKey
- * @returns {{ videoId: string, subtitleHash: string, targetLang: string }}
+ * @returns {{ videoId: string, subtitleHash: string, targetLang: string, nativeLang: string }}
  */
 export function parseLibraryKey(compoundKey) {
-  if (!compoundKey) return { videoId: '', subtitleHash: '', targetLang: '' };
+  if (!compoundKey) return { videoId: '', subtitleHash: '', targetLang: '', nativeLang: 'es' };
   const str = String(compoundKey).trim();
-  const lastUnderscore = str.lastIndexOf('_');
-  if (lastUnderscore === -1) return { videoId: str, subtitleHash: '', targetLang: '' };
-
-  const targetLang = str.slice(lastUnderscore + 1);
-  const remaining = str.slice(0, lastUnderscore);
-  const secondLastUnderscore = remaining.lastIndexOf('_');
-  if (secondLastUnderscore === -1) {
-    return { videoId: remaining, subtitleHash: '', targetLang };
+  const parts = str.split('_');
+  if (parts.length >= 4) {
+    const nativeLang = parts[parts.length - 1];
+    const targetLang = parts[parts.length - 2];
+    const subtitleHash = parts[parts.length - 3];
+    const videoId = parts.slice(0, parts.length - 3).join('_');
+    return { videoId: videoId || str, subtitleHash, targetLang, nativeLang };
+  } else if (parts.length === 3) {
+    return { videoId: parts[0], subtitleHash: parts[1], targetLang: parts[2], nativeLang: 'es' };
   }
-
-  const subtitleHash = remaining.slice(secondLastUnderscore + 1);
-  const videoId = remaining.slice(0, secondLastUnderscore);
-
-  return { videoId: videoId || str, subtitleHash, targetLang };
+  return { videoId: str, subtitleHash: '', targetLang: '', nativeLang: 'es' };
 }
 
 /**
@@ -199,8 +198,9 @@ export async function saveTranscriptToLibrary(record) {
 
   const cleanVideoId = String(record.videoId).trim();
   const targetLang = record.targetLanguage || record.targetLang || 'zh';
+  const nativeLang = record.nativeLanguage || record.nativeLang || 'es';
   const subHash = record.subtitleHash || computeSubtitleHash(record.subtitles);
-  const id = record.id || getLibraryKey(cleanVideoId, subHash, targetLang);
+  const id = record.id || getLibraryKey(cleanVideoId, subHash, targetLang, nativeLang);
 
   const existingMemory = memoryStore.get(id);
   const sharedPos = getSharedPlaybackPosition(cleanVideoId);
@@ -234,7 +234,7 @@ export async function saveTranscriptToLibrary(record) {
     videoTitle: record.videoTitle || `YouTube Video (${cleanVideoId})`,
     videoUrl: record.videoUrl || `https://www.youtube.com/watch?v=${cleanVideoId}`,
     targetLanguage: targetLang,
-    nativeLanguage: record.nativeLanguage || record.nativeLang || 'es',
+    nativeLanguage: nativeLang,
     sourceType: record.sourceType || 'srt',
     subtitleHash: subHash,
     subtitlesCount: record.subtitles.length,
@@ -277,7 +277,7 @@ export async function saveTranscriptToLibrary(record) {
  * Fast, lightweight updater for last playback position and subtitle marker.
  * Persists lastPlaybackTime and lastSubtitleId across all target languages for this video.
  * 
- * @param {string} idOrVideoId - Transcript record ID (e.g. videoId_hash_targetLang) or raw videoId
+ * @param {string} idOrVideoId - Transcript record ID (e.g. videoId_hash_targetLang_nativeLang) or raw videoId
  * @param {number} playbackTime - Current playback time in seconds
  * @param {string|null} subtitleId - Active subtitle line ID
  * @returns {Promise<boolean>}
@@ -358,23 +358,27 @@ export async function updateTranscriptPlaybackPosition(idOrVideoId, playbackTime
 }
 
 /**
- * Retrieve a saved transcript by exact videoId, subtitleHash, and targetLang.
+ * Retrieve a saved transcript by exact videoId, subtitleHash, targetLang, and nativeLang.
  * 
  * @param {string} videoId
  * @param {string} subtitleHash
  * @param {string} targetLang
+ * @param {string} nativeLang
  * @returns {Promise<Object|null>}
  */
-export async function getTranscriptFromLibrary(videoId, subtitleHash, targetLang = 'zh') {
+export async function getTranscriptFromLibrary(videoId, subtitleHash, targetLang = 'zh', nativeLang = 'es') {
   if (!videoId) return null;
   const cleanVideoId = String(videoId).trim();
-  const id = getLibraryKey(cleanVideoId, subtitleHash, targetLang);
+  const id = getLibraryKey(cleanVideoId, subtitleHash, targetLang, nativeLang);
+  const cleanTarget = (targetLang || 'zh').replace(/[^a-zA-Z0-9_-]/g, '');
+  const cleanVid = cleanVideoId.replace(/[^a-zA-Z0-9_-]/g, '');
+  const legacyId = `${cleanVid}_${subtitleHash}_${cleanTarget}`;
 
   const db = await openDatabase();
   let result = null;
 
   if (!db) {
-    result = memoryStore.get(id) || null;
+    result = memoryStore.get(id) || ((nativeLang === 'es') ? memoryStore.get(legacyId) : null) || null;
   } else {
     result = await new Promise((resolve) => {
       try {
@@ -383,16 +387,24 @@ export async function getTranscriptFromLibrary(videoId, subtitleHash, targetLang
         const request = store.get(id);
 
         request.onsuccess = (event) => {
-          const res = event.target.result || memoryStore.get(id) || null;
+          let res = event.target.result || memoryStore.get(id) || null;
+          if (!res && nativeLang === 'es') {
+            const legacyReq = store.get(legacyId);
+            legacyReq.onsuccess = (ev) => {
+              resolve(ev.target.result || memoryStore.get(legacyId) || null);
+            };
+            legacyReq.onerror = () => resolve(null);
+            return;
+          }
           resolve(res);
         };
 
         request.onerror = () => {
-          resolve(memoryStore.get(id) || null);
+          resolve(memoryStore.get(id) || (nativeLang === 'es' ? memoryStore.get(legacyId) : null) || null);
         };
       } catch (err) {
         console.warn('[TranscriptLibrary] Error reading from IndexedDB:', err);
-        resolve(memoryStore.get(id) || null);
+        resolve(memoryStore.get(id) || (nativeLang === 'es' ? memoryStore.get(legacyId) : null) || null);
       }
     });
   }

@@ -23,7 +23,7 @@ import { CHINESE_OFFLINE_DICT } from './languageGlossStrategies.js';
  * Tokenize a live call turn into interlinear units.
  * Guarantees zero latency (0ms offline execution) with accurate Tier 1 transliteration for Arabic & Chinese.
  */
-export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null) {
+export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null, nativeLang = 'es') {
   if (!text || typeof text !== 'string') return [];
   const clean = text.trim();
   if (!clean) return [];
@@ -31,7 +31,7 @@ export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null)
   const isArabic = targetLang === 'ar';
   const isChinese = targetLang === 'zh';
 
-  let baseTokens = tokenizeAndGlossLineOffline(clean, targetLang);
+  let baseTokens = tokenizeAndGlossLineOffline(clean, targetLang, nativeLang);
 
   if (!Array.isArray(baseTokens) || baseTokens.length === 0) {
     const parts = clean.split(/\s+/).filter(Boolean);
@@ -196,7 +196,7 @@ export async function glossLiveCallTurnAsync({
 
   const preparedTokens = Array.isArray(tokens) && tokens.length > 0
     ? tokens
-    : tokenizeLiveCallTurn(text, targetLang);
+    : tokenizeLiveCallTurn(text, targetLang, null, nativeLang);
 
   try {
     const linePayload = {
@@ -210,7 +210,7 @@ export async function glossLiveCallTurnAsync({
     if (Array.isArray(aiResults) && aiResults.length > 0) {
       const item = aiResults[0];
       if (item && Array.isArray(item.tokens) && item.tokens.length > 0) {
-        const merged = mergeAiTokensWithSegmented(preparedTokens, item.tokens, targetLang, text);
+        const merged = mergeAiTokensWithSegmented(preparedTokens, item.tokens, targetLang, text, nativeLang);
 
         // Preserve any changed/original flags from preparedTokens
         const changedTokensMap = new Map();

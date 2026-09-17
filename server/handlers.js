@@ -828,29 +828,36 @@ const activeModel = getSanitizedGroqModel();
 
       const isChinese = targetLang === 'zh';
       const isArabic = targetLang === 'ar';
-      const targetLangName = (SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang }).name;
+      const targetLangObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
+      const nativeLangObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
+      const targetLangName = targetLangObj.englishName || targetLangObj.name;
+      const nativeLangName = nativeLangObj.englishName || nativeLangObj.name;
 
       let languageRules = '';
       if (isChinese) {
         languageRules = `- CHINESE RULES (targetLang: 'zh'):
   * Generate tone-marked Pinyin in the "auxiliary" field (e.g. "huānyíng", "jīntiān", "de").
   * In the "word" field, provide the exact Chinese characters (Hanzi).
-  * In the "gloss" field, provide the direct concise meaning in "${nativeLang}".`;
+  * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").`;
       } else if (isArabic) {
         languageRules = `- ARABIC RULES (targetLang: 'ar'):
   * Preserve Arabic script. Use Arabic diacritics (tashkeel) on words when appropriate to help with reading.
   * In the "auxiliary" field, provide the clear Latin transliteration / romanization with vowels (e.g. "marḥaban", "kayfa", "al-kitāb"). Never leave it null for real Arabic words.
   * In the "word" field, provide the Arabic script word with tashkeel.
-  * In the "gloss" field, provide the direct concise meaning in "${nativeLang}".`;
+  * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").`;
       } else {
         languageRules = `- RULES FOR ${targetLang.toUpperCase()} (${targetLangName}):
   * Do NOT generate pronunciation, transliteration, romanization, Pinyin, or any auxiliary text. STRICTLY set "auxiliary": null for all tokens.
   * In the "word" field, provide the exact word in ${targetLangName}.
-  * In the "gloss" field, provide the direct concise meaning in "${nativeLang}".`;
+  * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").`;
       }
 
       const prompt = `You are a master multilingual linguistic professor and vocabulary glossing engine.
-Analyze each subtitle line in language "${targetLang}" and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLang}".
+Analyze each subtitle line in target source language "${targetLangName}" (code: "${targetLang}") and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLangName}" (code: "${nativeLang}").
+
+MANDATORY RULES:
+- TRANSLATION LANGUAGE: Every single gloss MUST be translated INTO the student's native language: ${nativeLangName} ("${nativeLang}"). DO NOT return Spanish glosses unless nativeLang is explicitly "es" / Spanish.
+- SOURCE MEANINGS: Word meanings MUST reflect the vocabulary, grammar, and context of the SOURCE language (${targetLangName}), even if the word's spelling is shared with other languages (e.g. "was", "is", "had", "in", "de", "baby" in Dutch must be parsed and glossed as authentic Dutch words in ${nativeLangName}).
 
 CRITICAL REQUIREMENTS:
 ${isChinese ? `- CHINESE LEXICAL SEGMENTATION (MANDATORY):
@@ -866,13 +873,13 @@ ${isChinese ? `- CHINESE LEXICAL SEGMENTATION (MANDATORY):
   * Use sentence context to determine correct word boundaries.
   * Return EXACTLY one token per meaningful lexical unit (word/phrase), not per character.
   * The "auxiliary" field MUST contain tone-marked Pinyin for the COMPLETE multi-character word.
-  * The "gloss" field MUST contain the meaning of the COMPLETE multi-character word.
+  * The "gloss" field MUST contain the meaning of the COMPLETE multi-character word in ${nativeLangName}.
   * IGNORE any pre-segmented word list — perform fresh lexical analysis from the sentence text.
   * Single-character words that are genuinely independent (e.g., 我, 的, 很, 了, 在, 也, 和) stay as single tokens.` :
   hasSpecificUnknowns ? `- HYBRID CONTEXTUAL GLOSSING:
   * For lines with "ONLY generate tokens for these unknown words", analyze the full sentence context to understand the exact contextual meaning, but ONLY output tokens and glosses for the requested unknown words!
   * Do NOT generate tokens for words outside the unknown list. This saves tokens and preserves local dictionary resolutions.` : `- PRESERVE PRE-SEGMENTED WORDS: You MUST preserve the exact pre-segmented word units. DO NOT break multi-character words into individual characters!
-  * Complete glossing: Provide an accurate gloss for all substantive words.`}
+  * Complete glossing: Provide an accurate gloss in ${nativeLangName} for all substantive words.`}
 - LANGUAGE-SPECIFIC RULES:
 ${languageRules}
 - Omit punctuation marks or give them null gloss and null auxiliary.
@@ -891,7 +898,7 @@ Return STRICTLY valid JSON with no markdown formatting:
         {
           "word": "string (exact word unit)",
           "auxiliary": ${isChinese ? '"string with tone-marked Pinyin for the COMPLETE word"' : 'null'},
-          "gloss": "string (direct concise meaning in ${nativeLang})"
+          "gloss": "string (direct concise meaning in ${nativeLangName})"
         }
       ]
     }

@@ -520,8 +520,8 @@ export function TextReaderPage({
   // Count how many paragraphs are completely glossed
   const completedParagraphsCount = useMemo(() => {
     if (!document || !Array.isArray(document.paragraphs)) return 0;
-    return document.paragraphs.filter(p => isGlossComplete(p, activeDocLang)).length;
-  }, [document, activeDocLang]);
+    return document.paragraphs.filter(p => isGlossComplete(p, activeDocLang, nativeLang)).length;
+  }, [document, activeDocLang, nativeLang]);
 
   // Initial sync: if draft document exists with its own targetLang, synchronize targetLang once on mount
   useEffect(() => {
@@ -932,7 +932,7 @@ export function TextReaderPage({
   // Individual paragraph glossing (runs ONLY for that paragraph, works even when auto-glossing is OFF)
   const handleGlossParagraph = useCallback(async (paragraph) => {
     if (!paragraph || !paragraph.id) return;
-    if (isGlossComplete(paragraph, activeDocLang)) return; // $0 Groq cost: already glossed!
+    if (isGlossComplete(paragraph, activeDocLang, nativeLang)) return; // $0 Groq cost: already glossed!
 
     // Mark solely this paragraph as glossing
     setGlossingParagraphIds(prev => new Set(prev).add(paragraph.id));
@@ -985,7 +985,7 @@ export function TextReaderPage({
     const rawTextChanged = isExistingDoc && document.rawText.trim() !== raw;
     const effectiveParagraphs = (!rawTextChanged && isExistingDoc && Array.isArray(document.paragraphs) && document.paragraphs.length > 0)
       ? document.paragraphs
-      : splitTextIntoParagraphs(raw, targetLang);
+      : splitTextIntoParagraphs(raw, targetLang, nativeLang);
 
     // Validate if lastAudioPosition still points to an existing paragraph after edit
     let preservedLastAudioPosition = null;
@@ -1022,8 +1022,8 @@ export function TextReaderPage({
 
     // Auto-glossing MUST BE OFF BY DEFAULT:
     // Display text immediately, persist offline segmentation, ZERO AI calls!
-    const alreadyComplete = effectiveParagraphs.every(p => isGlossComplete(p, targetLang));
-    const completedCount = effectiveParagraphs.filter(p => isGlossComplete(p, targetLang)).length;
+    const alreadyComplete = effectiveParagraphs.every(p => isGlossComplete(p, targetLang, nativeLang));
+    const completedCount = effectiveParagraphs.filter(p => isGlossComplete(p, targetLang, nativeLang)).length;
 
     setGlossingProgress({
       total: effectiveParagraphs.length,
@@ -1091,8 +1091,8 @@ export function TextReaderPage({
 
     const docLang = doc.targetLang || 'zh';
     const paras = Array.isArray(doc.paragraphs) ? doc.paragraphs : [];
-    const allComplete = paras.length > 0 && paras.every(p => isGlossComplete(p, docLang));
-    const completedCount = paras.filter(p => isGlossComplete(p, docLang)).length;
+    const allComplete = paras.length > 0 && paras.every(p => isGlossComplete(p, docLang, nativeLang));
+    const completedCount = paras.filter(p => isGlossComplete(p, docLang, nativeLang)).length;
 
     setGlossingProgress({
       total: paras.length,
@@ -1105,7 +1105,7 @@ export function TextReaderPage({
     setIsAutoGlossing(false);
     setLoadingParagraphIds(new Set());
     navigateToView('reader');
-  }, [setTargetLang, navigateToView]);
+  }, [setTargetLang, navigateToView, nativeLang]);
 
   // Delete document handler from library modal / view
   const handleDeleteDocumentFromLibrary = useCallback(async (deletedId) => {
@@ -1199,8 +1199,8 @@ export function TextReaderPage({
         await refreshLibraryCount();
 
         // Auto-glossing is OFF by default:
-        const alreadyComplete = saved.paragraphs.every(p => isGlossComplete(p, docLang));
-        const completedCount = saved.paragraphs.filter(p => isGlossComplete(p, docLang)).length;
+        const alreadyComplete = saved.paragraphs.every(p => isGlossComplete(p, docLang, nativeLang));
+        const completedCount = saved.paragraphs.filter(p => isGlossComplete(p, docLang, nativeLang)).length;
 
         setGlossingProgress({
           total: saved.paragraphs.length,
@@ -1929,7 +1929,7 @@ export function TextReaderPage({
                       activeAudioCharIndex={playingParagraphId === paragraph.id ? activeAudioCharIndex : -1}
                       isAudioError={audioErrorId === paragraph.id}
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
-                      hasGloss={isGlossComplete(paragraph, activeDocLang)}
+                      hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
                       isLastAudioPosition={lastAudioParagraphId === paragraph.id}
                       onPlay={handlePlayParagraph}
                       onStop={handleStopAudio}

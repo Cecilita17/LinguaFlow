@@ -218,7 +218,7 @@ export function splitTextIntoNaturalSegments(rawText, targetLang = 'zh') {
  * @param {string} targetLang
  * @returns {Array<{ id: string, index: number, text: string, tokens: Array, glosses: Array, tts: object }>}
  */
-export function splitTextIntoParagraphs(rawText, targetLang = 'zh') {
+export function splitTextIntoParagraphs(rawText, targetLang = 'zh', nativeLang = 'es') {
   const segments = splitTextIntoNaturalSegments(rawText, targetLang);
   const langMeta = getLanguageMeta(targetLang);
   const speechCode = langMeta?.speechCode || 'zh-CN';
@@ -227,7 +227,7 @@ export function splitTextIntoParagraphs(rawText, targetLang = 'zh') {
     id: `p-${idx + 1}`,
     index: idx,
     text,
-    tokens: tokenizeAndGlossLineOffline(text, targetLang),
+    tokens: tokenizeAndGlossLineOffline(text, targetLang, nativeLang),
     glosses: [],
     tts: {
       speechCode,
@@ -251,11 +251,14 @@ export function normalizeDocument(rawDoc) {
   const targetLang = rawDoc.targetLang || 'zh';
   const nativeLang = rawDoc.nativeLang || 'es';
   const rawText = typeof rawDoc.rawText === 'string' ? rawDoc.rawText : '';
+  const langKey = `${targetLang}_${nativeLang}`;
 
   // Resolve paragraphs: preserve non-empty array, or recover from languageStates or rawText
   let paragraphs = Array.isArray(rawDoc.paragraphs) && rawDoc.paragraphs.length > 0 ? rawDoc.paragraphs : [];
   if (paragraphs.length === 0 && rawDoc.languageStates && typeof rawDoc.languageStates === 'object') {
-    if (Array.isArray(rawDoc.languageStates[targetLang]?.paragraphs) && rawDoc.languageStates[targetLang].paragraphs.length > 0) {
+    if (Array.isArray(rawDoc.languageStates[langKey]?.paragraphs) && rawDoc.languageStates[langKey].paragraphs.length > 0) {
+      paragraphs = rawDoc.languageStates[langKey].paragraphs;
+    } else if (Array.isArray(rawDoc.languageStates[targetLang]?.paragraphs) && rawDoc.languageStates[targetLang].paragraphs.length > 0) {
       paragraphs = rawDoc.languageStates[targetLang].paragraphs;
     } else {
       const anyState = Object.values(rawDoc.languageStates).find(s => Array.isArray(s?.paragraphs) && s.paragraphs.length > 0);
@@ -265,7 +268,7 @@ export function normalizeDocument(rawDoc) {
     }
   }
   if (paragraphs.length === 0 && rawText.trim().length > 0) {
-    paragraphs = splitTextIntoParagraphs(rawText, targetLang);
+    paragraphs = splitTextIntoParagraphs(rawText, targetLang, nativeLang);
   }
 
   const effectiveRawText = rawText || (paragraphs.length > 0 ? paragraphs.map(p => p.text || '').join('\n\n') : '');
@@ -281,13 +284,18 @@ export function normalizeDocument(rawDoc) {
     ? { ...rawDoc.languageStates }
     : {};
 
-  if (!languageStates[targetLang] || !Array.isArray(languageStates[targetLang].paragraphs) || languageStates[targetLang].paragraphs.length === 0) {
+  if (!languageStates[langKey] || !Array.isArray(languageStates[langKey].paragraphs) || languageStates[langKey].paragraphs.length === 0) {
     if (paragraphs.length > 0) {
-      languageStates[targetLang] = {
+      languageStates[langKey] = {
         targetLang,
+        nativeLang,
         paragraphs,
         updatedAt: rawDoc.updatedAt || now
       };
+      // Maintain legacy targetLang key for backward compatibility
+      if (!languageStates[targetLang]) {
+        languageStates[targetLang] = languageStates[langKey];
+      }
     }
   }
 
@@ -358,7 +366,7 @@ export function createTextDocument({
   const now = new Date().toISOString();
   const effectiveParagraphs = paragraphs && Array.isArray(paragraphs) && paragraphs.length > 0
     ? paragraphs
-    : splitTextIntoParagraphs(rawText, targetLang);
+    : splitTextIntoParagraphs(rawText, targetLang, nativeLang);
 
   // Derive a fallback title if empty
   let derivedTitle = (title || '').trim();
@@ -374,12 +382,17 @@ export function createTextDocument({
     ? { ...languageStates }
     : {};
 
-  if (!initialStates[targetLang]) {
-    initialStates[targetLang] = {
+  const langKey = `${targetLang}_${nativeLang}`;
+  if (!initialStates[langKey]) {
+    initialStates[langKey] = {
       targetLang,
+      nativeLang,
       paragraphs: effectiveParagraphs,
       updatedAt: now
     };
+  }
+  if (!initialStates[targetLang]) {
+    initialStates[targetLang] = initialStates[langKey];
   }
 
   return {
