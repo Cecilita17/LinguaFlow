@@ -7,7 +7,8 @@ import {
   extractTurnTransliteration,
   extractTurnGlosses
 } from '../services/liveCallGlossService.js';
-import { isGlossComplete } from '../services/subtitleGlossService.js';
+import { isGlossComplete, getEffectiveApiKey } from '../services/subtitleGlossService.js';
+import { transcribeAudioApi } from '../services/chatService.js';
 import { cleanDuplicatePhrases } from './useSpeech.js';
 
 /**
@@ -108,7 +109,8 @@ export function usePipelineCall({
   nativeLang = 'es',
   level = 'A2/B1',
   isSpanish = true,
-  voice = 'alloy'
+  voice = 'alloy',
+  apiKey = ''
 }) {
   const [callState, setCallState] = useState('idle'); // 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'error'
   const [isMuted, setIsMuted] = useState(false);
@@ -139,6 +141,11 @@ export function usePipelineCall({
     finalized: false
   });
 
+  // Multilingual Code-Switching Audio Capture Refs (MediaRecorder + Groq Whisper)
+  const mediaStreamRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
   // Half-Duplex Acoustic Protection & TTS Playback State Refs
   const isSttPausedRef = useRef(false);
   const isLlmStreamingRef = useRef(false);
@@ -155,6 +162,69 @@ export function usePipelineCall({
   const lastAiSpokenTimestampRef = useRef(0);
   const isEchoGuardActiveRef = useRef(false);
   const echoGuardTimerRef = useRef(null);
+
+  // Start turn audio capture for multilingual Whisper transcription
+  const startTurnAudioRecording = useCallback(() => {
+    if (!mediaStreamRef.current) return;
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch (e) {}
+      }
+      audioChunksRef.current = [];
+      let chosenMime = 'audio/webm';
+      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav'];
+      for (const m of mimeTypes) {
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) {
+          chosenMime = m;
+          break;
+        }
+      }
+      const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType: chosenMime });
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+      recorder.start(100);
+      mediaRecorderRef.current = recorder;
+    } catch (err) {
+      console.warn('[PipelineSTT] MediaRecorder start notice:', err);
+    }
+  }, []);
+
+  // Stop turn audio capture and retrieve audio blob
+  const stopTurnAudioRecording = useCallback(async () => {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+      if (audioChunksRef.current.length > 0) {
+        const blob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+        audioChunksRef.current = [];
+        return blob;
+      }
+      return null;
+    }
+    try {
+      const recorder = mediaRecorderRef.current;
+      const blobPromise = new Promise((resolve) => {
+        recorder.onstop = () => {
+          const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          audioChunksRef.current = [];
+          resolve(blob);
+        };
+      });
+      recorder.stop();
+      const timeoutPromise = new Promise((resolve) => {
+        setTimeout(() => {
+          const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          audioChunksRef.current = [];
+          resolve(blob);
+        }, 350);
+      });
+      return await Promise.race([blobPromise, timeoutPromise]);
+    } catch (err) {
+      console.warn('[PipelineSTT] MediaRecorder stop notice:', err);
+      return null;
+    }
+  }, []);
 
   // Deduplication & Lifecycle Sets
   const correctedTurnIdsRef = useRef(new Set());
@@ -315,6 +385,19 @@ export function usePipelineCall({
         audioContextRef.current.close();
       } catch (e) {}
       audioContextRef.current = null;
+    }
+
+    // Stop and release MediaRecorder & Microphone stream tracks
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (e) {}
+      mediaRecorderRef.current = null;
+    }
+    audioChunksRef.current = [];
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch (e) {}
+      mediaStreamRef.current = null;
     }
 
     // Clear deduplication caches & turn state
@@ -903,9 +986,9 @@ export function usePipelineCall({
   }, [targetLang, nativeLang, level, interruptAssistant, enqueueTextForTTS, triggerTurnGloss, playNextInAudioQueue]);
 
   // Finalize and process a completed user speech turn
-  const finalizeUserSpeechTurn = useCallback((userText, turnId) => {
+  const finalizeUserSpeechTurn = useCallback(async (userText, turnId) => {
     if (!userText || !userText.trim()) return;
-    const cleanText = userText.trim();
+    const cleanText = cleanDuplicatePhrases(userText.trim());
     if (!cleanText) return;
 
     const activeTurn = currentTurnRef.current;
@@ -991,12 +1074,57 @@ export function usePipelineCall({
       return [...prev, newUserMsg];
     });
 
+    // 3. Audio chunk capture & high-precision Groq Whisper code-switching transcription
+    let effectiveText = cleanText;
+    const audioBlob = await stopTurnAudioRecording();
+
+    if (audioBlob && audioBlob.size > 150) {
+      try {
+        const effectiveKey = getEffectiveApiKey(apiKey);
+        const aiTranscript = await transcribeAudioApi({
+          audioBlob,
+          targetLang,
+          nativeLang,
+          apiKey: effectiveKey
+        });
+
+        if (aiTranscript && aiTranscript.trim()) {
+          const cleanedAi = cleanDuplicatePhrases(aiTranscript.trim());
+          if (cleanedAi) {
+            console.log('✅ Live Call AI Multilingual transcription received:', cleanedAi);
+            effectiveText = cleanedAi;
+            const refinedTokens = tokenizeLiveCallTurn(effectiveText, targetLang);
+            const refinedTranslit = extractTurnTransliteration(refinedTokens, targetLang);
+            const refinedGlosses = extractTurnGlosses(refinedTokens);
+
+            setLiveTranscript((prev) =>
+              prev.map((m) =>
+                m.id === currentId
+                  ? {
+                      ...m,
+                      text: effectiveText,
+                      originalText: effectiveText,
+                      correctedText: effectiveText,
+                      tokens: refinedTokens,
+                      transliteration: refinedTranslit,
+                      glosses: refinedGlosses
+                    }
+                  : m
+              )
+            );
+          }
+        }
+      } catch (sttErr) {
+        console.warn('[PipelineSTT] AI audio transcribe fallback notice:', sttErr);
+      }
+    }
+
     // Asynchronously trigger single pedagogical correction
-    triggerCorrection(cleanText, currentId);
+    triggerCorrection(effectiveText, currentId);
 
     // Dispatch assistant conversational response
-    dispatchAssistantResponse(cleanText);
-  }, [targetLang, isSpanish, triggerCorrection, dispatchAssistantResponse]);
+    dispatchAssistantResponse(effectiveText);
+  }, [targetLang, nativeLang, apiKey, isSpanish, stopTurnAudioRecording, triggerCorrection, dispatchAssistantResponse]);
 
   // Initialize Speech Recognition for Live VAD & Streaming STT
   const initSpeechRecognition = useCallback(() => {
@@ -1076,7 +1204,11 @@ export function usePipelineCall({
 
       sessionMetricsRef.current.transcriptionEvents++;
 
-      // 4. Ensure active unfinalized turn state (isolated fresh user turn)
+      // 4. Ensure active unfinalized turn state and active MediaRecorder
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') {
+        startTurnAudioRecording();
+      }
+
       if (!currentTurnRef.current.id || currentTurnRef.current.finalized) {
         currentTurnRef.current = {
           id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1313,12 +1445,12 @@ export function usePipelineCall({
         );
       }
 
-      // 3. Request and verify microphone permissions, then immediately release the stream
+      // 3. Request and retain microphone stream for turn audio capture & Whisper code-switching STT
       try {
         console.log('[PipelineMic] Requesting microphone permission...');
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-        console.log('[PipelineMic] Microphone permission granted; verification stream released successfully.');
+        mediaStreamRef.current = stream;
+        console.log('[PipelineMic] Microphone permission granted; media stream active.');
       } catch (micErr) {
         console.error('[PipelineMic] Microphone permission error:', micErr);
         throw new Error(

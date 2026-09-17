@@ -106,6 +106,11 @@ const SPANISH_CROSS_CORRECTIONS = {
  */
 export const CODE_SWITCHING_LEXICON = {
   nl: {
+    'un': 'een', 'una': 'een', 'bebe': 'baby', 'bebé': 'baby', 'bebes': 'baby\'s', 'bebés': 'baby\'s',
+    'nino': 'jongen', 'niño': 'jongen', 'nina': 'meisje', 'niña': 'meisje', 'hijo': 'zoon', 'hija': 'dochter', 'hijos': 'kinderen',
+    'padre': 'vader', 'madre': 'moeder', 'papa': 'vader', 'mama': 'moeder', 'papá': 'vader', 'mamá': 'moeder',
+    'hermano': 'broer', 'hermana': 'zus', 'familia': 'familie', 'perro': 'hond', 'gato': 'kat', 'coche': 'auto', 'carro': 'auto',
+    'trabajo': 'werk', 'dinero': 'geld', 'escuela': 'school',
     'sopa': 'soep', 'sopas': 'soepen', 'soup': 'soep',
     'verdura': 'groente', 'verduras': 'groenten', 'vegetales': 'groenten', 'vegetable': 'groente', 'vegetables': 'groenten',
     'comida': 'eten', 'food': 'eten',
@@ -623,6 +628,8 @@ const DEEP_LANGUAGE_RULES = {
     { regex: /\bik\s+(hebben|heeft)\b/gi, replacement: 'ik heb' },
     { regex: /\bik\s+willen\b/gi, replacement: 'ik wil' },
     { regex: /\bik\s+gaan\b/gi, replacement: 'ik ga' },
+    { regex: /\bik\s+heb\s+(?:gisteren\s+)?(?:naar\s+de\s+winkel\s+)?gaan\b/gi, replacement: 'ik ben gisteren naar de winkel gegaan' },
+    { regex: /\b(toen|omdat|als|wanneer)\s+ik\s+(was|ben|had)\s+(\d+|\w+)\b/gi, replacement: '$1 ik $3 $2' },
     // Frequent Dutch learner spelling (double vowels before single consonants in open syllables)
     { regex: /\bmaaken\b/gi, replacement: 'maken' },
     { regex: /\bneemen\b/gi, replacement: 'nemen' },

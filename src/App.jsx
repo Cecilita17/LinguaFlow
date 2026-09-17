@@ -988,6 +988,7 @@ export default function App() {
             targetLang={targetLang}
             nativeLang={nativeLang}
             level={config?.level || 'A2/B1'}
+            apiKey={config?.apiKey || ''}
             onEndCall={handleEndCall}
           />
         </main>

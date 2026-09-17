@@ -26,6 +26,7 @@ export function LiveCallView({
   targetLang,
   nativeLang = 'es',
   level = 'A2/B1',
+  apiKey = '',
   onEndCall
 }) {
   const { t, isSpanish } = useSiteLanguage();
@@ -44,6 +45,7 @@ export function LiveCallView({
     targetLang,
     nativeLang,
     level,
+    apiKey,
     isSpanish
   });
 
