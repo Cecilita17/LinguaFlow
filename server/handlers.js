@@ -988,4 +988,133 @@ Return STRICTLY valid JSON with no markdown formatting:
   }
 }
 
+// AI Text Generation endpoint for Text Reader
+export async function handleGenerateText(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  try {
+    const body = parseRequestBody(req);
+    const {
+      topic = '',
+      targetLang = 'es',
+      level = 'B1',
+      length = 'medium',
+      apiKey: clientApiKey
+    } = body;
+
+    const trimmedTopic = (topic || '').trim();
+    if (!trimmedTopic) {
+      return res.status(400).json({ error: 'Debes proporcionar un tema o idea para generar el texto.' });
+    }
+
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
+
+    const activeModel = getSanitizedGroqModel();
+    const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
+    const targetName = langObj.englishName || langObj.name;
+    const targetNativeName = langObj.name || targetName;
+
+    const lengthGuidelines = {
+      short: 'approx 150-200 words across 2 to 3 paragraphs',
+      medium: 'approx 250-350 words across 3 to 5 paragraphs',
+      long: 'approx 450-600 words across 4 to 6 paragraphs'
+    };
+    const lengthInstruction = lengthGuidelines[length] || lengthGuidelines.medium;
+
+    if (effectiveApiKey) {
+      console.log(`Generating text with Groq (${activeModel}) strictly in language: ${targetLang} (${targetName}) for topic: "${trimmedTopic}"`);
+
+      const systemPrompt = `You are a professional author and multilingual language educator.
+Your task is to write an engaging, authentic, and natural reading text STRICTLY and EXCLUSIVELY in ${targetName} (${targetNativeName}, language code: "${targetLang}").
+
+CRITICAL RULES:
+1. The entire text body MUST be written 100% in ${targetName} (${targetNativeName}). DO NOT include sentences, explanations, translations, or notes in any other language.
+2. The text MUST match the learner's requested proficiency level: ${level}.
+3. The length of the text should be ${lengthInstruction}.
+4. Separate distinct paragraphs using a double newline ("\\n\\n"). Each paragraph should be coherent and formatted cleanly.
+5. Provide a short, captivating title strictly in ${targetName}.
+6. Return your output STRICTLY as a JSON object with this exact schema:
+{
+  "title": "Title in ${targetName}",
+  "text": "First paragraph in ${targetName}...\\n\\nSecond paragraph in ${targetName}...\\n\\nThird paragraph in ${targetName}..."
+}`;
+
+      const userPrompt = `Student requested topic / prompt: "${trimmedTopic}".
+Proficiency level: ${level}.
+Target language: ${targetName} (${targetNativeName}, code: ${targetLang}).
+
+Write the complete reading text in ${targetName} now according to the required JSON schema.`;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.7,
+            max_tokens: 2500
+          })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const rawContent = data?.choices?.[0]?.message?.content;
+          const parsed = cleanAndParseJSON(rawContent);
+          if (parsed && typeof parsed.text === 'string' && parsed.text.trim()) {
+            return res.status(200).json({
+              success: true,
+              source: `groq (${activeModel})`,
+              title: (parsed.title || trimmedTopic).trim(),
+              text: parsed.text.trim()
+            });
+          }
+        } else {
+          const errText = await response.text();
+          console.warn(`Groq text generation error HTTP ${response.status}:`, errText);
+          const categorized = categorizeGroqError(response.status, errText);
+          return res.status(response.status >= 400 && response.status < 600 ? response.status : 500).json({
+            error: categorized.userMessage,
+            error_type: categorized.type
+          });
+        }
+      } catch (err) {
+        console.warn('Groq generate text error:', err.message);
+        const isTimeout = err.name === 'AbortError';
+        return res.status(isTimeout ? 408 : 500).json({
+          error: isTimeout
+            ? 'Tiempo de espera agotado al generar el texto con IA. Por favor intenta nuevamente.'
+            : `Error de conexión: ${err.message}`
+        });
+      }
+    }
+
+    return res.status(400).json({
+      error: 'Para generar textos con IA, configura tu GROQ_API_KEY en el servidor o en Ajustes ⚙️.'
+    });
+  } catch (err) {
+    console.error('Server error in /api/generate-text:', err);
+    res.status(500).json({ error: 'Error interno en el servidor al generar el texto.' });
+  }
+}
+
+
 

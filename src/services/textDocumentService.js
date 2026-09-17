@@ -5,6 +5,7 @@
  */
 
 import { getLanguageMeta } from '../constants/languages.js';
+import { API_BASE_URL } from './chatService.js';
 import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
 import {
   saveTextDocument,
@@ -615,5 +616,78 @@ export function clearActiveDocumentDraft() {
     }
   } catch (e) {}
 }
+
+/**
+ * Calls the backend /api/generate-text endpoint to generate a reading text in the active target language.
+ * @param {Object} options
+ * @param {string} options.topic - Topic or prompt requested by the user
+ * @param {string} options.targetLang - Active learning language code (e.g., 'de', 'ar', 'zh', 'pl', 'tr', 'nl', 'fr', 'es', 'en')
+ * @param {string} [options.level='B1'] - CEFR level ('A1-A2', 'B1', 'B2', 'C1')
+ * @param {string} [options.length='medium'] - Desired length ('short', 'medium', 'long')
+ * @param {string} [options.apiKey=''] - Optional client override API key
+ * @returns {Promise<{ success: boolean, title: string, text: string }>}
+ */
+export async function generateAiTextDocument({
+  topic,
+  targetLang = 'es',
+  level = 'B1',
+  length = 'medium',
+  apiKey = ''
+}) {
+  const trimmedTopic = (topic || '').trim();
+  if (!trimmedTopic) {
+    throw new Error('Debes ingresar un tema para generar el texto.');
+  }
+
+  const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
+  const headers = { 'Content-Type': 'application/json' };
+  if (effectiveKey) {
+    headers['x-api-key'] = effectiveKey;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/generate-text`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        topic: trimmedTopic,
+        targetLang,
+        level,
+        length,
+        apiKey: effectiveKey
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const errMsg = data?.error || `Error del servidor (${response.status})`;
+      throw new Error(errMsg);
+    }
+
+    if (!data.success || !data.text) {
+      throw new Error(data?.error || 'No se pudo generar el texto en este momento.');
+    }
+
+    return {
+      success: true,
+      title: data.title || trimmedTopic,
+      text: data.text
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado al conectar con el servidor de IA.');
+    }
+    throw err;
+  }
+}
+
 
 

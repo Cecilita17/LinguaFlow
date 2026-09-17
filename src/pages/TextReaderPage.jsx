@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
+import { CreateWithAiModal } from '../components/text/CreateWithAiModal.jsx';
 import { TextLibraryView } from '../components/text/TextLibraryView.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { getLanguageMeta } from '../constants/languages.js';
@@ -232,6 +233,18 @@ export function TextReaderPage({
   // Saved documents library modal
   const [showSavedModal, setShowSavedModal] = useState(false);
   const [savedDocsCount, setSavedDocsCount] = useState(0);
+
+  // Create with AI modal state
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+
+  const handleAiTextGenerated = useCallback(({ title, text }) => {
+    if (text) {
+      setInputText(text);
+      if (title) {
+        setInputTitle(title);
+      }
+    }
+  }, []);
 
   // EPUB Import state
   const [isImporting, setIsImporting] = useState(false);
@@ -1544,9 +1557,9 @@ export function TextReaderPage({
                 />
               </div>
 
-              {/* Action Buttons Strip (Paste clipboard, Upload .txt file, Start Reading) */}
+              {/* Action Buttons Strip (Paste clipboard, Upload .txt file, Create with AI, Start Reading) */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {/* Paste from Clipboard */}
                   <button
                     type="button"
@@ -1568,6 +1581,16 @@ export function TextReaderPage({
                       className="hidden"
                     />
                   </label>
+
+                  {/* Create with AI Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsAiModalOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-500/10 via-rose-500/10 to-pink-500/10 hover:from-purple-500/20 hover:via-rose-500/20 hover:to-pink-500/20 border border-purple-500/30 text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                  >
+                    <Sparkles className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+                    <span>Crear con IA</span>
+                  </button>
                 </div>
 
                 {/* Submit / Start Reading CTA */}
@@ -2096,6 +2119,15 @@ export function TextReaderPage({
         onNewDocument={handleNewDocumentFromModal}
         onDeleteDocument={handleDeleteDocumentFromLibrary}
         currentDocumentId={document?.id || ''}
+      />
+
+      {/* Create with AI Modal */}
+      <CreateWithAiModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        targetLang={targetLang}
+        apiKey={apiKey}
+        onTextGenerated={handleAiTextGenerated}
       />
     </div>
   );
