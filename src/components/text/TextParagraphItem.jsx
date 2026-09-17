@@ -127,9 +127,9 @@ export function TextParagraphItem({
                   : null;
                 const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : null;
 
-                // Never display auxiliary as gloss or word as gloss (except valid cases like 'de')
-                const isLegitSameWord = word === '的' && rawGloss?.toLowerCase() === 'de';
-                const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameWord) && rawGloss.toLowerCase() !== word?.toLowerCase())
+                // Never display auxiliary as gloss unless it is a genuine translation (e.g. 的 -> de)
+                const isLegitSameAux = word === '的' && rawGloss?.toLowerCase() === 'de';
+                const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameAux))
                   ? rawGloss
                   : null;
 

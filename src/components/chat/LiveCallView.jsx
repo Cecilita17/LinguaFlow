@@ -171,10 +171,9 @@ export function LiveCallView({
           // Tier 3 (Word-by-word Gloss):
           const rawGlossVal = tokenObj && typeof tokenObj === 'object' ? tokenObj.gloss : null;
           const rawGloss = rawGlossVal != null ? String(rawGlossVal).trim() : null;
-          const wordLower = word.toLowerCase();
           const rawGlossLower = rawGloss ? rawGloss.toLowerCase() : null;
-          const isLegitSameWord = word === '的' && rawGlossLower === 'de';
-          const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameWord) && rawGlossLower !== wordLower)
+          const isLegitSameAux = word === '的' && rawGlossLower === 'de';
+          const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameAux))
             ? rawGloss
             : null;
 

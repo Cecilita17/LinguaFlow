@@ -256,11 +256,9 @@ export function TranscriptLine({
                     ? tokenObj.isPunctuation
                     : PUNCTUATION_REGEX.test(word);
 
-                  // Never display auxiliary as gloss or word as gloss (except when gloss is a valid word like 'de')
-                  const wordLower = word.toLowerCase();
-                  const rawGlossLower = rawGloss ? rawGloss.toLowerCase() : null;
-                  const isLegitSameWord = word === '的' && rawGlossLower === 'de';
-                  const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameWord) && rawGlossLower !== wordLower) ? rawGloss : null;
+                  // Never display auxiliary as gloss unless it is a genuine translation (e.g. 的 -> de)
+                  const isLegitSameAux = word === '的' && rawGlossLower === 'de';
+                  const cleanGloss = (rawGloss && (rawGloss !== auxiliary || isLegitSameAux)) ? rawGloss : null;
 
                   if (isPunctuation) {
                     return (
