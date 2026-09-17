@@ -338,14 +338,6 @@ export function YouTubeLibraryView({
                         </button>
                       </div>
                     </div>
-
-                    {/* Card Bottom Progress Bar */}
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--border-primary)]/40 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-300"
-                        style={{ width: `${progressPercent}%` }}
-                      />
-                    </div>
                   </div>
                 </div>
               );
