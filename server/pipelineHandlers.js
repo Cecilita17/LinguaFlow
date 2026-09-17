@@ -81,10 +81,11 @@ The student is practicing ${targetName}. Their native language is ${nativeName} 
 
 CRITICAL SPOKEN CONVERSATION RULES:
 1. Speak EXCLUSIVELY in ${targetName}, using natural spoken phrasing suitable for oral conversation.
-2. Keep your answer CONCISE (1 to 2 spoken sentences maximum) to keep the voice call interactive.
-3. Respond directly to the student's thought, comment, or question.
-4. NEVER output markdown, asterisks, bullet points, numbers, emoji, or non-speech symbols.
-5. NEVER repeat hello/greetings on every turn. Dive directly into natural spoken conversation.`
+2. If the student speaks in English, Spanish, or another language, or mixes languages, understand their meaning completely, but ALWAYS reply strictly in ${targetName} to maintain immersive language practice.
+3. Keep your answer CONCISE (1 to 2 spoken sentences maximum) to keep the voice call interactive.
+4. Respond directly to the student's thought, comment, or question.
+5. NEVER output markdown, asterisks, bullet points, numbers, emoji, or non-speech symbols.
+6. NEVER repeat hello/greetings on every turn. Dive directly into natural spoken conversation.`
       }
     ];
 

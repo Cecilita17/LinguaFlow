@@ -563,6 +563,7 @@ export function usePipelineCall({
                 hasCorrection: hasErrors,
                 text: corrected,
                 correctedText: corrected,
+                translatedText: (corrected.toLowerCase() !== cleanText.toLowerCase()) ? corrected : null,
                 diffTokens,
                 tokens: updatedTokens,
                 transliteration: extractTurnTransliteration(updatedTokens, targetLang),
@@ -1499,7 +1500,7 @@ export function usePipelineCall({
     setCallState('idle');
 
     const formattedDuration = formatSeconds(finalSeconds);
-    const firstUserMsg = finalTranscript.find((m) => m.sender === 'user')?.text;
+    const firstUserMsg = finalTranscript.find((m) => m.sender === 'user')?.correctedText || finalTranscript.find((m) => m.sender === 'user')?.text;
     const firstBotMsg = finalTranscript.find((m) => m.sender === 'bot')?.text;
 
     const summaryText = firstUserMsg
@@ -1524,6 +1525,10 @@ export function usePipelineCall({
         const glosses = msg.glosses || extractTurnGlosses(tokens);
         return {
           ...msg,
+          text: msg.correctedText || msg.text || '',
+          correctedText: msg.correctedText || msg.text || '',
+          originalText: msg.originalText || msg.text || '',
+          translatedText: msg.translatedText || (msg.correctedText && msg.originalText && msg.correctedText.toLowerCase() !== msg.originalText.toLowerCase() ? msg.correctedText : null),
           tokens,
           transliteration,
           glosses
