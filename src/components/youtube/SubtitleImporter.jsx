@@ -12,7 +12,8 @@ export function SubtitleImporter({
   onStopOrPauseGlossing = null,
   onResumeGlossing = null,
   isExpanded: controlledExpanded = null,
-  onToggleExpand = null
+  onToggleExpand = null,
+  targetLang = 'zh'
 }) {
   const { isSpanish } = useSiteLanguage();
   const [internalExpanded, setInternalExpanded] = useState(false);
@@ -34,7 +35,7 @@ export function SubtitleImporter({
 
     try {
       setIsProcessing(true);
-      const { format, subtitles } = parseSubtitlesAuto(pastedText);
+      const { format, subtitles } = parseSubtitlesAuto(pastedText, '', targetLang);
 
       if (!subtitles || subtitles.length === 0) {
         setError('No se detectaron líneas de texto válidas.');
@@ -70,7 +71,7 @@ export function SubtitleImporter({
           return;
         }
 
-        const { format, subtitles } = parseSubtitlesAuto(content, file.name);
+        const { format, subtitles } = parseSubtitlesAuto(content, file.name, targetLang);
 
         if (!subtitles || subtitles.length === 0) {
           setError(`El archivo "${file.name}" no contiene líneas de subtítulos legibles.`);

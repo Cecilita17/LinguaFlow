@@ -251,6 +251,7 @@ export function TranscriptLine({
                     ? tokenObj.gloss
                     : (glosses && glosses[idx]);
                   const rawGloss = rawGlossVal != null ? String(rawGlossVal).trim() : null;
+                  const rawGlossLower = rawGloss ? rawGloss.toLowerCase() : null;
 
                   const isPunctuation = tokenObj && typeof tokenObj === 'object' && typeof tokenObj.isPunctuation === 'boolean'
                     ? tokenObj.isPunctuation

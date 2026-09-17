@@ -285,7 +285,7 @@ export function YouTubeReaderPage({
         if (sub && (!sub.tokens || sub.tokens.length === 0)) {
           chunkResults.push({
             index: i,
-            tokens: tokenizeAndGlossLineOffline(sub.text, lang)
+            tokens: tokenizeAndGlossLineOffline(sub.text, lang, nativeLang)
           });
         }
       }
@@ -312,7 +312,7 @@ export function YouTubeReaderPage({
     };
 
     setTimeout(processNextChunk, 32);
-  }, []);
+  }, [nativeLang]);
 
   // Safe reset reader action (e.g. on ErrorBoundary recovery or complete clear)
   const handleResetReader = useCallback(() => {
@@ -1080,6 +1080,7 @@ export function YouTubeReaderPage({
               glossProgress={glossProgress}
               onStopOrPauseGlossing={handleStopOrPauseGlossing}
               onResumeGlossing={handleResumeGlossing}
+              targetLang={targetLang}
             />
           </div>
         </div>
@@ -1412,6 +1413,7 @@ export function YouTubeReaderPage({
                 glossProgress={glossProgress}
                 onStopOrPauseGlossing={handleStopOrPauseGlossing}
                 onResumeGlossing={handleResumeGlossing}
+                targetLang={targetLang}
               />
             </div>
 
@@ -1475,7 +1477,7 @@ export function YouTubeReaderPage({
                   onSeek={handleSeek}
                   onGloss={handleGlossSingleLine}
                   onGlossLine={handleGlossSingleLine}
-                  glossingLineIds={glossingLineIds}
+                  glossingLineIds={loadingLineIds}
                   loadingLineIds={loadingLineIds}
                   autoScroll={autoScroll}
                   fontSize={fontSize}

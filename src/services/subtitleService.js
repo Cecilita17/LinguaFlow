@@ -83,7 +83,7 @@ export function parseSrt(content) {
   const blocks = clean.split(/\n\s*\n/);
   const results = [];
 
-  const timeRegex = /(\d+:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d+:\d{2}:\d{2}[,.]\d{1,3})/;
+  const timeRegex = /((?:\d+:)?\d{1,2}:\d{2}[,.]\d{1,3})\s*-->\s*((?:\d+:)?\d{1,2}:\d{2}[,.]\d{1,3})/;
 
   for (let idx = 0; idx < blocks.length; idx++) {
     const block = blocks[idx];
@@ -135,7 +135,7 @@ export function parseVtt(content) {
   const blocks = clean.split(/\n\s*\n/);
   const results = [];
 
-  const timeRegex = /((?:\d+:)?\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*((?:\d+:)?\d{2}:\d{2}[,.]\d{1,3})/;
+  const timeRegex = /((?:\d+:)?\d{1,2}:\d{2}[,.]\d{1,3})\s*-->\s*((?:\d+:)?\d{1,2}:\d{2}[,.]\d{1,3})/;
 
   for (let idx = 0; idx < blocks.length; idx++) {
     const block = blocks[idx];

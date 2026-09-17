@@ -20,6 +20,8 @@ import {
 } from './languageGlossStrategies.js';
 import {
   computeSubtitleHash,
+  getLibraryKey,
+  parseLibraryKey,
   getTranscriptFromLibrary,
   saveTranscriptToLibrary,
   getAllSavedTranscripts,
@@ -36,6 +38,8 @@ export {
   PUNCTUATION_REGEX,
   getLanguageGlossStrategy,
   computeSubtitleHash,
+  getLibraryKey,
+  parseLibraryKey,
   getTranscriptFromLibrary,
   saveTranscriptToLibrary,
   getAllSavedTranscripts,
@@ -257,10 +261,35 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
           linesResult.isComplete = Boolean(data.isComplete);
           linesResult.missingIds = data.missingIds || [];
           return linesResult;
+        } else {
+          console.warn('[Gloss] batch response missing lines or unsuccessful:', {
+            status: res.status,
+            targetLang,
+            nativeLang,
+            subtitleIds: lines.map(l => l.id),
+            requestedCount: lines.length,
+            payload: data
+          });
         }
+      } else {
+        const errText = await res.text().catch(() => '');
+        console.warn('[Gloss] batch request failed:', {
+          status: res.status,
+          targetLang,
+          nativeLang,
+          subtitleIds: lines.map(l => l.id),
+          requestedCount: lines.length,
+          response: errText
+        });
       }
     } catch (err) {
-      console.warn(`Attempt ${attempt + 1} for batch gloss failed:`, err.message);
+      console.warn(`[Gloss] Attempt ${attempt + 1} for batch gloss failed:`, {
+        error: err.message,
+        targetLang,
+        nativeLang,
+        subtitleIds: lines.map(l => l.id),
+        requestedCount: lines.length
+      });
       if (attempt === 0) {
         await new Promise(r => setTimeout(r, 1000));
       }
