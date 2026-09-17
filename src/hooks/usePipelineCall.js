@@ -7,44 +7,8 @@ import {
   extractTurnTransliteration,
   extractTurnGlosses
 } from '../services/liveCallGlossService.js';
-import { isGlossComplete, getEffectiveApiKey } from '../services/subtitleGlossService.js';
+import { transcribeAudioApi } from '../services/chatService.js';
 import { cleanDuplicatePhrases } from './useSpeech.js';
-
-/**
- * Deterministically merges newly recognized turn text with existing confirmed text,
- * handling full prefix re-emissions and boundary word overlaps gracefully.
- */
-function mergeTurnText(confirmed, incoming) {
-  if (!confirmed) return incoming || '';
-  if (!incoming) return confirmed || '';
-  const conf = confirmed.trim();
-  const inc = incoming.trim();
-  if (!conf) return inc;
-  if (!inc) return conf;
-
-  // If incoming already includes confirmed as prefix, use incoming
-  if (inc.toLowerCase().startsWith(conf.toLowerCase())) {
-    return inc;
-  }
-  // If confirmed already includes incoming as suffix, use confirmed
-  if (conf.toLowerCase().endsWith(inc.toLowerCase())) {
-    return conf;
-  }
-
-  // Check for word-level overlap at boundary (suffix of conf matching prefix of inc)
-  const confWords = conf.split(/\s+/);
-  const incWords = inc.split(/\s+/);
-  const maxOverlap = Math.min(confWords.length, incWords.length);
-  for (let overlap = maxOverlap; overlap > 0; overlap--) {
-    const confSuffix = confWords.slice(-overlap).join(' ').toLowerCase();
-    const incPrefix = incWords.slice(0, overlap).join(' ').toLowerCase();
-    if (confSuffix === incPrefix) {
-      return `${conf} ${incWords.slice(overlap).join(' ')}`.trim();
-    }
-  }
-
-  return `${conf} ${inc}`.trim();
-}
 
 /**
  * Configurable post-TTS acoustic echo guard duration (ms).
@@ -54,54 +18,24 @@ function mergeTurnText(confirmed, incoming) {
 const POST_TTS_ECHO_GUARD_MS = 350;
 
 /**
- * Conservative acoustic echo fallback detector.
- * Only flags unmistakable verbatim or consecutive reproduction of what the AI just spoke,
- * never penalizing legitimate user responses that merely share vocabulary words.
+ * Voice Activity Detection (VAD) Configuration
  */
-function isLikelyEcho(transcript, aiText) {
-  if (!transcript || !aiText) return false;
-  const cleanTrans = transcript
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '')
-    .trim();
-  const cleanAi = aiText
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[.,/#!$%^&*;:{}=\-_`~()?'"¡¿]/g, '')
-    .trim();
-  if (!cleanTrans || !cleanAi) return false;
-
-  // 1. Direct exact full-phrase match
-  if (cleanTrans === cleanAi) return true;
-
-  // 2. Exact consecutive substring match for substantial phrases (>= 3 words)
-  const transWords = cleanTrans.split(/\s+/).filter(Boolean);
-  if (transWords.length >= 3 && cleanAi.includes(cleanTrans)) {
-    return true;
-  }
-
-  // 3. For short utterances (1-2 words), only consider echo if AI utterance is identical
-  if (transWords.length < 3) {
-    return cleanAi === cleanTrans;
-  }
-
-  return false;
-}
+const VAD_INTERVAL_MS = 40;
+const SPEECH_ENERGY_THRESHOLD = 14;
+const MIN_SPEECH_DURATION_MS = 250;
+const SILENCE_TIMEOUT_MS = 900;
 
 /**
  * Hook for managing Low-Cost Live Voice Calls (Pipeline Architecture) in LinguaFlow.
  * Flow:
- * - Client Microphone + Live STT (Streaming Speech Recognition + Auto-VAD)
+ * - Single persistent MediaStream with Web Audio Voice Activity Detection (VAD)
+ * - Multilingual Speech-to-Text via Groq Whisper (/api/transcribe) preserving code-switching
  * - Intelligent Sentence Boundary Chunker (dispatches sentences to TTS as they stream)
  * - Streaming TTS Synthesis (/api/pipeline/tts Cartesia Sonic-3.6 Audio Queue Player)
  * - Pedagogical sentence-level correction post-turn via grammarEngine
- * - Natural Barge-in / Interruption handling
  * - Word-by-word Glosses & Local Transliteration (Arabic/Chinese)
- * - Deduplicated Pedagogical Grammar Corrections
- * - Comprehensive Usage & Latency Metrics Instrumentation
+ * - Half-Duplex Acoustic Protection & Post-TTS Echo Guard
+ * - Zero hardware microphone conflicts / multi-turn continuous conversation
  */
 export function usePipelineCall({
   targetLang = 'es',
@@ -125,14 +59,18 @@ export function usePipelineCall({
   const isMutedRef = useRef(false);
   const callStateRef = useRef('idle');
 
-  // Speech Recognition & VAD Refs
-  const recognitionRef = useRef(null);
-  const isRecognitionActiveRef = useRef(false);
-  const isSpeechRecognitionRunningRef = useRef(false);
-  const speechRecognitionRestartPendingRef = useRef(false);
-  const restartRetryTimeoutRef = useRef(null);
+  // Single-Stream Audio & VAD Refs
+  const mediaStreamRef = useRef(null);
+  const mediaStreamSourceRef = useRef(null);
+  const analyserRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const isRecordingTurnRef = useRef(false);
+  const speechStartTimeRef = useRef(0);
   const silenceTimeoutRef = useRef(null);
-  const consumedFinalIndicesRef = useRef(new Set());
+  const vadIntervalRef = useRef(null);
+  const isVadActiveRef = useRef(false);
+
   const currentTurnRef = useRef({
     id: null,
     confirmedText: '',
@@ -235,10 +173,6 @@ export function usePipelineCall({
 
   // Cancel active AI generation & playback (Barge-in / Interruption)
   const interruptAssistant = useCallback(() => {
-    if (restartRetryTimeoutRef.current) {
-      clearTimeout(restartRetryTimeoutRef.current);
-      restartRetryTimeoutRef.current = null;
-    }
     if (echoGuardTimerRef.current) {
       clearTimeout(echoGuardTimerRef.current);
       echoGuardTimerRef.current = null;
@@ -246,7 +180,6 @@ export function usePipelineCall({
     isEchoGuardActiveRef.current = false;
     isLlmStreamingRef.current = false;
     isSttPausedRef.current = false;
-    speechRecognitionRestartPendingRef.current = false;
 
     if (llmAbortControllerRef.current) {
       try { llmAbortControllerRef.current.abort(); } catch (e) {}
@@ -276,10 +209,14 @@ export function usePipelineCall({
   // Teardown all resources
   const cleanupResources = useCallback(() => {
     stopDurationTimer();
-    if (restartRetryTimeoutRef.current) {
-      clearTimeout(restartRetryTimeoutRef.current);
-      restartRetryTimeoutRef.current = null;
+
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
     }
+    isVadActiveRef.current = false;
+    isRecordingTurnRef.current = false;
+
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = null;
@@ -292,22 +229,33 @@ export function usePipelineCall({
     isEchoGuardActiveRef.current = false;
     isLlmStreamingRef.current = false;
     isSttPausedRef.current = false;
-    isSpeechRecognitionRunningRef.current = false;
-    speechRecognitionRestartPendingRef.current = false;
     lastAiSpokenTextRef.current = '';
 
     interruptAssistant();
 
-    // Stop Speech Recognition
-    if (recognitionRef.current) {
-      isRecognitionActiveRef.current = false;
+    // Stop MediaRecorder if recording
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.abort();
+        mediaRecorderRef.current.stop();
       } catch (e) {}
-      recognitionRef.current = null;
+      mediaRecorderRef.current = null;
+    }
+
+    // Disconnect MediaStreamSource
+    if (mediaStreamSourceRef.current) {
+      try {
+        mediaStreamSourceRef.current.disconnect();
+      } catch (e) {}
+      mediaStreamSourceRef.current = null;
+    }
+    analyserRef.current = null;
+
+    // Release microphone hardware stream
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch (e) {}
+      mediaStreamRef.current = null;
     }
 
     // Close Web Audio Context
@@ -319,7 +267,6 @@ export function usePipelineCall({
     }
 
     // Clear deduplication caches & turn state
-    consumedFinalIndicesRef.current.clear();
     correctedTurnIdsRef.current.clear();
     glossedTurnIdsRef.current.clear();
     processedUserTurnIdsRef.current.clear();
@@ -330,64 +277,6 @@ export function usePipelineCall({
       finalized: false
     };
   }, [interruptAssistant]);
-
-  // Determine if Speech Recognition can be safely active and listening
-  const canRunSpeechRecognition = useCallback(() => {
-    const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
-    const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
-    const isQueueActive = ttsQueueRef.current.length > 0;
-    const isLlmActive = isLlmStreamingRef.current || Boolean(currentAiTurnIdRef.current);
-
-    return Boolean(
-      isRecognitionActiveRef.current &&
-      recognitionRef.current &&
-      !isSttPausedRef.current &&
-      !isEchoGuardActiveRef.current &&
-      !isPlaybackActive &&
-      !isQueueActive &&
-      !isLlmActive &&
-      !isSpeakingState &&
-      callStateRef.current !== 'idle' &&
-      callStateRef.current !== 'error'
-    );
-  }, []);
-
-  // Safely start Speech Recognition if ready, handling Chrome state races and retries
-  const startSpeechRecognitionIfReady = useCallback(() => {
-    if (restartRetryTimeoutRef.current) {
-      clearTimeout(restartRetryTimeoutRef.current);
-      restartRetryTimeoutRef.current = null;
-    }
-
-    if (!canRunSpeechRecognition()) {
-      console.log('[PipelineSTT] startSpeechRecognitionIfReady: not ready to run STT currently (paused/speaking/thinking)');
-      return;
-    }
-
-    if (isSpeechRecognitionRunningRef.current) {
-      console.log('[PipelineSTT] SpeechRecognition is already running');
-      return;
-    }
-
-    try {
-      console.log('[PipelineSTT] Starting SpeechRecognition...');
-      speechRecognitionRestartPendingRef.current = false;
-      recognitionRef.current.start();
-      isSpeechRecognitionRunningRef.current = true;
-      console.log('[PipelineSTT] SpeechRecognition.start() initiated successfully');
-    } catch (err) {
-      console.warn('[PipelineSTT] SpeechRecognition.start() notice:', err?.name || err);
-      // If error is InvalidStateError or recognition is in a transitional closing state, mark pending and retry safely
-      if (err?.name === 'InvalidStateError' || (err?.message && err.message.includes('already started'))) {
-        speechRecognitionRestartPendingRef.current = true;
-        restartRetryTimeoutRef.current = setTimeout(() => {
-          if (canRunSpeechRecognition() && !isSpeechRecognitionRunningRef.current) {
-            startSpeechRecognitionIfReady();
-          }
-        }, 150);
-      }
-    }
-  }, [canRunSpeechRecognition]);
 
   // Trigger pedagogical correction asynchronously for a user voice turn
   const triggerCorrection = useCallback((userText, turnId) => {
@@ -538,10 +427,9 @@ export function usePipelineCall({
             isSttPausedRef.current = false;
             echoGuardTimerRef.current = null;
             if (callStateRef.current !== 'idle' && callStateRef.current !== 'error') {
-              console.log('[PipelineEchoGuard] STT resumed -> listening');
+              console.log('[PipelineEchoGuard] Listening resumed');
               callStateRef.current = 'listening';
               setCallState('listening');
-              startSpeechRecognitionIfReady();
             }
           }, POST_TTS_ECHO_GUARD_MS);
         }
@@ -564,7 +452,7 @@ export function usePipelineCall({
     setCallState('speaking');
 
     try {
-      console.log('[PipelineTTS] Request: synthesising text chunk:', nextItem.text.slice(0, 40) + '...');
+      console.log('[PipelineTTS] Synthesizing text chunk:', nextItem.text.slice(0, 40) + '...');
       ttsAbortControllerRef.current = new AbortController();
       sessionMetricsRef.current.ttsRequests++;
 
@@ -579,9 +467,7 @@ export function usePipelineCall({
         signal: ttsAbortControllerRef.current.signal
       });
 
-      console.log('[PipelineTTS] Response status:', ttsResponse.status);
       const contentType = ttsResponse.headers.get('content-type') || '';
-      console.log('[PipelineTTS] Content-Type:', contentType);
 
       if (!ttsResponse.ok) {
         let errBody = '';
@@ -594,10 +480,9 @@ export function usePipelineCall({
         throw new Error(`TTS service returned HTTP ${ttsResponse.status}: ${errBody}`);
       }
 
-      // Check for audio/wav or audio/mpeg
+      // Check for audio/wav, audio/mpeg, or audio/mp3
       if (contentType.includes('audio/wav') || contentType.includes('audio/mpeg') || contentType.includes('audio/mp3') || contentType.includes('audio/webm')) {
         const audioBlob = await ttsResponse.blob();
-        console.log('[PipelineTTS] Received audio blob size:', audioBlob.size, 'bytes, type:', audioBlob.type);
 
         if (audioBlob.size === 0) {
           throw new Error('Received 0-byte audio stream from TTS');
@@ -627,7 +512,6 @@ export function usePipelineCall({
             source.start(0);
           } catch (decodeErr) {
             console.warn('[PipelineTTS] Web Audio decode notice, fallback to HTMLAudio:', decodeErr);
-            // Fallback to HTMLAudioElement
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
             activeAudioElementRef.current = audio;
@@ -672,42 +556,16 @@ export function usePipelineCall({
 
           await audio.play();
         }
-      } else {
-        // Handle JSON response (Cartesia / OpenAI base64 or alternative)
-        const data = await ttsResponse.json();
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        if (data.audioContent) {
-          const audioBlob = base64ToBlob(data.audioContent, 'audio/mp3');
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          activeAudioElementRef.current = audio;
-
-          await new Promise((resolve) => {
-            audio.onended = resolve;
-            audio.onerror = resolve;
-            audio.play().catch((e) => {
-              console.warn('[PipelineTTS] Audio.play notice:', e);
-              resolve();
-            });
-          });
-          URL.revokeObjectURL(audioUrl);
-          activeAudioElementRef.current = null;
-          isPlayingQueueRef.current = false;
-          playNextInAudioQueue();
-        }
       }
 
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.warn('[PipelineTTS] Playback failed: Request or playback error:', err);
+        console.warn('[PipelineTTS] Playback notice:', err);
       }
       isPlayingQueueRef.current = false;
       playNextInAudioQueue();
     }
-  }, [voice, targetLang, startSpeechRecognitionIfReady]);
+  }, [voice, targetLang]);
 
   // Enqueue a sentence chunk for TTS synthesis and playback
   const enqueueTextForTTS = useCallback((textChunk) => {
@@ -729,12 +587,6 @@ export function usePipelineCall({
     interruptAssistant();
     isLlmStreamingRef.current = true;
     isSttPausedRef.current = true;
-    console.log('[PipelineEchoGuard] TTS playback started -> STT paused');
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch (e) {}
-    }
     callStateRef.current = 'thinking';
     setCallState('thinking');
 
@@ -749,104 +601,98 @@ export function usePipelineCall({
     const aiTurnId = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     currentAiTurnIdRef.current = aiTurnId;
     currentAiTurnTextRef.current = '';
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Insert placeholder bot message into transcript
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setLiveTranscript((prev) => [
       ...prev,
       {
         id: aiTurnId,
         sender: 'bot',
-        speaker: 'LinguaFlow AI',
+        speaker: 'LinguaFlow',
         text: '',
-        tokens: [],
+        timestamp: timeStr,
         isStreaming: true,
-        timestamp: timeStr
+        tokens: []
       }
     ]);
 
-    llmAbortControllerRef.current = new AbortController();
     sessionMetricsRef.current.llmRequests++;
 
     try {
-      const historyContext = liveTranscriptRef.current
-        .filter(m => m.text && !m.isStreaming && m.id !== aiTurnId)
-        .slice(-6)
-        .map(m => ({ sender: m.sender, text: m.text }));
+      llmAbortControllerRef.current = new AbortController();
 
-      const response = await fetch('/api/pipeline/chat-stream', {
+      const historyPayload = liveTranscriptRef.current
+        .filter((msg) => msg.id !== aiTurnId && msg.text && msg.text.trim())
+        .slice(-6)
+        .map((msg) => ({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: (msg.correctedText || msg.text).trim()
+        }));
+
+      const streamResponse = await fetch('/api/pipeline/chat-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: cleanPrompt,
-          history: historyContext,
           targetLang,
           nativeLang,
-          level
+          level,
+          voice,
+          history: historyPayload
         }),
         signal: llmAbortControllerRef.current.signal
       });
 
-      if (!response.ok) {
-        throw new Error('LLM Stream status: ' + response.status);
+      if (!streamResponse.ok) {
+        throw new Error(`LLM streaming service error: HTTP ${streamResponse.status}`);
       }
 
-      const reader = response.body.getReader();
+      const reader = streamResponse.body.getReader();
       const decoder = new TextDecoder('utf-8');
-      let sseBuffer = '';
       let sentenceBuffer = '';
-
-      // Sentence boundary detection regex: punctuation [.!?؛:\n]
-      const sentenceRegex = /([^.!?؛:\n]+[.!?؛:\n]+)/g;
+      const terminalPunctuationRegex = /([.!?。！？]+)/;
 
       while (true) {
-        const { done, value } = await reader.read();
+        const { value, done } = await reader.read();
         if (done) break;
 
-        sseBuffer += decoder.decode(value, { stream: true });
-        const lines = sseBuffer.split('\n');
-        sseBuffer = lines.pop() || '';
+        const rawChunk = decoder.decode(value, { stream: true });
+        const lines = rawChunk.split('\n');
 
         for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          const jsonStr = trimmed.slice(6);
-          try {
-            const data = JSON.parse(jsonStr);
-            if (data.done) {
-              break;
-            }
-            if (data.delta) {
-              currentAiTurnTextRef.current += data.delta;
-              lastAiSpokenTextRef.current = currentAiTurnTextRef.current;
-              lastAiSpokenTimestampRef.current = Date.now();
-              sentenceBuffer += data.delta;
+          const trimmedLine = line.trim();
+          if (!trimmedLine.startsWith('data:')) continue;
+          const jsonStr = trimmedLine.replace(/^data:\s*/, '');
+          if (jsonStr === '[DONE]') continue;
 
-              const fullText = currentAiTurnTextRef.current;
-              const streamingTokens = tokenizeLiveCallTurn(fullText, targetLang);
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const deltaContent = parsed.content || parsed.text || '';
+            if (deltaContent) {
+              currentAiTurnTextRef.current += deltaContent;
+              sentenceBuffer += deltaContent;
+
+              const liveText = currentAiTurnTextRef.current;
+              const liveTokens = tokenizeLiveCallTurn(liveText, targetLang);
 
               setLiveTranscript((prev) =>
                 prev.map((msg) =>
                   msg.id === aiTurnId
-                    ? { ...msg, text: fullText, tokens: streamingTokens, isStreaming: true }
+                    ? { ...msg, text: liveText, tokens: liveTokens }
                     : msg
                 )
               );
 
-              // Check for complete sentence chunk
-              sentenceRegex.lastIndex = 0;
+              // Sentence boundary chunking: dispatch completed sentences directly to TTS
               let match;
-              let lastIndex = 0;
-              while ((match = sentenceRegex.exec(sentenceBuffer)) !== null) {
-                const completeSentence = match[1].trim();
-                if (completeSentence) {
-                  enqueueTextForTTS(completeSentence);
+              while ((match = terminalPunctuationRegex.exec(sentenceBuffer)) !== null) {
+                const punctEnd = match.index + match[0].length;
+                const completedSentence = sentenceBuffer.slice(0, punctEnd).trim();
+                sentenceBuffer = sentenceBuffer.slice(punctEnd).trim();
+
+                if (completedSentence) {
+                  enqueueTextForTTS(completedSentence);
                 }
-                lastIndex = sentenceRegex.lastIndex;
-              }
-              if (lastIndex > 0) {
-                sentenceBuffer = sentenceBuffer.slice(lastIndex);
-                sentenceRegex.lastIndex = 0;
               }
             }
           } catch (e) {}
@@ -901,7 +747,7 @@ export function usePipelineCall({
         playNextInAudioQueue();
       }
     }
-  }, [targetLang, nativeLang, level, interruptAssistant, enqueueTextForTTS, triggerTurnGloss, playNextInAudioQueue]);
+  }, [targetLang, nativeLang, level, voice, interruptAssistant, enqueueTextForTTS, triggerTurnGloss, playNextInAudioQueue]);
 
   // Finalize and process a completed user speech turn
   const finalizeUserSpeechTurn = useCallback((userText, turnId) => {
@@ -912,17 +758,12 @@ export function usePipelineCall({
     const activeTurn = currentTurnRef.current;
     const currentId = turnId || activeTurn.id || `user-${Date.now()}`;
 
-    // 1. Guard against duplicate finalization
-    if (activeTurn.id === currentId && activeTurn.finalized) {
-      return;
-    }
     if (processedUserTurnIdsRef.current.has(currentId)) {
       return;
     }
     processedUserTurnIdsRef.current.add(currentId);
     sessionMetricsRef.current.userTurns++;
 
-    // 2. Mark active turn as finalized and reset currentTurnRef for the next turn
     if (activeTurn.id === currentId) {
       activeTurn.finalized = true;
       activeTurn.text = cleanText;
@@ -934,10 +775,6 @@ export function usePipelineCall({
       text: '',
       finalized: false
     };
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current);
-      silenceTimeoutRef.current = null;
-    }
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const initialTokens = tokenizeLiveCallTurn(cleanText, targetLang);
@@ -992,280 +829,214 @@ export function usePipelineCall({
       return [...prev, newUserMsg];
     });
 
-    // Asynchronously trigger single pedagogical correction
+    // Asynchronously trigger pedagogical correction
     triggerCorrection(cleanText, currentId);
 
     // Dispatch assistant conversational response
     dispatchAssistantResponse(cleanText);
   }, [targetLang, isSpanish, triggerCorrection, dispatchAssistantResponse]);
 
-  // Initialize Speech Recognition for Live VAD & Streaming STT
-  const initSpeechRecognition = useCallback(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn('[PipelineSTT] SpeechRecognition not supported in browser');
+  // Start capturing audio for a new user turn
+  const startTurnAudioRecording = useCallback(() => {
+    if (!mediaStreamRef.current || isRecordingTurnRef.current) return;
+    if (isSttPausedRef.current || isMutedRef.current || isEchoGuardActiveRef.current) return;
+
+    isRecordingTurnRef.current = true;
+    speechStartTimeRef.current = Date.now();
+    audioChunksRef.current = [];
+
+    const turnId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    currentTurnRef.current = {
+      id: turnId,
+      confirmedText: '',
+      text: '',
+      finalized: false
+    };
+
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setLiveTranscript((prev) => [
+      ...prev,
+      {
+        id: turnId,
+        sender: 'user',
+        speaker: isSpanish ? 'Tú' : 'You',
+        text: '',
+        isTranscribing: true,
+        timestamp: timeStr
+      }
+    ]);
+
+    try {
+      let mimeType = 'audio/webm;codecs=opus';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/webm';
+        }
+        const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType });
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            audioChunksRef.current.push(e.data);
+          }
+        };
+        recorder.start(100);
+        mediaRecorderRef.current = recorder;
+        console.log('[PipelineVAD] MediaRecorder started for user turn:', turnId);
+      }
+    } catch (err) {
+      console.warn('[PipelineVAD] MediaRecorder start notice:', err);
+    }
+  }, [isSpanish]);
+
+  // Stop recording user turn and transcribe via Groq Whisper Multilingual API
+  const stopTurnAudioRecordingAndTranscribe = useCallback(async () => {
+    if (!isRecordingTurnRef.current) return;
+    isRecordingTurnRef.current = false;
+
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+
+    const activeTurn = currentTurnRef.current;
+    const turnId = activeTurn?.id;
+    const speechDuration = Date.now() - (speechStartTimeRef.current || Date.now());
+
+    let audioBlob = null;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        const stopPromise = new Promise((resolve) => {
+          mediaRecorderRef.current.onstop = () => {
+            const blob = new Blob(audioChunksRef.current, {
+              type: mediaRecorderRef.current.mimeType || 'audio/webm'
+            });
+            resolve(blob);
+          };
+          mediaRecorderRef.current.stop();
+        });
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => {
+          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          resolve(blob);
+        }, 500));
+        audioBlob = await Promise.race([stopPromise, timeoutPromise]);
+      } catch (err) {
+        console.warn('[PipelineVAD] Error stopping MediaRecorder:', err);
+      }
+      mediaRecorderRef.current = null;
+    } else if (audioChunksRef.current.length > 0) {
+      audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    }
+
+    // Ignore short audio spikes / clicks (< 250ms or < 300 bytes)
+    if (!audioBlob || audioBlob.size < 300 || speechDuration < MIN_SPEECH_DURATION_MS) {
+      console.log('[PipelineVAD] Discarding noise spike (<250ms)');
+      setLiveTranscript((prev) => prev.filter((m) => m.id !== turnId));
+      currentTurnRef.current = { id: null, confirmedText: '', text: '', finalized: false };
       return;
     }
 
-    console.log('[PipelineSTT] Creating SpeechRecognition instance for language:', targetLang);
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = targetLang;
-    recognition.maxAlternatives = 1;
+    console.log(`[PipelineVAD] User turn audio captured (${audioBlob.size} bytes, ${speechDuration}ms). Transcribing via Groq Whisper...`);
+    sessionMetricsRef.current.sttRequests++;
 
-    recognition.onstart = () => {
-      console.log('[PipelineSTT] SpeechRecognition onstart fired - actively listening to microphone');
-      isSpeechRecognitionRunningRef.current = true;
-      speechRecognitionRestartPendingRef.current = false;
-    };
-
-    recognition.onresult = (event) => {
-      console.log('[PipelineSTT] SpeechRecognition onresult received event, count:', event.results?.length);
-      if (isMutedRef.current) return;
-
-      // 1. Half-Duplex Acoustic Protection: Ignore speech recognition during TTS playback, LLM thinking/streaming, or post-TTS acoustic guard
-      const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
-      const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
-      const isQueueActive = ttsQueueRef.current.length > 0;
-      const isLlmActive = isLlmStreamingRef.current || Boolean(currentAiTurnIdRef.current);
-
-      if (
-        isSttPausedRef.current ||
-        isPlaybackActive ||
-        isQueueActive ||
-        isLlmActive ||
-        isEchoGuardActiveRef.current ||
-        isSpeakingState
-      ) {
-        console.log('[PipelineEchoGuard] Ignoring SpeechRecognition result during TTS playback');
-        for (let i = 0; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            consumedFinalIndicesRef.current.add(i);
-          }
-        }
-        return;
-      }
-
-      // 2. Extract strictly NEW speech from changed results in this event
-      let newIncomingSpeech = '';
-      const startIndex = typeof event.resultIndex === 'number' ? event.resultIndex : 0;
-      for (let i = startIndex; i < event.results.length; i++) {
-        if (!consumedFinalIndicesRef.current.has(i)) {
-          const t = event.results[i][0]?.transcript?.trim() || '';
-          if (t) {
-            newIncomingSpeech = (newIncomingSpeech ? newIncomingSpeech + ' ' : '') + t;
-          }
-        }
-      }
-      newIncomingSpeech = newIncomingSpeech.trim();
-
-      // If no new unconsumed speech was detected in changed results, nothing to process
-      if (!newIncomingSpeech) return;
-
-      // 3. Fallback echo heuristic check (in case tail slightly exceeded timer)
-      const aiSpokenText = (currentAiTurnTextRef.current || lastAiSpokenTextRef.current || '').trim();
-      if (isLikelyEcho(newIncomingSpeech, aiSpokenText)) {
-        console.log('[PipelineEchoGuard] Ignoring SpeechRecognition result matching recent AI spoken text');
-        for (let i = 0; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            consumedFinalIndicesRef.current.add(i);
-          }
-        }
-        return;
-      }
-
-      sessionMetricsRef.current.transcriptionEvents++;
-
-      // 4. Ensure active unfinalized turn state (isolated fresh user turn)
-      if (!currentTurnRef.current.id || currentTurnRef.current.finalized) {
-        currentTurnRef.current = {
-          id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          confirmedText: '',
-          text: '',
-          finalized: false
-        };
-      }
-
-      const activeTurn = currentTurnRef.current;
-      const turnId = activeTurn.id;
-
-      // 5. Process event results: consume unconsumed final items, compute latest unconsumed interim
-      let sessionInterim = '';
-      for (let i = 0; i < event.results.length; i++) {
-        const resultItem = event.results[i];
-        const transcript = resultItem[0]?.transcript?.trim() || '';
-        if (!transcript) continue;
-
-        if (resultItem.isFinal) {
-          if (!consumedFinalIndicesRef.current.has(i)) {
-            consumedFinalIndicesRef.current.add(i);
-            activeTurn.confirmedText = mergeTurnText(activeTurn.confirmedText, transcript);
-          }
-        } else {
-          if (!consumedFinalIndicesRef.current.has(i)) {
-            sessionInterim = (sessionInterim ? sessionInterim + ' ' : '') + transcript;
-          }
-        }
-      }
-
-      sessionInterim = sessionInterim.trim();
-
-      // Full active turn text is confirmed base merged with current interim
-      let fullTurnText = activeTurn.confirmedText;
-      if (sessionInterim) {
-        fullTurnText = mergeTurnText(activeTurn.confirmedText, sessionInterim);
-      }
-      fullTurnText = fullTurnText.trim();
-
-      activeTurn.text = fullTurnText;
-      if (!fullTurnText) return;
-
-      const previewTokens = tokenizeLiveCallTurn(fullTurnText, targetLang);
-
-      setLiveTranscript((prev) => {
-        // 1. Find active user bubble by ID
-        const existingIdx = prev.findIndex((m) => m.id === turnId);
-        if (existingIdx >= 0) {
-          const updated = [...prev];
-          updated[existingIdx] = {
-            ...updated[existingIdx],
-            text: fullTurnText,
-            tokens: previewTokens,
-            isTranscribing: true
-          };
-          return updated;
-        }
-
-        // 2. Reuse trailing transcribing user bubble ONLY if it matches the current turn ID
-        const lastIdx = prev.length - 1;
-        if (lastIdx >= 0 && prev[lastIdx].sender === 'user' && prev[lastIdx].id === turnId && prev[lastIdx].isTranscribing) {
-          const updated = [...prev];
-          updated[lastIdx] = {
-            ...updated[lastIdx],
-            text: fullTurnText,
-            tokens: previewTokens,
-            isTranscribing: true
-          };
-          return updated;
-        }
-
-        // 3. Otherwise add new user bubble
-        return [
-          ...prev,
-          {
-            id: turnId,
-            sender: 'user',
-            speaker: isSpanish ? 'Tú' : 'You',
-            text: fullTurnText,
-            tokens: previewTokens,
-            isTranscribing: true,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }
-        ];
+    try {
+      const transcript = await transcribeAudioApi({
+        audioBlob,
+        targetLang,
+        nativeLang,
+        apiKey
       });
 
-      // Reset auto-VAD silence timer
+      if (transcript && transcript.trim()) {
+        const cleanTranscript = cleanDuplicatePhrases(transcript.trim());
+        console.log('✅ [PipelineVAD] Groq Whisper Transcribed:', cleanTranscript);
+        finalizeUserSpeechTurn(cleanTranscript, turnId);
+      } else {
+        console.log('[PipelineVAD] Groq Whisper returned empty transcript');
+        setLiveTranscript((prev) => prev.filter((m) => m.id !== turnId));
+        currentTurnRef.current = { id: null, confirmedText: '', text: '', finalized: false };
+      }
+    } catch (err) {
+      console.error('[PipelineVAD] Transcribe error:', err);
+      setLiveTranscript((prev) => prev.filter((m) => m.id !== turnId));
+      currentTurnRef.current = { id: null, confirmedText: '', text: '', finalized: false };
+    }
+  }, [targetLang, nativeLang, apiKey, finalizeUserSpeechTurn]);
+
+  // Real-time Voice Activity Detection monitoring loop
+  const checkVadAudioLevel = useCallback(() => {
+    if (!analyserRef.current || !isVadActiveRef.current) return;
+    if (isSttPausedRef.current || isMutedRef.current || isEchoGuardActiveRef.current) return;
+
+    const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
+    const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
+    const isQueueActive = ttsQueueRef.current.length > 0;
+    const isLlmActive = isLlmStreamingRef.current || Boolean(currentAiTurnIdRef.current);
+
+    if (isSpeakingState || isPlaybackActive || isQueueActive || isLlmActive) {
+      return;
+    }
+
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
+    }
+    const avgEnergy = sum / dataArray.length;
+
+    // Speech detected
+    if (avgEnergy >= SPEECH_ENERGY_THRESHOLD) {
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
       }
-
-      // Auto-finalize turn ONLY after stable silence (950ms)
-      const capturedTurnId = turnId;
-      silenceTimeoutRef.current = setTimeout(() => {
-        if (currentTurnRef.current.id === capturedTurnId && !currentTurnRef.current.finalized) {
-          const textToFinalize = currentTurnRef.current.text || fullTurnText;
-          if (textToFinalize && textToFinalize.trim()) {
-            finalizeUserSpeechTurn(textToFinalize.trim(), capturedTurnId);
-          }
+      if (!isRecordingTurnRef.current) {
+        startTurnAudioRecording();
+      }
+    } else {
+      // Volume below threshold
+      if (isRecordingTurnRef.current) {
+        if (!silenceTimeoutRef.current) {
+          silenceTimeoutRef.current = setTimeout(() => {
+            stopTurnAudioRecordingAndTranscribe();
+          }, SILENCE_TIMEOUT_MS);
         }
-      }, 950);
-    };
-
-    recognition.onerror = (event) => {
-      console.warn('[PipelineSTT] SpeechRecognition onerror:', event.error, event.message || '');
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        isRecognitionActiveRef.current = false;
-        isSpeechRecognitionRunningRef.current = false;
-        setCallState('error');
-        setErrorMessage(
-          isSpanish
-            ? 'Permiso de micrófono denegado para el reconocimiento de voz.'
-            : 'Microphone permission denied for speech recognition.'
-        );
-      } else if (event.error === 'audio-capture') {
-        isRecognitionActiveRef.current = false;
-        isSpeechRecognitionRunningRef.current = false;
-        setCallState('error');
-        setErrorMessage(
-          isSpanish
-            ? 'No se detectó ningún micrófono o está bloqueado por otra aplicación.'
-            : 'No microphone was found or microphone is busy.'
-        );
-      } else if (event.error === 'aborted') {
-        isSpeechRecognitionRunningRef.current = false;
       }
-    };
-
-    recognition.onend = () => {
-      console.log('[PipelineSTT] SpeechRecognition onend fired');
-      isSpeechRecognitionRunningRef.current = false;
-      consumedFinalIndicesRef.current.clear();
-
-      // Auto-restart recognition only if call is still active and STT is not paused for TTS / thinking
-      if (canRunSpeechRecognition()) {
-        console.log('[PipelineSTT] STT ended while ready -> auto-restarting');
-        startSpeechRecognitionIfReady();
-      } else {
-        console.log('[PipelineSTT] STT ended while paused/busy; will restart when AI completes turn');
-      }
-    };
-
-    recognitionRef.current = recognition;
-  }, [targetLang, isSpanish, finalizeUserSpeechTurn, canRunSpeechRecognition, startSpeechRecognitionIfReady]);
+    }
+  }, [startTurnAudioRecording, stopTurnAudioRecordingAndTranscribe]);
 
   // Start Pipeline Call
   const startCall = useCallback(async () => {
-    // 1. Immediately create / resume AudioContext synchronously in direct response to user gesture BEFORE any await!
+    // 1. Initialize AudioContext on user gesture
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx && !audioContextRef.current) {
         audioContextRef.current = new AudioCtx();
         console.log('[PipelineAudio] AudioContext created');
       }
-      if (audioContextRef.current) {
-        console.log('[PipelineAudio] AudioContext state:', audioContextRef.current.state);
-        if (audioContextRef.current.state === 'suspended') {
-          audioContextRef.current.resume().then(() => {
-            console.log('[PipelineAudio] AudioContext resumed');
-          }).catch((err) => {
-            console.warn('[PipelineAudio] AudioContext resume notice:', err);
-          });
-        }
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume().catch((err) => {
+          console.warn('[PipelineAudio] AudioContext resume notice:', err);
+        });
       }
     } catch (audioInitErr) {
       console.warn('[PipelineAudio] AudioContext initialization notice:', audioInitErr);
     }
 
     try {
-      // Clear previous resources without closing the newly unlocked AudioContext
+      // Clear previous resources
       stopDurationTimer();
+      interruptAssistant();
+
+      if (vadIntervalRef.current) {
+        clearInterval(vadIntervalRef.current);
+        vadIntervalRef.current = null;
+      }
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
         silenceTimeoutRef.current = null;
       }
-      interruptAssistant();
-      if (recognitionRef.current) {
-        isRecognitionActiveRef.current = false;
-        try {
-          recognitionRef.current.onend = null;
-          recognitionRef.current.onerror = null;
-          recognitionRef.current.onresult = null;
-          recognitionRef.current.abort();
-        } catch (e) {}
-        recognitionRef.current = null;
-      }
-      consumedFinalIndicesRef.current.clear();
+
       correctedTurnIdsRef.current.clear();
       glossedTurnIdsRef.current.clear();
       processedUserTurnIdsRef.current.clear();
@@ -1303,23 +1074,19 @@ export function usePipelineCall({
         errors: []
       };
 
-      // 2. Validate SpeechRecognition browser support
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        console.error('[PipelineSTT] SpeechRecognition is not supported in this browser.');
-        throw new Error(
-          isSpanish
-            ? 'Tu navegador no soporta reconocimiento de voz (SpeechRecognition). Por favor usa Google Chrome.'
-            : 'Your browser does not support SpeechRecognition. Please use Google Chrome.'
-        );
-      }
-
-      // 3. Request and verify microphone permissions, then immediately release the stream
+      // 2. Request microphone stream (single persistent stream for VAD & audio capture)
+      let stream = null;
       try {
-        console.log('[PipelineMic] Requesting microphone permission...');
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-        console.log('[PipelineMic] Microphone permission granted; verification stream released successfully.');
+        console.log('[PipelineMic] Requesting microphone access...');
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        mediaStreamRef.current = stream;
+        console.log('[PipelineMic] Microphone stream opened successfully.');
       } catch (micErr) {
         console.error('[PipelineMic] Microphone permission error:', micErr);
         throw new Error(
@@ -1329,14 +1096,28 @@ export function usePipelineCall({
         );
       }
 
-      // 4. Initialize and start SpeechRecognition
-      initSpeechRecognition();
-      if (recognitionRef.current) {
-        isRecognitionActiveRef.current = true;
-        callStateRef.current = 'listening';
-        setCallState('listening');
-        startSpeechRecognitionIfReady();
+      // 3. Connect single stream to AnalyserNode for real-time VAD
+      if (audioContextRef.current && stream) {
+        if (audioContextRef.current.state === 'suspended') {
+          await audioContextRef.current.resume();
+        }
+        const source = audioContextRef.current.createMediaStreamSource(stream);
+        mediaStreamSourceRef.current = source;
+        const analyser = audioContextRef.current.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.3;
+        source.connect(analyser);
+        analyserRef.current = analyser;
       }
+
+      // 4. Start VAD monitoring loop
+      isVadActiveRef.current = true;
+      isSttPausedRef.current = false;
+      callStateRef.current = 'listening';
+      setCallState('listening');
+
+      if (vadIntervalRef.current) clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = setInterval(checkVadAudioLevel, VAD_INTERVAL_MS);
 
       startDurationTimer();
 
@@ -1346,14 +1127,29 @@ export function usePipelineCall({
       setCallState('error');
       setErrorMessage(err.message || 'Error desconocido al conectar la llamada.');
     }
-  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant, startSpeechRecognitionIfReady]);
+  }, [isSpanish, cleanupResources, interruptAssistant, checkVadAudioLevel]);
 
   // Toggle Mute / Unmute
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
       const next = !prev;
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getAudioTracks().forEach((track) => {
+          track.enabled = !next;
+        });
+      }
       if (next) {
         if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+        if (isRecordingTurnRef.current) {
+          isRecordingTurnRef.current = false;
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            try { mediaRecorderRef.current.stop(); } catch (e) {}
+          }
+          const turnId = currentTurnRef.current?.id;
+          if (turnId) {
+            setLiveTranscript((p) => p.filter((m) => m.id !== turnId));
+          }
+        }
       }
       return next;
     });
@@ -1429,3 +1225,5 @@ export function usePipelineCall({
     toggleMute
   };
 }
+
+export default usePipelineCall;
