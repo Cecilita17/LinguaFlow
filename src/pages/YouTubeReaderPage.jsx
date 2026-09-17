@@ -777,9 +777,19 @@ export function YouTubeReaderPage({
           const latest = saved[0];
           console.log(`[GlossCache] Auto-recovering saved transcript for video ${newVideoId}: "${latest.videoTitle}" (${latest.subtitlesCount} lines)`);
           handleLoadFromLibrary(latest);
+        } else {
+          // Open in reader so the user can immediately watch the video and import/paste subtitles
+          setSubtitles([]);
+          setGlossProgress(null);
+          navigateToView('reader');
         }
       })
-      .catch((err) => console.warn('Error checking saved transcripts for video:', err));
+      .catch((err) => {
+        console.warn('Error checking saved transcripts for video:', err);
+        setSubtitles([]);
+        setGlossProgress(null);
+        navigateToView('reader');
+      });
   };
 
   const handleSubtitlesLoaded = useCallback(async (newSubtitles, format, sourceName) => {
@@ -814,7 +824,6 @@ export function YouTubeReaderPage({
       const existing = await getTranscriptFromLibrary(videoId || 'novideo', subHash, targetLang);
       if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
         handleLoadFromLibrary(existing);
-        navigateToView('library');
         return;
       }
     } catch (e) {
@@ -852,8 +861,8 @@ export function YouTubeReaderPage({
       console.warn('Failed to save imported transcript to library:', e);
     }
 
-    // Requirement 4: After successful import, navigate back to YouTube Library where it appears
-    navigateToView('library');
+    // Navigate to Reader where the user can watch the video with the imported transcript
+    navigateToView('reader');
   }, [videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition, navigateToView]);
 
   const handleFileUpload = (file) => {
@@ -1393,20 +1402,18 @@ export function YouTubeReaderPage({
               </div>
             )}
 
-            {/* SubtitleImporter (compact status line in reader) */}
-            {subtitles.length > 0 && (
-              <div className="shrink-0 mb-1">
-                <SubtitleImporter
-                  onSubtitlesLoaded={handleSubtitlesLoaded}
-                  subtitlesCount={subtitles.length}
-                  currentFormat={subtitleFormat}
-                  onClearSubtitles={handleClearSubtitles}
-                  glossProgress={glossProgress}
-                  onStopOrPauseGlossing={handleStopOrPauseGlossing}
-                  onResumeGlossing={handleResumeGlossing}
-                />
-              </div>
-            )}
+            {/* SubtitleImporter (in reader view: shown when subtitles.length === 0 or compact status when loaded) */}
+            <div className="shrink-0 mb-1">
+              <SubtitleImporter
+                onSubtitlesLoaded={handleSubtitlesLoaded}
+                subtitlesCount={subtitles.length}
+                currentFormat={subtitleFormat}
+                onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
+                glossProgress={glossProgress}
+                onStopOrPauseGlossing={handleStopOrPauseGlossing}
+                onResumeGlossing={handleResumeGlossing}
+              />
+            </div>
 
             {/* Search Input & Quick Controls */}
             {subtitles.length > 0 && (

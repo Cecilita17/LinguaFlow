@@ -223,6 +223,9 @@ export function TextReaderPage({
     setIsAutoGlossing(false);
     setPlayingParagraphId(null);
     setActiveAudioCharIndex(-1);
+    setLastAudioParagraphId(null);
+    setPendingScrollParagraphId(null);
+    setDocument(null);
     setInputText('');
     setInputTitle('');
     navigateToView('importer');
@@ -1031,7 +1034,7 @@ export function TextReaderPage({
     setIsEditing(false);
     setIsHeaderHidden(false);
     previousScrollTopRef.current = 0;
-    refreshLibraryCount();
+    await refreshLibraryCount();
 
     // Auto-glossing MUST BE OFF BY DEFAULT:
     // Display text immediately, persist offline segmentation, ZERO AI calls!
@@ -1047,6 +1050,7 @@ export function TextReaderPage({
       failed: 0
     });
     setIsAutoGlossing(false);
+    navigateToView('reader');
   };
 
   // Open / select document from saved library modal
@@ -1224,6 +1228,7 @@ export function TextReaderPage({
           failed: 0
         });
         setIsAutoGlossing(false);
+        navigateToView('reader');
       } catch (err) {
         console.error('Error al importar archivo EPUB:', err);
         alert(`Error al importar el archivo EPUB: ${err.message || err}`);
