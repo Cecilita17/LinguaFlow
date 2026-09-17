@@ -104,11 +104,6 @@ export function YouTubePlayer({
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      // Emit one final current time
-      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-        const currentTime = playerRef.current.getCurrentTime();
-        if (onTimeUpdate) onTimeUpdate(currentTime);
-      }
     };
 
     return () => {

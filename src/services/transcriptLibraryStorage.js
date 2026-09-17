@@ -25,6 +25,7 @@ const sharedPlaybackMemory = new Map();
 export function getSharedPlaybackPosition(videoId) {
   if (!videoId) return null;
   const cleanId = String(videoId).trim();
+  if (cleanId === 'novideo' || cleanId === 'generic') return null;
   
   if (typeof localStorage !== 'undefined') {
     try {
@@ -52,6 +53,7 @@ export function getSharedPlaybackPosition(videoId) {
 export function saveSharedPlaybackPosition(videoId, subtitleHash = null, playbackTime = 0, subtitleId = null) {
   if (!videoId) return;
   const cleanId = String(videoId).trim();
+  if (cleanId === 'novideo' || cleanId === 'generic') return;
   const time = typeof playbackTime === 'number' && !isNaN(playbackTime) ? Math.max(0, playbackTime) : 0;
   const subId = subtitleId ? String(subtitleId) : null;
   const now = new Date().toISOString();
@@ -288,13 +290,18 @@ export async function updateTranscriptPlaybackPosition(idOrVideoId, playbackTime
 
   const mem = memoryStore.get(idOrVideoId);
   const cleanVideoId = mem?.videoId || parseLibraryKey(idOrVideoId).videoId || String(idOrVideoId).trim();
+  const isValidVideoId = cleanVideoId && cleanVideoId !== 'novideo' && cleanVideoId !== 'generic';
 
   // 1. Save to shared playback storage
-  saveSharedPlaybackPosition(cleanVideoId, null, time, subId);
+  if (isValidVideoId) {
+    saveSharedPlaybackPosition(cleanVideoId, null, time, subId);
+  }
 
   // 2. Update memoryStore for all records matching this videoId or exact ID
   for (const [key, item] of memoryStore.entries()) {
-    if (key === idOrVideoId || item.videoId === cleanVideoId) {
+    const isExact = key === idOrVideoId;
+    const isSameVideo = isValidVideoId && item.videoId === cleanVideoId;
+    if (isExact || isSameVideo) {
       item.lastPlaybackTime = time;
       item.lastSubtitleId = subId;
       item.lastUpdatedAt = now;
@@ -311,7 +318,7 @@ export async function updateTranscriptPlaybackPosition(idOrVideoId, playbackTime
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
 
-      if (store.indexNames.contains('videoId')) {
+      if (isValidVideoId && store.indexNames.contains('videoId')) {
         const index = store.index('videoId');
         const req = index.openCursor(IDBKeyRange.only(cleanVideoId));
         req.onsuccess = (e) => {

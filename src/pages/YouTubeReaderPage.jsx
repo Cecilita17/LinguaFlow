@@ -127,7 +127,7 @@ export function YouTubeReaderPage({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [currentRecordId, setCurrentRecordId] = useState('');
   const [pendingScrollSubtitleId, setPendingScrollSubtitleId] = useState(null);
-  const latestPositionRef = useRef({ time: 0, subId: null });
+  const latestPositionRef = useRef({ videoId: '', recordId: '', time: 0, subId: null });
   const saveThrottlerRef = useRef({ lastSavedTime: 0, timer: null });
 
   // Transcript view preferences
@@ -332,7 +332,7 @@ export function YouTubeReaderPage({
     setCurrentTime(0);
     setCurrentRecordId('');
     setPendingScrollSubtitleId(null);
-    latestPositionRef.current = { time: 0, subId: null };
+    latestPositionRef.current = { videoId: '', recordId: '', time: 0, subId: null };
     try {
       localStorage.removeItem(SESSION_STORAGE_KEY);
     } catch (e) {}
@@ -480,14 +480,19 @@ export function YouTubeReaderPage({
         const savedTime = Math.max(parsedTime, sharedPos?.lastPlaybackTime || 0);
         const savedSubId = parsed.lastSubtitleId || sharedPos?.lastSubtitleId || null;
 
+        latestPositionRef.current = {
+          videoId: parsed.videoId || '',
+          recordId: parsed.currentRecordId || '',
+          time: savedTime,
+          subId: savedSubId
+        };
+
         if (savedTime > 0) {
           setCurrentTime(savedTime);
           setSeekToTime({ time: savedTime, autoPlay: false });
-          latestPositionRef.current.time = savedTime;
         }
         if (savedSubId) {
           setPendingScrollSubtitleId(savedSubId);
-          latestPositionRef.current.subId = savedSubId;
         }
 
         if (parsed.preferences) {
@@ -600,17 +605,24 @@ export function YouTubeReaderPage({
 
   // Throttled playback position persistence:
   // Saves current time and active subtitle ID every 1.5s to 2s without freezing or overloading IndexedDB.
-  const flushPlaybackPosition = useCallback(() => {
+  const flushPlaybackPosition = useCallback((explicitRecordId = null, explicitVideoId = null) => {
     if (saveThrottlerRef.current.timer) {
       clearTimeout(saveThrottlerRef.current.timer);
       saveThrottlerRef.current.timer = null;
     }
-    const { time, subId } = latestPositionRef.current;
-    if (videoId && typeof time === 'number') {
-      saveSharedPlaybackPosition(videoId, null, time, subId);
+    const { videoId: posVideoId, recordId: posRecordId, time, subId } = latestPositionRef.current;
+    const effectiveVideoId = explicitVideoId || posVideoId || videoId;
+    const effectiveRecordId = explicitRecordId || posRecordId || currentRecordId;
+
+    if (posVideoId && effectiveVideoId && posVideoId !== effectiveVideoId) {
+      return;
     }
-    if (currentRecordId && typeof time === 'number') {
-      updateTranscriptPlaybackPosition(currentRecordId, time, subId).catch(err => {
+
+    if (effectiveVideoId && typeof time === 'number' && !isNaN(time)) {
+      saveSharedPlaybackPosition(effectiveVideoId, null, time, subId);
+    }
+    if (effectiveRecordId && typeof time === 'number' && !isNaN(time)) {
+      updateTranscriptPlaybackPosition(effectiveRecordId, time, subId).catch(err => {
         console.warn('Failed to flush playback position:', err);
       });
       saveThrottlerRef.current.lastSavedTime = Date.now();
@@ -618,8 +630,12 @@ export function YouTubeReaderPage({
   }, [currentRecordId, videoId]);
 
   const handleTimeUpdate = useCallback((newTime) => {
+    if (typeof newTime !== 'number' || isNaN(newTime)) return;
+
     setCurrentTime(newTime);
     latestPositionRef.current.time = newTime;
+    latestPositionRef.current.videoId = videoId;
+    latestPositionRef.current.recordId = currentRecordId;
 
     // Identify active subtitle line ID for this timestamp
     if (Array.isArray(subtitles) && subtitles.length > 0) {
@@ -633,19 +649,21 @@ export function YouTubeReaderPage({
       }
     }
 
-    if (videoId && typeof newTime === 'number') {
+    if (videoId) {
       saveSharedPlaybackPosition(videoId, null, newTime, latestPositionRef.current.subId);
     }
 
     if (!currentRecordId) return;
 
+    const boundRecordId = currentRecordId;
+    const boundVideoId = videoId;
     const now = Date.now();
     if (now - saveThrottlerRef.current.lastSavedTime >= 2000) {
       // Throttle interval passed, save immediately
       saveThrottlerRef.current.lastSavedTime = now;
       updateTranscriptPlaybackPosition(
-        currentRecordId,
-        latestPositionRef.current.time,
+        boundRecordId,
+        newTime,
         latestPositionRef.current.subId
       ).catch(() => {});
     } else if (!saveThrottlerRef.current.timer) {
@@ -653,9 +671,9 @@ export function YouTubeReaderPage({
       saveThrottlerRef.current.timer = setTimeout(() => {
         saveThrottlerRef.current.timer = null;
         saveThrottlerRef.current.lastSavedTime = Date.now();
-        if (currentRecordId) {
+        if (latestPositionRef.current.recordId === boundRecordId || (!latestPositionRef.current.recordId && latestPositionRef.current.videoId === boundVideoId)) {
           updateTranscriptPlaybackPosition(
-            currentRecordId,
+            boundRecordId,
             latestPositionRef.current.time,
             latestPositionRef.current.subId
           ).catch(() => {});
@@ -680,9 +698,25 @@ export function YouTubeReaderPage({
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      flushPlaybackPosition();
     };
   }, [flushPlaybackPosition]);
+
+  // Flush position on unmount of reader page
+  useEffect(() => {
+    return () => {
+      if (saveThrottlerRef.current.timer) {
+        clearTimeout(saveThrottlerRef.current.timer);
+        saveThrottlerRef.current.timer = null;
+      }
+      const { videoId: vId, recordId: rId, time, subId } = latestPositionRef.current;
+      if (vId && typeof time === 'number' && !isNaN(time)) {
+        saveSharedPlaybackPosition(vId, null, time, subId);
+      }
+      if (rId && typeof time === 'number' && !isNaN(time)) {
+        updateTranscriptPlaybackPosition(rId, time, subId).catch(() => {});
+      }
+    };
+  }, []);
 
   // Navigation helper: change view mode and update browser history
   const navigateToView = useCallback((newMode) => {
@@ -733,7 +767,7 @@ export function YouTubeReaderPage({
     setVideoUrl(newUrl);
     setCurrentTime(0);
     setCurrentRecordId('');
-    latestPositionRef.current = { time: 0, subId: null };
+    latestPositionRef.current = { videoId: newVideoId || '', recordId: '', time: 0, subId: null };
     setIsUrlImporterOpen(false);
 
     // Auto-check if a saved transcript exists in the library for this video
@@ -854,8 +888,23 @@ export function YouTubeReaderPage({
 
     const subHash = record.subtitleHash || (Array.isArray(record.subtitles) ? computeSubtitleHash(record.subtitles) : '');
     const recId = record.id || getLibraryKey(record.videoId, subHash, targetLang);
-    setCurrentRecordId(recId);
 
+    // Restore saved playback position and subtitle marker from record or shared video position
+    const sharedPos = record.videoId ? getSharedPlaybackPosition(record.videoId) : null;
+    const recTime = typeof record.lastPlaybackTime === 'number' && !isNaN(record.lastPlaybackTime)
+      ? Math.max(0, record.lastPlaybackTime)
+      : 0;
+    const savedTime = Math.max(recTime, sharedPos?.lastPlaybackTime || 0);
+    const savedSubId = record.lastSubtitleId || sharedPos?.lastSubtitleId || null;
+
+    latestPositionRef.current = {
+      videoId: record.videoId || '',
+      recordId: recId,
+      time: savedTime,
+      subId: savedSubId
+    };
+
+    setCurrentRecordId(recId);
     if (record.videoId) setVideoId(record.videoId);
     if (record.videoUrl) setVideoUrl(record.videoUrl);
     if (record.videoTitle) setVideoTitle(record.videoTitle);
@@ -873,17 +922,8 @@ export function YouTubeReaderPage({
       });
     }
 
-    // Restore saved playback position and subtitle marker from record or shared video position
-    const sharedPos = record.videoId ? getSharedPlaybackPosition(record.videoId) : null;
-    const recTime = typeof record.lastPlaybackTime === 'number' && !isNaN(record.lastPlaybackTime)
-      ? Math.max(0, record.lastPlaybackTime)
-      : 0;
-    const savedTime = Math.max(recTime, sharedPos?.lastPlaybackTime || 0);
-    const savedSubId = record.lastSubtitleId || sharedPos?.lastSubtitleId || null;
-
     setCurrentTime(savedTime);
     setSeekToTime({ time: savedTime, autoPlay: false });
-    latestPositionRef.current = { time: savedTime, subId: savedSubId };
 
     if (savedSubId) {
       setPendingScrollSubtitleId(savedSubId);
@@ -913,7 +953,7 @@ export function YouTubeReaderPage({
       setCurrentRecordId('');
       setCurrentTime(0);
       setPendingScrollSubtitleId(null);
-      latestPositionRef.current = { time: 0, subId: null };
+      latestPositionRef.current = { videoId: '', recordId: '', time: 0, subId: null };
       try {
         localStorage.removeItem(SESSION_STORAGE_KEY);
       } catch (e) {}
@@ -945,7 +985,7 @@ export function YouTubeReaderPage({
     setGlossProgress(null);
     setCurrentRecordId('');
     setPendingScrollSubtitleId(null);
-    latestPositionRef.current = { time: 0, subId: null };
+    latestPositionRef.current = { videoId: '', recordId: '', time: 0, subId: null };
   };
 
   const handleResetSession = () => {
@@ -963,7 +1003,7 @@ export function YouTubeReaderPage({
     setCurrentTime(0);
     setCurrentRecordId('');
     setPendingScrollSubtitleId(null);
-    latestPositionRef.current = { time: 0, subId: null };
+    latestPositionRef.current = { videoId: '', recordId: '', time: 0, subId: null };
     setSearchQuery('');
     setGlossProgress(null);
     try {
