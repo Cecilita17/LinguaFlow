@@ -111,6 +111,12 @@ export const CODE_SWITCHING_LEXICON = {
     'padre': 'vader', 'madre': 'moeder', 'papa': 'vader', 'mama': 'moeder', 'papá': 'vader', 'mamá': 'moeder',
     'hermano': 'broer', 'hermana': 'zus', 'familia': 'familie', 'perro': 'hond', 'gato': 'kat', 'coche': 'auto', 'carro': 'auto',
     'trabajo': 'werk', 'dinero': 'geld', 'escuela': 'school',
+    'very': 'erg', 'tired': 'moe', 'cansado': 'moe', 'cansada': 'moe',
+    'happy': 'blij', 'feliz': 'blij', 'sad': 'verdrietig', 'triste': 'verdrietig',
+    'good': 'goed', 'bueno': 'goed', 'bien': 'goed', 'bad': 'slecht', 'malo': 'slecht', 'mal': 'slecht',
+    'big': 'groot', 'grande': 'groot', 'small': 'klein', 'pequeño': 'klein', 'pequeña': 'klein',
+    'please': 'alstublieft', 'thanks': 'bedankt', 'thank': 'bedankt', 'gracias': 'bedankt',
+    'hello': 'hallo', 'hola': 'hallo', 'bye': 'dag', 'adiós': 'dag', 'adios': 'dag',
     'sopa': 'soep', 'sopas': 'soepen', 'soup': 'soep',
     'verdura': 'groente', 'verduras': 'groenten', 'vegetales': 'groenten', 'vegetable': 'groente', 'vegetables': 'groenten',
     'comida': 'eten', 'food': 'eten',
@@ -489,9 +495,9 @@ export const CODE_SWITCHING_LEXICON = {
  * Protected valid words per target language that must NEVER be translated away.
  */
 export const VALID_TARGET_WORDS = {
-  en: new Set(['no', 'in', 'me', 'so', 'to', 'or', 'he', 'be', 'on', 'at', 'by', 'do', 'go', 'if', 'is', 'it', 'my', 'up', 'us', 'we', 'am', 'an', 'as', 'hotel', 'radio', 'taxi', 'bar', 'club', 'piano', 'solo', 'idea', 'bus', 'pasta', 'auto', 'menu', 'video', 'banana', 'mango', 'actor', 'doctor', 'motor', 'animal', 'hospital', 'canal', 'legal', 'general', 'natural', 'normal', 'total', 'original', 'simple', 'terrible', 'flexible', 'probable', 'visible', 'cable', 'base', 'balance', 'dance', 'chance', 'distance', 'substance', 'perfume', 'costume', 'crime', 'drama', 'flora', 'fauna', 'opera', 'panorama', 'plasma', 'sofa', 'arena', 'cafeteria', 'camera', 'dilemma', 'gorilla', 'lava', 'umbrella', 'vanilla', 'zebra', 'area', 'era', 'extra', 'formula', 'guerrilla', 'inertia', 'agenda', 'propaganda', 'villa', 'yoga']),
+  en: new Set(['no', 'in', 'me', 'so', 'to', 'or', 'he', 'be', 'on', 'at', 'by', 'do', 'go', 'if', 'is', 'it', 'my', 'up', 'us', 'we', 'am', 'an', 'as', 'was', 'had', 'were', 'been', 'hotel', 'radio', 'taxi', 'bar', 'club', 'piano', 'solo', 'idea', 'bus', 'pasta', 'auto', 'menu', 'video', 'banana', 'mango', 'actor', 'doctor', 'motor', 'animal', 'hospital', 'canal', 'legal', 'general', 'natural', 'normal', 'total', 'original', 'simple', 'terrible', 'flexible', 'probable', 'visible', 'cable', 'base', 'balance', 'dance', 'chance', 'distance', 'substance', 'perfume', 'costume', 'crime', 'drama', 'flora', 'fauna', 'opera', 'panorama', 'plasma', 'sofa', 'arena', 'cafeteria', 'camera', 'dilemma', 'gorilla', 'lava', 'umbrella', 'vanilla', 'zebra', 'area', 'era', 'extra', 'formula', 'guerrilla', 'inertia', 'agenda', 'propaganda', 'villa', 'yoga']),
   de: new Set(['no', 'in', 'an', 'am', 'so', 'du', 'die', 'der', 'das', 'den', 'dem', 'des', 'er', 'es', 'sie', 'wir', 'ihr', 'ist', 'im', 'ja', 'ab', 'aus', 'bei', 'mit', 'nach', 'seit', 'von', 'zu', 'gut', 'neu', 'alt', 'rot', 'blau', 'grün', 'weiß', 'schwarz', 'hotel', 'radio', 'taxi', 'bar', 'club', 'piano', 'solo', 'idea', 'bus', 'pasta', 'auto', 'menu', 'video']),
-  nl: new Set(['in', 'en', 'is', 'ik', 'je', 'ze', 'we', 'er', 'te', 'om', 'op', 'van', 'tot', 'bij', 'na', 'uit', 'als', 'dan', 'ook', 'nog', 'al', 'wel', 'niet', 'geen', 'maar', 'want', 'of', 'dus', 'ja', 'nee', 'goed', 'hotel', 'radio', 'taxi', 'bar', 'club', 'piano', 'solo', 'bus', 'pasta', 'auto', 'menu', 'video']),
+  nl: new Set(['in', 'en', 'is', 'ik', 'je', 'ze', 'we', 'er', 'te', 'om', 'op', 'van', 'tot', 'bij', 'na', 'uit', 'als', 'dan', 'ook', 'nog', 'al', 'wel', 'niet', 'geen', 'maar', 'want', 'of', 'dus', 'ja', 'nee', 'goed', 'was', 'had', 'ben', 'moe', 'hotel', 'radio', 'taxi', 'bar', 'club', 'piano', 'solo', 'bus', 'pasta', 'auto', 'menu', 'video']),
   pl: new Set(['no', 'w', 'z', 'o', 'do', 'na', 'po', 'od', 'za', 'ze', 'ku', 'ja', 'ty', 'on', 'ona', 'ono', 'my', 'wy', 'oni', 'one', 'to', 'jest', 'są', 'mam', 'ma', 'tak', 'nie', 'ale', 'lub', 'czy', 'hotel', 'radio', 'taxi', 'bar', 'club', 'piano', 'solo', 'bus', 'pasta', 'auto', 'menu', 'video']),
   es: new Set(['no', 'si', 'sí', 'en', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas', 'y', 'o', 'pero', 'con', 'sin', 'por', 'para', 'hotel', 'radio', 'taxi', 'bar', 'club', 'piano', 'solo', 'idea', 'bus', 'pasta', 'auto', 'menu', 'video'])
 };
