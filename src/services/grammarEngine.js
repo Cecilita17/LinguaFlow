@@ -1,6 +1,7 @@
 import { computeWordDiff } from './diffUtils.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
 import { getEffectiveApiKey } from './subtitleGlossService.js';
+import { API_BASE_URL } from './chatService.js';
 
 const LT_LANG_MAP = {
   es: 'es',
@@ -810,7 +811,7 @@ export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-    const res = await fetch('/api/pedagogical-correct', {
+    let res = await fetch(`${API_BASE_URL}/api/pedagogical-correct`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -825,6 +826,24 @@ export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', 
       }),
       signal: controller.signal
     });
+
+    if (!res.ok && res.status === 404) {
+      res = await fetch(`${API_BASE_URL}/pedagogical-correct`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(effectiveKey ? { 'x-api-key': effectiveKey } : {})
+        },
+        body: JSON.stringify({
+          text: clean,
+          targetLang,
+          nativeLang,
+          level,
+          apiKey: effectiveKey
+        }),
+        signal: controller.signal
+      });
+    }
 
     clearTimeout(timeoutId);
 

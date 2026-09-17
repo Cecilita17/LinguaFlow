@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import {
   GROQ_MODEL_CONFIG,
   buildSystemInstruction,
+  buildPedagogicalSystemInstruction,
   buildDataContextPrompt,
   cleanAndParseJSON
 } from './promptTemplates.js';
@@ -180,6 +181,7 @@ export async function handlePedagogicalCorrect(req, res) {
 
     const activeModel = getSanitizedGroqModel();
     const isArabic = targetLang === 'ar';
+    const isChinese = targetLang === 'zh';
     const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
     const nativeObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
     const targetName = langObj.englishName || langObj.name;
@@ -188,26 +190,8 @@ export async function handlePedagogicalCorrect(req, res) {
     if (effectiveApiKey) {
       console.log(`Pedagogical correction requested with Groq [${activeModel}] for lang: ${targetLang}`);
 
-      const systemPrompt = `You are an expert pedagogical grammar correction and translation engine for language learners.
-Your ONLY task is to analyze user learner sentences, detect errors (grammar, conjugation, cases, diacritics, vocabulary, code-switching/foreign words), and output structured JSON.
-CRITICAL RULES:
-- NEVER engage in conversation or roleplay.
-- NEVER explain or add conversational greetings.
-- Always output STRICTLY valid JSON matching the requested schema.`;
-
-      const userPrompt = `Analyze this sentence spoken by a student learning ${targetName} (Native language: ${nativeName}, Level: ${level}):
-"${rawText}"
-
-Tasks:
-1. If the sentence is grammatically, lexically, and naturally correct in ${targetName}, set "corrected_text" identical to "${rawText.replace(/"/g, '\\"')}" and "has_errors": false.
-   * Note: Words that are legitimate and valid in ${targetName} (including shared cognates/loanwords like "no", "hotel", "radio", "taxi", "idea", "bus", "bar", "piano", etc.) must NEVER be marked as errors.
-2. If the student uses any word, term, or expression in another language (e.g., Spanish, English, or any non-${targetName} language), or makes grammatical/spelling mistakes, TRANSLATE and correct those words into natural ${targetName}, integrating them seamlessly into the sentence in ${targetName}. Set "has_errors": true and write the full natural ${targetName} sentence in "corrected_text". Preserve the user's intended meaning without unnecessary stylistic rewrites.
-3. Return STRICTLY valid JSON with no markdown wrapping:
-{
-  "original_text": "${rawText.replace(/"/g, '\\"')}",
-  "corrected_text": "corrected sentence strictly in ${targetName}",
-  "has_errors": false
-}`;
+      const systemPrompt = buildPedagogicalSystemInstruction(targetName, nativeName, level, targetLang);
+      const userPrompt = `=== STUDENT INPUT TO CORRECT ===\n"${rawText}"\n\nAnalyze the student's input according to pedagogical tasks and output strictly structured JSON for "user_correction".`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -229,11 +213,8 @@ Tasks:
               { role: 'user', content: userPrompt }
             ],
             response_format: { type: 'json_object' },
-            temperature: 0.1,
-            // max_tokens: 350 is chosen because pedagogical corrections of a speech turn
-            // consist of 1-3 sentences max in JSON. This prevents lengthy hallucinated output,
-            // minimizes token costs on Groq, and guarantees rapid response latency (<300ms).
-            max_tokens: 350
+            temperature: 0.2,
+            max_tokens: 600
           })
         });
 
@@ -245,10 +226,28 @@ Tasks:
           const rawContent = data?.choices?.[0]?.message?.content || '';
           const parsed = cleanAndParseJSON(rawContent);
 
-          if (parsed && typeof parsed.corrected_text === 'string') {
-            const corrected = parsed.corrected_text.trim();
-            const rawDiffTokens = computeWordDiff(rawText, corrected);
-            const diffTokens = rawDiffTokens.map(token => {
+          const cor = parsed?.user_correction || parsed;
+          if (cor && typeof cor.corrected_text === 'string') {
+            const corrected = cor.corrected_text.trim();
+            const hasDiffWithChanges = Array.isArray(cor.diff_tokens) &&
+              cor.diff_tokens.length > 0 &&
+              cor.diff_tokens.some((t) => t.changed);
+
+            let diffTokens = hasDiffWithChanges
+              ? cor.diff_tokens
+              : (corrected.toLowerCase() !== rawText.toLowerCase()
+                  ? computeWordDiff(rawText, corrected)
+                  : (Array.isArray(cor.diff_tokens) && cor.diff_tokens.length > 0
+                      ? cor.diff_tokens
+                      : computeWordDiff(rawText, corrected)));
+
+            // Transliteration rules: strictly for Arabic and Chinese
+            const allowsTranslit = isArabic || isChinese;
+            diffTokens = diffTokens.map(token => {
+              if (!token) return token;
+              if (!allowsTranslit) {
+                return { ...token, translit: null };
+              }
               const tokenText = token.text || '';
               if ((isArabic || /[\u0600-\u06FF]/.test(tokenText)) && !token.translit) {
                 return {
@@ -259,10 +258,10 @@ Tasks:
               return token;
             });
 
-            const hasErrors = Boolean(parsed.has_errors || diffTokens.some(t => t.changed) || corrected.toLowerCase() !== rawText.toLowerCase());
+            const hasErrors = Boolean(cor.has_errors || diffTokens.some(t => t.changed) || corrected.toLowerCase() !== rawText.toLowerCase());
 
             const resultPayload = {
-              original_text: rawText,
+              original_text: cor.original_text || rawText,
               corrected_text: corrected,
               has_errors: hasErrors,
               diff_tokens: diffTokens
@@ -271,7 +270,8 @@ Tasks:
             return res.status(200).json({
               success: true,
               source: `groq (${activeModel})`,
-              data: resultPayload
+              data: resultPayload,
+              user_correction: resultPayload
             });
           }
         } else {
@@ -293,7 +293,8 @@ Tasks:
       success: false,
       fallback: true,
       source: 'deterministic-linguistics',
-      data: deterministic
+      data: deterministic,
+      user_correction: deterministic
     });
 
   } catch (error) {
@@ -302,7 +303,8 @@ Tasks:
     return res.status(200).json({
       success: false,
       fallback: true,
-      data: deterministic
+      data: deterministic,
+      user_correction: deterministic
     });
   }
 }
