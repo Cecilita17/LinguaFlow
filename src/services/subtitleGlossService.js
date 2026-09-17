@@ -480,6 +480,8 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     }
   });
 
+  const strategy = getLanguageGlossStrategy(targetLang);
+
   return originalTokens.map(orig => {
     if (orig.isPunctuation) return orig;
 
@@ -497,7 +499,6 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       if (isManual) {
         return {
           ...orig,
-          targetLang: orig.targetLang || targetLang,
           glossSource: 'manual'
         };
       }
@@ -505,21 +506,49 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       // 2. TIER 2: AI GLOSS COMPLETION
       return {
         ...orig,
-        targetLang: orig.targetLang || targetLang,
-        auxiliary: match.auxiliary || orig.auxiliary || null,
-        pinyin: match.pinyin || orig.pinyin || null,
-        translit: match.translit || orig.translit || null,
-        gloss: match.gloss || orig.gloss || null,
+        targetLang: targetLang,
+        auxiliary: match.auxiliary || null,
+        pinyin: match.pinyin || null,
+        translit: match.translit || null,
+        gloss: match.gloss || null,
         glossSource: 'ai'
       };
     }
 
+    // If no AI match was returned:
+    // If it's a manual gloss, preserve it
+    if (isManual) {
+      return orig;
+    }
+
+    // If it's an offline dictionary match for the ACTIVE strategy, preserve/set it with targetLang
+    const offlineEntry = strategy.lookupOffline(w);
+    if (offlineEntry && offlineEntry.gloss) {
+      return {
+        ...orig,
+        targetLang: targetLang,
+        auxiliary: offlineEntry.auxiliary || offlineEntry.pinyin || offlineEntry.translit || null,
+        pinyin: offlineEntry.pinyin || offlineEntry.auxiliary || null,
+        translit: offlineEntry.translit || null,
+        gloss: offlineEntry.gloss,
+        glossSource: 'offline'
+      };
+    }
+
+    // If the token was previously resolved with AI for the ACTIVE targetLang, keep it
+    if (orig.glossSource === 'ai' && orig.targetLang === targetLang && orig.gloss) {
+      return orig;
+    }
+
+    // Otherwise, the token is unresolved for this targetLang (e.g. legacy token without targetLang or from different language)
     return {
       ...orig,
-      targetLang: orig.targetLang || targetLang,
-      auxiliary: orig.auxiliary || null,
-      pinyin: orig.pinyin || null,
-      translit: orig.translit || null
+      targetLang: targetLang,
+      auxiliary: null,
+      pinyin: null,
+      translit: null,
+      gloss: null,
+      glossSource: null
     };
   });
 }
@@ -851,7 +880,7 @@ export function enrichSubtitlesWithGlosses({
 
     if (savedRecord && Array.isArray(savedRecord.subtitles) && savedRecord.subtitles.length > 0) {
       const savedCompleted = getCompletedCount(savedRecord.subtitles);
-      if (savedRecord.isComplete || savedCompleted === totalSubtitles) {
+      if (savedCompleted === totalSubtitles) {
         console.log(`[GlossCache] HIT — loading saved transcript (${savedCompleted}/${totalSubtitles} lines)`);
         if (onUpdate) onUpdate(savedRecord.subtitles);
         if (onProgress) {

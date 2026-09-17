@@ -1184,18 +1184,13 @@ export class ChineseGlossStrategy {
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
-    // Cross-language protection: Token gloss from another language is invalid for this strategy
-    if (token.targetLang && token.targetLang !== 'zh') {
-      return false;
-    }
-
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
 
     const aux = typeof (token.auxiliary || token.pinyin) === 'string' ? (token.auxiliary || token.pinyin).trim() : '';
 
-    // Verified AI gloss
-    if (token.glossSource === 'ai' && gloss && (gloss !== w || w === '的')) {
+    // Verified AI gloss: MUST match active targetLang ('zh')
+    if (token.glossSource === 'ai' && token.targetLang === 'zh' && gloss && (gloss !== w || w === '的')) {
       if (/[\u4E00-\u9FFF]/.test(w)) {
         return Boolean(aux && aux !== gloss);
       }
@@ -1302,18 +1297,13 @@ export class ArabicGlossStrategy {
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
-    // Cross-language protection: Token gloss from another language is invalid for this strategy
-    if (token.targetLang && token.targetLang !== 'ar') {
-      return false;
-    }
-
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
 
     const aux = typeof (token.auxiliary || token.translit) === 'string' ? (token.auxiliary || token.translit).trim() : '';
 
-    // Verified AI gloss
-    if (token.glossSource === 'ai' && gloss && gloss !== w) {
+    // Verified AI gloss: MUST match active targetLang ('ar')
+    if (token.glossSource === 'ai' && token.targetLang === 'ar' && gloss && gloss !== w) {
       if (/[\u0600-\u06FF]/.test(w)) {
         return Boolean(aux && aux !== gloss);
       }
@@ -1415,16 +1405,11 @@ export class PolishGlossStrategy {
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
 
-    // Cross-language protection: Token gloss from another language is invalid for this strategy
-    if (token.targetLang && token.targetLang !== 'pl') {
-      return false;
-    }
-
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
 
-    // Verified AI gloss
-    if (token.glossSource === 'ai' && gloss && gloss.toLowerCase() !== w.toLowerCase()) {
+    // Verified AI gloss: MUST match active targetLang ('pl')
+    if (token.glossSource === 'ai' && token.targetLang === 'pl' && gloss && gloss.toLowerCase() !== w.toLowerCase()) {
       return true;
     }
 
@@ -1797,7 +1782,6 @@ export class TurkishGlossStrategy {
 
   isTokenComplete(token) {
     if (!token) return false;
-    if (token.targetLang && token.targetLang !== this.code) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
@@ -1805,8 +1789,8 @@ export class TurkishGlossStrategy {
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
 
-    // Verified AI gloss
-    if (token.glossSource === 'ai' && gloss && gloss.toLocaleLowerCase('tr-TR') !== w.toLocaleLowerCase('tr-TR')) {
+    // Verified AI gloss: MUST match active targetLang ('tr')
+    if (token.glossSource === 'ai' && token.targetLang === 'tr' && gloss && gloss.toLocaleLowerCase('tr-TR') !== w.toLocaleLowerCase('tr-TR')) {
       return true;
     }
 
@@ -1887,7 +1871,6 @@ export class DefaultGlossStrategy {
 
   isTokenComplete(token) {
     if (!token) return false;
-    if (token.targetLang && token.targetLang !== this.code) return false;
     if (token.isPunctuation) return true;
     const w = (token.text || token.word || '').trim();
     if (!w || PUNCTUATION_REGEX.test(w)) return true;
@@ -1895,8 +1878,8 @@ export class DefaultGlossStrategy {
     const gloss = typeof token.gloss === 'string' ? token.gloss.trim() : '';
     if (token.glossSource === 'manual' && gloss) return true;
 
-    // Verified AI gloss
-    if (token.glossSource === 'ai' && gloss && gloss.toLowerCase() !== w.toLowerCase()) {
+    // Verified AI gloss: MUST match this strategy's active targetLang
+    if (token.glossSource === 'ai' && token.targetLang === this.code && gloss && gloss.toLowerCase() !== w.toLowerCase()) {
       return true;
     }
 
