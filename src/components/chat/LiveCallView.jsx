@@ -28,7 +28,7 @@ export function LiveCallView({
   level = 'A2/B1',
   apiKey = '',
   onEndCall,
-  activeCall: externalCall = null
+  activeCall
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
@@ -41,16 +41,6 @@ export function LiveCallView({
 
   const [showLiveTranscript, setShowLiveTranscript] = useState(true);
   const transcriptContainerRef = useRef(null);
-
-  const internalCall = usePipelineCall({
-    targetLang,
-    nativeLang,
-    level,
-    apiKey,
-    isSpanish
-  });
-
-  const activeCall = externalCall || internalCall;
 
   const {
     callState,

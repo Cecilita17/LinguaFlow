@@ -604,6 +604,8 @@ export function usePipelineCall({
     }
 
     try {
+      console.log('[PipelineAndroidTest] recognition.start ABOUT TO RUN');
+      console.log('[PipelineAndroidTest] userActivation.isActive =', typeof navigator !== 'undefined' && navigator.userActivation ? navigator.userActivation.isActive : 'unavailable');
       console.log('[PipelineSTT] SpeechRecognition start requested');
       speechRecognitionRestartPendingRef.current = false;
       recognitionRef.current.start();
@@ -1290,6 +1292,8 @@ export function usePipelineCall({
 
     const speechLangCode = getLanguageMeta(targetLang)?.speechCode || targetLang;
     console.log(`[PipelineSTT] SpeechRecognition created: lang=${speechLangCode}, targetLang=${targetLang}`);
+    console.log('[PipelineAndroidTest] SpeechRecognition INSTANCE CREATED');
+    console.log('[PipelineAndroidTest] userActivation.isActive at creation =', typeof navigator !== 'undefined' && navigator.userActivation ? navigator.userActivation.isActive : 'unavailable');
     const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const recognition = new SpeechRecognition();
     recognition.continuous = !isMobile;
@@ -1298,12 +1302,14 @@ export function usePipelineCall({
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
+      console.log('[PipelineAndroidTest] onstart');
       console.log('[PipelineSTT] SpeechRecognition onstart: actively listening to microphone');
       isSpeechRecognitionRunningRef.current = true;
       speechRecognitionRestartPendingRef.current = false;
     };
 
     recognition.onresult = (event) => {
+      console.log('[PipelineAndroidTest] onresult');
       const resultsCount = event.results?.length || 0;
       const resultIdx = typeof event.resultIndex === 'number' ? event.resultIndex : 0;
       console.log(`[PipelineSTT] SpeechRecognition onresult: count=${resultsCount}, resultIndex=${resultIdx}`);
@@ -1450,6 +1456,7 @@ export function usePipelineCall({
     };
 
     recognition.onerror = (event) => {
+      console.log(`[PipelineAndroidTest] onerror = ${event.error}`);
       console.warn(`[PipelineSTT] onerror: event.error=${event.error}, message=${event.message || ''}`);
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         isRecognitionActiveRef.current = false;
@@ -1477,6 +1484,7 @@ export function usePipelineCall({
     };
 
     recognition.onend = () => {
+      console.log('[PipelineAndroidTest] onend');
       console.log(`[PipelineSTT] onend: callState=${callStateRef.current}`);
       isSpeechRecognitionRunningRef.current = false;
 
@@ -1491,6 +1499,22 @@ export function usePipelineCall({
 
     recognitionRef.current = recognition;
   }, [targetLang, isSpanish, finalizeUserSpeechTurn, canRunSpeechRecognition, startSpeechRecognitionIfReady, startTurnAudioCapture]);
+
+  // Pre-instantiate and configure SpeechRecognition instance ahead of time (before user click gesture)
+  useEffect(() => {
+    initSpeechRecognition();
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.abort();
+        } catch (e) {}
+        recognitionRef.current = null;
+      }
+    };
+  }, [initSpeechRecognition]);
 
   // Start Pipeline Call
   const startCall = useCallback(async () => {
@@ -1523,16 +1547,6 @@ export function usePipelineCall({
         silenceTimeoutRef.current = null;
       }
       interruptAssistant();
-      if (recognitionRef.current) {
-        isRecognitionActiveRef.current = false;
-        try {
-          recognitionRef.current.onend = null;
-          recognitionRef.current.onerror = null;
-          recognitionRef.current.onresult = null;
-          recognitionRef.current.abort();
-        } catch (e) {}
-        recognitionRef.current = null;
-      }
       correctedTurnIdsRef.current.clear();
       glossedTurnIdsRef.current.clear();
       processedUserTurnIdsRef.current.clear();
@@ -1582,8 +1596,10 @@ export function usePipelineCall({
         );
       }
 
-      // 3. Initialize and start SpeechRecognition immediately (preserves user activation)
-      initSpeechRecognition();
+      // 3. Start pre-existing SpeechRecognition instance immediately (preserves user activation)
+      if (!recognitionRef.current) {
+        initSpeechRecognition();
+      }
       if (recognitionRef.current) {
         isRecognitionActiveRef.current = true;
         startSpeechRecognitionIfReady();
@@ -1647,6 +1663,7 @@ export function usePipelineCall({
     const finalMetrics = { ...sessionMetricsRef.current };
 
     cleanupResources();
+    initSpeechRecognition();
     setCallState('idle');
 
     const formattedDuration = formatSeconds(finalSeconds);
