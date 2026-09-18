@@ -27,7 +27,8 @@ export function LiveCallView({
   nativeLang = 'es',
   level = 'A2/B1',
   apiKey = '',
-  onEndCall
+  onEndCall,
+  activeCall: externalCall = null
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
@@ -41,13 +42,15 @@ export function LiveCallView({
   const [showLiveTranscript, setShowLiveTranscript] = useState(true);
   const transcriptContainerRef = useRef(null);
 
-  const activeCall = usePipelineCall({
+  const internalCall = usePipelineCall({
     targetLang,
     nativeLang,
     level,
     apiKey,
     isSpanish
   });
+
+  const activeCall = externalCall || internalCall;
 
   const {
     callState,
@@ -63,10 +66,12 @@ export function LiveCallView({
     toggleMute
   } = activeCall;
 
-  // Automatically start call on mount
+  // If the call was not already pre-started via user gesture (e.g. direct mount / fallback), start it on mount
   useEffect(() => {
-    startCall();
-  }, [startCall]);
+    if (callState === 'idle') {
+      startCall();
+    }
+  }, [callState, startCall]);
 
   // Keep transcript scrolled to latest conversational turn
   useEffect(() => {

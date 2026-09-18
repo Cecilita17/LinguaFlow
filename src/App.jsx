@@ -11,6 +11,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HabitTrackerPage } from './pages/HabitTrackerPage.jsx';
 import HomePage from './pages/HomePage';
 import { useSpeech } from './hooks/useSpeech';
+import { usePipelineCall } from './hooks/usePipelineCall.js';
 import { Sparkles, RotateCcw, ArrowLeft, ArrowUp } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
@@ -906,6 +907,21 @@ export default function App() {
     setChatViewMode('hub');
   };
 
+  // Lifted Live Call hook to guarantee SpeechRecognition starts directly in the user click event loop
+  const pipelineCall = usePipelineCall({
+    targetLang,
+    nativeLang,
+    level: config?.level || 'A2/B1',
+    apiKey: config?.apiKey || '',
+    isSpanish
+  });
+
+  const handleStartCall = () => {
+    // Synchronously initiate SpeechRecognition in direct response to user gesture
+    pipelineCall.startCall();
+    setChatViewMode('call');
+  };
+
   return (
     <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
       {/* Global Header — hidden in Text Reader, YouTube Reader & Live Call because they own their dedicated full-screen headers */}
@@ -1000,6 +1016,7 @@ export default function App() {
             level={config?.level || 'A2/B1'}
             apiKey={config?.apiKey || ''}
             onEndCall={handleEndCall}
+            activeCall={pipelineCall}
           />
         </main>
       ) : chatViewMode === 'call-detail' ? (
@@ -1020,7 +1037,7 @@ export default function App() {
             setTargetLang={handleTargetLangChange}
             languages={languages}
             onStartChat={() => setChatViewMode('chat')}
-            onStartCall={() => setChatViewMode('call')}
+            onStartCall={handleStartCall}
             onOpenChatSession={(langCode) => {
               if (langCode && langCode !== targetLang) {
                 handleTargetLangChange(langCode);
