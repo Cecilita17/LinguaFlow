@@ -196,8 +196,10 @@ export function SavedTranscriptsModal({
             filtered.map((item) => {
               const langMeta = LANGUAGE_META[item.targetLanguage] || { name: item.targetLanguage.toUpperCase(), flag: '🌐' };
               const isCurrent = currentVideoId && item.videoId === currentVideoId;
-              const isComplete = Boolean(item.isComplete);
-              const completedCount = item.completedLinesCount || item.subtitlesCount;
+              const completedCount = typeof item.completedLinesCount === 'number'
+                ? item.completedLinesCount
+                : (Array.isArray(item.subtitles) ? item.subtitles.filter(s => s.tokens && s.tokens.some(t => t.gloss)).length : 0);
+              const isComplete = Boolean(item.isComplete) && completedCount === item.subtitlesCount && item.subtitlesCount > 0;
 
               return (
                 <div

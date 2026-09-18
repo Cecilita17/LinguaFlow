@@ -238,8 +238,13 @@ export async function saveTranscriptToLibrary(record) {
     sourceType: record.sourceType || 'srt',
     subtitleHash: subHash,
     subtitlesCount: record.subtitles.length,
-    completedLinesCount: record.completedLinesCount || record.subtitles.filter(s => s.tokens && s.tokens.some(t => t.gloss)).length,
-    isComplete: Boolean(record.isComplete),
+    completedLinesCount: typeof record.completedLinesCount === 'number'
+      ? record.completedLinesCount
+      : (Array.isArray(record.subtitles) ? record.subtitles.filter(s => s.tokens && s.tokens.some(t => t.gloss)).length : 0),
+    isComplete: Boolean(record.isComplete) && (
+      record.subtitles.length === 0 ||
+      (typeof record.completedLinesCount === 'number' ? record.completedLinesCount : 0) === record.subtitles.length
+    ),
     format: record.format || 'srt',
     subtitles: record.subtitles,
     lastPlaybackTime: effectivePlaybackTime,

@@ -549,11 +549,14 @@ export function YouTubeReaderPage({
         getTranscriptFromLibrary(videoId, subHash, targetLang).then((existing) => {
           if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
             setSubtitles(existing.subtitles);
+            const actualCompleted = existing.subtitles.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
+            const isActuallyComplete = existing.subtitles.length > 0 && actualCompleted === existing.subtitles.length;
             setGlossProgress({
               total: existing.subtitles.length,
-              completed: existing.completedLinesCount || existing.subtitles.length,
+              completed: actualCompleted,
               isGlossing: false,
-              isComplete: Boolean(existing.isComplete),
+              isPaused: false,
+              isComplete: isActuallyComplete,
               failed: 0
             });
           } else {
@@ -971,11 +974,14 @@ export function YouTubeReaderPage({
 
     if (Array.isArray(record.subtitles)) {
       setSubtitles(record.subtitles);
+      const actualCompleted = record.subtitles.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
+      const isActuallyComplete = record.subtitles.length > 0 && actualCompleted === record.subtitles.length;
       setGlossProgress({
         total: record.subtitles.length,
-        completed: record.completedLinesCount || record.subtitles.length,
+        completed: actualCompleted,
         isGlossing: false,
-        isComplete: Boolean(record.isComplete),
+        isPaused: false,
+        isComplete: isActuallyComplete,
         failed: 0
       });
     }
