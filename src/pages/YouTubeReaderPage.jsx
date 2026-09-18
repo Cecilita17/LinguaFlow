@@ -349,13 +349,18 @@ export function YouTubeReaderPage({
     glossAbortControllerRef.current = controller;
     setIsAutoGlossing(true);
 
+    const effectiveVid = videoId || 'novideo';
+    const effectiveTitle = (videoTitle && titleVideoIdRef.current === effectiveVid)
+      ? videoTitle
+      : `YouTube Video (${effectiveVid})`;
+
     const enriched = enrichSubtitlesWithGlosses({
       subtitles: subtitlesToGloss,
       targetLang,
       nativeLang,
       apiKey,
-      videoId,
-      videoTitle,
+      videoId: effectiveVid,
+      videoTitle: effectiveTitle,
       videoUrl,
       sourceType: sourceName || 'srt',
       abortSignal: controller.signal,
@@ -427,9 +432,14 @@ export function YouTubeReaderPage({
         const updatedList = prevSubtitles.map(s => s.id === line.id ? updatedLine : s);
 
         const completedCount = updatedList.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
+        const effectiveVid = videoId || 'novideo';
+        const effectiveTitle = (videoTitle && titleVideoIdRef.current === effectiveVid)
+          ? videoTitle
+          : `YouTube Video (${effectiveVid})`;
+
         saveTranscriptToLibrary({
-          videoId,
-          videoTitle,
+          videoId: effectiveVid,
+          videoTitle: effectiveTitle,
           videoUrl,
           targetLanguage: targetLang,
           nativeLanguage: nativeLang,
@@ -463,8 +473,14 @@ export function YouTubeReaderPage({
       const saved = localStorage.getItem(SESSION_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.videoId) setVideoId(parsed.videoId);
-        if (parsed.videoTitle) setVideoTitle(parsed.videoTitle);
+        if (parsed.videoId) {
+          setVideoId(parsed.videoId);
+          activeVideoIdRef.current = parsed.videoId;
+        }
+        if (parsed.videoTitle && parsed.videoId) {
+          setVideoTitle(parsed.videoTitle);
+          titleVideoIdRef.current = parsed.videoId;
+        }
         if (parsed.videoUrl) setVideoUrl(parsed.videoUrl);
         if (parsed.videoLanguage) setVideoLanguage(parsed.videoLanguage);
         if (parsed.currentRecordId) setCurrentRecordId(parsed.currentRecordId);
@@ -753,6 +769,14 @@ export function YouTubeReaderPage({
     return () => window.removeEventListener('popstate', handlePopState);
   }, [videoId, subtitles]);
 
+  // Ref to track the videoId associated with the current videoTitle and prevent cross-video race conditions
+  const activeVideoIdRef = useRef(videoId);
+  const titleVideoIdRef = useRef('');
+
+  useEffect(() => {
+    activeVideoIdRef.current = videoId;
+  }, [videoId]);
+
   const handleImportVideo = (newVideoId, newUrl) => {
     flushPlaybackPosition();
     if (glossAbortControllerRef.current) {
@@ -763,6 +787,12 @@ export function YouTubeReaderPage({
       progressiveTokenizeRef.current.abort();
       progressiveTokenizeRef.current = null;
     }
+
+    // Invalidate and clear previous video title immediately to prevent cross-video title leaks
+    setVideoTitle('');
+    titleVideoIdRef.current = '';
+    activeVideoIdRef.current = newVideoId || '';
+
     setVideoId(newVideoId);
     setVideoUrl(newUrl);
     setCurrentTime(0);
@@ -773,6 +803,9 @@ export function YouTubeReaderPage({
     // Auto-check if a saved transcript exists in the library for this video
     findTranscriptsByVideoId(newVideoId, targetLang)
       .then((saved) => {
+        // Prevent race conditions if user changed video during the async lookup
+        if (activeVideoIdRef.current !== newVideoId) return;
+
         if (saved && saved.length > 0) {
           const latest = saved[0];
           console.log(`[GlossCache] Auto-recovering saved transcript for video ${newVideoId}: "${latest.videoTitle}" (${latest.subtitlesCount} lines)`);
@@ -786,9 +819,11 @@ export function YouTubeReaderPage({
       })
       .catch((err) => {
         console.warn('Error checking saved transcripts for video:', err);
-        setSubtitles([]);
-        setGlossProgress(null);
-        navigateToView('reader');
+        if (activeVideoIdRef.current === newVideoId) {
+          setSubtitles([]);
+          setGlossProgress(null);
+          navigateToView('reader');
+        }
       });
   };
 
@@ -839,10 +874,15 @@ export function YouTubeReaderPage({
       const initialTime = sharedPos?.lastPlaybackTime || 0;
       const initialSubId = sharedPos?.lastSubtitleId || null;
 
+      const effectiveVideoId = videoId || 'novideo';
+      const effectiveTitle = (videoTitle && titleVideoIdRef.current === effectiveVideoId)
+        ? videoTitle
+        : `YouTube Video (${effectiveVideoId})`;
+
       await saveTranscriptToLibrary({
         id: recId,
-        videoId: videoId || 'novideo',
-        videoTitle: videoTitle || `YouTube Video (${videoId || 'novideo'})`,
+        videoId: effectiveVideoId,
+        videoTitle: effectiveTitle,
         videoUrl: videoUrl || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : ''),
         targetLanguage: targetLang,
         nativeLanguage: nativeLang,
@@ -914,9 +954,18 @@ export function YouTubeReaderPage({
     };
 
     setCurrentRecordId(recId);
-    if (record.videoId) setVideoId(record.videoId);
+    if (record.videoId) {
+      setVideoId(record.videoId);
+      activeVideoIdRef.current = record.videoId;
+    }
     if (record.videoUrl) setVideoUrl(record.videoUrl);
-    if (record.videoTitle) setVideoTitle(record.videoTitle);
+    if (record.videoTitle) {
+      setVideoTitle(record.videoTitle);
+      titleVideoIdRef.current = record.videoId || '';
+    } else {
+      setVideoTitle(record.videoId ? `YouTube Video (${record.videoId})` : '');
+      titleVideoIdRef.current = record.videoId || '';
+    }
     if (record.sourceType) setSubtitleSource(record.sourceType);
     if (record.format) setSubtitleFormat(record.format);
 
@@ -973,8 +1022,35 @@ export function YouTubeReaderPage({
     try {
       if (player && typeof player.getVideoData === 'function') {
         const data = player.getVideoData();
-        if (data && data.title && (!videoTitle || videoTitle.startsWith('YouTube Video'))) {
-          setVideoTitle(data.title);
+        const playerVid = data?.video_id;
+        const currentVid = activeVideoIdRef.current;
+
+        // Guard against race conditions: only accept title if player data matches currently active video
+        if (playerVid && currentVid && playerVid !== currentVid) return;
+
+        if (data && data.title && data.title.trim()) {
+          const newTitle = data.title.trim();
+          setVideoTitle(newTitle);
+          titleVideoIdRef.current = currentVid || playerVid || '';
+
+          // If a library transcript record is already loaded for this video, update its title in the library
+          const targetVideoId = currentVid || playerVid;
+          if (targetVideoId) {
+            findTranscriptsByVideoId(targetVideoId, targetLang)
+              .then((records) => {
+                if (records && records.length > 0) {
+                  records.forEach((rec) => {
+                    if (rec.videoTitle !== newTitle && activeVideoIdRef.current === targetVideoId) {
+                      saveTranscriptToLibrary({
+                        ...rec,
+                        videoTitle: newTitle
+                      }).then(() => refreshLibraryCount()).catch(() => {});
+                    }
+                  });
+                }
+              })
+              .catch(() => {});
+          }
         }
       }
     } catch (e) {
@@ -1005,6 +1081,8 @@ export function YouTubeReaderPage({
     }
     setVideoId('');
     setVideoTitle('');
+    titleVideoIdRef.current = '';
+    activeVideoIdRef.current = '';
     setVideoUrl('');
     setSubtitles([]);
     setSubtitleFormat(null);
