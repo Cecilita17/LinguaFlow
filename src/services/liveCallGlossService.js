@@ -18,6 +18,7 @@ import {
 } from './subtitleGlossService.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
 import { CHINESE_OFFLINE_DICT } from './languageGlossStrategies.js';
+import { computeWordDiff } from './diffUtils.js';
 
 /**
  * Tokenize a live call turn into interlinear units.
@@ -95,7 +96,11 @@ export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null,
     baseTokens = mapDiffTokensOntoTokens(baseTokens, diffTokens);
   }
 
-  return baseTokens;
+  return baseTokens.map((t) => ({
+    ...t,
+    changed: Boolean(t.changed),
+    original: t.original || null
+  }));
 }
 
 const cleanDiffWord = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '').toLowerCase();
@@ -173,7 +178,11 @@ function mapDiffTokensOntoTokens(tokens, diffTokens) {
       };
     }
 
-    return t;
+    return {
+      ...t,
+      changed: false,
+      original: null
+    };
   });
 }
 
@@ -293,4 +302,32 @@ export function extractTurnTransliteration(tokens, targetLang) {
 export function extractTurnGlosses(tokens) {
   if (!Array.isArray(tokens) || tokens.length === 0) return [];
   return tokens.map(t => t.gloss || null);
+}
+
+/**
+ * Parses and tokenizes an AI response in Integrated Correction Mode.
+ * Identifies <correction>...</correction> tags, computes word diff against userPrompt,
+ * and sets changed: true on modified/translated words inside the reconstructed sentence.
+ */
+export function parseIntegratedCorrectionTokens(rawAiText, userPrompt = '', targetLang = 'es', nativeLang = 'es') {
+  if (!rawAiText || typeof rawAiText !== 'string') return [];
+
+  const match = rawAiText.match(/<correction>([\s\S]*?)(?:<\/correction>|$)/i);
+  if (!match) {
+    const cleanText = rawAiText.replace(/<\/?correction>/gi, '').trim();
+    return tokenizeLiveCallTurn(cleanText, targetLang, null, nativeLang);
+  }
+
+  const corrPhrase = match[1].trim();
+  const beforeText = rawAiText.slice(0, match.index).replace(/<\/?correction>/gi, '');
+  const afterText = rawAiText.slice(match.index + match[0].length).replace(/<\/?correction>/gi, '');
+
+  const beforeTokens = beforeText ? tokenizeLiveCallTurn(beforeText, targetLang, null, nativeLang) : [];
+  const afterTokens = afterText ? tokenizeLiveCallTurn(afterText, targetLang, null, nativeLang) : [];
+
+  // Compute diff against userPrompt for the correction span
+  const diffTokens = corrPhrase ? computeWordDiff(userPrompt || '', corrPhrase) : [];
+  const corrTokens = corrPhrase ? tokenizeLiveCallTurn(corrPhrase, targetLang, diffTokens, nativeLang) : [];
+
+  return [...beforeTokens, ...corrTokens, ...afterTokens];
 }

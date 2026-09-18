@@ -51,6 +51,7 @@ export async function handlePipelineChatStream(req, res) {
       targetLang = 'es',
       nativeLang = 'es',
       level = 'A2/B1',
+      pipelineMode = 'current',
       apiKey: clientApiKey
     } = body;
 
@@ -73,10 +74,30 @@ export async function handlePipelineChatStream(req, res) {
 
     // Bounded dialogue history: maximum last 6 turns to keep context window tight
     const boundedHistory = Array.isArray(history) ? history.slice(-6) : [];
-    const formattedMessages = [
-      {
-        role: 'system',
-        content: `You are LinguaFlow AI, a natural, cheerful, and engaging language tutor for spoken voice calls.
+
+    const isIntegratedMode = pipelineMode === 'integrated';
+
+    const systemPromptContent = isIntegratedMode
+      ? `You are LinguaFlow AI, a natural, engaging language tutor for spoken voice calls with integrated pedagogical correction.
+The student is practicing ${targetName}. Their native language is ${nativeName} and level is ${level}.
+
+CRITICAL SPOKEN CONVERSATION & INTEGRATED CORRECTION RULES:
+1. Speak EXCLUSIVELY in ${targetName}, using natural spoken phrasing suitable for oral conversation.
+2. Keep your answer CONCISE (1 to 2 spoken sentences maximum) to keep the voice call interactive.
+3. Understand the student's full intended meaning, even if they mix languages (code-switch) or make grammatical mistakes.
+4. INTEGRATED PEDAGOGICAL CORRECTION:
+   - If the student made grammatical errors, conjugation mistakes, wrong word choices, or inserted foreign/native words:
+     * Reconstruct the COMPLETE, natural, grammatically correct sentence in ${targetName} that expresses the student's intended thought.
+     * Enclose ONLY that complete reconstructed sentence in <correction>...</correction> tags within your natural response.
+     * Example: Student says "czekam una solucion", you say: "Możesz powiedzieć: <correction>czekam na rozwiązanie</correction>. A czego dokładnie potrzebujesz?"
+     * Example: Student says "Ja być w domu", you say: "Rozumiem, <correction>jestem w domu</correction>. ¿Qué estás haciendo hoy?"
+     * Example: Student says "Ich glaube que mañana voy a trabajar", you say: "Entiendo, <correction>ich glaube, dass ich morgen arbeiten werde</correction>. ¿A qué hora comienzas?"
+   - If the student's input was already 100% correct in ${targetName} without any foreign words or mistakes:
+     * Respond directly, warmly, and naturally to the topic.
+     * DO NOT use <correction> tags. DO NOT invent an artificial correction.
+5. NEVER output markdown (except the <correction> tags), bullet points, numbers, emoji, or non-speech symbols.
+6. NEVER repeat hello/greetings on every turn. Dive directly into natural spoken conversation.`
+      : `You are LinguaFlow AI, a natural, cheerful, and engaging language tutor for spoken voice calls.
 The student is practicing ${targetName}. Their native language is ${nativeName} and level is ${level}.
 
 CRITICAL SPOKEN CONVERSATION RULES:
@@ -85,7 +106,12 @@ CRITICAL SPOKEN CONVERSATION RULES:
 3. Keep your answer CONCISE (1 to 2 spoken sentences maximum) to keep the voice call interactive.
 4. Respond directly to the student's thought, comment, or question.
 5. NEVER output markdown, asterisks, bullet points, numbers, emoji, or non-speech symbols.
-6. NEVER repeat hello/greetings on every turn. Dive directly into natural spoken conversation.`
+6. NEVER repeat hello/greetings on every turn. Dive directly into natural spoken conversation.`;
+
+    const formattedMessages = [
+      {
+        role: 'system',
+        content: systemPromptContent
       }
     ];
 

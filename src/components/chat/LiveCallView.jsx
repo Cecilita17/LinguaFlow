@@ -51,6 +51,9 @@ export function LiveCallView({
     setShowGlosses,
     toggleGlosses,
     formattedDuration,
+    pipelineMode = 'current',
+    setPipelineMode,
+    togglePipelineMode,
     startCall,
     endCall,
     toggleMute
@@ -190,7 +193,7 @@ export function LiveCallView({
             );
           }
 
-          const isChanged = Boolean(isUser && tokenObj.changed);
+          const isChanged = Boolean(tokenObj.changed);
 
           return (
             <div
@@ -213,7 +216,11 @@ export function LiveCallView({
               {/* Tier 2 (MIDDLE): Word */}
               {isChanged ? (
                 <span
-                  className="relative inline-block text-amber-200 dark:text-amber-200 font-extrabold tracking-wide underline decoration-amber-300 decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text"
+                  className={`relative inline-block font-extrabold tracking-wide underline decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text ${
+                    isUser
+                      ? 'text-amber-200 dark:text-amber-200 decoration-amber-300'
+                      : 'text-amber-500 dark:text-amber-400 decoration-amber-400'
+                  }`}
                   title={tokenObj.original ? `Original: "${tokenObj.original}"` : (isSpanish ? 'Palabra corregida' : 'Corrected word')}
                 >
                   <span>{word}</span>
@@ -284,6 +291,32 @@ export function LiveCallView({
 
         {/* Right: Toggle Buttons */}
         <div className="flex items-center space-x-2">
+          {/* Pipeline Mode Selector */}
+          <button
+            type="button"
+            onClick={togglePipelineMode}
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+              pipelineMode === 'integrated'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-amber-500/20 shadow-sm'
+                : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+            title={
+              pipelineMode === 'integrated'
+                ? (isSpanish ? 'Modo de llamada: Corrección integrada (Clic para cambiar a Corrección actual)' : 'Call Mode: Integrated Correction (Click to switch to Current)')
+                : (isSpanish ? 'Modo de llamada: Corrección actual (Clic para cambiar a Corrección integrada)' : 'Call Mode: Current Correction (Click to switch to Integrated)')
+            }
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${pipelineMode === 'integrated' ? 'text-white' : 'text-amber-500'}`} />
+            <span className="hidden sm:inline">
+              {pipelineMode === 'integrated'
+                ? (isSpanish ? 'Corrección integrada' : 'Integrated')
+                : (isSpanish ? 'Corrección actual' : 'Current')}
+            </span>
+            <span className={`text-[10px] px-1 py-0.2 rounded font-mono ${pipelineMode === 'integrated' ? 'bg-black/20 text-white font-bold' : 'bg-black/10 dark:bg-white/10'}`}>
+              {pipelineMode === 'integrated' ? 'INTEGRATED' : 'CURRENT'}
+            </span>
+          </button>
+
           {showLiveTranscript && (
             <button
               type="button"
@@ -363,7 +396,7 @@ export function LiveCallView({
 
         <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] font-mono">
           <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
-          <span>Pipeline (STT→LLM→TTS)</span>
+          <span>{pipelineMode === 'integrated' ? 'Pipeline (Corrección integrada)' : 'Pipeline (STT→LLM→TTS)'}</span>
         </div>
       </div>
 

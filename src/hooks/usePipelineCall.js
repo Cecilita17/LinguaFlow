@@ -5,7 +5,8 @@ import {
   tokenizeLiveCallTurn,
   glossLiveCallTurnAsync,
   extractTurnTransliteration,
-  extractTurnGlosses
+  extractTurnGlosses,
+  parseIntegratedCorrectionTokens
 } from '../services/liveCallGlossService.js';
 import { isGlossComplete, getEffectiveApiKey } from '../services/subtitleGlossService.js';
 import { transcribeAudioApi } from '../services/chatService.js';
@@ -256,6 +257,13 @@ export function usePipelineCall({
   const [liveTranscript, setLiveTranscript] = useState([]);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
   const [showGlosses, setShowGlosses] = useState(false);
+  const [pipelineMode, setPipelineMode] = useState(() => {
+    try {
+      return (typeof window !== 'undefined' && localStorage.getItem('linguaflow_call_pipeline_mode')) || 'current';
+    } catch {
+      return 'current';
+    }
+  });
 
   const durationTimerRef = useRef(null);
   const liveTranscriptRef = useRef([]);
@@ -263,6 +271,20 @@ export function usePipelineCall({
   const showGlossesRef = useRef(false);
   const isMutedRef = useRef(false);
   const callStateRef = useRef('idle');
+  const pipelineModeRef = useRef(pipelineMode);
+
+  useEffect(() => {
+    pipelineModeRef.current = pipelineMode;
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('linguaflow_call_pipeline_mode', pipelineMode);
+      }
+    } catch {}
+  }, [pipelineMode]);
+
+  const togglePipelineMode = useCallback(() => {
+    setPipelineMode((prev) => (prev === 'current' ? 'integrated' : 'current'));
+  }, []);
 
   // Detection of mobile devices (Android / iOS / etc.)
   const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -1038,6 +1060,8 @@ export function usePipelineCall({
     sessionMetricsRef.current.llmRequests++;
 
     try {
+      const isIntegrated = pipelineModeRef.current === 'integrated';
+
       const historyContext = liveTranscriptRef.current
         .filter(m => m.text && !m.isStreaming && m.id !== aiTurnId)
         .slice(-6)
@@ -1051,7 +1075,8 @@ export function usePipelineCall({
           history: historyContext,
           targetLang,
           nativeLang,
-          level
+          level,
+          pipelineMode: pipelineModeRef.current
         }),
         signal: llmAbortControllerRef.current.signal
       });
@@ -1092,12 +1117,17 @@ export function usePipelineCall({
               sentenceBuffer += data.delta;
 
               const fullText = currentAiTurnTextRef.current;
-              const streamingTokens = tokenizeLiveCallTurn(fullText, targetLang);
+              const streamingTokens = isIntegrated
+                ? parseIntegratedCorrectionTokens(fullText, cleanPrompt, targetLang, nativeLang)
+                : tokenizeLiveCallTurn(fullText, targetLang);
+              const cleanDisplayFullText = isIntegrated
+                ? fullText.replace(/<\/?correction>/gi, '')
+                : fullText;
 
               setLiveTranscript((prev) =>
                 prev.map((msg) =>
                   msg.id === aiTurnId
-                    ? { ...msg, text: fullText, tokens: streamingTokens, isStreaming: true }
+                    ? { ...msg, text: cleanDisplayFullText, tokens: streamingTokens, isStreaming: true }
                     : msg
                 )
               );
@@ -1109,7 +1139,12 @@ export function usePipelineCall({
               while ((match = sentenceRegex.exec(sentenceBuffer)) !== null) {
                 const completeSentence = match[1].trim();
                 if (completeSentence) {
-                  enqueueTextForTTS(completeSentence);
+                  const cleanTtsSentence = isIntegrated
+                    ? completeSentence.replace(/<\/?correction>/gi, '').trim()
+                    : completeSentence;
+                  if (cleanTtsSentence) {
+                    enqueueTextForTTS(cleanTtsSentence);
+                  }
                 }
                 lastIndex = sentenceRegex.lastIndex;
               }
@@ -1124,26 +1159,36 @@ export function usePipelineCall({
 
       // Flush any trailing text in sentenceBuffer
       if (sentenceBuffer.trim()) {
-        enqueueTextForTTS(sentenceBuffer.trim());
+        const cleanTrailingForTTS = isIntegrated
+          ? sentenceBuffer.replace(/<\/?correction>/gi, '').trim()
+          : sentenceBuffer.trim();
+        if (cleanTrailingForTTS) {
+          enqueueTextForTTS(cleanTrailingForTTS);
+        }
       }
 
       // Finalize AI message
       const finalText = currentAiTurnTextRef.current;
       sessionMetricsRef.current.assistantTurns++;
-      const finalTokens = tokenizeLiveCallTurn(finalText, targetLang);
+      const finalTokens = isIntegrated
+        ? parseIntegratedCorrectionTokens(finalText, cleanPrompt, targetLang, nativeLang)
+        : tokenizeLiveCallTurn(finalText, targetLang);
+      const cleanFinalDisplay = isIntegrated
+        ? finalText.replace(/<\/?correction>/gi, '')
+        : finalText;
 
       setLiveTranscript((prev) =>
         prev
           .map((msg) =>
             msg.id === aiTurnId
-              ? { ...msg, text: finalText, tokens: finalTokens, isStreaming: false }
+              ? { ...msg, text: cleanFinalDisplay, tokens: finalTokens, isStreaming: false }
               : msg
           )
           .filter((msg) => !(msg.id === aiTurnId && (!msg.text || !msg.text.trim())))
       );
 
-      if (showGlossesRef.current && finalText.trim()) {
-        triggerTurnGloss(aiTurnId, finalText, finalTokens);
+      if (showGlossesRef.current && cleanFinalDisplay.trim()) {
+        triggerTurnGloss(aiTurnId, cleanFinalDisplay, finalTokens);
       }
 
       currentAiTurnIdRef.current = null;
@@ -1276,8 +1321,16 @@ export function usePipelineCall({
       // Dispatch assistant conversational response immediately
       dispatchAssistantResponse(finalUserText);
 
-      // Trigger pedagogical correction asynchronously
-      triggerCorrection(finalUserText, turnId);
+      // Trigger pedagogical correction ONLY in current pipeline mode
+      if (pipelineModeRef.current === 'current') {
+        triggerCorrection(finalUserText, turnId);
+      } else {
+        setLiveTranscript((prev) =>
+          prev.map((msg) =>
+            msg.id === turnId ? { ...msg, isCorrecting: false } : msg
+          )
+        );
+      }
 
     } catch (err) {
       console.warn('[PipelineMobileSTT] Whisper transcription error:', err);
@@ -1534,18 +1587,42 @@ export function usePipelineCall({
           // Dispatch AI assistant response with the final bilingual text
           dispatchAssistantResponse(finalUserText);
 
-          // Trigger single pedagogical correction on the final accurate text
-          triggerCorrection(finalUserText, currentId);
+          // Trigger pedagogical correction ONLY in current pipeline mode
+          if (pipelineModeRef.current === 'current') {
+            triggerCorrection(finalUserText, currentId);
+          } else {
+            setLiveTranscript((prev) =>
+              prev.map((msg) =>
+                msg.id === currentId ? { ...msg, isCorrecting: false } : msg
+              )
+            );
+          }
         })
         .catch((err) => {
           console.warn('[PipelineSTT] Whisper bilingual transcription notice, fallback to browser STT:', err);
           dispatchAssistantResponse(cleanText);
-          triggerCorrection(cleanText, currentId);
+          if (pipelineModeRef.current === 'current') {
+            triggerCorrection(cleanText, currentId);
+          } else {
+            setLiveTranscript((prev) =>
+              prev.map((msg) =>
+                msg.id === currentId ? { ...msg, isCorrecting: false } : msg
+              )
+            );
+          }
         });
     } else {
       // Fallback if no audio blob was captured
       dispatchAssistantResponse(cleanText);
-      triggerCorrection(cleanText, currentId);
+      if (pipelineModeRef.current === 'current') {
+        triggerCorrection(cleanText, currentId);
+      } else {
+        setLiveTranscript((prev) =>
+          prev.map((msg) =>
+            msg.id === currentId ? { ...msg, isCorrecting: false } : msg
+          )
+        );
+      }
     }
   }, [targetLang, nativeLang, isSpanish, stopTurnAudioCapture, triggerCorrection, dispatchAssistantResponse]);
 
@@ -2001,6 +2078,9 @@ export function usePipelineCall({
     toggleGlosses: () => setShowGlosses((prev) => !prev),
     callDurationSeconds,
     formattedDuration: formatSeconds(callDurationSeconds),
+    pipelineMode,
+    setPipelineMode,
+    togglePipelineMode,
     startCall,
     endCall,
     toggleMute
