@@ -8,7 +8,7 @@ import {
 } from '../services/liveCallGlossService.js';
 import { isGlossComplete, getEffectiveApiKey } from '../services/subtitleGlossService.js';
 import { transcribeAudioApi } from '../services/chatService.js';
-import { cleanDuplicatePhrases } from './useSpeech.js';
+import { cleanDuplicatePhrases, stripSttTranslationArtifacts } from './useSpeech.js';
 import { getLanguageMeta } from '../constants/languages.js';
 
 /**
@@ -107,7 +107,8 @@ export function isSpeechFillerWord(word, lang = 'es') {
  */
 export function cleanSpeechTurnText(text, lang = 'es') {
   if (!text || typeof text !== 'string') return '';
-  const trimmed = text.trim();
+  const sanitized = stripSttTranslationArtifacts(text, lang);
+  const trimmed = sanitized.trim();
   if (!trimmed) return '';
 
   const langCode = (lang || 'es').toLowerCase().split('-')[0];

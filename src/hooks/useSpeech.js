@@ -3,12 +3,61 @@ import { transcribeAudioApi } from '../services/chatService.js';
 import { mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 
 /**
+ * Strips secondary subtitle/translation artifacts produced by STT engines when transcribing
+ * multilingual speech with natural code-switching.
+ */
+export function stripSttTranslationArtifacts(text, targetLang = 'es') {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text.trim();
+  if (!cleaned) return '';
+
+  // 1. Remove bracketed / parenthetical translation or subtitle notes:
+  // e.g. [Translation: ...], (English: ...), [Translated from Russian: ...]
+  cleaned = cleaned
+    .replace(/\[\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)?\s*:?[^\]]*\]/gi, '')
+    .replace(/\(\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\)]*\)/gi, '')
+    .trim();
+
+  // 2. Multi-line handling: Whisper subtitle format (Line 1: original/code-switch, Line 2: English/secondary translation)
+  const lines = cleaned.split(/\r?\n+/).map(l => l.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    const nonLatinRegex = /[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0370-\u03FF\u0590-\u05FF\u0900-\u097F\u0E00-\u0E7F]/;
+
+    if (nonLatinRegex.test(lines[0])) {
+      const nonLatinLines = lines.filter(l => nonLatinRegex.test(l));
+      if (nonLatinLines.length > 0 && nonLatinLines.length < lines.length) {
+        cleaned = nonLatinLines.join(' ');
+      } else {
+        cleaned = lines[0];
+      }
+    } else {
+      cleaned = lines[0];
+    }
+  }
+
+  // 3. Inline sentence translation handling (e.g. "Russian sentence. English translation.")
+  const sentenceMatches = cleaned.match(/[^.!?]+[.!?]*/g);
+  if (sentenceMatches && sentenceMatches.length >= 2) {
+    const s1 = sentenceMatches[0].trim();
+    const s2 = sentenceMatches.slice(1).join(' ').trim();
+    const nonLatinRegex = /[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0370-\u03FF\u0590-\u05FF\u0900-\u097F\u0E00-\u0E7F]/;
+
+    // If Sentence 1 has non-Latin characters (e.g. Russian, Arabic, Chinese) and Sentence 2 has NO non-Latin characters (pure Latin/English)
+    if (nonLatinRegex.test(s1) && !nonLatinRegex.test(s2)) {
+      cleaned = s1;
+    }
+  }
+
+  return cleaned.trim();
+}
+
+/**
  * Intelligent phrase and n-gram deduplication to fix Android Chrome / mobile WebKit
  * phrase repetition bug: e.g. "la casa la casa la casa es roja la casa es roja" -> "la casa es roja"
  */
-export function cleanDuplicatePhrases(text) {
+export function cleanDuplicatePhrases(text, targetLang = 'es') {
   if (!text || typeof text !== 'string') return '';
-  let cleaned = text.trim();
+  let cleaned = stripSttTranslationArtifacts(text, targetLang);
   if (!cleaned) return '';
 
   // 1. Remove duplicate adjacent sentences

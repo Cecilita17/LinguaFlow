@@ -548,6 +548,55 @@ Format strictly as valid JSON matching this schema:
   }
 }
 
+/**
+ * Strips secondary subtitle/translation artifacts produced by STT engines when transcribing
+ * multilingual speech with natural code-switching.
+ */
+export function stripSttTranslationArtifacts(text, targetLang = 'es') {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text.trim();
+  if (!cleaned) return '';
+
+  // 1. Remove bracketed / parenthetical translation or subtitle notes:
+  // e.g. [Translation: ...], (English: ...), [Translated from Russian: ...]
+  cleaned = cleaned
+    .replace(/\[\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)?\s*:?[^\]]*\]/gi, '')
+    .replace(/\(\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\)]*\)/gi, '')
+    .trim();
+
+  // 2. Multi-line handling: Whisper subtitle format (Line 1: original/code-switch, Line 2: English/secondary translation)
+  const lines = cleaned.split(/\r?\n+/).map(l => l.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    const nonLatinRegex = /[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0370-\u03FF\u0590-\u05FF\u0900-\u097F\u0E00-\u0E7F]/;
+
+    if (nonLatinRegex.test(lines[0])) {
+      const nonLatinLines = lines.filter(l => nonLatinRegex.test(l));
+      if (nonLatinLines.length > 0 && nonLatinLines.length < lines.length) {
+        cleaned = nonLatinLines.join(' ');
+      } else {
+        cleaned = lines[0];
+      }
+    } else {
+      cleaned = lines[0];
+    }
+  }
+
+  // 3. Inline sentence translation handling (e.g. "Russian sentence. English translation.")
+  const sentenceMatches = cleaned.match(/[^.!?]+[.!?]*/g);
+  if (sentenceMatches && sentenceMatches.length >= 2) {
+    const s1 = sentenceMatches[0].trim();
+    const s2 = sentenceMatches.slice(1).join(' ').trim();
+    const nonLatinRegex = /[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0370-\u03FF\u0590-\u05FF\u0900-\u097F\u0E00-\u0E7F]/;
+
+    // If Sentence 1 has non-Latin characters (e.g. Russian, Arabic, Chinese) and Sentence 2 has NO non-Latin characters (pure Latin/English)
+    if (nonLatinRegex.test(s1) && !nonLatinRegex.test(s2)) {
+      cleaned = s1;
+    }
+  }
+
+  return cleaned.trim();
+}
+
 // Transcribe audio endpoint (Groq Whisper-large-v3)
 export async function handleTranscribe(req, res) {
   setCorsHeaders(res);
@@ -622,11 +671,8 @@ export async function handleTranscribe(req, res) {
         return hints[code] || null;
       };
 
-      const targetHint = getLangScriptHint(targetLang);
-      const nativeHint = getLangScriptHint(nativeLang);
-      const scriptHints = [targetHint, nativeHint].filter(Boolean).join(', ');
-
-      const whisperPrompt = `Bilingual speech with natural code-switching strictly between ${targetName} (${targetLang}) and ${nativeName} (${nativeLang})${scriptHints ? ` [Scripts: ${scriptHints}]` : ''}. Transcribe every spoken word accurately in its original language (${targetName} or ${nativeName}) in UTF-8 without translating, omitting, or altering words.`;
+      const hintParts = [targetName, nativeName !== targetName ? nativeName : null, 'English'].filter(Boolean);
+      const whisperPrompt = `Spoken dialogue with code-switching (${hintParts.join(', ')}).`;
       formData.append('prompt', whisperPrompt);
 
       const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
@@ -643,8 +689,9 @@ export async function handleTranscribe(req, res) {
 
       if (groqRes.ok) {
         const groqData = await groqRes.json();
-        const transcript = groqData?.text?.trim();
+        let transcript = groqData?.text?.trim();
         if (transcript) {
+          transcript = stripSttTranslationArtifacts(transcript, targetLang);
           console.log(`✅ Audio transcribed via Groq Whisper: "${transcript}"`);
           return res.status(200).json({
             success: true,
