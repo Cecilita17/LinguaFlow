@@ -1268,19 +1268,24 @@ export function usePipelineCall({
         whisperText = cleanSpeechTurnText(cleanDuplicatePhrases(whisperText), targetLang);
       }
 
+      const isIntegrated = pipelineModeRef.current === 'integrated';
+      const rawSTTTranscript = whisperText;
+
       // Contextual & acoustic validation
       const validation = validateTranscriptContextually({
-        rawTranscript: whisperText,
+        rawTranscript: rawSTTTranscript,
         history: liveTranscriptRef.current,
         targetLang,
         nativeLang
       });
 
-      const finalUserText = validation.validatedTranscript;
+      // In integrated mode, display and AI input MUST be the raw/clean STT transcript exactly as spoken
+      // In current mode, preserve existing behavior: validation.validatedTranscript
+      const effectiveUserText = isIntegrated ? rawSTTTranscript : validation.validatedTranscript;
 
-      console.log(`[PipelineMobileSTT] Whisper validated text: "${finalUserText}" (confidence=${validation.transcriptionConfidence})`);
+      console.log(`[PipelineMobileSTT] Whisper text: "${effectiveUserText}" (mode=${pipelineModeRef.current}, confidence=${validation.transcriptionConfidence})`);
 
-      if (!finalUserText) {
+      if (!effectiveUserText) {
         // Discard placeholder if no speech was recognized
         setLiveTranscript((prev) => prev.filter((m) => m.id !== turnId));
         isFinalizingMobileTurnRef.current = false;
@@ -1291,7 +1296,7 @@ export function usePipelineCall({
       sessionMetricsRef.current.userTurns++;
       processedUserTurnIdsRef.current.add(turnId);
 
-      const tokens = tokenizeLiveCallTurn(finalUserText, targetLang);
+      const tokens = tokenizeLiveCallTurn(effectiveUserText, targetLang);
       const transliteration = extractTurnTransliteration(tokens, targetLang);
       const glosses = extractTurnGlosses(tokens);
 
@@ -1300,30 +1305,30 @@ export function usePipelineCall({
           msg.id === turnId
             ? {
                 ...msg,
-                text: finalUserText,
-                rawTranscript: validation.rawTranscript,
-                validatedTranscript: finalUserText,
+                text: effectiveUserText,
+                rawTranscript: rawSTTTranscript,
+                validatedTranscript: validation.validatedTranscript,
                 transcriptionConfidence: validation.transcriptionConfidence,
                 isAcousticMismatch: validation.isAcousticMismatch,
-                originalText: finalUserText,
-                correctedText: finalUserText,
+                originalText: effectiveUserText,
+                correctedText: effectiveUserText,
                 tokens,
                 transliteration,
                 glosses,
-                diffTokens: [{ text: finalUserText, changed: false, original: null }],
+                diffTokens: [{ text: effectiveUserText, changed: false, original: null }],
                 isTranscribing: false,
-                isCorrecting: true
+                isCorrecting: !isIntegrated
               }
             : msg
         )
       );
 
       // Dispatch assistant conversational response immediately
-      dispatchAssistantResponse(finalUserText);
+      dispatchAssistantResponse(effectiveUserText);
 
       // Trigger pedagogical correction ONLY in current pipeline mode
-      if (pipelineModeRef.current === 'current') {
-        triggerCorrection(finalUserText, turnId);
+      if (!isIntegrated) {
+        triggerCorrection(effectiveUserText, turnId);
       } else {
         setLiveTranscript((prev) =>
           prev.map((msg) =>
@@ -1495,6 +1500,7 @@ export function usePipelineCall({
         }
       }
 
+      const isIntegrated = pipelineModeRef.current === 'integrated';
       if (targetIdx >= 0) {
         const updated = [...prev];
         updated[targetIdx] = {
@@ -1508,7 +1514,7 @@ export function usePipelineCall({
           transliteration: initialTranslit,
           glosses: initialGlosses,
           isTranscribing: false,
-          isCorrecting: true
+          isCorrecting: !isIntegrated
         };
         return updated;
       }
@@ -1526,7 +1532,7 @@ export function usePipelineCall({
         glosses: initialGlosses,
         originalText: cleanText,
         correctedText: cleanText,
-        isCorrecting: true,
+        isCorrecting: !isIntegrated,
         isTranscribing: false
       };
       return [...prev, newUserMsg];
@@ -1547,15 +1553,20 @@ export function usePipelineCall({
             whisperText = cleanSpeechTurnText(cleanDuplicatePhrases(whisperText), targetLang);
           }
 
+          const isIntegrated = pipelineModeRef.current === 'integrated';
+          const rawSTTTranscript = whisperText || cleanText;
+
           // Contextual & acoustic validation
           const validation = validateTranscriptContextually({
-            rawTranscript: whisperText || cleanText,
+            rawTranscript: rawSTTTranscript,
             history: liveTranscriptRef.current,
             targetLang,
             nativeLang
           });
 
-          const finalUserText = validation.validatedTranscript || cleanText;
+          // In integrated mode, display and AI input MUST be the raw/clean STT transcript exactly as spoken
+          // In current mode, preserve existing behavior: validation.validatedTranscript || cleanText
+          const finalUserText = isIntegrated ? rawSTTTranscript : (validation.validatedTranscript || cleanText);
 
           if (finalUserText && finalUserText.toLowerCase() !== cleanText.toLowerCase()) {
             const finalTokens = tokenizeLiveCallTurn(finalUserText, targetLang);
@@ -1568,8 +1579,8 @@ export function usePipelineCall({
                   ? {
                       ...msg,
                       text: finalUserText,
-                      rawTranscript: validation.rawTranscript,
-                      validatedTranscript: finalUserText,
+                      rawTranscript: rawSTTTranscript,
+                      validatedTranscript: validation.validatedTranscript,
                       transcriptionConfidence: validation.transcriptionConfidence,
                       isAcousticMismatch: validation.isAcousticMismatch,
                       originalText: finalUserText,
@@ -1577,18 +1588,19 @@ export function usePipelineCall({
                       diffTokens: [{ text: finalUserText, changed: false, original: null }],
                       tokens: finalTokens,
                       transliteration: finalTranslit,
-                      glosses: finalGlosses
+                      glosses: finalGlosses,
+                      isCorrecting: !isIntegrated
                     }
                   : msg
               )
             );
           }
 
-          // Dispatch AI assistant response with the final bilingual text
+          // Dispatch AI assistant response with the final text
           dispatchAssistantResponse(finalUserText);
 
           // Trigger pedagogical correction ONLY in current pipeline mode
-          if (pipelineModeRef.current === 'current') {
+          if (!isIntegrated) {
             triggerCorrection(finalUserText, currentId);
           } else {
             setLiveTranscript((prev) =>
