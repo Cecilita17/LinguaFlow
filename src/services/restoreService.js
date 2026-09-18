@@ -202,6 +202,10 @@ export async function restoreBackupData(payload) {
         localStorage.setItem('linguaflow_config', JSON.stringify(mergedConfig));
       }
 
+      if (s.callVoicePreferences && typeof s.callVoicePreferences === 'object') {
+        localStorage.setItem('linguaflow_call_voice_preferences', JSON.stringify(s.callVoicePreferences));
+      }
+
       summary.settingsRestored = true;
     } catch (e) {}
   }

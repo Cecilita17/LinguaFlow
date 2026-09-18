@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleSentenceBreakdown, handleBatchGloss, handleGenerateText } from './handlers.js';
 import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
-import { handlePipelineChatStream, handlePipelineTTS } from './pipelineHandlers.js';
+import { handlePipelineChatStream, handlePipelineTTS, handleListCartesiaVoices } from './pipelineHandlers.js';
 
 dotenv.config();
 
@@ -57,6 +57,9 @@ app.post('/pipeline/chat-stream', handlePipelineChatStream);
 
 app.post('/api/pipeline/tts', handlePipelineTTS);
 app.post('/pipeline/tts', handlePipelineTTS);
+
+app.get('/api/pipeline/voices', handleListCartesiaVoices);
+app.get('/pipeline/voices', handleListCartesiaVoices);
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {

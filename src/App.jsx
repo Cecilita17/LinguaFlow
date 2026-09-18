@@ -907,12 +907,29 @@ export default function App() {
     setChatViewMode('hub');
   };
 
+  // Get call voice preference for active target language
+  const getCallVoiceForTargetLang = () => {
+    try {
+      const raw = localStorage.getItem('linguaflow_call_voice_preferences');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && parsed[targetLang]) {
+          return parsed[targetLang];
+        }
+      }
+    } catch (e) {}
+    return '';
+  };
+
+  const selectedCallVoice = getCallVoiceForTargetLang();
+
   // Lifted Live Call hook to guarantee SpeechRecognition starts directly in the user click event loop
   const pipelineCall = usePipelineCall({
     targetLang,
     nativeLang,
     level: config?.level || 'A2/B1',
     apiKey: config?.apiKey || '',
+    voice: selectedCallVoice,
     isSpanish
   });
 

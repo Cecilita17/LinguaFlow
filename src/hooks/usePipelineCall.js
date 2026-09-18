@@ -261,6 +261,8 @@ export function usePipelineCall({
   const showGlossesRef = useRef(false);
   const isMutedRef = useRef(false);
   const callStateRef = useRef('idle');
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
 
   // Detection of mobile devices (Android / iOS / etc.)
   const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -756,7 +758,7 @@ export function usePipelineCall({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: nextItem.text,
-          voice,
+          voice: voiceRef.current || voice || '',
           targetLang
         }),
         signal: ttsAbortControllerRef.current.signal

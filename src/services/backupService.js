@@ -159,6 +159,13 @@ function gatherCleanSettings() {
         };
       } catch (e) {}
     }
+
+    const callVoicePreferences = localStorage.getItem('linguaflow_call_voice_preferences');
+    if (callVoicePreferences) {
+      try {
+        settings.callVoicePreferences = JSON.parse(callVoicePreferences);
+      } catch (e) {}
+    }
   } catch (e) {}
 
   return settings;

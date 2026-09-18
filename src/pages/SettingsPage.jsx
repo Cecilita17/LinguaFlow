@@ -32,6 +32,7 @@ import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx
 import { SiteLanguageToggle } from '../components/SiteLanguageToggle.jsx';
 import { AccountSettingsView } from '../components/settings/AccountSettingsView.jsx';
 import { GoogleDriveBackupSection } from '../components/settings/GoogleDriveBackupSection.jsx';
+import { CallVoiceSettingsSection } from '../components/settings/CallVoiceSettingsSection.jsx';
 import { NATIVE_LANG_OPTIONS } from '../constants/languages.js';
 
 export function SettingsPage({
@@ -501,6 +502,9 @@ export function SettingsPage({
             </div>
           </div>
         </div>
+
+        {/* SECTION 2.5: VOCES PARA LLAMADAS (CARTESIA) */}
+        <CallVoiceSettingsSection onPreferencesChange={triggerNotice} />
 
         {/* SECTION 3: INTELIGENCIA ARTIFICIAL Y BACKEND */}
         <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">

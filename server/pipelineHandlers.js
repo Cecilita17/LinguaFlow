@@ -355,6 +355,47 @@ export async function handlePipelineTTS(req, res) {
     );
 
     if (!response.ok) {
+      const fallbackVoiceId = langConfig?.voiceId || DEFAULT_CARTESIA_VOICE_ID;
+      // Resilient fallback: if custom voice failed, retry with default voice for targetLang
+      if (resolvedVoiceId !== fallbackVoiceId) {
+        console.warn(`[BackendPipelineTTS] Custom voice ${resolvedVoiceId} failed (HTTP ${response.status}). Retrying with fallback voice ${fallbackVoiceId}...`);
+        try {
+          const fallbackResp = await fetch('https://api.cartesia.ai/tts/bytes', {
+            method: 'POST',
+            headers: {
+              'X-API-Key': trimmedKey,
+              'Cartesia-Version': '2026-08-14',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model_id: cartesiaModel,
+              transcript: cleanText,
+              voice: {
+                mode: 'id',
+                id: fallbackVoiceId
+              },
+              output_format: {
+                container: 'mp3',
+                sample_rate: 44100,
+                bit_rate: 128000
+              },
+              language: resolvedLanguage
+            })
+          });
+
+          if (fallbackResp.ok) {
+            const arrayBuffer = await fallbackResp.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            console.log('[BackendPipelineTTS] ✓ Fallback Cartesia audio generated OK. Bytes:', buffer.length);
+            res.setHeader('Content-Type', 'audio/mpeg');
+            res.setHeader('Cache-Control', 'no-cache');
+            return res.end(buffer);
+          }
+        } catch (retryErr) {
+          console.error('[BackendPipelineTTS] Fallback retry failed:', retryErr);
+        }
+      }
+
       // Read full error body for server-side diagnostics
       const errText = await response.text();
       console.warn(
@@ -404,5 +445,135 @@ export async function handlePipelineTTS(req, res) {
         details: err.message
       });
     }
+  }
+}
+
+/**
+ * Curated catalog of default known Cartesia voices for offline/fallback mode.
+ */
+export const DEFAULT_CARTESIA_CATALOG = [
+  {
+    id: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4',
+    name: 'Skylar (Multilingual Friendly Guide)',
+    language: 'multilingual',
+    is_owner: false,
+    gender: 'female',
+    description: 'Voz oficial clara y cálida recomendada para aprendizaje'
+  },
+  {
+    id: 'a249eaff-1e96-4d2c-b23b-12efa4f66f41',
+    name: 'Jacqueline (French Native)',
+    language: 'fr',
+    is_owner: false,
+    gender: 'female',
+    description: 'Voz nativa francesa conversacional'
+  },
+  {
+    id: '694f9389-aac1-45b6-b726-9d9369183238',
+    name: 'Sarah (Conversational English)',
+    language: 'en',
+    is_owner: false,
+    gender: 'female',
+    description: 'Voz natural en inglés con entonación expresiva'
+  },
+  {
+    id: '87748186-23bb-4147-a173-2224b806680d',
+    name: 'Pedro (Spanish Conversational)',
+    language: 'es',
+    is_owner: false,
+    gender: 'male',
+    description: 'Voz conversacional en español con tono amigable'
+  }
+];
+
+/**
+ * List Cartesia Voices endpoint (securely queried from backend).
+ * Returns available cloned & public voices with safe metadata.
+ */
+export async function handleListCartesiaVoices(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const rawKey = process.env.CARTESIA_API_KEY;
+  const trimmedKey = (rawKey || '').trim();
+
+  // If no API key, return default catalog and mapping
+  if (!trimmedKey) {
+    return res.status(200).json({
+      success: true,
+      hasApiKey: false,
+      voices: DEFAULT_CARTESIA_CATALOG,
+      defaults: CARTESIA_VOICES
+    });
+  }
+
+  try {
+    const response = await fetch('https://api.cartesia.ai/voices', {
+      method: 'GET',
+      headers: {
+        'X-API-Key': trimmedKey,
+        'Cartesia-Version': '2026-08-14',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`[BackendPipelineVoices] Cartesia returned HTTP ${response.status}. Falling back to default catalog.`);
+      return res.status(200).json({
+        success: true,
+        hasApiKey: true,
+        voices: DEFAULT_CARTESIA_CATALOG,
+        defaults: CARTESIA_VOICES,
+        warning: `Cartesia API returned HTTP ${response.status}`
+      });
+    }
+
+    const json = await response.json();
+    const rawVoices = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
+
+    // Sanitize and extract only safe metadata
+    const sanitizedVoices = rawVoices.map(v => {
+      const isOwner = Boolean(v.is_owner || v.isOwner || v.visibility === 'owner' || v.access === 'private');
+      let lang = v.language || '';
+      if (!lang && Array.isArray(v.accents) && v.accents.length > 0) {
+        lang = v.accents[0]?.locale || v.accents[0]?.language || '';
+      }
+      return {
+        id: v.id,
+        name: v.name || 'Voz de Cartesia',
+        description: v.description || v.tagline || '',
+        language: lang,
+        is_owner: isOwner,
+        gender: v.gender || 'neutral',
+        status: v.status || 'active'
+      };
+    }).filter(v => Boolean(v.id && UUID_REGEX.test(v.id)));
+
+    // Merge in default catalog if missing
+    const existingIds = new Set(sanitizedVoices.map(v => v.id));
+    const mergedVoices = [...sanitizedVoices];
+    for (const defVoice of DEFAULT_CARTESIA_CATALOG) {
+      if (!existingIds.has(defVoice.id)) {
+        mergedVoices.push(defVoice);
+        existingIds.add(defVoice.id);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      hasApiKey: true,
+      voices: mergedVoices,
+      defaults: CARTESIA_VOICES
+    });
+
+  } catch (err) {
+    console.error('[BackendPipelineVoices] Error querying Cartesia voices:', err);
+    return res.status(200).json({
+      success: true,
+      hasApiKey: true,
+      voices: DEFAULT_CARTESIA_CATALOG,
+      defaults: CARTESIA_VOICES,
+      warning: 'Fallback used due to network error'
+    });
   }
 }
