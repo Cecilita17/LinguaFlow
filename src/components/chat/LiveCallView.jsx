@@ -28,7 +28,7 @@ export function LiveCallView({
   level = 'A2/B1',
   apiKey = '',
   onEndCall,
-  activeCall
+  activeCall = {}
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
@@ -41,25 +41,29 @@ export function LiveCallView({
 
   const [showLiveTranscript, setShowLiveTranscript] = useState(true);
   const transcriptContainerRef = useRef(null);
+  const hasAutoStartedRef = useRef(false);
 
   const {
-    callState,
-    isMuted,
-    errorMessage,
-    liveTranscript,
-    showGlosses,
+    callState = 'idle',
+    isMuted = false,
+    errorMessage = null,
+    liveTranscript = [],
+    showGlosses = false,
     setShowGlosses,
     toggleGlosses,
-    formattedDuration,
+    formattedDuration = '00:00',
     startCall,
     endCall,
     toggleMute
-  } = activeCall;
+  } = activeCall || {};
 
-  // If the call was not already pre-started via user gesture (e.g. direct mount / fallback), start it on mount
+  // If the call was not already pre-started via user gesture (e.g. direct mount / fallback), start it once on mount
   useEffect(() => {
-    if (callState === 'idle') {
-      startCall();
+    if (!hasAutoStartedRef.current) {
+      hasAutoStartedRef.current = true;
+      if (callState === 'idle' && typeof startCall === 'function') {
+        startCall();
+      }
     }
   }, [callState, startCall]);
 
@@ -71,7 +75,7 @@ export function LiveCallView({
   }, [liveTranscript]);
 
   const handleEndCallAction = () => {
-    const sessionData = endCall();
+    const sessionData = typeof endCall === 'function' ? endCall() : null;
     if (onEndCall) {
       onEndCall(sessionData);
     }

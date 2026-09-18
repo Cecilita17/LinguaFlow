@@ -1878,6 +1878,11 @@ export function usePipelineCall({
     return sessionRecord;
   }, [targetLang, isSpanish, cleanupResources]);
 
+  // Toggle word-by-word glosses
+  const toggleGlosses = useCallback(() => {
+    setShowGlosses((prev) => !prev);
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -1892,7 +1897,7 @@ export function usePipelineCall({
     liveTranscript,
     showGlosses,
     setShowGlosses,
-    toggleGlosses: () => setShowGlosses((prev) => !prev),
+    toggleGlosses,
     callDurationSeconds,
     formattedDuration: formatSeconds(callDurationSeconds),
     startCall,
