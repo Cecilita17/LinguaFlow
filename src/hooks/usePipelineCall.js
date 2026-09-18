@@ -1605,7 +1605,7 @@ export function usePipelineCall({
             startTurnAudioCapture();
           })
           .catch((micErr) => {
-            console.error('[PipelineMic] Microphone permission error:', micErr);
+            console.error(`[PipelineMic] Microphone permission error: name=${micErr?.name} message=${micErr?.message}`, micErr);
             cleanupResources();
             setCallState('error');
             setErrorMessage(
