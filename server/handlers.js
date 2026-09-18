@@ -190,7 +190,7 @@ export async function handlePedagogicalCorrect(req, res) {
     if (effectiveApiKey) {
       console.log(`Pedagogical correction requested with Groq [${activeModel}] for lang: ${targetLang}`);
 
-      const systemPrompt = buildPedagogicalSystemInstruction(targetName, nativeName, level, targetLang);
+      const systemPrompt = buildPedagogicalSystemInstruction(targetName, nativeName, level);
       const userPrompt = `=== STUDENT INPUT TO CORRECT ===\n"${rawText}"\n\nAnalyze the student's input according to pedagogical tasks and output strictly structured JSON for "user_correction".`;
 
       const controller = new AbortController();
@@ -213,8 +213,8 @@ export async function handlePedagogicalCorrect(req, res) {
               { role: 'user', content: userPrompt }
             ],
             response_format: { type: 'json_object' },
-            temperature: 0.2,
-            max_tokens: 600
+            temperature: 0.3,
+            max_tokens: 800
           })
         });
 
@@ -229,17 +229,11 @@ export async function handlePedagogicalCorrect(req, res) {
           const cor = parsed?.user_correction || parsed;
           if (cor && typeof cor.corrected_text === 'string') {
             const corrected = cor.corrected_text.trim();
-            const hasDiffWithChanges = Array.isArray(cor.diff_tokens) &&
-              cor.diff_tokens.length > 0 &&
-              cor.diff_tokens.some((t) => t.changed);
+            const hasDiffTokens = Array.isArray(cor.diff_tokens) && cor.diff_tokens.length > 0;
 
-            let diffTokens = hasDiffWithChanges
+            let diffTokens = hasDiffTokens
               ? cor.diff_tokens
-              : (corrected.toLowerCase() !== rawText.toLowerCase()
-                  ? computeWordDiff(rawText, corrected)
-                  : (Array.isArray(cor.diff_tokens) && cor.diff_tokens.length > 0
-                      ? cor.diff_tokens
-                      : computeWordDiff(rawText, corrected)));
+              : computeWordDiff(rawText, corrected);
 
             // Transliteration rules: strictly for Arabic and Chinese
             const allowsTranslit = isArabic || isChinese;

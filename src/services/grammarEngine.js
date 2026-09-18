@@ -867,17 +867,11 @@ export async function getLiveCallPedagogicalCorrection(text, targetLang = 'en', 
 
       if (cor && !isFallback && (cor.corrected_text !== undefined || cor.diff_tokens)) {
         const corrected = (cor.corrected_text || clean).trim();
-        const hasDiffWithChanges = Array.isArray(cor.diff_tokens) &&
-          cor.diff_tokens.length > 0 &&
-          cor.diff_tokens.some((t) => t.changed);
+        const hasDiffTokens = Array.isArray(cor.diff_tokens) && cor.diff_tokens.length > 0;
 
-        const diffTokens = hasDiffWithChanges
+        const diffTokens = hasDiffTokens
           ? cor.diff_tokens
-          : (corrected.toLowerCase() !== clean.toLowerCase()
-              ? computeWordDiff(clean, corrected)
-              : (Array.isArray(cor.diff_tokens) && cor.diff_tokens.length > 0
-                  ? cor.diff_tokens
-                  : computeWordDiff(clean, corrected)));
+          : computeWordDiff(clean, corrected);
 
         const hasErrors = Boolean(
           cor.has_errors ||
