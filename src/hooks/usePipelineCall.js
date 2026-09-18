@@ -582,7 +582,6 @@ export function usePipelineCall({
 
     // Clear deduplication caches & turn state
     consumedFinalIndicesRef.current.clear();
-    correctedTurnIdsRef.current.clear();
     glossedTurnIdsRef.current.clear();
     processedUserTurnIdsRef.current.clear();
     currentTurnRef.current = {
@@ -1714,7 +1713,6 @@ export function usePipelineCall({
         silenceTimeoutRef.current = null;
       }
       interruptAssistant();
-      correctedTurnIdsRef.current.clear();
       glossedTurnIdsRef.current.clear();
       processedUserTurnIdsRef.current.clear();
       currentTurnRef.current = {
