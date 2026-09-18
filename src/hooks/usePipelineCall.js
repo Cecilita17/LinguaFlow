@@ -9,6 +9,7 @@ import {
 } from '../services/liveCallGlossService.js';
 import { isGlossComplete, getEffectiveApiKey } from '../services/subtitleGlossService.js';
 import { transcribeAudioApi } from '../services/chatService.js';
+import { validateTranscriptContextually } from '../services/transcriptValidationService.js';
 import { cleanDuplicatePhrases } from './useSpeech.js';
 import { getLanguageMeta } from '../constants/languages.js';
 
@@ -1219,9 +1220,19 @@ export function usePipelineCall({
         whisperText = cleanSpeechTurnText(cleanDuplicatePhrases(whisperText), targetLang);
       }
 
-      console.log(`[PipelineMobileSTT] Whisper transcribed text: "${whisperText}"`);
+      // Contextual & acoustic validation
+      const validation = validateTranscriptContextually({
+        rawTranscript: whisperText,
+        history: liveTranscriptRef.current,
+        targetLang,
+        nativeLang
+      });
 
-      if (!whisperText) {
+      const finalUserText = validation.validatedTranscript;
+
+      console.log(`[PipelineMobileSTT] Whisper validated text: "${finalUserText}" (confidence=${validation.transcriptionConfidence})`);
+
+      if (!finalUserText) {
         // Discard placeholder if no speech was recognized
         setLiveTranscript((prev) => prev.filter((m) => m.id !== turnId));
         isFinalizingMobileTurnRef.current = false;
@@ -1232,7 +1243,7 @@ export function usePipelineCall({
       sessionMetricsRef.current.userTurns++;
       processedUserTurnIdsRef.current.add(turnId);
 
-      const tokens = tokenizeLiveCallTurn(whisperText, targetLang);
+      const tokens = tokenizeLiveCallTurn(finalUserText, targetLang);
       const transliteration = extractTurnTransliteration(tokens, targetLang);
       const glosses = extractTurnGlosses(tokens);
 
@@ -1241,13 +1252,17 @@ export function usePipelineCall({
           msg.id === turnId
             ? {
                 ...msg,
-                text: whisperText,
-                originalText: whisperText,
-                correctedText: whisperText,
+                text: finalUserText,
+                rawTranscript: validation.rawTranscript,
+                validatedTranscript: finalUserText,
+                transcriptionConfidence: validation.transcriptionConfidence,
+                isAcousticMismatch: validation.isAcousticMismatch,
+                originalText: finalUserText,
+                correctedText: finalUserText,
                 tokens,
                 transliteration,
                 glosses,
-                diffTokens: [{ text: whisperText, changed: false, original: null }],
+                diffTokens: [{ text: finalUserText, changed: false, original: null }],
                 isTranscribing: false,
                 isCorrecting: true
               }
@@ -1256,10 +1271,10 @@ export function usePipelineCall({
       );
 
       // Dispatch assistant conversational response immediately
-      dispatchAssistantResponse(whisperText);
+      dispatchAssistantResponse(finalUserText);
 
       // Trigger pedagogical correction asynchronously
-      triggerCorrection(whisperText, turnId);
+      triggerCorrection(finalUserText, turnId);
 
     } catch (err) {
       console.warn('[PipelineMobileSTT] Whisper transcription error:', err);
@@ -1461,10 +1476,6 @@ export function usePipelineCall({
       return [...prev, newUserMsg];
     });
 
-    // 0ms voice latency: Immediately dispatch assistant conversational response
-    dispatchAssistantResponse(cleanText);
-
-    // In parallel: Transcribe turn audio with Groq Whisper for accurate multilingual code-switching recognition
     if (turnAudioBlob && turnAudioBlob.size > 0) {
       sessionMetricsRef.current.sttRequests++;
       const apiKey = getEffectiveApiKey();
@@ -1475,13 +1486,22 @@ export function usePipelineCall({
         apiKey
       })
         .then((whisperResult) => {
-          let whisperText = (whisperResult?.text || '').trim();
+          let whisperText = (typeof whisperResult === 'string' ? whisperResult : whisperResult?.text || '').trim();
           if (whisperText) {
             whisperText = cleanSpeechTurnText(cleanDuplicatePhrases(whisperText), targetLang);
           }
-          const finalUserText = whisperText || cleanText;
 
-          if (whisperText && whisperText.toLowerCase() !== cleanText.toLowerCase()) {
+          // Contextual & acoustic validation
+          const validation = validateTranscriptContextually({
+            rawTranscript: whisperText || cleanText,
+            history: liveTranscriptRef.current,
+            targetLang,
+            nativeLang
+          });
+
+          const finalUserText = validation.validatedTranscript || cleanText;
+
+          if (finalUserText && finalUserText.toLowerCase() !== cleanText.toLowerCase()) {
             const finalTokens = tokenizeLiveCallTurn(finalUserText, targetLang);
             const finalTranslit = extractTurnTransliteration(finalTokens, targetLang);
             const finalGlosses = extractTurnGlosses(finalTokens);
@@ -1492,6 +1512,10 @@ export function usePipelineCall({
                   ? {
                       ...msg,
                       text: finalUserText,
+                      rawTranscript: validation.rawTranscript,
+                      validatedTranscript: finalUserText,
+                      transcriptionConfidence: validation.transcriptionConfidence,
+                      isAcousticMismatch: validation.isAcousticMismatch,
                       originalText: finalUserText,
                       correctedText: finalUserText,
                       diffTokens: [{ text: finalUserText, changed: false, original: null }],
@@ -1504,15 +1528,20 @@ export function usePipelineCall({
             );
           }
 
+          // Dispatch AI assistant response with the final bilingual text
+          dispatchAssistantResponse(finalUserText);
+
           // Trigger single pedagogical correction on the final accurate text
           triggerCorrection(finalUserText, currentId);
         })
         .catch((err) => {
-          console.warn('[PipelineSTT] Whisper multilingual transcription notice, fallback to browser STT:', err);
+          console.warn('[PipelineSTT] Whisper bilingual transcription notice, fallback to browser STT:', err);
+          dispatchAssistantResponse(cleanText);
           triggerCorrection(cleanText, currentId);
         });
     } else {
       // Fallback if no audio blob was captured
+      dispatchAssistantResponse(cleanText);
       triggerCorrection(cleanText, currentId);
     }
   }, [targetLang, nativeLang, isSpanish, stopTurnAudioCapture, triggerCorrection, dispatchAssistantResponse]);

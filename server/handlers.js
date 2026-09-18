@@ -602,7 +602,31 @@ export async function handleTranscribe(req, res) {
       formData.append('model', 'whisper-large-v3');
       formData.append('temperature', '0');
       formData.append('response_format', 'json');
-      const whisperPrompt = `Multilingual speech with natural code-switching: ${targetName}, ${nativeName}, English, Polski (ą, ć, ę, ł, ń, ó, ś, ź, ż), Deutsch (ä, ö, ü, ß), Español (ñ, á, é, í, ó, ú), Français, 中文, Русский, العربية. Transcribe every spoken word in its original language in UTF-8 without translating or omitting words.`;
+
+      const getLangScriptHint = (code) => {
+        const hints = {
+          de: 'Deutsch (ä, ö, ü, ß)',
+          es: 'Español (ñ, á, é, í, ó, ú, ¿, ¡)',
+          fr: 'Français (é, è, ê, ë, à, ç, œ, ù)',
+          it: 'Italiano (à, è, é, ì, ò, ù)',
+          pt: 'Português (ã, õ, á, é, í, ó, ú, ç, ê)',
+          nl: 'Nederlands (ij, ë, é, ó, ú)',
+          pl: 'Polski (ą, ć, ę, ł, ń, ó, ś, ź, ż)',
+          ru: 'Русский (кириллица: а, б, в, г, д, е, ж, з, и, й, к, л, м, н, о, п, р, с, т, у, ф, х, ц, ч, ш, щ, ъ, ы, ь, э, ю, я)',
+          zh: '中文 (简体字 / 繁体字)',
+          ar: 'العربية (الحروف العربية: ا ب ت ث ج ح خ د ذ ر ز س ش ص ض ط ظ ع غ ف ق ك ل م ن هـ و ي)',
+          ja: '日本語 (漢字, ひらがな, カタカナ)',
+          ko: '한국어 (한글)',
+          en: 'English'
+        };
+        return hints[code] || null;
+      };
+
+      const targetHint = getLangScriptHint(targetLang);
+      const nativeHint = getLangScriptHint(nativeLang);
+      const scriptHints = [targetHint, nativeHint].filter(Boolean).join(', ');
+
+      const whisperPrompt = `Bilingual speech with natural code-switching strictly between ${targetName} (${targetLang}) and ${nativeName} (${nativeLang})${scriptHints ? ` [Scripts: ${scriptHints}]` : ''}. Transcribe every spoken word accurately in its original language (${targetName} or ${nativeName}) in UTF-8 without translating, omitting, or altering words.`;
       formData.append('prompt', whisperPrompt);
 
       const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
