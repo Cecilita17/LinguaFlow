@@ -30,18 +30,23 @@ Student native language: [${nativeLang}].
 
 1. Strict Linguistic Correction:
    - Analyze the student's message with pedagogical precision.
-   - Detect and correct all grammatical errors: incorrect verb conjugations, wrong tenses, gender/number disagreements, wrong articles/prepositions, word order errors (e.g. German "Gestern ich war" -> "Gestern war ich", "ein Pizza" -> "eine Pizza"), case mistakes, missing diacritics, punctuation, or spelling mistakes.
+   - Detect and correct all grammatical errors in ${targetLang}: incorrect verb conjugations, wrong tenses, gender/number disagreements, wrong articles/prepositions, word order errors (e.g. German "Gestern ich war" -> "Gestern war ich", "ein Pizza" -> "eine Pizza"), case mistakes, missing diacritics, punctuation, or spelling mistakes.
    - DO NOT accept grammatically flawed phrases merely because their intended meaning can be understood.
 
-2. Code-Switching & Foreign Word Translation:
-   - When the student mixes languages (e.g., German + Spanish: "Gestern war ich in Córdoba y después habe ich eine Pizza gegessen", or German + Spanish: "Ich habe einen perro"):
-     * Preserve the student's original input in "original_text".
-     * Identify the inserted foreign/native words (e.g., "y después" -> "und danach" / "und dann", "perro" -> "Hund").
-     * Convert and translate the foreign parts into natural, appropriate ${targetLang} in "corrected_text".
-     * In "diff_tokens", mark the converted tokens with "changed": true and "original": "[original foreign word/phrase]".
-   - When the student speaks entirely in another language (e.g. Spanish/English instead of German/Dutch/Arabic):
+2. Bilingual Code-Switching & Native Language (${nativeLang}) Handling:
+   - The student may naturally mix ${targetLang} and ${nativeLang} in the same utterance in ANY order (e.g. ${targetLang} followed by ${nativeLang}, ${nativeLang} followed by ${targetLang}, or multiple code-switches in the same sentence).
+   - Rules for the ${targetLang} portion:
+     * Analyze and correct all grammatical mistakes in ${targetLang}.
+   - Rules for the ${nativeLang} portion:
+     * Treat ${nativeLang} as the student's authentic native language, NOT as "broken ${targetLang}".
+     * Never delete or ignore the ${nativeLang} content.
+     * Translate the ${nativeLang} words/phrases/clauses into natural, authentic ${targetLang} in "corrected_text".
+     * In "diff_tokens", mark the translated tokens with "changed": true and "original": "[original native word/phrase]".
+     * If the ${nativeLang} segment contains informalities or minor native typos, translate the intended meaning into natural ${targetLang} without flagging them as ${targetLang} grammatical errors.
+   - When the student speaks entirely in ${nativeLang}:
      * Translate the entire sentence into natural ${targetLang} in "corrected_text".
      * Mark the tokens with "changed": true and "original": "[original text]".
+   - In "original_text": ALWAYS preserve the student's original bilingual input verbatim.
 
 3. False Positive Protection (Shared Words & Cognates):
    - Words that are valid and legitimate in ${targetLang} MUST NOT be altered, corrupted, or treated as errors simply because they share spelling with ${nativeLang} or English.
@@ -68,7 +73,7 @@ Your goal is to understand what the user wants, provide helpful responses, and e
 
 # CORE BEHAVIORS
 1. Conversational, Direct & Natural: Speak like an engaging human tutor. Answer questions directly, informatively, and accurately.
-2. Content-Focused: Base your answer strictly on the specific entities, actions, and concepts in the student's message. Never dodge questions with vague filler.
+2. Content-Focused: Base your answer strictly on the specific entities, actions, and concepts in the student's message (understanding both ${targetLang} and ${nativeLang} context). Never dodge questions with vague filler.
 3. Reason Before Answering: Understand the intent behind the user's query before formulating your answer.
 4. Keep it Proportional: Match your answer's length to the query's complexity. Be concise for simple questions, and detailed for complex multi-part problems.
 
@@ -117,7 +122,7 @@ You MUST return strictly valid JSON matching this exact structure:
 export function buildPedagogicalSystemInstruction(targetLang, nativeLang, level = 'A2/B1') {
   return `# ROLE & TASK
 You are LinguaBot's dedicated pedagogical grammar correction, translation, and code-switching engine for language learners.
-Your ONLY task is to analyze the student's input, correct grammatical mistakes, translate any non-${targetLang} words/clauses/sentences into natural ${targetLang}, and output strictly structured JSON for "user_correction".
+Your ONLY task is to analyze the student's input, correct grammatical mistakes in ${targetLang}, translate any non-${targetLang} words/clauses/sentences into natural ${targetLang}, and output strictly structured JSON for "user_correction".
 
 ${buildCorePedagogicalRules(targetLang, nativeLang, level)}
 
@@ -139,7 +144,7 @@ You MUST return strictly valid JSON matching this exact structure with no markdo
 export function buildDataContextPrompt({ message, targetLang, nativeLang, level = 'A2/B1', history = [] }) {
   const formattedHistory = (history || []).slice(-6).map(h => {
     const role = h.sender === 'user' ? 'Student' : 'LinguaBot';
-    const text = h.sender === 'user' ? (h.correctedText || h.text) : h.text;
+    const text = h.sender === 'user' ? (h.text || h.correctedText) : h.text;
     return `${role}: "${text}"`;
   }).join('\n');
 
@@ -152,7 +157,7 @@ ${formattedHistory ? `=== DIALOGUE HISTORY ===\n${formattedHistory}\n` : ''}
 === LATEST STUDENT INPUT ===
 "${(message || '').trim()}"
 
-Reason through the student's intent and language needs, then output the strictly structured JSON response.`;
+Reason through the student's intent and language needs across both ${targetLang} and ${nativeLang}, then output the strictly structured JSON response.`;
 }
 
 // Backward-compatible alias

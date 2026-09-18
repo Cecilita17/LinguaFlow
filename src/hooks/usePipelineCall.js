@@ -702,17 +702,20 @@ export function usePipelineCall({
 
             if (targetIdx >= 0) {
               const updated = [...prev];
+              const originalTranscript = updated[targetIdx].text || cleanText;
               updated[targetIdx] = {
                 ...updated[targetIdx],
                 hasCorrection: hasErrors,
-                text: corrected,
+                text: originalTranscript,
+                rawTranscript: updated[targetIdx].rawTranscript || originalTranscript,
+                validatedTranscript: updated[targetIdx].validatedTranscript || originalTranscript,
                 correctedText: corrected,
                 translatedText: (corrected.toLowerCase() !== cleanText.toLowerCase()) ? corrected : null,
                 diffTokens,
                 tokens: updatedTokens,
                 transliteration: extractTurnTransliteration(updatedTokens, targetLang),
                 glosses: extractTurnGlosses(updatedTokens),
-                originalText: correction.original_text || cleanText,
+                originalText: correction.original_text || originalTranscript,
                 isCorrecting: false
               };
               return updated;
