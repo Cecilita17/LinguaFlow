@@ -263,7 +263,10 @@ export function usePipelineCall({
   const isMutedRef = useRef(false);
   const callStateRef = useRef('idle');
 
-  // Speech Recognition & VAD Refs
+  // Detection of mobile devices (Android / iOS / etc.)
+  const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  // Speech Recognition & Desktop VAD Refs
   const recognitionRef = useRef(null);
   const isRecognitionActiveRef = useRef(false);
   const isSpeechRecognitionRunningRef = useRef(false);
@@ -277,6 +280,15 @@ export function usePipelineCall({
     text: '',
     finalized: false
   });
+
+  // Mobile Web Audio VAD & Turn Engine Refs
+  const vadSourceNodeRef = useRef(null);
+  const vadAnalyserNodeRef = useRef(null);
+  const vadIntervalRef = useRef(null);
+  const isUserSpeakingMobileRef = useRef(false);
+  const mobileLastVoiceTimestampRef = useRef(0);
+  const mobileSpeechStartTimestampRef = useRef(0);
+  const isFinalizingMobileTurnRef = useRef(false);
 
   // Turn Audio Capture (MediaRecorder) for Multilingual Groq Whisper STT
   const micStreamRef = useRef(null);
@@ -498,9 +510,27 @@ export function usePipelineCall({
     }
   }, [stopAudioPlayback, resetTurnAudioCapture]);
 
+  // Stop mobile Web Audio VAD
+  const stopMobileVAD = useCallback(() => {
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
+    if (vadSourceNodeRef.current) {
+      try { vadSourceNodeRef.current.disconnect(); } catch (e) {}
+      vadSourceNodeRef.current = null;
+    }
+    vadAnalyserNodeRef.current = null;
+    isUserSpeakingMobileRef.current = false;
+    isFinalizingMobileTurnRef.current = false;
+    mobileLastVoiceTimestampRef.current = 0;
+    mobileSpeechStartTimestampRef.current = 0;
+  }, []);
+
   // Teardown all resources
   const cleanupResources = useCallback(() => {
     stopDurationTimer();
+    stopMobileVAD();
     if (restartRetryTimeoutRef.current) {
       clearTimeout(restartRetryTimeoutRef.current);
       restartRetryTimeoutRef.current = null;
@@ -563,7 +593,7 @@ export function usePipelineCall({
       text: '',
       finalized: false
     };
-  }, [interruptAssistant]);
+  }, [interruptAssistant, stopMobileVAD]);
 
   // Determine if Speech Recognition can be safely active and listening
   const canRunSpeechRecognition = useCallback(() => {
@@ -772,7 +802,11 @@ export function usePipelineCall({
               callStateRef.current = 'listening';
               setCallState('listening');
               startTurnAudioCapture();
-              startSpeechRecognitionIfReady();
+              if (isMobileDevice) {
+                isUserSpeakingMobileRef.current = false;
+              } else {
+                startSpeechRecognitionIfReady();
+              }
             }
           }, POST_TTS_ECHO_GUARD_MS);
         }
@@ -1134,6 +1168,207 @@ export function usePipelineCall({
     }
   }, [targetLang, nativeLang, level, interruptAssistant, enqueueTextForTTS, triggerTurnGloss, playNextInAudioQueue]);
 
+  // Finalize a mobile voice turn by stopping MediaRecorder and querying Groq Whisper
+  const finalizeMobileTurn = useCallback(async () => {
+    if (isFinalizingMobileTurnRef.current) return;
+    isFinalizingMobileTurnRef.current = true;
+
+    // Stop turn audio capture to retrieve recorded voice blob
+    const turnAudioBlob = await stopTurnAudioCapture();
+    if (!turnAudioBlob || turnAudioBlob.size < 400) {
+      console.log(`[PipelineMobileSTT] Voice turn audio blob too small or empty (${turnAudioBlob?.size || 0} bytes) -> restarting turn capture`);
+      isFinalizingMobileTurnRef.current = false;
+      startTurnAudioCapture();
+      return;
+    }
+
+    const turnId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Show temporary transcribing placeholder in transcript
+    setLiveTranscript((prev) => [
+      ...prev,
+      {
+        id: turnId,
+        sender: 'user',
+        speaker: isSpanish ? 'Tú' : 'You',
+        text: isSpanish ? 'Escuchando...' : 'Listening...',
+        timestamp: timeStr,
+        hasCorrection: false,
+        tokens: [],
+        diffTokens: [],
+        isTranscribing: true,
+        isCorrecting: false
+      }
+    ]);
+
+    console.log(`[PipelineMobileSTT] Transcribing mobile voice turn (${turnAudioBlob.size} bytes) with Groq Whisper...`);
+    sessionMetricsRef.current.sttRequests++;
+    const apiKey = getEffectiveApiKey();
+
+    try {
+      const whisperResult = await transcribeAudioApi({
+        audioBlob: turnAudioBlob,
+        targetLang,
+        nativeLang,
+        apiKey
+      });
+
+      let whisperText = (typeof whisperResult === 'string' ? whisperResult : whisperResult?.text || '').trim();
+      if (whisperText) {
+        whisperText = cleanSpeechTurnText(cleanDuplicatePhrases(whisperText), targetLang);
+      }
+
+      console.log(`[PipelineMobileSTT] Whisper transcribed text: "${whisperText}"`);
+
+      if (!whisperText) {
+        // Discard placeholder if no speech was recognized
+        setLiveTranscript((prev) => prev.filter((m) => m.id !== turnId));
+        isFinalizingMobileTurnRef.current = false;
+        startTurnAudioCapture();
+        return;
+      }
+
+      sessionMetricsRef.current.userTurns++;
+      processedUserTurnIdsRef.current.add(turnId);
+
+      const tokens = tokenizeLiveCallTurn(whisperText, targetLang);
+      const transliteration = extractTurnTransliteration(tokens, targetLang);
+      const glosses = extractTurnGlosses(tokens);
+
+      setLiveTranscript((prev) =>
+        prev.map((msg) =>
+          msg.id === turnId
+            ? {
+                ...msg,
+                text: whisperText,
+                originalText: whisperText,
+                correctedText: whisperText,
+                tokens,
+                transliteration,
+                glosses,
+                diffTokens: [{ text: whisperText, changed: false, original: null }],
+                isTranscribing: false,
+                isCorrecting: true
+              }
+            : msg
+        )
+      );
+
+      // Dispatch assistant conversational response immediately
+      dispatchAssistantResponse(whisperText);
+
+      // Trigger pedagogical correction asynchronously
+      triggerCorrection(whisperText, turnId);
+
+    } catch (err) {
+      console.warn('[PipelineMobileSTT] Whisper transcription error:', err);
+      setLiveTranscript((prev) => prev.filter((m) => m.id !== turnId));
+    } finally {
+      isFinalizingMobileTurnRef.current = false;
+    }
+  }, [isSpanish, targetLang, nativeLang, stopTurnAudioCapture, startTurnAudioCapture, dispatchAssistantResponse, triggerCorrection]);
+
+  // Start mobile Web Audio VAD monitoring on the microphone stream
+  const startMobileVAD = useCallback((stream) => {
+    stopMobileVAD();
+    if (!stream || !audioContextRef.current || audioContextRef.current.state === 'closed') {
+      return;
+    }
+
+    try {
+      const audioCtx = audioContextRef.current;
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.2;
+      source.connect(analyser);
+
+      vadSourceNodeRef.current = source;
+      vadAnalyserNodeRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const SILENCE_THRESHOLD = 16;
+      const SILENCE_DURATION_MS = 1400;
+      const MIN_SPEECH_DURATION_MS = 350;
+
+      isUserSpeakingMobileRef.current = false;
+      mobileLastVoiceTimestampRef.current = 0;
+      mobileSpeechStartTimestampRef.current = 0;
+      isFinalizingMobileTurnRef.current = false;
+
+      console.log('[PipelineMobileSTT] Web Audio VAD started on mic stream');
+
+      vadIntervalRef.current = setInterval(() => {
+        if (!vadAnalyserNodeRef.current || isFinalizingMobileTurnRef.current) return;
+        if (isMutedRef.current) return;
+
+        // Half-Duplex Acoustic Protection: pause VAD while AI is speaking, thinking, or during echo guard
+        const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
+        const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
+        const isQueueActive = ttsQueueRef.current.length > 0;
+        const isLlmActive = isLlmStreamingRef.current || Boolean(currentAiTurnIdRef.current);
+
+        if (
+          isSttPausedRef.current ||
+          isPlaybackActive ||
+          isQueueActive ||
+          isLlmActive ||
+          isEchoGuardActiveRef.current ||
+          isSpeakingState
+        ) {
+          if (isUserSpeakingMobileRef.current) {
+            isUserSpeakingMobileRef.current = false;
+          }
+          return;
+        }
+
+        vadAnalyserNodeRef.current.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avgVolume = sum / dataArray.length;
+        const now = Date.now();
+
+        if (avgVolume > SILENCE_THRESHOLD) {
+          mobileLastVoiceTimestampRef.current = now;
+          if (!isUserSpeakingMobileRef.current) {
+            isUserSpeakingMobileRef.current = true;
+            mobileSpeechStartTimestampRef.current = now;
+            console.log(`[PipelineMobileSTT] Voice activity started (vol=${avgVolume.toFixed(1)})`);
+            startTurnAudioCapture();
+          }
+        } else {
+          if (isUserSpeakingMobileRef.current) {
+            const speechDuration = now - mobileSpeechStartTimestampRef.current;
+            const silenceDuration = now - mobileLastVoiceTimestampRef.current;
+
+            if (silenceDuration >= SILENCE_DURATION_MS) {
+              if (speechDuration >= MIN_SPEECH_DURATION_MS) {
+                console.log(`[PipelineMobileSTT] Silence threshold reached (silence=${silenceDuration}ms, speech=${speechDuration}ms) -> finalizing mobile turn`);
+                isUserSpeakingMobileRef.current = false;
+                finalizeMobileTurn();
+              } else {
+                console.log(`[PipelineMobileSTT] Discarding short audio spike (${speechDuration}ms)`);
+                isUserSpeakingMobileRef.current = false;
+                resetTurnAudioCapture();
+                startTurnAudioCapture();
+              }
+            }
+          }
+        }
+      }, 50);
+
+    } catch (vadErr) {
+      console.warn('[PipelineMobileSTT] Web Audio VAD initialization notice:', vadErr);
+    }
+  }, [stopMobileVAD, finalizeMobileTurn, startTurnAudioCapture, resetTurnAudioCapture]);
+
   // Finalize and process a completed user speech turn
   const finalizeUserSpeechTurn = useCallback(async (userText, turnId) => {
     if (!userText || !userText.trim()) return;
@@ -1459,6 +1694,12 @@ export function usePipelineCall({
       console.log(`[PipelineAndroidTest] onerror = ${event.error}`);
       console.warn(`[PipelineSTT] onerror: event.error=${event.error}, message=${event.message || ''}`);
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        if (isMobileDevice) {
+          console.log('[PipelineMobileSTT] SpeechRecognition not-allowed on mobile -> bypassing, using Web Audio VAD + Whisper fallback');
+          isRecognitionActiveRef.current = false;
+          isSpeechRecognitionRunningRef.current = false;
+          return;
+        }
         isRecognitionActiveRef.current = false;
         isSpeechRecognitionRunningRef.current = false;
         setCallState('error');
@@ -1587,7 +1828,7 @@ export function usePipelineCall({
 
       // 2. Validate SpeechRecognition browser support
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
+      if (!SpeechRecognition && !isMobileDevice) {
         console.error('[PipelineSTT] SpeechRecognition is not supported in this browser.');
         throw new Error(
           isSpanish
@@ -1596,16 +1837,18 @@ export function usePipelineCall({
         );
       }
 
-      // 3. Start pre-existing SpeechRecognition instance immediately (preserves user activation)
-      if (!recognitionRef.current) {
-        initSpeechRecognition();
-      }
-      if (recognitionRef.current) {
-        isRecognitionActiveRef.current = true;
-        startSpeechRecognitionIfReady();
+      // 3. Start pre-existing SpeechRecognition instance immediately on desktop
+      if (!isMobileDevice) {
+        if (!recognitionRef.current) {
+          initSpeechRecognition();
+        }
+        if (recognitionRef.current) {
+          isRecognitionActiveRef.current = true;
+          startSpeechRecognitionIfReady();
+        }
       }
 
-      // 4. Concurrently request and retain microphone stream for Web Speech + MediaRecorder
+      // 4. Concurrently request and retain microphone stream for Web Speech + MediaRecorder + Mobile VAD
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         console.log('[PipelineMic] getUserMedia requested');
         navigator.mediaDevices.getUserMedia({ audio: true })
@@ -1619,6 +1862,9 @@ export function usePipelineCall({
             const track = tracks[0];
             console.log(`[PipelineMic] getUserMedia acquired: tracks=${tracks.length}, readyState=${track?.readyState}, enabled=${track?.enabled}, muted=${track?.muted}`);
             startTurnAudioCapture();
+            if (isMobileDevice) {
+              startMobileVAD(stream);
+            }
           })
           .catch((micErr) => {
             console.error(`[PipelineMic] Microphone permission error: name=${micErr?.name} message=${micErr?.message}`, micErr);
@@ -1640,7 +1886,7 @@ export function usePipelineCall({
       setCallState('error');
       setErrorMessage(err.message || 'Error desconocido al conectar la llamada.');
     }
-  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant, startSpeechRecognitionIfReady, startTurnAudioCapture]);
+  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant, startSpeechRecognitionIfReady, startTurnAudioCapture, startMobileVAD]);
 
   // Toggle Mute / Unmute
   const toggleMute = useCallback(() => {
