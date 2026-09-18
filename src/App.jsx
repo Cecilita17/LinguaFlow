@@ -1017,6 +1017,7 @@ export default function App() {
             apiKey={config?.apiKey || ''}
             onEndCall={handleEndCall}
             activeCall={pipelineCall}
+            onWordClick={handleWordClick}
           />
         </main>
       ) : chatViewMode === 'call-detail' ? (
@@ -1028,6 +1029,7 @@ export default function App() {
               setSelectedCallData(null);
               setChatViewMode('hub');
             }}
+            onWordClick={handleWordClick}
           />
         </main>
       ) : chatViewMode === 'hub' ? (

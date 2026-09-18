@@ -21,6 +21,7 @@ import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { tokenizeLiveCallTurn } from '../../services/liveCallGlossService.js';
+import { useSavedWords } from '../../context/SavedWordsContext.jsx';
 
 export function LiveCallView({
   targetLang,
@@ -28,9 +29,11 @@ export function LiveCallView({
   level = 'A2/B1',
   apiKey = '',
   onEndCall,
-  activeCall = {}
+  activeCall = {},
+  onWordClick
 }) {
   const { t, isSpanish } = useSiteLanguage();
+  const { isWordSaved } = useSavedWords();
   const currentTargetMeta = getLanguageMeta(targetLang);
 
   const isChinese = targetLang === 'zh';
@@ -195,12 +198,35 @@ export function LiveCallView({
           }
 
           const isChanged = Boolean(tokenObj.changed);
+          const isSaved = !isPunctuation && isWordSaved(word, targetLang);
 
           return (
             <div
               key={idx}
               dir={textDirection}
-              className="inline-flex flex-col items-center justify-start rounded transition-colors group/token max-w-full isolate [unicode-bidi:isolate] px-0.5 sm:px-1 py-0.5"
+              onClick={(e) => {
+                if (onWordClick && !isPunctuation) {
+                  e.stopPropagation();
+                  onWordClick(word, {
+                    word,
+                    auxiliary,
+                    translit: auxiliary,
+                    gloss: cleanGloss,
+                    meaning: (tokenObj && typeof tokenObj === 'object' && tokenObj.meaning) || cleanGloss || null,
+                    part_of_speech: (tokenObj && typeof tokenObj === 'object' && tokenObj.part_of_speech) || null,
+                    changed: isChanged,
+                    original: (tokenObj && typeof tokenObj === 'object' && tokenObj.original) || null
+                  });
+                }
+              }}
+              className="inline-flex flex-col items-center justify-start rounded transition-all group/token max-w-full isolate [unicode-bidi:isolate] px-0.5 sm:px-1 py-0.5 cursor-pointer hover:opacity-90 active:scale-95"
+              title={
+                isSaved
+                  ? (isSpanish ? `Palabra guardada: "${word}"` : `Saved word: "${word}"`)
+                  : (tokenObj && typeof tokenObj === 'object' && tokenObj.original
+                      ? `Original: "${tokenObj.original}"`
+                      : (isSpanish ? `Ver significado de "${word}"` : `View definition of "${word}"`))
+              }
             >
               {/* Tier 1 (TOP): Transliteration for Arabic / Pīnyīn for Chinese ONLY */}
               {hasTranslit && auxiliary && (
@@ -217,16 +243,17 @@ export function LiveCallView({
               {/* Tier 2 (MIDDLE): Word */}
               {isChanged ? (
                 <span
-                  className={`relative inline-block font-extrabold tracking-wide underline decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text ${
-                    isUser
+                  className={`relative inline-block font-extrabold tracking-wide underline decoration-2 underline-offset-4 leading-tight select-text ${
+                    isSaved
+                      ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 shadow-xs ring-1 ring-amber-400/60 decoration-amber-700'
+                      : isUser
                       ? 'text-amber-200 dark:text-amber-200 decoration-amber-300'
                       : 'text-amber-500 dark:text-amber-400 decoration-amber-400'
                   }`}
-                  title={tokenObj.original ? `Original: "${tokenObj.original}"` : (isSpanish ? 'Palabra corregida' : 'Corrected word')}
                 >
                   <span>{word}</span>
                   {tokenObj.original && (
-                    <span dir="ltr" className="hidden group-hover/word:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded shadow-lg border border-stone-700 pointer-events-none">
+                    <span dir="ltr" className="hidden group-hover/token:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-20 whitespace-nowrap bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded shadow-lg border border-stone-700 pointer-events-none">
                       Original: <span className="line-through text-rose-300">{tokenObj.original}</span>
                     </span>
                   )}
@@ -235,7 +262,9 @@ export function LiveCallView({
                 <span
                   dir={textDirection}
                   className={`leading-tight select-text ${
-                    isUser
+                    isSaved
+                      ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'
+                      : isUser
                       ? 'text-white font-semibold'
                       : 'text-[var(--text-primary)] font-semibold'
                   } ${isArabic ? 'font-arabic text-base sm:text-lg' : ''}`}
