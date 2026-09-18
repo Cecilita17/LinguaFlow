@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CheckCircle2,
   FileText,
+  CalendarCheck,
   Settings as SettingsIcon,
   Zap,
   Server,
@@ -161,7 +162,38 @@ export default function HomePage({
             </div>
           </div>
 
-          {/* CARD 4: SETTINGS (Opens Dedicated Settings Page) */}
+          {/* CARD 4: HABIT TRACKER (Opens Dedicated Habit Tracker Section) */}
+          <div
+            onClick={() => onSelectMode('habits')}
+            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+          >
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <CalendarCheck className="w-6 h-6 sm:w-7 sm:h-7" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors">
+                    Habit Tracker
+                  </h2>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                    📅
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                  {isSpanish
+                    ? 'Lleva un registro diario de tus hábitos de estudio por idioma.'
+                    : 'Keep a daily log of your study habits and practice across all languages.'}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-300">
+              <span>{isSpanish ? 'Abrir Habit Tracker' : 'Open Habit Tracker'}</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* CARD 5: SETTINGS (Opens Dedicated Settings Page) */}
           <div
             onClick={() => onSelectMode('settings')}
             className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-stone-400/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-stone-900/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"

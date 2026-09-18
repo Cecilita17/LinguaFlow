@@ -8,6 +8,7 @@ import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
 import { YouTubeReaderPage } from './pages/YouTubeReaderPage';
 import { TextReaderPage } from './pages/TextReaderPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { HabitTrackerPage } from './pages/HabitTrackerPage.jsx';
 import HomePage from './pages/HomePage';
 import { useSpeech } from './hooks/useSpeech';
 import { Sparkles, RotateCcw, ArrowLeft, ArrowUp } from 'lucide-react';
@@ -39,7 +40,7 @@ const TARGET_LANG_KEY = 'linguaflow_target_lang';
 const NATIVE_LANG_KEY = 'linguaflow_native_lang';
 const ACTIVE_TAB_KEY = 'linguaflow_active_tab';
 const CALL_STORAGE_KEY = 'linguaflow_call_history';
-const VALID_TABS = ['home', 'chat', 'youtube', 'text', 'settings'];
+const VALID_TABS = ['home', 'chat', 'youtube', 'text', 'settings', 'habits'];
 
 function getActiveTabFromLocation() {
   try {
@@ -940,6 +941,15 @@ export default function App() {
           languages={languages}
           apiWarning={apiWarning}
         />
+      ) : activeTab === 'habits' ? (
+        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
+          <HabitTrackerPage
+            onBack={() => setActiveTab('home')}
+            targetLang={targetLang}
+            languages={languages}
+            apiKey={config?.apiKey}
+          />
+        </main>
       ) : activeTab === 'settings' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
           <SettingsPage

@@ -204,8 +204,20 @@ export const TRANSLATIONS = {
     save_settings: 'Guardar Ajustes',
     saved: '¡Guardado!',
     ui_language: 'Idioma del Sitio Web',
-    ui_language_desc: 'Idioma de los textos y botones de la plataforma',
-    scroll_to_top: 'Volver arriba'
+    scroll_to_top: 'Volver arriba',
+
+    // Habit Tracker
+    habit_tracker_title: 'Habit Tracker',
+    habit_tracker_subtitle: 'Lleva un registro de los idiomas que practicas cada día.',
+    habit_tracker_desc: 'Selecciona los idiomas que quieres trackear y marca lo que estudiaste.',
+    habit_config_title: 'Configura los idiomas que quieres trackear',
+    habit_config_desc: 'Puedes activar o desactivar los idiomas en cualquier momento.',
+    habit_activity_conversation: 'Conversación',
+    habit_activity_youtube: 'YouTube',
+    habit_activity_reading: 'Lectura',
+    habit_card_title: 'Habit Tracker',
+    habit_card_desc: 'Lleva un registro diario de tus hábitos de estudio por idioma.',
+    habit_card_action: 'Abrir Habit Tracker'
   },
   en: {
     // Header & Branding
@@ -409,6 +421,19 @@ export const TRANSLATIONS = {
     saved: 'Saved!',
     ui_language: 'Website Language',
     ui_language_desc: 'Platform text and button interface language',
-    scroll_to_top: 'Scroll to top'
+    scroll_to_top: 'Scroll to top',
+
+    // Habit Tracker
+    habit_tracker_title: 'Habit Tracker',
+    habit_tracker_subtitle: 'Keep track of the languages you practice every day.',
+    habit_tracker_desc: 'Select the languages you want to track and mark what you studied.',
+    habit_config_title: 'Configure the languages you want to track',
+    habit_config_desc: 'You can enable or disable languages at any time.',
+    habit_activity_conversation: 'Conversation',
+    habit_activity_youtube: 'YouTube',
+    habit_activity_reading: 'Reading',
+    habit_card_title: 'Habit Tracker',
+    habit_card_desc: 'Keep a daily log of your study habits and practice across all languages.',
+    habit_card_action: 'Open Habit Tracker'
   }
 };

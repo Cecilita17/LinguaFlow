@@ -157,7 +157,16 @@ export async function restoreBackupData(payload) {
     });
   }
 
-  // 8. Restore localStorage: User settings (preserving existing auth tokens and API keys)
+  // 8. Restore localStorage: Habit Tracker data
+  if (data.habitTracker && typeof data.habitTracker === 'object') {
+    Object.entries(data.habitTracker).forEach(([key, habitData]) => {
+      try {
+        localStorage.setItem(key, JSON.stringify(habitData));
+      } catch (e) {}
+    });
+  }
+
+  // 9. Restore localStorage: User settings (preserving existing auth tokens and API keys)
   if (data.settings && typeof data.settings === 'object') {
     const s = data.settings;
     try {

@@ -13,6 +13,7 @@
 
 import { getAllTextDocuments } from './textLibraryStorage.js';
 import { getAllSavedTranscripts } from './transcriptLibraryStorage.js';
+import { gatherAllHabitTrackerData } from './habitTrackerService.js';
 import {
   requestDriveAccessToken,
   getOrCreateBackupFolder,
@@ -228,9 +229,10 @@ export async function createBackupPayload(user = null) {
     if (rawYtSession) activeYoutubeSession = JSON.parse(rawYtSession);
   } catch (e) {}
 
-  // 7. Chats and gloss caches
+  // 7. Chats, gloss caches, and habit tracker data
   const chatHistory = gatherChatHistory();
   const cachedGlosses = gatherCachedGlosses();
+  const habitTracker = gatherAllHabitTrackerData();
   const settings = gatherCleanSettings();
 
   return {
@@ -247,13 +249,15 @@ export async function createBackupPayload(user = null) {
       youtubeTranscriptsCount: youtubeTranscripts.length,
       savedWordsCount: savedWords.length,
       chatConversationsCount: Object.keys(chatHistory).length,
-      callSessionsCount: callHistory.length
+      callSessionsCount: callHistory.length,
+      habitTrackerKeysCount: Object.keys(habitTracker).length
     },
     data: {
       settings,
       savedWords,
       chatHistory,
       callHistory,
+      habitTracker,
       activeSessions: {
         textDraft: activeTextDraft,
         youtubeSession: activeYoutubeSession
