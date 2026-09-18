@@ -597,6 +597,32 @@ export function stripSttTranslationArtifacts(text, targetLang = 'es') {
   return cleaned.trim();
 }
 
+export function getWhisperPromptForLanguage(targetLang = 'es') {
+  const lang = (targetLang || 'es').toLowerCase().split('-')[0];
+  const prompts = {
+    nl: 'Nederlandse gesproken taal. Precieze transcriptie van wat er gezegd wordt, inclusief eventuele code-switching. Niet vertalen.',
+    de: 'Deutsche gesprochene Sprache. Genaue wörtliche Transkription des Gesprochenen inklusive Code-Switching. Nicht übersetzen.',
+    es: 'Español hablado. Transcripción literal y exacta de las palabras dichas, incluyendo cambio de código. No traducir.',
+    fr: 'Français parlé. Transcription exacte et littérale de ce qui est dit, y compris le code-switching. Ne pas traduire.',
+    it: 'Italiano parlato. Trascrizione esatta e letterale di ciò que viene detto, incluso code-switching. Non tradurre.',
+    pt: 'Português falado. Transcrição exata e literal do que é dito, incluindo code-switching. Não traduzir.',
+    pl: 'Mówiony język polski. Dokładna, dosłowna transkrypcja wypowiedzi wraz z przełączaniem kodów. Nie tłumaczyć.',
+    ru: 'Русская разговорная речь. Точная дословная расшифровка сказанного, включая переключение языков. Не переводить.',
+    ar: 'كلام منطوق باللغة العربية. نسخ حرفي دقيق لما يقال دون ترجمة مع الحفاظ على أي تبديل بين اللغات.',
+    zh: '中文普通话口语对话。准确逐字记录原话，保留混合语言，绝不翻译。',
+    tr: 'Konuşulan Türkçe. Söylenenlerin tam ve kelimesi kelimesine dökümü, dil geçişleri dahil. Çeviri yapmayın.',
+    en: 'Spoken English dialogue. Exact verbatim transcription of spoken words including code-switching. Do not translate.'
+  };
+
+  if (prompts[lang]) {
+    return prompts[lang];
+  }
+
+  const langObj = SUPPORTED_LANGUAGES.find(l => l.code === lang);
+  const targetName = langObj?.englishName || langObj?.name || lang;
+  return `${targetName} spoken dialogue. Exact verbatim transcription of spoken words including code-switching. Do not translate.`;
+}
+
 // Transcribe audio endpoint (Groq Whisper-large-v3)
 export async function handleTranscribe(req, res) {
   setCorsHeaders(res);
@@ -606,7 +632,7 @@ export async function handleTranscribe(req, res) {
     const body = parseRequestBody(req);
     const {
       audioBase64,
-      mimeType = 'audio/webm',
+      mimeType,
       targetLang = 'es',
       nativeLang = 'es',
       apiKey: clientApiKey
@@ -630,12 +656,7 @@ export async function handleTranscribe(req, res) {
     let cleanMime = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
     if (!cleanMime || cleanMime === 'audio/x-m4a') cleanMime = 'audio/mp4';
 
-    const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
-    const nativeObj = SUPPORTED_LANGUAGES.find(l => l.code === nativeLang) || { name: nativeLang, englishName: nativeLang };
-    const targetName = langObj.englishName || langObj.name;
-    const nativeName = nativeObj.englishName || nativeObj.name;
-
-    console.log('Audio transcription requested with Groq Whisper [whisper-large-v3]');
+    console.log(`Audio transcription requested with Groq Whisper [whisper-large-v3] (targetLang=${targetLang}, nativeLang=${nativeLang})`);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     let httpStatus = 0;
@@ -652,27 +673,7 @@ export async function handleTranscribe(req, res) {
       formData.append('temperature', '0');
       formData.append('response_format', 'json');
 
-      const getLangScriptHint = (code) => {
-        const hints = {
-          de: 'Deutsch (ä, ö, ü, ß)',
-          es: 'Español (ñ, á, é, í, ó, ú, ¿, ¡)',
-          fr: 'Français (é, è, ê, ë, à, ç, œ, ù)',
-          it: 'Italiano (à, è, é, ì, ò, ù)',
-          pt: 'Português (ã, õ, á, é, í, ó, ú, ç, ê)',
-          nl: 'Nederlands (ij, ë, é, ó, ú)',
-          pl: 'Polski (ą, ć, ę, ł, ń, ó, ś, ź, ż)',
-          ru: 'Русский (кириллица: а, б, в, г, д, е, ж, з, и, й, к, л, м, н, о, п, р, с, т, у, ф, х, ц, ч, ш, щ, ъ, ы, ь, э, ю, я)',
-          zh: '中文 (简体字 / 繁体字)',
-          ar: 'العربية (الحروف العربية: ا ب ت ث ج ح خ د ذ ر ز س ش ص ض ط ظ ع غ ف ق ك ل م ن هـ و ي)',
-          ja: '日本語 (漢字, ひらがな, カタカナ)',
-          ko: '한국어 (한글)',
-          en: 'English'
-        };
-        return hints[code] || null;
-      };
-
-      const hintParts = [targetName, nativeName !== targetName ? nativeName : null, 'English'].filter(Boolean);
-      const whisperPrompt = `Spoken dialogue with code-switching (${hintParts.join(', ')}).`;
+      const whisperPrompt = getWhisperPromptForLanguage(targetLang);
       formData.append('prompt', whisperPrompt);
 
       const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
