@@ -13,11 +13,13 @@
 import { API_BASE_URL } from './chatService.js';
 import {
   getLanguageGlossStrategy,
+  normalizeArabicForMatching,
   CHINESE_OFFLINE_DICT,
   ARABIC_OFFLINE_DICT,
   POLISH_OFFLINE_DICT,
   PUNCTUATION_REGEX
 } from './languageGlossStrategies.js';
+import { getArabicTransliteration } from './arabicTransliteration.js';
 import {
   computeSubtitleHash,
   getLibraryKey,
@@ -36,6 +38,7 @@ export {
   ARABIC_OFFLINE_DICT,
   POLISH_OFFLINE_DICT,
   PUNCTUATION_REGEX,
+  normalizeArabicForMatching,
   getLanguageGlossStrategy,
   computeSubtitleHash,
   getLibraryKey,
@@ -174,7 +177,7 @@ export function isGlossComplete(sub, targetLang = 'zh', nativeLang = 'es') {
  * Call backend batch gloss endpoint to enrich a set of lines with AI glosses.
  * Crucially passes client pre-segmented words, specific UNRESOLVED unknown tokens, and effective API key.
  */
-export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang = 'es', apiKey = '', abortSignal = null) {
+export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang = 'es', apiKey = '', abortSignal = null, options = {}) {
   if (!Array.isArray(lines) || lines.length === 0) return [];
   if (abortSignal?.aborted) return [];
 
@@ -202,9 +205,11 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
       const words = (l.tokens || [])
         .filter(t => !t.isPunctuation && (t.text || t.word))
         .map(t => t.text || t.word);
-      const unknownTokens = (l.tokens || [])
-        .filter(t => !t.isPunctuation && (t.text || t.word) && !strategy.isTokenComplete(t, nativeLang))
-        .map(t => t.text || t.word);
+      const unknownTokens = options.forceFullLine
+        ? words
+        : (l.tokens || [])
+            .filter(t => !t.isPunctuation && (t.text || t.word) && !strategy.isTokenComplete(t, nativeLang))
+            .map(t => t.text || t.word);
 
       return {
         id: l.id,
@@ -498,37 +503,55 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
   }
 
   // ============================================================
-  // MAP-BASED MERGE (original behavior for all non-Chinese)
+  // MAP-BASED MERGE (for all non-Chinese languages)
   // ============================================================
   const aiMap = new Map();
+  const normalizedAiMap = new Map();
+
   aiTokens.forEach(item => {
     const w = (item.word || item.text || '').trim();
     if (w) {
       aiMap.set(w, item);
       aiMap.set(w.toLowerCase(), item);
-      // Normalized Arabic without tashkeel
-      const stripped = w.replace(/[\u064B-\u065F\u0670]/g, '');
-      if (stripped && stripped !== w) {
-        aiMap.set(stripped, item);
+      if (targetLang === 'ar' || /[\u0600-\u06FF]/.test(w)) {
+        const norm = normalizeArabicForMatching(w);
+        if (norm) {
+          normalizedAiMap.set(norm, item);
+          // If AI returned a prefixed word (e.g. 'والسلام'), also index base word ('سلام')
+          if (norm.length > 2 && /^[وفبل]/.test(norm)) {
+            const base = norm.slice(1);
+            if (!normalizedAiMap.has(base)) {
+              normalizedAiMap.set(base, item);
+            }
+          }
+        }
       }
     }
   });
 
   const strategy = getLanguageGlossStrategy(targetLang);
+  const usedAiTokens = new Set();
 
-  return originalTokens.map(orig => {
+  const intermediateTokens = originalTokens.map(orig => {
     if (orig.isPunctuation) return orig;
 
     const isManual = orig.glossSource === 'manual';
     const w = (orig.text || orig.word || '').trim();
     let match = aiMap.get(w) || aiMap.get(w.toLowerCase());
 
-    if (!match && /[\u0600-\u06FF]/.test(w)) {
-      const stripped = w.replace(/[\u064B-\u065F\u0670]/g, '');
-      match = aiMap.get(stripped);
+    if (!match && (targetLang === 'ar' || /[\u0600-\u06FF]/.test(w))) {
+      const normW = normalizeArabicForMatching(w);
+      if (normW) {
+        match = normalizedAiMap.get(normW);
+        // Prefix fallback if AI dropped common clitic (و/ف/ب/ل)
+        if (!match && normW.length > 2 && /^[وفبل]/.test(normW)) {
+          match = normalizedAiMap.get(normW.slice(1));
+        }
+      }
     }
 
     if (match) {
+      usedAiTokens.add(match);
       // 1. TIER 1: MANUAL GLOSS PRIORITY - NEVER OVERWRITE orig.gloss
       if (isManual) {
         return {
@@ -538,52 +561,77 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       }
 
       // 2. TIER 2: AI GLOSS COMPLETION
+      const translitFallback = targetLang === 'ar' ? getArabicTransliteration(orig.word || orig.text) : (match.pinyin || match.translit || null);
       return {
         ...orig,
         targetLang: targetLang,
         nativeLang: nativeLang || 'es',
-        auxiliary: match.auxiliary || null,
-        pinyin: match.pinyin || null,
-        translit: match.translit || null,
+        auxiliary: match.auxiliary || translitFallback,
+        pinyin: match.pinyin || match.auxiliary || null,
+        translit: match.translit || match.auxiliary || translitFallback,
         gloss: match.gloss || null,
         glossSource: 'ai'
       };
     }
 
-    // If no AI match was returned:
-    // If it's a manual gloss, preserve it
-    if (isManual) {
-      return orig;
-    }
+    return orig;
+  });
 
-    // If it's an offline dictionary match for the ACTIVE strategy and nativeLang, preserve/set it with targetLang & nativeLang
-    const offlineEntry = strategy.lookupOffline(w, nativeLang);
-    if (offlineEntry && offlineEntry.gloss) {
+  // Second pass: Positional alignment for remaining unassigned AI tokens
+  const unassignedAiTokens = aiTokens.filter(t => !usedAiTokens.has(t) && (t.gloss || t.translation));
+  let unassignedIdx = 0;
+
+  return intermediateTokens.map(token => {
+    if (token.isPunctuation) return token;
+    if (token.glossSource === 'manual' || token.glossSource === 'ai') return token;
+
+    // Check if an unassigned AI token can be applied positionally
+    if (unassignedIdx < unassignedAiTokens.length) {
+      const aiToken = unassignedAiTokens[unassignedIdx++];
+      const translitFallback = targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : (aiToken.pinyin || aiToken.translit || null);
       return {
-        ...orig,
+        ...token,
         targetLang: targetLang,
         nativeLang: nativeLang || 'es',
-        auxiliary: offlineEntry.auxiliary || offlineEntry.pinyin || offlineEntry.translit || null,
+        auxiliary: aiToken.auxiliary || translitFallback,
+        pinyin: aiToken.pinyin || aiToken.auxiliary || null,
+        translit: aiToken.translit || aiToken.auxiliary || translitFallback,
+        gloss: aiToken.gloss || null,
+        glossSource: 'ai'
+      };
+    }
+
+    // If it's an offline dictionary match for the ACTIVE strategy and nativeLang, preserve/set it
+    const w = (token.text || token.word || '').trim();
+    const offlineEntry = strategy.lookupOffline(w, nativeLang);
+    if (offlineEntry && offlineEntry.gloss) {
+      const translitFallback = targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : null;
+      return {
+        ...token,
+        targetLang: targetLang,
+        nativeLang: nativeLang || 'es',
+        auxiliary: offlineEntry.auxiliary || offlineEntry.pinyin || offlineEntry.translit || translitFallback,
         pinyin: offlineEntry.pinyin || offlineEntry.auxiliary || null,
-        translit: offlineEntry.translit || null,
+        translit: offlineEntry.translit || translitFallback,
         gloss: offlineEntry.gloss,
         glossSource: 'offline'
       };
     }
 
     // If the token was previously resolved with AI for the ACTIVE targetLang and nativeLang, keep it
-    if (orig.glossSource === 'ai' && orig.targetLang === targetLang && orig.nativeLang === (nativeLang || 'es') && orig.gloss) {
-      return orig;
+    if (token.glossSource === 'ai' && token.targetLang === targetLang && token.nativeLang === (nativeLang || 'es') && token.gloss) {
+      return token;
     }
 
     // Otherwise, the token is unresolved for this targetLang/nativeLang pair
+    const translitFallback = targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : null;
     return {
-      ...orig,
+      ...token,
       targetLang: targetLang,
       nativeLang: nativeLang || 'es',
-      auxiliary: null,
+      auxiliary: translitFallback,
       pinyin: null,
-      translit: null,
+      translit: translitFallback,
       gloss: null,
       glossSource: null
     };
@@ -795,7 +843,7 @@ export async function glossSingleSubtitleLine({
   };
 
   try {
-    const aiResults = await fetchBatchGlossesApi([preparedSub], targetLang, nativeLang, apiKey, abortSignal);
+    const aiResults = await fetchBatchGlossesApi([preparedSub], targetLang, nativeLang, apiKey, abortSignal, { forceFullLine: true });
     if (Array.isArray(aiResults) && aiResults.length > 0) {
       const match = aiResults[0];
       if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {

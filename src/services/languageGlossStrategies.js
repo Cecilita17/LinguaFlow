@@ -1231,6 +1231,24 @@ export class ChineseGlossStrategy {
   }
 }
 
+/**
+ * Normalizes an Arabic string for robust matching across diacritical,
+ * orthographic, and Unicode variants without modifying the display text.
+ */
+export function normalizeArabicForMatching(text) {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200F\uFEFF\u061C]/g, '')
+    .replace(/\u0640/g, '')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+    .replace(/[\u0622\u0623\u0625\u0671\u0672\u0673]/g, '\u0627')
+    .replace(/[\u0649\u06CD\u06D0\u06D1]/g, '\u064A')
+    .replace(/\u0629/g, '\u0647')
+    .trim()
+    .toLowerCase();
+}
+
 export class ArabicGlossStrategy {
   constructor() {
     this.code = 'ar';
@@ -1240,6 +1258,13 @@ export class ArabicGlossStrategy {
     this.requiresTranslit = true;
     this.translitKey = 'translit';
     this.offlineDict = ARABIC_OFFLINE_DICT;
+    this._normalizedDict = new Map();
+    for (const [key, val] of Object.entries(ARABIC_OFFLINE_DICT)) {
+      const norm = normalizeArabicForMatching(key);
+      if (norm && !this._normalizedDict.has(norm)) {
+        this._normalizedDict.set(norm, val);
+      }
+    }
   }
 
   tokenize(text, nativeLang = 'es') {
@@ -1311,8 +1336,54 @@ export class ArabicGlossStrategy {
     if (!isSpanishNative) return null;
     const clean = word.trim();
     if (this.offlineDict[clean]) return this.offlineDict[clean];
-    const stripped = clean.replace(/[\u064B-\u065F\u0670]/g, '');
-    if (this.offlineDict[stripped]) return this.offlineDict[stripped];
+
+    const norm = normalizeArabicForMatching(clean);
+    if (this._normalizedDict.has(norm)) {
+      return this._normalizedDict.get(norm);
+    }
+
+    // Prefix stripping: e.g. "والسلام" -> "و" + "السلام"
+    if (norm.startsWith('و') && norm.length > 2) {
+      const rest = norm.slice(1);
+      if (this._normalizedDict.has(rest)) {
+        const base = this._normalizedDict.get(rest);
+        return {
+          translit: 'wa-' + (base.translit || ''),
+          gloss: 'y ' + (base.gloss || '')
+        };
+      }
+    }
+    if (norm.startsWith('ف') && norm.length > 2) {
+      const rest = norm.slice(1);
+      if (this._normalizedDict.has(rest)) {
+        const base = this._normalizedDict.get(rest);
+        return {
+          translit: 'fa-' + (base.translit || ''),
+          gloss: 'entonces ' + (base.gloss || '')
+        };
+      }
+    }
+    if (norm.startsWith('ب') && norm.length > 2) {
+      const rest = norm.slice(1);
+      if (this._normalizedDict.has(rest)) {
+        const base = this._normalizedDict.get(rest);
+        return {
+          translit: 'bi-' + (base.translit || ''),
+          gloss: 'con/en ' + (base.gloss || '')
+        };
+      }
+    }
+    if (norm.startsWith('ل') && norm.length > 2) {
+      const rest = norm.slice(1);
+      if (this._normalizedDict.has(rest)) {
+        const base = this._normalizedDict.get(rest);
+        return {
+          translit: 'li-' + (base.translit || ''),
+          gloss: 'para ' + (base.gloss || '')
+        };
+      }
+    }
+
     return null;
   }
 
@@ -1333,15 +1404,10 @@ export class ArabicGlossStrategy {
 
     if (tokenTarget && tokenTarget !== 'ar') return false;
 
-    const aux = typeof (token.auxiliary || token.translit) === 'string' ? (token.auxiliary || token.translit).trim() : '';
-
     // Verified AI gloss: MUST match active targetLang ('ar') and requested nativeLang
     if (token.glossSource === 'ai') {
       if (tokenNative && tokenNative !== targetNative) return false;
       if (!tokenNative) return false;
-      if (/[\u0600-\u06FF]/.test(w)) {
-        return Boolean(aux);
-      }
       return true;
     }
 
@@ -1350,10 +1416,6 @@ export class ArabicGlossStrategy {
       if (targetNative !== 'es') return false;
       const entry = this.lookupOffline(w, 'es');
       if (entry && entry.gloss) {
-        const entryTranslit = entry.translit || aux;
-        if (/[\u0600-\u06FF]/.test(w)) {
-          return Boolean(entryTranslit);
-        }
         return true;
       }
     }
@@ -1362,10 +1424,6 @@ export class ArabicGlossStrategy {
     if (targetNative === 'es') {
       const entry = this.lookupOffline(w, 'es');
       if (entry && entry.gloss) {
-        const entryTranslit = entry.translit || aux;
-        if (/[\u0600-\u06FF]/.test(w)) {
-          return Boolean(entryTranslit);
-        }
         return true;
       }
     }

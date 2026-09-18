@@ -859,9 +859,8 @@ const activeModel = getSanitizedGroqModel();
   * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").`;
       } else if (isArabic) {
         languageRules = `- ARABIC RULES (targetLang: 'ar'):
-  * Preserve Arabic script. Use Arabic diacritics (tashkeel) on words when appropriate to help with reading.
-  * In the "auxiliary" field, provide the clear Latin transliteration / romanization with vowels (e.g. "marḥaban", "kayfa", "al-kitāb"). Never leave it null for real Arabic words.
-  * In the "word" field, provide the Arabic script word with tashkeel.
+  * In the "word" field, provide the Arabic script word corresponding to the input token.
+  * In the "auxiliary" field, provide the clear Latin transliteration / romanization with vowels (e.g. "marḥaban", "kayfa", "al-kitāb", "as-salāmu"). Never leave it null for real Arabic words.
   * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").`;
       } else {
         languageRules = `- RULES FOR ${targetLang.toUpperCase()} (${targetLangName}):
@@ -915,7 +914,7 @@ Return STRICTLY valid JSON with no markdown formatting:
       "tokens": [
         {
           "word": "string (exact word unit)",
-          "auxiliary": ${isChinese ? '"string with tone-marked Pinyin for the COMPLETE word"' : 'null'},
+          "auxiliary": ${isChinese ? '"string with tone-marked Pinyin for the COMPLETE word"' : (isArabic ? '"string with clear Latin transliteration (e.g. marḥaban, al-kitāb)"' : 'null')},
           "gloss": "string (direct concise meaning in ${nativeLangName})"
         }
       ]
