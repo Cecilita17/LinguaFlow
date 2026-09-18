@@ -51,9 +51,6 @@ export function LiveCallView({
     setShowGlosses,
     toggleGlosses,
     formattedDuration,
-    pipelineMode = 'current',
-    setPipelineMode,
-    togglePipelineMode,
     startCall,
     endCall,
     toggleMute
@@ -291,32 +288,6 @@ export function LiveCallView({
 
         {/* Right: Toggle Buttons */}
         <div className="flex items-center space-x-2">
-          {/* Pipeline Mode Selector */}
-          <button
-            type="button"
-            onClick={togglePipelineMode}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
-              pipelineMode === 'integrated'
-                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-amber-500/20 shadow-sm'
-                : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-            }`}
-            title={
-              pipelineMode === 'integrated'
-                ? (isSpanish ? 'Modo de llamada: Corrección integrada (Clic para cambiar a Corrección actual)' : 'Call Mode: Integrated Correction (Click to switch to Current)')
-                : (isSpanish ? 'Modo de llamada: Corrección actual (Clic para cambiar a Corrección integrada)' : 'Call Mode: Current Correction (Click to switch to Integrated)')
-            }
-          >
-            <Sparkles className={`w-3.5 h-3.5 ${pipelineMode === 'integrated' ? 'text-white' : 'text-amber-500'}`} />
-            <span className="hidden sm:inline">
-              {pipelineMode === 'integrated'
-                ? (isSpanish ? 'Corrección integrada' : 'Integrated')
-                : (isSpanish ? 'Corrección actual' : 'Current')}
-            </span>
-            <span className={`text-[10px] px-1 py-0.2 rounded font-mono ${pipelineMode === 'integrated' ? 'bg-black/20 text-white font-bold' : 'bg-black/10 dark:bg-white/10'}`}>
-              {pipelineMode === 'integrated' ? 'INTEGRATED' : 'CURRENT'}
-            </span>
-          </button>
-
           {showLiveTranscript && (
             <button
               type="button"
@@ -396,7 +367,7 @@ export function LiveCallView({
 
         <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] font-mono">
           <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
-          <span>{pipelineMode === 'integrated' ? 'Pipeline (Corrección integrada)' : 'Pipeline (STT→LLM→TTS)'}</span>
+          <span>Pipeline (STT → LLM → TTS)</span>
         </div>
       </div>
 
@@ -420,20 +391,10 @@ export function LiveCallView({
                       <span className="text-xs font-semibold text-[var(--text-secondary)]">
                         {item.speaker || (isSpanish ? 'Tú' : 'You')}
                       </span>
-                      {item.isCorrecting ? (
-                        <span className="flex items-center space-x-1.5 text-[10px] sm:text-[11px] font-semibold text-pink-700 dark:text-pink-300 bg-pink-500/15 px-2 py-0.5 rounded-full border border-pink-500/30 shadow-xs animate-pulse">
-                          <Sparkles className="w-3 h-3 text-pink-500" />
-                          <span>{isSpanish ? 'Analizando...' : 'Analyzing...'}</span>
-                        </span>
-                      ) : item.hasCorrection ? (
-                        <span className="flex items-center space-x-1.5 text-[10px] sm:text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/30 shadow-xs">
-                          <CheckCircle2 className="w-3 h-3 text-amber-500" />
-                          <span>{isSpanish ? 'Corregido' : 'Corrected'}</span>
-                        </span>
-                      ) : (
-                        <span className="flex items-center space-x-1.5 text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30 shadow-xs">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span>{isSpanish ? 'Sin errores' : 'No errors'}</span>
+                      {item.isTranscribing && (
+                        <span className="flex items-center space-x-1 text-[10px] text-pink-300 animate-pulse">
+                          <Mic className="w-2.5 h-2.5" />
+                          <span>{isSpanish ? 'Hablando...' : 'Speaking...'}</span>
                         </span>
                       )}
                       {item.isGlossing && (
@@ -461,20 +422,6 @@ export function LiveCallView({
                         </span>
                       ) : (
                         renderInterlinearTokens(userTokens, true)
-                      )}
-
-                      {/* Pedagogical Correction Comparison (Secondary block below) */}
-                      {item.hasCorrection && item.originalText && item.correctedText && item.originalText.toLowerCase().trim() !== item.correctedText.toLowerCase().trim() && (
-                        <div className="mt-2.5 pt-2 border-t border-white/20 text-xs space-y-0.5" dir="ltr">
-                          <div className="flex items-center gap-1.5 text-pink-100/90">
-                            <span className="font-medium text-pink-200">{isSpanish ? 'Original:' : 'Original:'}</span>
-                            <span className="line-through text-pink-200/80">{item.originalText}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 font-semibold text-amber-200">
-                            <span>{isSpanish ? 'Correcto:' : 'Corrected:'}</span>
-                            <span>{item.correctedText}</span>
-                          </div>
-                        </div>
                       )}
                     </div>
                   </div>

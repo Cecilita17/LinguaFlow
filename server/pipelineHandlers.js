@@ -51,7 +51,6 @@ export async function handlePipelineChatStream(req, res) {
       targetLang = 'es',
       nativeLang = 'es',
       level = 'A2/B1',
-      pipelineMode = 'current',
       apiKey: clientApiKey
     } = body;
 
@@ -75,10 +74,7 @@ export async function handlePipelineChatStream(req, res) {
     // Bounded dialogue history: maximum last 6 turns to keep context window tight
     const boundedHistory = Array.isArray(history) ? history.slice(-6) : [];
 
-    const isIntegratedMode = pipelineMode === 'integrated';
-
-    const systemPromptContent = isIntegratedMode
-      ? `You are LinguaFlow AI, a natural, engaging language tutor for spoken voice calls with integrated pedagogical correction.
+    const systemPromptContent = `You are LinguaFlow AI, a natural, engaging language tutor for spoken voice calls with integrated pedagogical correction.
 The student is practicing ${targetName}. Their native language is ${nativeName} and level is ${level}.
 
 CRITICAL SPOKEN CONVERSATION & INTEGRATED CORRECTION RULES:
@@ -100,17 +96,7 @@ CRITICAL SPOKEN CONVERSATION & INTEGRATED CORRECTION RULES:
      * Respond directly, warmly, and naturally to the topic in ${targetName}.
      * DO NOT use <correction> tags. DO NOT invent an artificial correction.
 6. NEVER output markdown (except the <correction> tags), bullet points, numbers, emoji, or non-speech symbols.
-7. NEVER repeat hello/greetings on every turn. Dive directly into natural spoken conversation.`
-      : `You are LinguaFlow AI, a natural, cheerful, and engaging language tutor for spoken voice calls.
-The student is practicing ${targetName}. Their native language is ${nativeName} and level is ${level}.
-
-CRITICAL SPOKEN CONVERSATION RULES:
-1. Speak EXCLUSIVELY in ${targetName}, using natural spoken phrasing suitable for oral conversation.
-2. If the student speaks in English, Spanish, or another language, or mixes languages, understand their meaning completely, but ALWAYS reply strictly in ${targetName} to maintain immersive language practice.
-3. Keep your answer CONCISE (1 to 2 spoken sentences maximum) to keep the voice call interactive.
-4. Respond directly to the student's thought, comment, or question.
-5. NEVER output markdown, asterisks, bullet points, numbers, emoji, or non-speech symbols.
-6. NEVER repeat hello/greetings on every turn. Dive directly into natural spoken conversation.`;
+7. NEVER repeat hello/greetings on every turn. Dive directly into natural spoken conversation.`;
 
     const formattedMessages = [
       {

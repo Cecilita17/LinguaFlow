@@ -1,6 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { getLiveCallPedagogicalCorrection } from '../services/grammarEngine.js';
-import { computeWordDiff } from '../services/diffUtils.js';
 import {
   tokenizeLiveCallTurn,
   glossLiveCallTurnAsync,
@@ -10,7 +8,6 @@ import {
 } from '../services/liveCallGlossService.js';
 import { isGlossComplete, getEffectiveApiKey } from '../services/subtitleGlossService.js';
 import { transcribeAudioApi } from '../services/chatService.js';
-import { validateTranscriptContextually } from '../services/transcriptValidationService.js';
 import { cleanDuplicatePhrases } from './useSpeech.js';
 import { getLanguageMeta } from '../constants/languages.js';
 
@@ -257,13 +254,6 @@ export function usePipelineCall({
   const [liveTranscript, setLiveTranscript] = useState([]);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
   const [showGlosses, setShowGlosses] = useState(false);
-  const [pipelineMode, setPipelineMode] = useState(() => {
-    try {
-      return (typeof window !== 'undefined' && localStorage.getItem('linguaflow_call_pipeline_mode')) || 'current';
-    } catch {
-      return 'current';
-    }
-  });
 
   const durationTimerRef = useRef(null);
   const liveTranscriptRef = useRef([]);
@@ -271,20 +261,6 @@ export function usePipelineCall({
   const showGlossesRef = useRef(false);
   const isMutedRef = useRef(false);
   const callStateRef = useRef('idle');
-  const pipelineModeRef = useRef(pipelineMode);
-
-  useEffect(() => {
-    pipelineModeRef.current = pipelineMode;
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('linguaflow_call_pipeline_mode', pipelineMode);
-      }
-    } catch {}
-  }, [pipelineMode]);
-
-  const togglePipelineMode = useCallback(() => {
-    setPipelineMode((prev) => (prev === 'current' ? 'integrated' : 'current'));
-  }, []);
 
   // Detection of mobile devices (Android / iOS / etc.)
   const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -337,7 +313,6 @@ export function usePipelineCall({
   const echoGuardTimerRef = useRef(null);
 
   // Deduplication & Lifecycle Sets
-  const correctedTurnIdsRef = useRef(new Set());
   const glossedTurnIdsRef = useRef(new Set());
   const processedUserTurnIdsRef = useRef(new Set());
 
@@ -679,89 +654,7 @@ export function usePipelineCall({
     }
   }, [canRunSpeechRecognition]);
 
-  // Trigger pedagogical correction asynchronously for a user voice turn
-  const triggerCorrection = useCallback((userText, turnId) => {
-    if (!userText || !userText.trim()) return;
-    const cleanText = userText.trim();
-    const dedupeKey = turnId || cleanText;
 
-    if (correctedTurnIdsRef.current.has(dedupeKey)) {
-      sessionMetricsRef.current.duplicateCorrectionAttempts++;
-      return;
-    }
-    correctedTurnIdsRef.current.add(dedupeKey);
-    sessionMetricsRef.current.correctionRequests++;
-
-    getLiveCallPedagogicalCorrection(cleanText, targetLang, nativeLang, level)
-      .then((correction) => {
-        sessionMetricsRef.current.correctionSuccesses++;
-        if (correction) {
-          const corrected = (correction.corrected_text || cleanText).trim();
-          const diffTokens = Array.isArray(correction.diff_tokens) && correction.diff_tokens.length > 0
-            ? correction.diff_tokens
-            : computeWordDiff(cleanText, corrected);
-
-          const hasErrors = Boolean(
-            correction.has_errors ||
-            diffTokens.some((t) => t.changed) ||
-            corrected.toLowerCase() !== cleanText.toLowerCase()
-          );
-          const updatedTokens = tokenizeLiveCallTurn(corrected, targetLang, diffTokens, nativeLang);
-
-          setLiveTranscript((prev) => {
-            let targetIdx = prev.findIndex((msg) => msg.id === turnId);
-            if (targetIdx < 0) {
-              targetIdx = prev.findIndex((msg) => msg.sender === 'user' && msg.text === cleanText && msg.isCorrecting);
-            }
-            if (targetIdx < 0) {
-              for (let i = prev.length - 1; i >= 0; i--) {
-                if (prev[i].sender === 'user' && prev[i].isCorrecting) {
-                  targetIdx = i;
-                  break;
-                }
-              }
-            }
-
-            if (targetIdx >= 0) {
-              const updated = [...prev];
-              const originalTranscript = updated[targetIdx].text || cleanText;
-              updated[targetIdx] = {
-                ...updated[targetIdx],
-                hasCorrection: hasErrors,
-                text: originalTranscript,
-                rawTranscript: updated[targetIdx].rawTranscript || originalTranscript,
-                validatedTranscript: updated[targetIdx].validatedTranscript || originalTranscript,
-                correctedText: corrected,
-                translatedText: (corrected.toLowerCase() !== cleanText.toLowerCase()) ? corrected : null,
-                diffTokens,
-                tokens: updatedTokens,
-                transliteration: extractTurnTransliteration(updatedTokens, targetLang),
-                glosses: extractTurnGlosses(updatedTokens),
-                originalText: correction.original_text || originalTranscript,
-                isCorrecting: false
-              };
-              return updated;
-            }
-            return prev;
-          });
-
-          if (showGlossesRef.current) {
-            triggerTurnGloss(turnId, corrected, updatedTokens);
-          }
-        }
-      })
-      .catch((err) => {
-        sessionMetricsRef.current.correctionFailures++;
-        console.warn('[PipelineCorrection] Notice:', err);
-        setLiveTranscript((prev) =>
-          prev.map((msg) =>
-            msg.id === turnId || (msg.sender === 'user' && msg.text === cleanText)
-              ? { ...msg, isCorrecting: false }
-              : msg
-          )
-        );
-      });
-  }, [targetLang, nativeLang, level]);
 
   // Request AI word-by-word glosses for a transcript turn
   const triggerTurnGloss = useCallback((turnId, turnText, currentTokens = []) => {
@@ -1060,8 +953,6 @@ export function usePipelineCall({
     sessionMetricsRef.current.llmRequests++;
 
     try {
-      const isIntegrated = pipelineModeRef.current === 'integrated';
-
       const historyContext = liveTranscriptRef.current
         .filter(m => m.text && !m.isStreaming && m.id !== aiTurnId)
         .slice(-6)
@@ -1075,8 +966,7 @@ export function usePipelineCall({
           history: historyContext,
           targetLang,
           nativeLang,
-          level,
-          pipelineMode: pipelineModeRef.current
+          level
         }),
         signal: llmAbortControllerRef.current.signal
       });
@@ -1117,12 +1007,8 @@ export function usePipelineCall({
               sentenceBuffer += data.delta;
 
               const fullText = currentAiTurnTextRef.current;
-              const streamingTokens = isIntegrated
-                ? parseIntegratedCorrectionTokens(fullText, cleanPrompt, targetLang, nativeLang)
-                : tokenizeLiveCallTurn(fullText, targetLang);
-              const cleanDisplayFullText = isIntegrated
-                ? fullText.replace(/<\/?correction>/gi, '')
-                : fullText;
+              const streamingTokens = parseIntegratedCorrectionTokens(fullText, cleanPrompt, targetLang, nativeLang);
+              const cleanDisplayFullText = fullText.replace(/<\/?correction>/gi, '');
 
               setLiveTranscript((prev) =>
                 prev.map((msg) =>
@@ -1139,9 +1025,7 @@ export function usePipelineCall({
               while ((match = sentenceRegex.exec(sentenceBuffer)) !== null) {
                 const completeSentence = match[1].trim();
                 if (completeSentence) {
-                  const cleanTtsSentence = isIntegrated
-                    ? completeSentence.replace(/<\/?correction>/gi, '').trim()
-                    : completeSentence;
+                  const cleanTtsSentence = completeSentence.replace(/<\/?correction>/gi, '').trim();
                   if (cleanTtsSentence) {
                     enqueueTextForTTS(cleanTtsSentence);
                   }
@@ -1159,9 +1043,7 @@ export function usePipelineCall({
 
       // Flush any trailing text in sentenceBuffer
       if (sentenceBuffer.trim()) {
-        const cleanTrailingForTTS = isIntegrated
-          ? sentenceBuffer.replace(/<\/?correction>/gi, '').trim()
-          : sentenceBuffer.trim();
+        const cleanTrailingForTTS = sentenceBuffer.replace(/<\/?correction>/gi, '').trim();
         if (cleanTrailingForTTS) {
           enqueueTextForTTS(cleanTrailingForTTS);
         }
@@ -1170,12 +1052,8 @@ export function usePipelineCall({
       // Finalize AI message
       const finalText = currentAiTurnTextRef.current;
       sessionMetricsRef.current.assistantTurns++;
-      const finalTokens = isIntegrated
-        ? parseIntegratedCorrectionTokens(finalText, cleanPrompt, targetLang, nativeLang)
-        : tokenizeLiveCallTurn(finalText, targetLang);
-      const cleanFinalDisplay = isIntegrated
-        ? finalText.replace(/<\/?correction>/gi, '')
-        : finalText;
+      const finalTokens = parseIntegratedCorrectionTokens(finalText, cleanPrompt, targetLang, nativeLang);
+      const cleanFinalDisplay = finalText.replace(/<\/?correction>/gi, '');
 
       setLiveTranscript((prev) =>
         prev
@@ -1268,24 +1146,11 @@ export function usePipelineCall({
         whisperText = cleanSpeechTurnText(cleanDuplicatePhrases(whisperText), targetLang);
       }
 
-      const isIntegrated = pipelineModeRef.current === 'integrated';
       const rawSTTTranscript = whisperText;
 
-      // Contextual & acoustic validation
-      const validation = validateTranscriptContextually({
-        rawTranscript: rawSTTTranscript,
-        history: liveTranscriptRef.current,
-        targetLang,
-        nativeLang
-      });
+      console.log(`[PipelineMobileSTT] Whisper text: "${rawSTTTranscript}"`);
 
-      // In integrated mode, display and AI input MUST be the raw/clean STT transcript exactly as spoken
-      // In current mode, preserve existing behavior: validation.validatedTranscript
-      const effectiveUserText = isIntegrated ? rawSTTTranscript : validation.validatedTranscript;
-
-      console.log(`[PipelineMobileSTT] Whisper text: "${effectiveUserText}" (mode=${pipelineModeRef.current}, confidence=${validation.transcriptionConfidence})`);
-
-      if (!effectiveUserText) {
+      if (!rawSTTTranscript) {
         // Discard placeholder if no speech was recognized
         setLiveTranscript((prev) => prev.filter((m) => m.id !== turnId));
         isFinalizingMobileTurnRef.current = false;
@@ -1296,7 +1161,7 @@ export function usePipelineCall({
       sessionMetricsRef.current.userTurns++;
       processedUserTurnIdsRef.current.add(turnId);
 
-      const tokens = tokenizeLiveCallTurn(effectiveUserText, targetLang);
+      const tokens = tokenizeLiveCallTurn(rawSTTTranscript, targetLang);
       const transliteration = extractTurnTransliteration(tokens, targetLang);
       const glosses = extractTurnGlosses(tokens);
 
@@ -1305,37 +1170,23 @@ export function usePipelineCall({
           msg.id === turnId
             ? {
                 ...msg,
-                text: effectiveUserText,
+                text: rawSTTTranscript,
                 rawTranscript: rawSTTTranscript,
-                validatedTranscript: validation.validatedTranscript,
-                transcriptionConfidence: validation.transcriptionConfidence,
-                isAcousticMismatch: validation.isAcousticMismatch,
-                originalText: effectiveUserText,
-                correctedText: effectiveUserText,
+                originalText: rawSTTTranscript,
+                correctedText: rawSTTTranscript,
                 tokens,
                 transliteration,
                 glosses,
-                diffTokens: [{ text: effectiveUserText, changed: false, original: null }],
+                diffTokens: [{ text: rawSTTTranscript, changed: false, original: null }],
                 isTranscribing: false,
-                isCorrecting: !isIntegrated
+                isCorrecting: false
               }
             : msg
         )
       );
 
       // Dispatch assistant conversational response immediately
-      dispatchAssistantResponse(effectiveUserText);
-
-      // Trigger pedagogical correction ONLY in current pipeline mode
-      if (!isIntegrated) {
-        triggerCorrection(effectiveUserText, turnId);
-      } else {
-        setLiveTranscript((prev) =>
-          prev.map((msg) =>
-            msg.id === turnId ? { ...msg, isCorrecting: false } : msg
-          )
-        );
-      }
+      dispatchAssistantResponse(rawSTTTranscript);
 
     } catch (err) {
       console.warn('[PipelineMobileSTT] Whisper transcription error:', err);
@@ -1343,7 +1194,7 @@ export function usePipelineCall({
     } finally {
       isFinalizingMobileTurnRef.current = false;
     }
-  }, [isSpanish, targetLang, nativeLang, stopTurnAudioCapture, startTurnAudioCapture, dispatchAssistantResponse, triggerCorrection]);
+  }, [isSpanish, targetLang, stopTurnAudioCapture, startTurnAudioCapture, dispatchAssistantResponse]);
 
   // Start mobile Web Audio VAD monitoring on the microphone stream
   const startMobileVAD = useCallback((stream) => {
@@ -1500,7 +1351,6 @@ export function usePipelineCall({
         }
       }
 
-      const isIntegrated = pipelineModeRef.current === 'integrated';
       if (targetIdx >= 0) {
         const updated = [...prev];
         updated[targetIdx] = {
@@ -1514,7 +1364,7 @@ export function usePipelineCall({
           transliteration: initialTranslit,
           glosses: initialGlosses,
           isTranscribing: false,
-          isCorrecting: !isIntegrated
+          isCorrecting: false
         };
         return updated;
       }
@@ -1532,7 +1382,7 @@ export function usePipelineCall({
         glosses: initialGlosses,
         originalText: cleanText,
         correctedText: cleanText,
-        isCorrecting: !isIntegrated,
+        isCorrecting: false,
         isTranscribing: false
       };
       return [...prev, newUserMsg];
@@ -1553,23 +1403,10 @@ export function usePipelineCall({
             whisperText = cleanSpeechTurnText(cleanDuplicatePhrases(whisperText), targetLang);
           }
 
-          const isIntegrated = pipelineModeRef.current === 'integrated';
           const rawSTTTranscript = whisperText || cleanText;
 
-          // Contextual & acoustic validation
-          const validation = validateTranscriptContextually({
-            rawTranscript: rawSTTTranscript,
-            history: liveTranscriptRef.current,
-            targetLang,
-            nativeLang
-          });
-
-          // In integrated mode, display and AI input MUST be the raw/clean STT transcript exactly as spoken
-          // In current mode, preserve existing behavior: validation.validatedTranscript || cleanText
-          const finalUserText = isIntegrated ? rawSTTTranscript : (validation.validatedTranscript || cleanText);
-
-          if (finalUserText && finalUserText.toLowerCase() !== cleanText.toLowerCase()) {
-            const finalTokens = tokenizeLiveCallTurn(finalUserText, targetLang);
+          if (rawSTTTranscript && rawSTTTranscript.toLowerCase() !== cleanText.toLowerCase()) {
+            const finalTokens = tokenizeLiveCallTurn(rawSTTTranscript, targetLang);
             const finalTranslit = extractTurnTransliteration(finalTokens, targetLang);
             const finalGlosses = extractTurnGlosses(finalTokens);
 
@@ -1578,18 +1415,15 @@ export function usePipelineCall({
                 msg.id === currentId
                   ? {
                       ...msg,
-                      text: finalUserText,
+                      text: rawSTTTranscript,
                       rawTranscript: rawSTTTranscript,
-                      validatedTranscript: validation.validatedTranscript,
-                      transcriptionConfidence: validation.transcriptionConfidence,
-                      isAcousticMismatch: validation.isAcousticMismatch,
-                      originalText: finalUserText,
-                      correctedText: finalUserText,
-                      diffTokens: [{ text: finalUserText, changed: false, original: null }],
+                      originalText: rawSTTTranscript,
+                      correctedText: rawSTTTranscript,
+                      diffTokens: [{ text: rawSTTTranscript, changed: false, original: null }],
                       tokens: finalTokens,
                       transliteration: finalTranslit,
                       glosses: finalGlosses,
-                      isCorrecting: !isIntegrated
+                      isCorrecting: false
                     }
                   : msg
               )
@@ -1597,46 +1431,17 @@ export function usePipelineCall({
           }
 
           // Dispatch AI assistant response with the final text
-          dispatchAssistantResponse(finalUserText);
-
-          // Trigger pedagogical correction ONLY in current pipeline mode
-          if (!isIntegrated) {
-            triggerCorrection(finalUserText, currentId);
-          } else {
-            setLiveTranscript((prev) =>
-              prev.map((msg) =>
-                msg.id === currentId ? { ...msg, isCorrecting: false } : msg
-              )
-            );
-          }
+          dispatchAssistantResponse(rawSTTTranscript);
         })
         .catch((err) => {
           console.warn('[PipelineSTT] Whisper bilingual transcription notice, fallback to browser STT:', err);
           dispatchAssistantResponse(cleanText);
-          if (pipelineModeRef.current === 'current') {
-            triggerCorrection(cleanText, currentId);
-          } else {
-            setLiveTranscript((prev) =>
-              prev.map((msg) =>
-                msg.id === currentId ? { ...msg, isCorrecting: false } : msg
-              )
-            );
-          }
         });
     } else {
       // Fallback if no audio blob was captured
       dispatchAssistantResponse(cleanText);
-      if (pipelineModeRef.current === 'current') {
-        triggerCorrection(cleanText, currentId);
-      } else {
-        setLiveTranscript((prev) =>
-          prev.map((msg) =>
-            msg.id === currentId ? { ...msg, isCorrecting: false } : msg
-          )
-        );
-      }
     }
-  }, [targetLang, nativeLang, isSpanish, stopTurnAudioCapture, triggerCorrection, dispatchAssistantResponse]);
+  }, [targetLang, nativeLang, isSpanish, stopTurnAudioCapture, dispatchAssistantResponse]);
 
   // Initialize Speech Recognition for Live VAD & Streaming STT
   const initSpeechRecognition = useCallback(() => {
@@ -2090,9 +1895,6 @@ export function usePipelineCall({
     toggleGlosses: () => setShowGlosses((prev) => !prev),
     callDurationSeconds,
     formattedDuration: formatSeconds(callDurationSeconds),
-    pipelineMode,
-    setPipelineMode,
-    togglePipelineMode,
     startCall,
     endCall,
     toggleMute

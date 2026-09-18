@@ -121,7 +121,7 @@ export function CallDetailView({
             );
           }
 
-          const isChanged = Boolean(isUser && tokenObj.changed);
+          const isChanged = Boolean(tokenObj.changed);
 
           return (
             <div
@@ -144,7 +144,11 @@ export function CallDetailView({
               {/* Tier 2 (MIDDLE): Word */}
               {isChanged ? (
                 <span
-                  className="relative inline-block text-amber-200 dark:text-amber-200 font-extrabold tracking-wide underline decoration-amber-300 decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text"
+                  className={`relative inline-block font-extrabold tracking-wide underline decoration-2 underline-offset-4 cursor-help group/word leading-tight select-text ${
+                    isUser
+                      ? 'text-amber-200 dark:text-amber-200 decoration-amber-300'
+                      : 'text-amber-500 dark:text-amber-400 decoration-amber-400'
+                  }`}
                   title={tokenObj.original ? `Original: "${tokenObj.original}"` : (isSpanish ? 'Palabra corregida' : 'Corrected word')}
                 >
                   <span>{word}</span>
@@ -277,17 +281,6 @@ export function CallDetailView({
                       <span className="text-xs font-semibold text-[var(--text-secondary)]">
                         {isSpanish ? 'Tú' : 'You'}
                       </span>
-                      {line.hasCorrection ? (
-                        <span className="flex items-center space-x-1.5 text-[10px] sm:text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/30 shadow-xs">
-                          <CheckCircle2 className="w-3 h-3 text-amber-500" />
-                          <span>{isSpanish ? 'Corregido' : 'Corrected'}</span>
-                        </span>
-                      ) : (
-                        <span className="flex items-center space-x-1.5 text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30 shadow-xs">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span>{isSpanish ? 'Sin errores' : 'No errors'}</span>
-                        </span>
-                      )}
                       {line.timestamp && (
                         <span className="text-[10px] text-[var(--text-muted)] font-mono">
                           {line.timestamp}
@@ -295,26 +288,12 @@ export function CallDetailView({
                       )}
                     </div>
 
-                    {/* User Speech Bubble with Corrected Version as Primary */}
+                    {/* User Speech Bubble */}
                     <div
                       dir={targetLang === 'ar' || /[؀-ۿ]/.test(line.text || '') ? 'rtl' : 'ltr'}
                       className="max-w-[92%] sm:max-w-[82%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-3xl rounded-tr-xs px-4 sm:px-5 py-3 sm:py-3.5 shadow-md shadow-rose-950/20 border border-rose-400/30 text-left"
                     >
                       {renderHistoryTokens(line)}
-
-                      {/* Secondary Pedagogical Comparison (Original vs Corrected) */}
-                      {line.hasCorrection && line.originalText && line.correctedText && line.originalText.toLowerCase().trim() !== line.correctedText.toLowerCase().trim() && (
-                        <div className="mt-2.5 pt-2 border-t border-white/20 text-xs space-y-0.5" dir="ltr">
-                          <div className="flex items-center gap-1.5 text-pink-100/90">
-                            <span className="font-medium text-pink-200">{isSpanish ? 'Original:' : 'Original:'}</span>
-                            <span className="line-through text-pink-200/80">{line.originalText}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 font-semibold text-amber-200">
-                            <span>{isSpanish ? 'Correcto:' : 'Corrected:'}</span>
-                            <span>{line.correctedText}</span>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
