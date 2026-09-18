@@ -240,14 +240,68 @@ export function TextReaderPage({
   // Create with AI modal state
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
-  const handleAiTextGenerated = useCallback(({ title, text }) => {
-    if (text) {
+  const handleAiTextGenerated = useCallback(async ({ title, text }) => {
+    const raw = (text || '').trim();
+    if (!raw) return;
+
+    try {
+      audioPlaybackIdRef.current++;
+      clearAudioVisualTimer();
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsAutoGlossing(false);
+      setPlayingParagraphId(null);
+      setActiveAudioCharIndex(-1);
+      setLastAudioParagraphId(null);
+      setPendingScrollParagraphId(null);
+      previousScrollTopRef.current = 0;
+      setIsHeaderHidden(false);
+
+      const effectiveTitle = (title || '').trim() || (isSpanish ? 'Historia con IA' : 'AI Generated Story');
+
+      const docToSave = createTextDocument({
+        title: effectiveTitle,
+        rawText: raw,
+        targetLang,
+        nativeLang,
+        sourceType: 'ai',
+        format: 'txt',
+        createdAt: new Date().toISOString()
+      });
+
+      const saved = await saveDocument(docToSave);
+      setDocument(saved);
+      setInputText(saved.rawText || '');
+      setInputTitle(saved.title || '');
+      await refreshLibraryCount();
+      navigateToView('reader');
+
+      // Auto-glossing is OFF by default:
+      const alreadyComplete = Array.isArray(saved.paragraphs) && saved.paragraphs.every(p => isGlossComplete(p, targetLang, nativeLang));
+      const completedCount = Array.isArray(saved.paragraphs) ? saved.paragraphs.filter(p => isGlossComplete(p, targetLang, nativeLang)).length : 0;
+
+      setGlossingProgress({
+        total: Array.isArray(saved.paragraphs) ? saved.paragraphs.length : 0,
+        completed: completedCount,
+        isGlossing: false,
+        isPaused: false,
+        isComplete: alreadyComplete,
+        failed: 0
+      });
+    } catch (err) {
+      console.error('Failed to create and save AI document:', err);
       setInputText(text);
       if (title) {
         setInputTitle(title);
       }
+      navigateToView('importer');
     }
-  }, []);
+  }, [targetLang, nativeLang, isSpanish, clearAudioVisualTimer, refreshLibraryCount, navigateToView]);
 
   // EPUB Import state
   const [isImporting, setIsImporting] = useState(false);
