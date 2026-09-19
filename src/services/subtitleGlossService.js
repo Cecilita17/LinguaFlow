@@ -223,12 +223,26 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
     apiKey: effectiveKey
   };
 
+  const batchId = lines.map(l => l.id).join(',');
+  const batchStartTime = Date.now();
+  console.log(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] [START] batch: "${batchId}", targetLang: "${targetLang}", nativeLang: "${nativeLang}", lines: ${lines.length}`);
+
   for (let attempt = 0; attempt < 2; attempt++) {
-    if (abortSignal?.aborted) return [];
+    if (abortSignal?.aborted) {
+      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Skipped attempt ${attempt + 1}: parent abortSignal already aborted. Reason: "${abortSignal?.reason}"`);
+      return [];
+    }
+    const attemptStartTime = Date.now();
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 28000);
-      const onParentAbort = () => controller.abort();
+      const timeoutId = setTimeout(() => {
+        console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Client 28s timeout reached for batch "${batchId}" attempt ${attempt + 1}. Aborting controller.`);
+        controller.abort('timeout_28s');
+      }, 28000);
+      const onParentAbort = () => {
+        console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Parent abortSignal fired for batch "${batchId}" attempt ${attempt + 1}. Reason: "${abortSignal?.reason}". Aborting internal controller.`);
+        controller.abort(abortSignal?.reason || 'parent_aborted');
+      };
       if (abortSignal) {
         abortSignal.addEventListener('abort', onParentAbort, { once: true });
       }
@@ -265,6 +279,7 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
           const linesResult = data.lines;
           linesResult.isComplete = Boolean(data.isComplete);
           linesResult.missingIds = data.missingIds || [];
+          console.log(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] [SUCCESS] batch: "${batchId}", received lines: ${linesResult.length} in ${Date.now() - attemptStartTime}ms`);
           return linesResult;
         } else {
           console.warn('[Gloss] batch response missing lines or unsuccessful:', {
@@ -288,6 +303,17 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
         });
       }
     } catch (err) {
+      const elapsed = Date.now() - attemptStartTime;
+      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC]
+request/batch id: ${batchId}
+attempt: ${attempt + 1}
+subtitle ids: ${JSON.stringify(lines.map(l => l.id))}
+controller created: ${new Date(attemptStartTime).toISOString()}
+abort requested: ${Boolean(abortSignal?.aborted)}
+abort reason: ${err.message || abortSignal?.reason || 'unknown'}
+elapsed ms: ${elapsed}
+caller/context: fetchBatchGlossesApi (catch block)`);
+
       console.warn(`[Gloss] Attempt ${attempt + 1} for batch gloss failed:`, {
         error: err.message,
         targetLang,
@@ -309,81 +335,144 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
  */
 export function getStorageKey(videoId, subtitlesCount, targetLang = 'zh', nativeLang = 'es') {
   const cleanId = (videoId || 'generic').replace(/[^a-zA-Z0-9_-]/g, '');
-  const cleanTarget = (targetLang || 'zh').toLowerCase().split('-')[0];
-  const cleanNative = (nativeLang || 'es').toLowerCase().split('-')[0];
-  return `linguaflow_yt_gloss_v4_${cleanTarget}_${cleanNative}_${cleanId}_${subtitlesCount}`;
+  const cleanTarget = (targetLang || 'zh').replace(/[^a-zA-Z0-9_-]/g, '');
+  const cleanNative = (nativeLang || 'es').replace(/[^a-zA-Z0-9_-]/g, '');
+  return `linguaflow_gloss_v4_${cleanId}_${subtitlesCount}_${cleanTarget}_${cleanNative}`;
 }
 
 /**
- * Load cached gloss lines from localStorage
+ * Safely parse and retrieve cached glosses from localStorage with JSON validity checks
  */
 export function loadCachedGlosses(videoId, subtitlesCount, targetLang = 'zh', nativeLang = 'es') {
-  try {
-    if (typeof window === 'undefined' || !window.localStorage) return {};
-    const key = getStorageKey(videoId, subtitlesCount, targetLang, nativeLang);
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === 'object') {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to load glosses cache from storage:', e);
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return {};
   }
-  return {};
-}
-
-/**
- * Save cached gloss lines to localStorage
- */
-export function saveCachedGlosses(videoId, subtitlesCount, cacheMap, targetLang = 'zh', nativeLang = 'es') {
+  const key = getStorageKey(videoId, subtitlesCount, targetLang, nativeLang);
   try {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    const key = getStorageKey(videoId, subtitlesCount, targetLang, nativeLang);
-    localStorage.setItem(key, JSON.stringify(cacheMap));
-  } catch (e) {
-    console.warn('Failed to save glosses cache to storage:', e);
+    const raw = localStorage.getItem(key);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (err) {
+    console.warn('[GlossCache] Corrupted cache detected, clearing key:', key);
+    try { localStorage.removeItem(key); } catch (e) {}
+    return {};
   }
 }
 
 /**
- * Robust matching to find the subtitle index in the full list corresponding to an AI response item.
- * Supports:
- * 1. Exact ID string match
- * 2. Numeric normalization (e.g. srt_1 vs line_1 vs 1)
- * 3. Positional index in the requested chunk
- * 4. Subtitle text matching
+ * Safely persist verified glosses to localStorage
  */
-export function findMatchingSubtitleIndex(subtitlesList, chunkList, aiItem, itemIndex) {
-  if (!aiItem || !Array.isArray(subtitlesList)) return -1;
+export function saveCachedGlosses(videoId, subtitlesCount, cacheData, targetLang = 'zh', nativeLang = 'es') {
+  if (typeof window === 'undefined' || !window.localStorage || !cacheData) return;
+  const key = getStorageKey(videoId, subtitlesCount, targetLang, nativeLang);
+  try {
+    localStorage.setItem(key, JSON.stringify(cacheData));
+  } catch (err) {
+    console.warn('[GlossCache] Failed to save glosses to localStorage (quota exceeded?):', err.message);
+  }
+}
+
+/**
+ * Robust, safe matching to associate an AI response item with its corresponding subtitle.
+ * 
+ * Hierarchy:
+ * 1. Exact ID match within the active batch/chunk (Highest confidence).
+ * 2. Exact ID match in the global subtitles list.
+ * 3. Exact text match within the active batch/chunk.
+ * 4. Local batch position:
+ *    - 1-based index (e.g. 1..N or "line_1"): maps to chunkList[num - 1].
+ *    - 0-based index (0..N-1): maps to chunkList[0].
+ *    - Positional itemIndex in chunkList.
+ * 5. If ambiguous or unresolvable: DO NOT search global list with digitsOnly! Return -1 to avoid corrupting other lines.
+ *
+ * @param {Array} subtitlesList - Full list of all subtitles in the video
+ * @param {Array} chunkList - The specific batch/chunk of subtitles sent to the API
+ * @param {Object} aiItem - AI response item { id, tokens, [text] }
+ * @param {number} itemIndex - Index of the item in the AI response array
+ * @param {Object} [debugInfo] - Optional out-param to record match mode
+ * @returns {number} Index in subtitlesList, or -1 if unresolved
+ */
+export function findMatchingSubtitleIndex(subtitlesList, chunkList, aiItem, itemIndex, debugInfo = null) {
+  if (!aiItem || !Array.isArray(subtitlesList)) {
+    if (debugInfo) debugInfo.mode = 'invalid_args';
+    return -1;
+  }
+
   const rawId = String(aiItem.id || '').trim();
   const digitsOnly = rawId.replace(/\D+/g, '');
 
-  // 1. Direct exact ID match
-  let idx = subtitlesList.findIndex(s => String(s.id).trim() === rawId);
-  if (idx !== -1) return idx;
-
-  // 2. Numeric match (e.g. srt_1 vs 1 vs line_1)
-  if (digitsOnly) {
-    idx = subtitlesList.findIndex(s => String(s.id).replace(/\D+/g, '') === digitsOnly);
-    if (idx !== -1) return idx;
+  // 1. Exact ID match within the active batch/chunk (Highest confidence)
+  if (rawId && Array.isArray(chunkList)) {
+    const chunkIdx = chunkList.findIndex(s => String(s.id).trim() === rawId);
+    if (chunkIdx !== -1) {
+      const globalIdx = subtitlesList.findIndex(s => s.id === chunkList[chunkIdx].id);
+      if (globalIdx !== -1) {
+        if (debugInfo) debugInfo.mode = 'exact-id-chunk';
+        return globalIdx;
+      }
+    }
   }
 
-  // 3. Positional match within the chunk that was sent
-  if (Array.isArray(chunkList) && chunkList[itemIndex]) {
-    const chunkSubId = chunkList[itemIndex].id;
-    idx = subtitlesList.findIndex(s => s.id === chunkSubId);
-    if (idx !== -1) return idx;
+  // 2. Exact ID match in the global subtitles list
+  if (rawId) {
+    const globalIdx = subtitlesList.findIndex(s => String(s.id).trim() === rawId);
+    if (globalIdx !== -1) {
+      if (debugInfo) debugInfo.mode = 'exact-id-global';
+      return globalIdx;
+    }
   }
 
-  // 4. Text match
-  if (aiItem.text) {
+  // 3. Exact text match within the active batch/chunk
+  if (aiItem.text && Array.isArray(chunkList)) {
     const cleanText = aiItem.text.trim();
-    idx = subtitlesList.findIndex(s => s.text && (s.text.trim() === cleanText || s.text.includes(cleanText)));
-    if (idx !== -1) return idx;
+    const chunkIdx = chunkList.findIndex(s => s.text && s.text.trim() === cleanText);
+    if (chunkIdx !== -1) {
+      const globalIdx = subtitlesList.findIndex(s => s.id === chunkList[chunkIdx].id);
+      if (globalIdx !== -1) {
+        if (debugInfo) debugInfo.mode = 'exact-text-chunk';
+        return globalIdx;
+      }
+    }
   }
 
+  // 4. Batch-local index resolution:
+  // If Groq returned a 1-based index (e.g. 1, 2, 3.. or "line_1", "1") within the batch
+  if (Array.isArray(chunkList) && chunkList.length > 0) {
+    if (digitsOnly) {
+      const num = parseInt(digitsOnly, 10);
+      // Check 1-based index (1 <= num <= chunkList.length)
+      if (num >= 1 && num <= chunkList.length) {
+        const targetSub = chunkList[num - 1];
+        const globalIdx = subtitlesList.findIndex(s => s.id === targetSub.id);
+        if (globalIdx !== -1) {
+          if (debugInfo) debugInfo.mode = 'batch-position-1based';
+          return globalIdx;
+        }
+      }
+      // Check 0-based index (0 <= num < chunkList.length)
+      if (num === 0 && chunkList[0]) {
+        const globalIdx = subtitlesList.findIndex(s => s.id === chunkList[0].id);
+        if (globalIdx !== -1) {
+          if (debugInfo) debugInfo.mode = 'batch-position-0based';
+          return globalIdx;
+        }
+      }
+    }
+
+    // 5. Positional fallback within the chunk (itemIndex matches position in sent chunk)
+    if (typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < chunkList.length) {
+      const targetSub = chunkList[itemIndex];
+      const globalIdx = subtitlesList.findIndex(s => s.id === targetSub.id);
+      if (globalIdx !== -1) {
+        if (debugInfo) debugInfo.mode = 'batch-position-itemIndex';
+        return globalIdx;
+      }
+    }
+  }
+
+  // If completely unresolved or ambiguous, DO NOT search global digitsOnly against all video subtitles!
+  if (debugInfo) debugInfo.mode = 'unresolved';
   return -1;
 }
 
@@ -458,6 +547,31 @@ export function mergeChineseAiTokensByCoverage(originalTokens = [], aiTokens = [
   // 1. Validate coverage
   const isValid = validateChineseAiSegmentation(authoritativeText, aiTokens);
   if (!isValid) {
+    const cleanOriginal = authoritativeText.replace(/\s+/g, '');
+    const cleanAiChars = aiTokens.map(t => (t.word || t.text || '').replace(/\s+/g, '')).join('');
+    const PUNCT_STRIP_REGEX = /[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]/g;
+    const nonPunctOrig = cleanOriginal.replace(PUNCT_STRIP_REGEX, '');
+    const nonPunctAi = cleanAiChars.replace(PUNCT_STRIP_REGEX, '');
+
+    const reasonDetails = [];
+    if (cleanAiChars.length !== cleanOriginal.length) {
+      reasonDetails.push(`Length mismatch (cleanOriginal: ${cleanOriginal.length}, cleanAiChars: ${cleanAiChars.length})`);
+    }
+    if (nonPunctAi !== nonPunctOrig) {
+      reasonDetails.push(`Non-punctuation text mismatch (nonPunctOrig: "${nonPunctOrig}", nonPunctAi: "${nonPunctAi}")`);
+    } else {
+      reasonDetails.push(`Punctuation or whitespace ordering mismatch`);
+    }
+
+    console.warn(`[ChineseCoverageDebug] [TEMPORARY_DIAGNOSTIC]
+Original: "${authoritativeText}"
+AI tokens: ${JSON.stringify(aiTokens.map(t => t.word || t.text || ''))}
+Reconstructed: "${aiTokens.map(t => t.word || t.text || '').join('')}"
+Normalized original: "${nonPunctOrig}"
+Normalized reconstructed: "${nonPunctAi}"
+MATCH: false
+Reason: ${reasonDetails.join(' | ')}`);
+
     console.warn('[ChineseMerge] AI tokens failed coverage validation against original text. Using provisional fallback.');
     return originalTokens;
   }
@@ -1102,7 +1216,17 @@ export function enrichSubtitlesWithGlosses({
       if (Array.isArray(aiResults) && aiResults.length > 0) {
         aiResults.forEach((item, itemIdx) => {
           if (item && Array.isArray(item.tokens) && item.tokens.length > 0) {
-            const idx = findMatchingSubtitleIndex(currentSubtitles, batch, item, itemIdx);
+            const debugInfo = { mode: 'none' };
+            const idx = findMatchingSubtitleIndex(currentSubtitles, batch, item, itemIdx, debugInfo);
+            if (targetLang === 'zh') {
+              if (idx !== -1) {
+                const sub = currentSubtitles[idx];
+                console.log(`[ChineseMatchDebug] aiId=${item.id} batchIndex=${itemIdx} matched=${sub.id} mode=${debugInfo.mode} text="${sub.text}"`);
+              } else {
+                console.warn(`[ChineseMatchDebug] UNRESOLVED aiId=${item.id} batchIndex=${itemIdx}`);
+              }
+            }
+
             if (idx !== -1) {
               const sub = currentSubtitles[idx];
               const mergedTokens = mergeAiTokensWithSegmented(sub.tokens, item.tokens, targetLang, sub.text, nativeLang);

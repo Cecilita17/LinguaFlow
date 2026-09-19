@@ -207,6 +207,15 @@ export function YouTubeReaderPage({
   const glossAbortControllerRef = useRef(null);
   const progressiveTokenizeRef = useRef(null);
 
+  // [TEMPORARY_DIAGNOSTIC] Helper to trace exact AbortController lifecycle
+  const abortGlossWithLog = useCallback((callerContext) => {
+    if (glossAbortControllerRef.current) {
+      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Abort called from context: "${callerContext}" at ${new Date().toISOString()}`, new Error().stack);
+      glossAbortControllerRef.current.abort(`caller: ${callerContext}`);
+      glossAbortControllerRef.current = null;
+    }
+  }, []);
+
   // Refresh saved transcripts count
   const refreshLibraryCount = useCallback(async () => {
     try {
@@ -220,14 +229,12 @@ export function YouTubeReaderPage({
   // Cleanup in-flight glossing and progressive tokenization on unmount
   useEffect(() => {
     return () => {
-      if (glossAbortControllerRef.current) {
-        glossAbortControllerRef.current.abort();
-      }
+      abortGlossWithLog('useEffect_unmount');
       if (progressiveTokenizeRef.current) {
         progressiveTokenizeRef.current.abort();
       }
     };
-  }, []);
+  }, [abortGlossWithLog]);
 
   // Progressive tokenization processor: tokenizes initial 50 lines for instant display,
   // then enriches remaining lines in asynchronous non-blocking batches without freezing UI
@@ -316,10 +323,7 @@ export function YouTubeReaderPage({
 
   // Safe reset reader action (e.g. on ErrorBoundary recovery or complete clear)
   const handleResetReader = useCallback(() => {
-    if (glossAbortControllerRef.current) {
-      glossAbortControllerRef.current.abort();
-      glossAbortControllerRef.current = null;
-    }
+    abortGlossWithLog('handleResetReader');
     if (progressiveTokenizeRef.current) {
       progressiveTokenizeRef.current.abort();
       progressiveTokenizeRef.current = null;
@@ -336,15 +340,13 @@ export function YouTubeReaderPage({
     try {
       localStorage.removeItem(SESSION_STORAGE_KEY);
     } catch (e) {}
-  }, []);
+  }, [abortGlossWithLog]);
 
   // Start or resume auto-glossing with abortable controller
   const startGlossing = useCallback((subtitlesToGloss, sourceName = subtitleSource) => {
     if (!Array.isArray(subtitlesToGloss) || subtitlesToGloss.length === 0) return;
 
-    if (glossAbortControllerRef.current) {
-      glossAbortControllerRef.current.abort();
-    }
+    abortGlossWithLog('startGlossing_new_controller');
     const controller = new AbortController();
     glossAbortControllerRef.current = controller;
     setIsAutoGlossing(true);
@@ -378,15 +380,12 @@ export function YouTubeReaderPage({
 
     setSubtitles(enriched);
     refreshLibraryCount();
-  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount]);
+  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount, abortGlossWithLog]);
 
   // Toggle Global Auto-Glossing (ON / OFF)
   const handleToggleAutoGlossing = useCallback(() => {
     if (isAutoGlossing) {
-      if (glossAbortControllerRef.current) {
-        glossAbortControllerRef.current.abort();
-        glossAbortControllerRef.current = null;
-      }
+      abortGlossWithLog('handleToggleAutoGlossing_turn_off');
       setIsAutoGlossing(false);
       setGlossProgress(prev => prev ? ({ ...prev, isGlossing: false, isPaused: true }) : null);
     } else {
@@ -394,17 +393,14 @@ export function YouTubeReaderPage({
       setIsAutoGlossing(true);
       startGlossing(subtitles, subtitleSource);
     }
-  }, [isAutoGlossing, subtitles, subtitleSource, startGlossing]);
+  }, [isAutoGlossing, subtitles, subtitleSource, startGlossing, abortGlossWithLog]);
 
   // Stop / Pause glossing
   const handleStopOrPauseGlossing = useCallback(() => {
-    if (glossAbortControllerRef.current) {
-      glossAbortControllerRef.current.abort();
-      glossAbortControllerRef.current = null;
-    }
+    abortGlossWithLog('handleStopOrPauseGlossing');
     setIsAutoGlossing(false);
     setGlossProgress(prev => prev ? ({ ...prev, isGlossing: false, isPaused: true }) : null);
-  }, []);
+  }, [abortGlossWithLog]);
 
   // Resume glossing
   const handleResumeGlossing = useCallback(() => {
@@ -782,10 +778,7 @@ export function YouTubeReaderPage({
 
   const handleImportVideo = (newVideoId, newUrl) => {
     flushPlaybackPosition();
-    if (glossAbortControllerRef.current) {
-      glossAbortControllerRef.current.abort();
-      glossAbortControllerRef.current = null;
-    }
+    abortGlossWithLog('handleImportVideo');
     if (progressiveTokenizeRef.current) {
       progressiveTokenizeRef.current.abort();
       progressiveTokenizeRef.current = null;
@@ -832,10 +825,7 @@ export function YouTubeReaderPage({
 
   const handleSubtitlesLoaded = useCallback(async (newSubtitles, format, sourceName) => {
     flushPlaybackPosition();
-    if (glossAbortControllerRef.current) {
-      glossAbortControllerRef.current.abort();
-      glossAbortControllerRef.current = null;
-    }
+    abortGlossWithLog('handleSubtitlesLoaded');
     if (progressiveTokenizeRef.current) {
       progressiveTokenizeRef.current.abort();
       progressiveTokenizeRef.current = null;
@@ -906,7 +896,7 @@ export function YouTubeReaderPage({
 
     // Navigate to Reader where the user can watch the video with the imported transcript
     navigateToView('reader');
-  }, [videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition, navigateToView]);
+  }, [videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition, navigateToView, abortGlossWithLog]);
 
   const handleFileUpload = (file) => {
     if (!file) return;
@@ -929,10 +919,7 @@ export function YouTubeReaderPage({
   const handleLoadFromLibrary = (record) => {
     if (!record) return;
     flushPlaybackPosition();
-    if (glossAbortControllerRef.current) {
-      glossAbortControllerRef.current.abort();
-      glossAbortControllerRef.current = null;
-    }
+    abortGlossWithLog('handleLoadFromLibrary');
     if (progressiveTokenizeRef.current) {
       progressiveTokenizeRef.current.abort();
       progressiveTokenizeRef.current = null;
@@ -1003,10 +990,7 @@ export function YouTubeReaderPage({
   const handleTranscriptDeleted = (deletedId) => {
     refreshLibraryCount();
     if (currentRecordId === deletedId) {
-      if (glossAbortControllerRef.current) {
-        glossAbortControllerRef.current.abort();
-        glossAbortControllerRef.current = null;
-      }
+      abortGlossWithLog('handleTranscriptDeleted');
       if (progressiveTokenizeRef.current) {
         progressiveTokenizeRef.current.abort();
         progressiveTokenizeRef.current = null;
@@ -1066,10 +1050,7 @@ export function YouTubeReaderPage({
 
   const handleClearSubtitles = () => {
     flushPlaybackPosition();
-    if (glossAbortControllerRef.current) {
-      glossAbortControllerRef.current.abort();
-      glossAbortControllerRef.current = null;
-    }
+    abortGlossWithLog('handleClearSubtitles');
     setSubtitles([]);
     setSubtitleFormat(null);
     setSubtitleSource('');
@@ -1081,10 +1062,7 @@ export function YouTubeReaderPage({
 
   const handleResetSession = () => {
     flushPlaybackPosition();
-    if (glossAbortControllerRef.current) {
-      glossAbortControllerRef.current.abort();
-      glossAbortControllerRef.current = null;
-    }
+    abortGlossWithLog('handleResetSession');
     setVideoId('');
     setVideoTitle('');
     titleVideoIdRef.current = '';
