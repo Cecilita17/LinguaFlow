@@ -320,7 +320,7 @@ export function CallDetailView({
                     {/* User Speech Bubble */}
                     <div
                       dir={targetLang === 'ar' || /[؀-ۿ]/.test(line.text || '') ? 'rtl' : 'ltr'}
-                      className="max-w-[92%] sm:max-w-[82%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-3xl rounded-tr-xs px-4 sm:px-5 py-3 sm:py-3.5 shadow-md shadow-rose-950/20 border border-rose-400/30 text-left"
+                      className="live-call-user-bubble max-w-[92%] sm:max-w-[82%] bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white rounded-3xl rounded-tr-xs px-4 sm:px-5 py-3 sm:py-3.5 shadow-md shadow-rose-950/20 border border-rose-400/30 text-left"
                     >
                       {renderHistoryTokens(line)}
                     </div>

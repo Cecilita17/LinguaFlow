@@ -650,6 +650,55 @@ rt {
   background-color: rgba(244, 63, 94, 0.16) !important;
 }
 
+/* ============================================================ */
+/* LIVE CALL USER BUBBLE CONTRAST FIX                           */
+/* Guarantees maximum contrast (white & gold) on pink bubble in light mode */
+/* ============================================================ */
+.live-call-user-bubble {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] .live-call-user-bubble .group\/token span.font-semibold,
+[data-theme="light"] .live-call-user-bubble .group\/token .text-white,
+[data-theme="light"] .live-call-user-bubble span.font-semibold,
+[data-theme="light"] .live-call-user-bubble .text-white {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] .live-call-user-bubble .group\/token span.font-mono,
+[data-theme="light"] .live-call-user-bubble .group\/token .text-pink-100,
+[data-theme="light"] .live-call-user-bubble .group\/token .text-pink-200\/90,
+[data-theme="light"] .live-call-user-bubble span.text-pink-100,
+[data-theme="light"] .live-call-user-bubble span.text-pink-200\/90 {
+  color: #fce7f3 !important; /* pink-100 */
+}
+
+[data-theme="light"] .live-call-user-bubble .group\/token .interlinear-gloss,
+[data-theme="light"] .live-call-user-bubble .group\/token span[dir="ltr"].interlinear-gloss,
+[data-theme="light"] .live-call-user-bubble .group\/token span[dir="rtl"].interlinear-gloss,
+[data-theme="light"] .live-call-user-bubble .interlinear-gloss {
+  color: #fef08a !important; /* amber-200 / warm yellow-gold */
+}
+
+[data-theme="light"] .live-call-user-bubble .group\/token .text-amber-200,
+[data-theme="light"] .live-call-user-bubble span.text-amber-200 {
+  color: #fef08a !important; /* amber-200 */
+}
+
+/* Saved words inside user bubble: keep bright yellow background with dark text */
+[data-theme="light"] .live-call-user-bubble .group\/token .bg-amber-300,
+[data-theme="light"] .live-call-user-bubble .bg-amber-300,
+[data-theme="light"] .live-call-user-bubble .group\/token .text-stone-950,
+[data-theme="light"] .live-call-user-bubble .text-stone-950 {
+  color: #0c0a09 !important; /* stone-950 */
+  background-color: #fcd34d !important; /* amber-300 */
+}
+
+/* Hover state inside user bubble in light mode */
+[data-theme="light"] .live-call-user-bubble .group\/token:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
 /* Text Reader Background in Light Mode */
 [data-theme="light"] .bg-gradient-to-b.from-\[\#190904\] {
   background: linear-gradient(to bottom, #faf5f0 0%, #f4ede6 50%, #eee4d9 100%) !important;

@@ -23,6 +23,36 @@ function parseRequestBody(req) {
   return req.body;
 }
 
+/**
+ * Isolated Development Cost Audit Logger for LinguaFlow
+ */
+function logCostAudit({
+  provider = 'groq',
+  feature = 'other',
+  model = '',
+  voice = '',
+  requestId = 'no disponible directamente',
+  inputTokens = null,
+  outputTokens = null,
+  totalTokens = null,
+  characters = null,
+  durationMs = 0,
+  retry = false,
+  streaming = false,
+  extra = ''
+}) {
+  const timestamp = new Date().toISOString();
+  const reqIdStr = requestId || 'no disponible directamente';
+  const inTokStr = inputTokens !== null && inputTokens !== undefined ? inputTokens : 'no disponible directamente';
+  const outTokStr = outputTokens !== null && outputTokens !== undefined ? outputTokens : 'no disponible directamente';
+  const totTokStr = totalTokens !== null && totalTokens !== undefined ? totalTokens : 'no disponible directamente';
+  const charStr = characters !== null && characters !== undefined ? characters : 'no disponible directamente';
+
+  console.log(
+    `[COST_AUDIT] timestamp=${timestamp} provider=${provider} feature=${feature} model=${model || 'n/a'}${voice ? ` voice=${voice}` : ''} request_id=${reqIdStr} input_tokens=${inTokStr} output_tokens=${outTokStr} total_tokens=${totTokStr} characters=${charStr} duration_ms=${durationMs} retry=${retry} streaming=${streaming}${extra ? ` info="${extra}"` : ''}`
+  );
+}
+
 const PRIMARY_GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_MODEL_ID_REGEX = /^[a-zA-Z0-9_./-]+$/;
 
@@ -153,6 +183,7 @@ CRITICAL SPOKEN CONVERSATION RULES:
     }
 
     // Connect to Groq streaming API
+    const startTime = Date.now();
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -209,6 +240,21 @@ CRITICAL SPOKEN CONVERSATION RULES:
         }
       }
     }
+
+    const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+    logCostAudit({
+      provider: 'groq',
+      feature: 'live_call_response',
+      model: activeModel,
+      requestId,
+      inputTokens: 'no disponible directamente (streaming)',
+      outputTokens: 'no disponible directamente (streaming)',
+      totalTokens: 'no disponible directamente (streaming)',
+      durationMs: Date.now() - startTime,
+      retry: false,
+      streaming: true,
+      extra: `history_turns=${boundedHistory.length}`
+    });
 
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
@@ -349,6 +395,7 @@ export async function handlePipelineTTS(req, res) {
     }
 
     // ── Call Cartesia TTS API ────────────────────────────────────────────
+    const startTime = Date.now();
     const response = await fetch('https://api.cartesia.ai/tts/bytes', {
       method: 'POST',
       headers: {
@@ -413,6 +460,19 @@ export async function handlePipelineTTS(req, res) {
           if (fallbackResp.ok) {
             const arrayBuffer = await fallbackResp.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
+            const fallbackReqId = fallbackResp.headers.get('x-request-id') || 'no disponible directamente';
+            logCostAudit({
+              provider: 'cartesia',
+              feature: 'live_call_tts',
+              model: cartesiaModel,
+              voice: fallbackVoiceId,
+              requestId: fallbackReqId,
+              characters: cleanText.length,
+              durationMs: Date.now() - startTime,
+              retry: true,
+              streaming: false,
+              extra: `bytes=${buffer.length} fallback_from=${resolvedVoiceId} targetLang=${targetLang}`
+            });
             console.log('[BackendPipelineTTS] ✓ Fallback Cartesia audio generated OK. Bytes:', buffer.length);
             res.setHeader('Content-Type', 'audio/mpeg');
             res.setHeader('Cache-Control', 'no-cache');
@@ -456,6 +516,19 @@ export async function handlePipelineTTS(req, res) {
     // ── Stream audio buffer directly to client ───────────────────────────
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+    logCostAudit({
+      provider: 'cartesia',
+      feature: 'live_call_tts',
+      model: cartesiaModel,
+      voice: resolvedVoiceId,
+      requestId,
+      characters: cleanText.length,
+      durationMs: Date.now() - startTime,
+      retry: false,
+      streaming: false,
+      extra: `bytes=${buffer.length} targetLang=${targetLang}`
+    });
     console.log('[BackendPipelineTTS] ✓ Cartesia audio generated OK. Bytes:', buffer.length, 'Model:', cartesiaModel, 'Voice:', resolvedVoiceId);
 
     res.setHeader('Content-Type', 'audio/mpeg');

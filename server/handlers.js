@@ -12,6 +12,36 @@ import { getArabicTransliteration } from './arabicTransliteration.js';
 
 dotenv.config();
 
+/**
+ * Isolated Development Cost Audit Logger for LinguaFlow
+ */
+function logCostAudit({
+  provider = 'groq',
+  feature = 'other',
+  model = '',
+  voice = '',
+  requestId = 'no disponible directamente',
+  inputTokens = null,
+  outputTokens = null,
+  totalTokens = null,
+  characters = null,
+  durationMs = 0,
+  retry = false,
+  streaming = false,
+  extra = ''
+}) {
+  const timestamp = new Date().toISOString();
+  const reqIdStr = requestId || 'no disponible directamente';
+  const inTokStr = inputTokens !== null && inputTokens !== undefined ? inputTokens : 'no disponible directamente';
+  const outTokStr = outputTokens !== null && outputTokens !== undefined ? outputTokens : 'no disponible directamente';
+  const totTokStr = totalTokens !== null && totalTokens !== undefined ? totalTokens : 'no disponible directamente';
+  const charStr = characters !== null && characters !== undefined ? characters : 'no disponible directamente';
+
+  console.log(
+    `[COST_AUDIT] timestamp=${timestamp} provider=${provider} feature=${feature} model=${model || 'n/a'}${voice ? ` voice=${voice}` : ''} request_id=${reqIdStr} input_tokens=${inTokStr} output_tokens=${outTokStr} total_tokens=${totTokStr} characters=${charStr} duration_ms=${durationMs} retry=${retry} streaming=${streaming}${extra ? ` info="${extra}"` : ''}`
+  );
+}
+
 function enrichArabicPayload(data, targetLang) {
   if (!data || typeof data !== 'object') return data;
   const isArabic = targetLang === 'ar';
@@ -198,6 +228,7 @@ export async function handlePedagogicalCorrect(req, res) {
       let httpStatus = 0;
       let groqErrorMessage = '';
 
+      const startTime = Date.now();
       try {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -223,6 +254,21 @@ export async function handlePedagogicalCorrect(req, res) {
 
         if (response.ok) {
           const data = await response.json();
+          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+          logCostAudit({
+            provider: 'groq',
+            feature: 'live_call_correction',
+            model: activeModel,
+            requestId,
+            inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+            outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+            totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+            characters: rawText.length,
+            durationMs: Date.now() - startTime,
+            retry: false,
+            streaming: false,
+            extra: `status=${httpStatus}`
+          });
           const rawContent = data?.choices?.[0]?.message?.content || '';
           const parsed = cleanAndParseJSON(rawContent);
 
@@ -358,6 +404,7 @@ export async function handleChat(req, res) {
       let groqErrorMessage = '';
       let parsedData = null;
 
+      const startTime = Date.now();
       try {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -383,6 +430,21 @@ export async function handleChat(req, res) {
 
         if (response.ok) {
           const data = await response.json();
+          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+          logCostAudit({
+            provider: 'groq',
+            feature: 'chat_response',
+            model: activeModel,
+            requestId,
+            inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+            outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+            totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+            characters: message.length,
+            durationMs: Date.now() - startTime,
+            retry: false,
+            streaming: false,
+            extra: `status=${httpStatus}`
+          });
           const rawText = data?.choices?.[0]?.message?.content || '';
           parsedData = cleanAndParseJSON(rawText);
 
@@ -481,6 +543,7 @@ Format strictly as valid JSON matching this schema:
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 12000);
 
+        const startTime = Date.now();
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -507,6 +570,21 @@ Format strictly as valid JSON matching this schema:
 
         if (response.ok) {
           const data = await response.json();
+          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+          logCostAudit({
+            provider: 'groq',
+            feature: 'dictionary',
+            model: activeModel,
+            requestId,
+            inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+            outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+            totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+            characters: word.length,
+            durationMs: Date.now() - startTime,
+            retry: false,
+            streaming: false,
+            extra: `word="${word}"`
+          });
           const rawText = data?.choices?.[0]?.message?.content;
           const parsed = cleanAndParseJSON(rawText);
           if (parsed && (parsed.meaning || parsed.definition)) {
@@ -676,6 +754,7 @@ export async function handleTranscribe(req, res) {
       const whisperPrompt = getWhisperPromptForLanguage(targetLang);
       formData.append('prompt', whisperPrompt);
 
+      const startTime = Date.now();
       const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
         headers: {
@@ -691,6 +770,21 @@ export async function handleTranscribe(req, res) {
       if (groqRes.ok) {
         const groqData = await groqRes.json();
         let transcript = groqData?.text?.trim();
+        const requestId = groqRes.headers.get('x-request-id') || 'no disponible directamente';
+        logCostAudit({
+          provider: 'groq',
+          feature: 'live_call_stt',
+          model: 'whisper-large-v3',
+          requestId,
+          inputTokens: 'no disponible directamente',
+          outputTokens: 'no disponible directamente',
+          totalTokens: 'no disponible directamente',
+          characters: transcript ? transcript.length : 0,
+          durationMs: Date.now() - startTime,
+          retry: false,
+          streaming: false,
+          extra: `status=${httpStatus} mime=${cleanMime}`
+        });
         if (transcript) {
           transcript = stripSttTranslationArtifacts(transcript, targetLang);
           console.log(`✅ Audio transcribed via Groq Whisper: "${transcript}"`);
@@ -794,6 +888,7 @@ Return STRICTLY valid JSON with no markdown formatting:
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 12000);
 
+        const startTime = Date.now();
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -820,6 +915,20 @@ Return STRICTLY valid JSON with no markdown formatting:
 
         if (response.ok) {
           const data = await response.json();
+          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+          logCostAudit({
+            provider: 'groq',
+            feature: 'sentence_breakdown',
+            model: activeModel,
+            requestId,
+            inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+            outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+            totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+            characters: sentence ? sentence.length : 0,
+            durationMs: Date.now() - startTime,
+            retry: false,
+            streaming: false
+          });
           const rawText = data?.choices?.[0]?.message?.content;
           const parsed = cleanAndParseJSON(rawText);
           if (parsed && Array.isArray(parsed.tokens) && parsed.tokens.length > 0) {
@@ -974,6 +1083,7 @@ Return STRICTLY valid JSON with no markdown formatting:
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 25000);
 
+        const startTime = Date.now();
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -1000,6 +1110,20 @@ Return STRICTLY valid JSON with no markdown formatting:
 
         if (response.ok) {
           const data = await response.json();
+          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+          logCostAudit({
+            provider: 'groq',
+            feature: 'text_gloss_batch',
+            model: activeModel,
+            requestId,
+            inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+            outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+            totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+            durationMs: Date.now() - startTime,
+            retry: false,
+            streaming: false,
+            extra: `lines=${lines.length} total_tokens_target=${totalUnknownTokens}`
+          });
           const rawText = data?.choices?.[0]?.message?.content;
           const parsed = cleanAndParseJSON(rawText);
           if (parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0) {
@@ -1115,6 +1239,7 @@ Write the complete reading text in ${targetName} now.`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 20000);
 
+        const startTime = Date.now();
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -1137,6 +1262,21 @@ Write the complete reading text in ${targetName} now.`;
 
         if (response.ok) {
           const data = await response.json();
+          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+          logCostAudit({
+            provider: 'groq',
+            feature: 'ai_story_generation',
+            model: activeModel,
+            requestId,
+            inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+            outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+            totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+            characters: trimmedTopic.length,
+            durationMs: Date.now() - startTime,
+            retry: false,
+            streaming: false,
+            extra: `level=${level} length=${length}`
+          });
           const rawContent = data?.choices?.[0]?.message?.content || '';
 
           // 1. Try JSON parsing
