@@ -1081,6 +1081,84 @@ Return STRICTLY valid JSON with no markdown formatting:
   }
 }
 
+/**
+ * Normalizes any structured or semi-structured JSON response from Groq batch glossing
+ * into the expected schema: [{ id: "...", tokens: [{ word, auxiliary, gloss }] }]
+ */
+export function normalizeBatchGlossPayload(parsed, requestedLines, targetLang = 'es', nativeLang = 'es') {
+  if (!parsed) return [];
+
+  let rawLines = [];
+  if (Array.isArray(parsed)) {
+    rawLines = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    if (Array.isArray(parsed.lines)) rawLines = parsed.lines;
+    else if (Array.isArray(parsed.subtitles)) rawLines = parsed.subtitles;
+    else if (Array.isArray(parsed.paragraphs)) rawLines = parsed.paragraphs;
+    else if (Array.isArray(parsed.data)) rawLines = parsed.data;
+    else if (Array.isArray(parsed.results)) rawLines = parsed.results;
+    else if (Array.isArray(parsed.glosses)) rawLines = parsed.glosses;
+    else {
+      // Keyed object by ID (e.g. { "p-1": [...], "p-2": [...] })
+      const keys = Object.keys(parsed);
+      const matching = keys.filter(k => requestedLines.some(l => String(l.id) === k || k.includes(String(l.id))));
+      if (matching.length > 0) {
+        rawLines = keys.map(k => {
+          const val = parsed[k];
+          if (Array.isArray(val)) return { id: k, tokens: val };
+          if (val && typeof val === 'object' && Array.isArray(val.tokens)) return { id: k, tokens: val.tokens };
+          return null;
+        }).filter(Boolean);
+      }
+    }
+  }
+
+  const isChinese = targetLang === 'zh';
+  const isArabic = targetLang === 'ar';
+  const requestedIds = requestedLines.map(l => String(l.id));
+
+  return rawLines
+    .filter(l => l && (Array.isArray(l.tokens) || Array.isArray(l.words) || Array.isArray(l.glosses)))
+    .map((l, idx) => {
+      let rawId = String(l.id || '').replace(/^\[?ID:?\s*|\]$/gi, '').trim();
+      let matchedId = rawId;
+
+      if (!requestedIds.includes(matchedId)) {
+        const found = requestedIds.find(rid => rid === matchedId || rid.endsWith(`-${matchedId}`) || rid.endsWith(`_${matchedId}`) || matchedId.endsWith(rid));
+        if (found) {
+          matchedId = found;
+        } else if (requestedLines[idx]) {
+          matchedId = String(requestedLines[idx].id);
+        }
+      }
+
+      const rawToks = Array.isArray(l.tokens) ? l.tokens : (Array.isArray(l.words) ? l.words : (Array.isArray(l.glosses) ? l.glosses : []));
+
+      const tokens = rawToks.map(t => {
+        if (!t) return null;
+        if (typeof t === 'string') {
+          return { word: t, auxiliary: null, gloss: null };
+        }
+        const w = String(t.word || t.text || '').trim();
+        if (!w) return null;
+        const aux = isChinese
+          ? (t.auxiliary || t.pinyin || null)
+          : (isArabic ? (t.auxiliary || t.translit || getArabicTransliteration(w) || null) : null);
+        const gloss = t.gloss ? String(t.gloss).trim() : null;
+        return {
+          word: w,
+          auxiliary: aux,
+          gloss
+        };
+      }).filter(Boolean);
+
+      return {
+        id: matchedId,
+        tokens
+      };
+    });
+}
+
 // Batch Subtitle Gloss endpoint (Groq AI-powered multi-line interlinear word glossing)
 export async function handleBatchGloss(req, res) {
   setCorsHeaders(res);
@@ -1117,12 +1195,12 @@ export async function handleBatchGloss(req, res) {
           const id = l.id || `line_${i + 1}`;
           const text = (l.text || '').trim();
           if (Array.isArray(l.unknownTokens) && l.unknownTokens.length > 0) {
-            return `[ID: ${id}] Sentence Context: "${text}" | ONLY generate tokens for these unknown words: [${l.unknownTokens.map(w => `"${w}"`).join(', ')}]`;
+            return `Line ID: "${id}" | Context: "${text}" | ONLY generate tokens for these unknown words: [${l.unknownTokens.map(w => `"${w}"`).join(', ')}]`;
           }
           const wordsStr = Array.isArray(l.words) && l.words.length > 0
             ? ` | Pre-segmented words: [${l.words.map(w => `"${w}"`).join(', ')}]`
             : '';
-          return `[ID: ${id}]: "${text}"${wordsStr}`;
+          return `Line ID: "${id}" | Text: "${text}"${wordsStr}`;
         })
         .join('\n');
 
@@ -1160,8 +1238,8 @@ MANDATORY RULES:
 - SOURCE MEANINGS: Word meanings MUST reflect the vocabulary, grammar, and context of the SOURCE language (${targetLangName}), even if the word's spelling is shared with other languages (e.g. "was", "is", "had", "in", "de", "baby" in Dutch must be parsed and glossed as authentic Dutch words in ${nativeLangName}).
 - ALL REAL WORDS MUST RECEIVE A GLOSS: Every substantive word, article, pronoun, preposition, conjunction, auxiliary, basic word, and shared/cognate word MUST have an accurate gloss in ${nativeLangName}.
 - Omit punctuation marks or give them null gloss and null auxiliary.
-- EXACT IDS: You MUST preserve and return the EXACT same line ID string for each line as provided in the input (e.g. "srt_1", "srt_2").
-- RETURN ALL LINES: You MUST return all ${lines.length} requested lines matching IDs [${lines.map(l => `"${l.id}"`).join(', ')}].
+- EXACT IDS: In the "id" field, return the exact string ID for each line (e.g. "p-1", "srt_1") without any prefix or enclosing brackets.
+- RETURN ALL LINES: You MUST return all ${lines.length} requested lines matching IDs: [${lines.map(l => `"${l.id}"`).join(', ')}].
 
 CRITICAL REQUIREMENTS:
 ${isChinese ? `- CHINESE LEXICAL SEGMENTATION (MANDATORY):
@@ -1229,7 +1307,7 @@ ${linesFormatted}`;
             ],
             response_format: { type: 'json_object' },
             temperature: 0.1,
-            max_tokens: 1500
+            max_tokens: 4096
           })
         });
 
@@ -1238,6 +1316,16 @@ ${linesFormatted}`;
         if (response.ok) {
           const data = await response.json();
           const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+          const finishReason = data?.choices?.[0]?.finish_reason || 'unknown';
+          const rawText = data?.choices?.[0]?.message?.content || '';
+          
+          if (finishReason === 'length') {
+            console.warn(`[BatchGlossWarning] Groq response truncated due to max_tokens limit (finish_reason: length). Raw length: ${rawText.length}`);
+          }
+
+          const parsed = cleanAndParseJSON(rawText);
+          const validLines = normalizeBatchGlossPayload(parsed, lines, targetLang, nativeLang);
+
           logCostAudit({
             provider: 'groq',
             feature: 'text_gloss_batch',
@@ -1249,40 +1337,23 @@ ${linesFormatted}`;
             durationMs: Date.now() - startTime,
             retry: false,
             streaming: false,
-            extra: `lines=${lines.length} total_tokens_target=${totalUnknownTokens}`
+            extra: `lines_requested=${lines.length} lines_returned=${validLines.length} finish_reason=${finishReason} total_tokens_target=${totalUnknownTokens}`
           });
-          const rawText = data?.choices?.[0]?.message?.content;
-          const parsed = cleanAndParseJSON(rawText);
-          if (parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0) {
-            const requestedIds = new Set(lines.map(l => String(l.id)));
-            const validLines = parsed.lines
-              .filter(l => l && l.id && Array.isArray(l.tokens))
-              .map(l => ({
-                id: String(l.id),
-                tokens: l.tokens.map(t => {
-                  const w = String(t.word || t.text || '').trim();
-                  const aux = isChinese
-                    ? (t.auxiliary || t.pinyin || null)
-                    : (isArabic ? (t.auxiliary || t.translit || getArabicTransliteration(w) || null) : null);
-                  const gloss = t.gloss ? String(t.gloss).trim() : null;
-                  return {
-                    word: w,
-                    auxiliary: aux,
-                    gloss
-                  };
-                })
-              }));
 
+          if (validLines.length > 0) {
+            const requestedIds = new Set(lines.map(l => String(l.id)));
             const returnedIds = new Set(validLines.map(l => String(l.id)));
             const missingIds = [...requestedIds].filter(id => !returnedIds.has(id));
 
             return res.status(200).json({
               success: true,
-              source: `groq (${activeModel})`,
+              source: `groq (${GLOSS_GROQ_MODEL})`,
               lines: validLines,
               isComplete: missingIds.length === 0,
               missingIds
             });
+          } else {
+            console.warn(`[BatchGlossWarning] Failed to extract valid gloss lines from Groq response. Finish reason: ${finishReason}, Raw text snippet: ${rawText.slice(0, 200)}`);
           }
         } else {
           const errText = await response.text();

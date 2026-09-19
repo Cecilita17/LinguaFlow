@@ -192,16 +192,30 @@ export function cleanAndParseJSON(rawText) {
     }
   }
 
-  // 4. Find the first outer balanced JSON object {...}
+  // 4. Find the first outer balanced JSON structure (either Object {...} or Array [...])
   const firstBrace = cleaned.indexOf('{');
-  if (firstBrace !== -1) {
+  const firstBracket = cleaned.indexOf('[');
+  let startIdx = -1;
+  let openChar = '';
+  let closeChar = '';
+
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    startIdx = firstBrace;
+    openChar = '{';
+    closeChar = '}';
+  } else if (firstBracket !== -1) {
+    startIdx = firstBracket;
+    openChar = '[';
+    closeChar = ']';
+  }
+
+  if (startIdx !== -1) {
     let depth = 0;
     let inString = false;
     let escape = false;
-    let startIdx = firstBrace;
     let endIdx = -1;
 
-    for (let i = firstBrace; i < cleaned.length; i++) {
+    for (let i = startIdx; i < cleaned.length; i++) {
       const char = cleaned[i];
       if (escape) {
         escape = false;
@@ -216,9 +230,9 @@ export function cleanAndParseJSON(rawText) {
         continue;
       }
       if (!inString) {
-        if (char === '{') {
+        if (char === openChar) {
           depth++;
-        } else if (char === '}') {
+        } else if (char === closeChar) {
           depth--;
           if (depth === 0) {
             endIdx = i + 1;
@@ -243,8 +257,8 @@ export function cleanAndParseJSON(rawText) {
   }
 
   // 5. Intelligent Truncation & Malformed Recovery
-  if (firstBrace !== -1) {
-    let candidate = cleaned.slice(firstBrace);
+  if (startIdx !== -1) {
+    let candidate = cleaned.slice(startIdx);
     // Remove trailing markdown or comments after last recognizable JSON fragment
     candidate = candidate.replace(/```[\s\S]*$/, '').trim();
 

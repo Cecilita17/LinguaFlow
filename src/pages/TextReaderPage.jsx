@@ -803,8 +803,6 @@ export function TextReaderPage({
     lastAudioBoundaryTimeRef.current = 0;
     audioMsPerCharRef.current = initialMsPerChar;
 
-    let hasReceivedBoundary = false;
-
     utterance.onstart = () => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       clearAudioVisualTimer();
@@ -817,15 +815,11 @@ export function TextReaderPage({
 
       let lastTickTime = startTime;
 
-      // Fallback timer ONLY for engines/browsers where onboundary does not fire.
-      // If onboundary fires, it immediately clears this timer so real speech events take 100% control.
+      // Continuous visual progression timer that smoothly interpolates between speech boundaries.
+      // On platforms like Android where WebSpeech onboundary events are emitted sparsely (every 3-4 words),
+      // this ensures word-by-word highlighting advances fluidly without skipping intermediate tokens.
       audioVisualTimerRef.current = setInterval(() => {
         if (playbackId !== audioPlaybackIdRef.current) {
-          clearAudioVisualTimer();
-          return;
-        }
-
-        if (hasReceivedBoundary) {
           clearAudioVisualTimer();
           return;
         }
@@ -842,16 +836,29 @@ export function TextReaderPage({
           audioVisualCharRef.current = nextChar;
           setActiveAudioCharIndex(Math.floor(nextChar));
         }
-      }, 50);
+      }, 35);
     };
 
     utterance.onboundary = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
-        hasReceivedBoundary = true;
-        clearAudioVisualTimer();
-
         const newBoundaryChar = Math.min(textLength - 1, event.charIndex);
+        const now = Date.now();
+        const prevBoundaryChar = lastAudioBoundaryCharRef.current;
+        const prevBoundaryTime = lastAudioBoundaryTimeRef.current;
+
+        // Dynamic calibration of real speech cadence based on observed boundary delta
+        if (prevBoundaryTime > 0 && newBoundaryChar > prevBoundaryChar) {
+          const elapsed = now - prevBoundaryTime;
+          const charDelta = newBoundaryChar - prevBoundaryChar;
+          if (elapsed > 50 && charDelta > 0) {
+            const measuredMsPerChar = elapsed / charDelta;
+            audioMsPerCharRef.current = Math.max(15, Math.min(350, (measuredMsPerChar * 0.6) + (audioMsPerCharRef.current * 0.4)));
+          }
+        }
+
+        lastAudioBoundaryTimeRef.current = now;
+        lastAudioBoundaryCharRef.current = newBoundaryChar;
         audioVisualCharRef.current = newBoundaryChar;
         setActiveAudioCharIndex(newBoundaryChar);
       }

@@ -241,20 +241,20 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
       return [];
     }
     const attemptStartTime = Date.now();
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Client 28s timeout reached for batch "${batchId}" attempt ${attempt + 1}. Aborting controller.`);
-        controller.abort('timeout_28s');
-      }, 28000);
-      const onParentAbort = () => {
-        console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Parent abortSignal fired for batch "${batchId}" attempt ${attempt + 1}. Reason: "${abortSignal?.reason}". Aborting internal controller.`);
-        controller.abort(abortSignal?.reason || 'parent_aborted');
-      };
-      if (abortSignal) {
-        abortSignal.addEventListener('abort', onParentAbort, { once: true });
-      }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Client 28s timeout reached for batch "${batchId}" attempt ${attempt + 1}. Aborting controller.`);
+      controller.abort('timeout_28s');
+    }, 28000);
+    const onParentAbort = () => {
+      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Parent abortSignal fired for batch "${batchId}" attempt ${attempt + 1}. Reason: "${abortSignal?.reason}". Aborting internal controller.`);
+      controller.abort(abortSignal?.reason || 'parent_aborted');
+    };
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', onParentAbort, { once: true });
+    }
 
+    try {
       const headers = { 'Content-Type': 'application/json' };
       if (effectiveKey) {
         headers['x-api-key'] = effectiveKey;
@@ -274,11 +274,6 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
           signal: controller.signal,
           body: JSON.stringify(payload)
         });
-      }
-
-      clearTimeout(timeoutId);
-      if (abortSignal) {
-        abortSignal.removeEventListener('abort', onParentAbort);
       }
 
       if (res.ok) {
@@ -331,6 +326,11 @@ caller/context: fetchBatchGlossesApi (catch block)`);
       });
       if (attempt === 0) {
         await new Promise(r => setTimeout(r, 1000));
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', onParentAbort);
       }
     }
   }
