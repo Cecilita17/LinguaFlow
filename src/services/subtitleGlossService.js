@@ -232,106 +232,80 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
   };
 
   const batchId = lines.map(l => l.id).join(',');
-  const batchStartTime = Date.now();
-  console.log(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] [START] batch: "${batchId}", targetLang: "${targetLang}", nativeLang: "${nativeLang}", lines: ${lines.length}`);
+  const attemptStartTime = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort('timeout_28s');
+  }, 28000);
+  const onParentAbort = () => {
+    controller.abort(abortSignal?.reason || 'parent_aborted');
+  };
+  if (abortSignal) {
+    abortSignal.addEventListener('abort', onParentAbort, { once: true });
+  }
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (abortSignal?.aborted) {
-      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Skipped attempt ${attempt + 1}: parent abortSignal already aborted. Reason: "${abortSignal?.reason}"`);
-      return [];
-    }
-    const attemptStartTime = Date.now();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Client 28s timeout reached for batch "${batchId}" attempt ${attempt + 1}. Aborting controller.`);
-      controller.abort('timeout_28s');
-    }, 28000);
-    const onParentAbort = () => {
-      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] Parent abortSignal fired for batch "${batchId}" attempt ${attempt + 1}. Reason: "${abortSignal?.reason}". Aborting internal controller.`);
-      controller.abort(abortSignal?.reason || 'parent_aborted');
-    };
-    if (abortSignal) {
-      abortSignal.addEventListener('abort', onParentAbort, { once: true });
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (effectiveKey) {
+      headers['x-api-key'] = effectiveKey;
     }
 
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (effectiveKey) {
-        headers['x-api-key'] = effectiveKey;
-      }
+    let res = await fetch(url, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify(payload)
+    });
 
-      let res = await fetch(url, {
+    if (!res.ok && res.status === 404) {
+      res = await fetch(fallbackUrl, {
         method: 'POST',
         headers,
         signal: controller.signal,
         body: JSON.stringify(payload)
       });
+    }
 
-      if (!res.ok && res.status === 404) {
-        res = await fetch(fallbackUrl, {
-          method: 'POST',
-          headers,
-          signal: controller.signal,
-          body: JSON.stringify(payload)
-        });
-      }
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.lines)) {
-          const linesResult = data.lines;
-          linesResult.isComplete = Boolean(data.isComplete);
-          linesResult.missingIds = data.missingIds || [];
-          console.log(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC] [SUCCESS] batch: "${batchId}", received lines: ${linesResult.length} in ${Date.now() - attemptStartTime}ms`);
-          return linesResult;
-        } else {
-          console.warn('[Gloss] batch response missing lines or unsuccessful:', {
-            status: res.status,
-            targetLang,
-            nativeLang,
-            subtitleIds: lines.map(l => l.id),
-            requestedCount: lines.length,
-            payload: data
-          });
-        }
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.lines)) {
+        const linesResult = data.lines;
+        linesResult.isComplete = Boolean(data.isComplete);
+        linesResult.missingIds = data.missingIds || [];
+        return linesResult;
       } else {
-        const errText = await res.text().catch(() => '');
-        console.warn('[Gloss] batch request failed:', {
+        console.warn('[Gloss] batch response missing lines or unsuccessful (fail-cheap, no retry):', {
           status: res.status,
           targetLang,
           nativeLang,
           subtitleIds: lines.map(l => l.id),
           requestedCount: lines.length,
-          response: errText
+          payload: data
         });
       }
-    } catch (err) {
-      const elapsed = Date.now() - attemptStartTime;
-      console.warn(`[GlossAbortDebug] [TEMPORARY_DIAGNOSTIC]
-request/batch id: ${batchId}
-attempt: ${attempt + 1}
-subtitle ids: ${JSON.stringify(lines.map(l => l.id))}
-controller created: ${new Date(attemptStartTime).toISOString()}
-abort requested: ${Boolean(abortSignal?.aborted)}
-abort reason: ${err.message || abortSignal?.reason || 'unknown'}
-elapsed ms: ${elapsed}
-caller/context: fetchBatchGlossesApi (catch block)`);
-
-      console.warn(`[Gloss] Attempt ${attempt + 1} for batch gloss failed:`, {
-        error: err.message,
+    } else {
+      const errText = await res.text().catch(() => '');
+      console.warn('[Gloss] batch request failed (fail-cheap, no retry):', {
+        status: res.status,
         targetLang,
         nativeLang,
         subtitleIds: lines.map(l => l.id),
-        requestedCount: lines.length
+        requestedCount: lines.length,
+        response: errText
       });
-      if (attempt === 0) {
-        await new Promise(r => setTimeout(r, 1000));
-      }
-    } finally {
-      clearTimeout(timeoutId);
-      if (abortSignal) {
-        abortSignal.removeEventListener('abort', onParentAbort);
-      }
+    }
+  } catch (err) {
+    console.warn(`[Gloss] Batch gloss request failed (fail-cheap, 0 retries):`, {
+      error: err.message,
+      targetLang,
+      nativeLang,
+      subtitleIds: lines.map(l => l.id),
+      requestedCount: lines.length
+    });
+  } finally {
+    clearTimeout(timeoutId);
+    if (abortSignal) {
+      abortSignal.removeEventListener('abort', onParentAbort);
     }
   }
 
@@ -1063,7 +1037,7 @@ export function enrichSubtitlesWithGlosses({
   const getCompletedCount = (subsList) => subsList.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
   const initialCompleted = getCompletedCount(prepared);
 
-  if (!onUpdate) {
+  if (!onUpdate && !onProgress) {
     return prepared;
   }
 
@@ -1212,10 +1186,8 @@ export function enrichSubtitlesWithGlosses({
       });
     }
 
-    // Phase 2: Reliable batch processing in small chunks of 5 lines + retrying missing IDs
+    // Phase 2: Reliable batch processing in chunks of 5 lines (Fail-Cheap: 1 request per chunk, zero retry multiplication)
     const CHUNK_SIZE = 5;
-    const MAX_RETRIES = 2; // Up to 2 retries per missing line
-    const retryCountMap = new Map();
     let actualAiRequestsCount = 0;
 
     const initialChunks = [];
@@ -1225,12 +1197,12 @@ export function enrichSubtitlesWithGlosses({
 
     // Helper to process a single batch of lines
     const processBatch = async (batch) => {
-      if (!Array.isArray(batch) || batch.length === 0) return [];
-      if (checkAborted()) return [];
+      if (!Array.isArray(batch) || batch.length === 0) return;
+      if (checkAborted()) return;
 
       actualAiRequestsCount++;
       const aiResults = await fetchBatchGlossesApi(batch, targetLang, nativeLang, apiKey, abortSignal);
-      if (checkAborted()) return [];
+      if (checkAborted()) return;
       let hasNewData = false;
 
       if (Array.isArray(aiResults) && aiResults.length > 0) {
@@ -1306,48 +1278,14 @@ export function enrichSubtitlesWithGlosses({
           failed: 0
         });
       }
-
-      // Identify which lines in this batch are STILL incomplete (using latest merged tokens)
-      const stillIncomplete = batch
-        .map(sub => currentSubtitles.find(s => s.id === sub.id) || sub)
-        .filter(sub => !isGlossComplete(sub, targetLang, nativeLang));
-
-      return stillIncomplete;
     };
 
-    const pendingRetries = [];
-
-    // Pass 1: Process initial chunks of 5 lines
+    // Process each chunk in a single pass (Fail-Cheap policy: no cascading retries)
     for (const chunk of initialChunks) {
       if (checkAborted()) return;
-      const incomplete = await processBatch(chunk);
+      await processBatch(chunk);
       if (checkAborted()) return;
-      for (const sub of incomplete) {
-        const attempts = (retryCountMap.get(sub.id) || 0) + 1;
-        retryCountMap.set(sub.id, attempts);
-        if (attempts <= MAX_RETRIES) {
-          pendingRetries.push(currentSubtitles.find(s => s.id === sub.id) || sub);
-        }
-      }
-      await new Promise(r => setTimeout(r, 200));
-    }
-
-    // Pass 2 & 3: Retry missing or incomplete lines in smaller batches of 3
-    while (pendingRetries.length > 0) {
-      if (checkAborted()) return;
-      const retryBatch = pendingRetries.splice(0, 3);
-      const incomplete = await processBatch(retryBatch);
-      if (checkAborted()) return;
-      for (const sub of incomplete) {
-        const attempts = (retryCountMap.get(sub.id) || 0) + 1;
-        retryCountMap.set(sub.id, attempts);
-        if (attempts <= MAX_RETRIES) {
-          pendingRetries.push(currentSubtitles.find(s => s.id === sub.id) || sub);
-        } else {
-          console.warn(`Subtitle line "${sub.id}" reached max retries (${MAX_RETRIES}). Retaining best partial gloss.`);
-        }
-      }
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 150));
     }
 
     // Final verified progress update and save

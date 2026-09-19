@@ -107,7 +107,7 @@ export function enrichParagraphsWithGlosses({
   const getCompletedCount = (pList) => pList.filter(p => isGlossComplete(p, targetLang, nativeLang)).length;
   const initialCompleted = getCompletedCount(prepared);
 
-  if (!onUpdate) {
+  if (!onUpdate && !onProgress) {
     return prepared;
   }
 
@@ -162,8 +162,6 @@ export function enrichParagraphsWithGlosses({
     }
 
     const CHUNK_SIZE = 5;
-    const MAX_RETRIES = 2;
-    const retryCountMap = new Map();
     let actualAiRequestsCount = 0;
 
     const initialChunks = [];
@@ -173,12 +171,12 @@ export function enrichParagraphsWithGlosses({
 
     // Helper to process a batch of paragraphs
     const processBatch = async (batch) => {
-      if (!Array.isArray(batch) || batch.length === 0) return [];
-      if (checkAborted()) return [];
+      if (!Array.isArray(batch) || batch.length === 0) return;
+      if (checkAborted()) return;
 
       actualAiRequestsCount++;
       const aiResults = await fetchBatchGlossesApi(batch, targetLang, nativeLang, apiKey, abortSignal);
-      if (checkAborted()) return [];
+      if (checkAborted()) return;
       let hasNewData = false;
 
       if (Array.isArray(aiResults) && aiResults.length > 0) {
@@ -221,45 +219,14 @@ export function enrichParagraphsWithGlosses({
           failed: 0
         });
       }
-
-      return batch
-        .map(p => currentParagraphs.find(cp => cp.id === p.id) || p)
-        .filter(p => !isGlossComplete(p, targetLang, nativeLang));
     };
 
-    const pendingRetries = [];
-
-    // Pass 1: Primary chunks of 5
+    // Process each chunk in a single pass (Fail-Cheap policy: no cascading retries)
     for (const chunk of initialChunks) {
       if (checkAborted()) return;
-      const incomplete = await processBatch(chunk);
+      await processBatch(chunk);
       if (checkAborted()) return;
-      for (const p of incomplete) {
-        const attempts = (retryCountMap.get(p.id) || 0) + 1;
-        retryCountMap.set(p.id, attempts);
-        if (attempts <= MAX_RETRIES) {
-          pendingRetries.push(currentParagraphs.find(cp => cp.id === p.id) || p);
-        }
-      }
-      await new Promise(r => setTimeout(r, 200));
-    }
-
-    // Pass 2: Retries in smaller batches of 3
-    while (pendingRetries.length > 0) {
-      if (checkAborted()) return;
-      const retryBatch = pendingRetries.splice(0, 3);
-      const incomplete = await processBatch(retryBatch);
-      if (checkAborted()) return;
-      for (const p of incomplete) {
-        const attempts = (retryCountMap.get(p.id) || 0) + 1;
-        retryCountMap.set(p.id, attempts);
-        if (attempts <= MAX_RETRIES) {
-          pendingRetries.push(currentParagraphs.find(cp => cp.id === p.id) || p);
-        } else {
-          console.warn(`Text paragraph "${p.id}" reached max retries. Retaining partial gloss.`);
-        }
-      }
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 150));
     }
 
     const finalCompleted = getCompletedCount(currentParagraphs);
