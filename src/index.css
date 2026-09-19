@@ -616,23 +616,23 @@ rt {
   font-weight: 700 !important;
 }
 
-/* Tier 3 (BOTTOM): Gloss in light mode (Clear stone-600, accessible and distinct) */
-[data-theme="light"] .group\/token .text-stone-300\/80,
-[data-theme="light"] .group\/line .text-stone-300\/80,
-[data-theme="light"] .group\/token span[dir="ltr"],
-[data-theme="light"] .group\/token span[dir="rtl"],
+/* Tier 3 (BOTTOM): Gloss in light mode (Rose-700 / #be123c, rich rose brand identity with strong contrast on light backgrounds) */
+[data-theme="light"] .interlinear-gloss,
+.light .interlinear-gloss,
 [data-theme="light"] .group\/token .interlinear-gloss,
-[data-theme="light"] .group\/line .interlinear-gloss {
-  color: #57534e !important; /* stone-600 */
+[data-theme="light"] .group\/line .interlinear-gloss,
+[data-theme="light"] .group\/para .interlinear-gloss,
+[data-theme="light"] .group\/token .text-stone-300\/80,
+[data-theme="light"] .group\/line .text-stone-300\/80 {
+  color: #be123c !important; /* rose-700 */
   font-weight: 500 !important;
 }
 
-[data-theme="light"] .group\/token:hover .text-stone-300\/80,
-[data-theme="light"] .group\/token:hover span[dir="ltr"],
-[data-theme="light"] .group\/token:hover span[dir="rtl"],
 [data-theme="light"] .group\/token:hover .interlinear-gloss,
+.light .group\/token:hover .interlinear-gloss,
+[data-theme="light"] .group\/token:hover .text-stone-300\/80,
 [data-theme="light"] .group\/token .group-hover\/token\:text-rose-200 {
-  color: #9f1239 !important; /* rose-800 on token hover */
+  color: #881337 !important; /* rose-900 on token hover */
 }
 
 /* Universal Interlinear Gloss: Guaranteed full visibility, no ellipsis, responsive wrapping */
@@ -651,11 +651,24 @@ rt {
   font-weight: 600 !important;
 }
 
-/* Continuous paragraph and subtitle text in light mode */
+/* Continuous paragraph and subtitle text in light mode (idle and during active playback when glosses are disabled) */
+[data-theme="light"] .group\/para p,
+.light .group\/para p,
 [data-theme="light"] .group\/para p.text-stone-100,
 [data-theme="light"] .group\/para p.text-stone-100.group-hover\/para\:text-white,
-[data-theme="light"] .group\/line p.text-rose-100\/90 {
-  color: #1c1917 !important;
+[data-theme="light"] .group\/para p.text-white,
+.light .group\/para p.text-white,
+[data-theme="light"] .group\/para.text-white,
+.light .group\/para.text-white,
+[data-theme="light"] .group\/para.text-white p,
+.light .group\/para.text-white p,
+[data-theme="light"] .group\/line p,
+.light .group\/line p,
+[data-theme="light"] .group\/line p.text-rose-100\/90,
+[data-theme="light"] .group\/line p.text-white,
+.light .group\/line p.text-white {
+  color: var(--text-primary) !important;
+  text-shadow: none !important;
 }
 
 /* Token hover state */
