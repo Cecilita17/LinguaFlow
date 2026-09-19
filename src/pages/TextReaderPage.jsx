@@ -59,6 +59,27 @@ import { parseEpubFile } from '../services/epubService.js';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 import { estimateSpeechDurationMs } from '../utils/audioWordSync.js';
 
+/**
+ * Resolves the initial chapter index for a document based on its saved reading/audio bookmarks.
+ * Fallback order:
+ * 1. lastAudioPosition.paragraphId
+ * 2. lastReadingPosition.paragraphId
+ * 3. lastReadingPosition.chapterIndex
+ * 4. 0 (default first chapter)
+ */
+function resolveChapterIndexForDoc(doc) {
+  if (!doc || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
+  const targetId = doc.lastAudioPosition?.paragraphId || doc.lastReadingPosition?.paragraphId;
+  if (targetId) {
+    const chIdx = doc.chapters.findIndex(ch => Array.isArray(ch.paragraphIds) && ch.paragraphIds.includes(targetId));
+    if (chIdx !== -1) return chIdx;
+  }
+  if (typeof doc.lastReadingPosition?.chapterIndex === 'number' && doc.lastReadingPosition.chapterIndex >= 0 && doc.lastReadingPosition.chapterIndex < doc.chapters.length) {
+    return doc.lastReadingPosition.chapterIndex;
+  }
+  return 0;
+}
+
 export function TextReaderPage({
   targetLang = 'zh',
   setTargetLang = null,
@@ -104,6 +125,23 @@ export function TextReaderPage({
     }
   }, []);
 
+  // Saved documents library count & refresh helper
+  const [savedDocsCount, setSavedDocsCount] = useState(0);
+  const refreshLibraryCount = useCallback(async () => {
+    try {
+      const count = await getTextDocumentsCount();
+      setSavedDocsCount(count);
+    } catch (e) {
+      console.warn('Failed to count saved documents in IndexedDB:', e);
+    }
+  }, []);
+
+  // Contextual actions menu state for top bar
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef(null);
+  // UI-only toggle to expand/collapse the "Configuraciones" submenu inside the hamburger menu.
+  const [isSettingsSubmenuOpen, setIsSettingsSubmenuOpen] = useState(false);
+
   // Glossing progress & controller
   const [glossingProgress, setGlossingProgress] = useState({
     total: 0,
@@ -131,20 +169,6 @@ export function TextReaderPage({
     return (isEpub && Array.isArray(document?.chapters)) ? document.chapters : [];
   }, [isEpub, document?.chapters]);
 
-  // Helper to resolve chapter index from a document's saved positions
-  const resolveChapterIndexForDoc = useCallback((doc) => {
-    if (!doc || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
-    const targetId = doc.lastAudioPosition?.paragraphId || doc.lastReadingPosition?.paragraphId;
-    if (targetId) {
-      const chIdx = doc.chapters.findIndex(ch => Array.isArray(ch.paragraphIds) && ch.paragraphIds.includes(targetId));
-      if (chIdx !== -1) return chIdx;
-    }
-    if (typeof doc.lastReadingPosition?.chapterIndex === 'number' && doc.lastReadingPosition.chapterIndex >= 0 && doc.lastReadingPosition.chapterIndex < doc.chapters.length) {
-      return doc.lastReadingPosition.chapterIndex;
-    }
-    return 0;
-  }, []);
-
   const [currentChapterIndex, setCurrentChapterIndex] = useState(() => {
     return resolveChapterIndexForDoc(loadActiveDocumentDraft());
   });
@@ -155,7 +179,7 @@ export function TextReaderPage({
       const idx = resolveChapterIndexForDoc(document);
       setCurrentChapterIndex(idx);
     }
-  }, [document?.id, isEpub, resolveChapterIndexForDoc]);
+  }, [document?.id, isEpub, chapters.length]);
 
   const currentChapter = isEpub && chapters[currentChapterIndex] ? chapters[currentChapterIndex] : null;
 
@@ -235,7 +259,6 @@ export function TextReaderPage({
 
   // Saved documents library modal
   const [showSavedModal, setShowSavedModal] = useState(false);
-  const [savedDocsCount, setSavedDocsCount] = useState(0);
 
   // Create with AI modal state
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -473,15 +496,6 @@ export function TextReaderPage({
     };
   }, [clearAudioVisualTimer]);
 
-  // Refresh library count from IndexedDB
-  const refreshLibraryCount = useCallback(async () => {
-    try {
-      const count = await getTextDocumentsCount();
-      setSavedDocsCount(count);
-    } catch (e) {
-      console.warn('Failed to count saved documents in IndexedDB:', e);
-    }
-  }, []);
 
   // On mount: run migration from legacy localStorage to IndexedDB, refresh count, and schedule draft scroll restoration
   useEffect(() => {
@@ -1360,12 +1374,6 @@ export function TextReaderPage({
     setFontSize(order[nextIdx]);
   };
 
-  // Contextual actions menu state for top bar
-  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
-  const actionsMenuRef = useRef(null);
-  // UI-only toggle to expand/collapse the "Configuraciones" submenu inside the hamburger menu.
-  // Purely presentational — does not persist and does not control any of the 5 configuration values.
-  const [isSettingsSubmenuOpen, setIsSettingsSubmenuOpen] = useState(false);
 
   // Toggle menu visibility
   const toggleActionsMenu = useCallback((e) => {
