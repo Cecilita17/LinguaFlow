@@ -2,9 +2,28 @@
  * Intelligent LCS (Longest Common Subsequence) diffing algorithm
  * between original learner text and grammatically corrected text.
  */
+function splitForDiff(text) {
+  if (!text) return [];
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const hasChinese = /[\u4E00-\u9FFF]/.test(trimmed);
+  if (!hasChinese) {
+    return trimmed.split(/\s+/).filter(Boolean);
+  }
+  const tokens = [];
+  const regex = /[\u4E00-\u9FFF]|[\p{L}\p{N}\p{M}]+|[^\s\p{L}\p{N}\p{M}\u4E00-\u9FFF]/gu;
+  let match;
+  while ((match = regex.exec(trimmed)) !== null) {
+    if (match[0].trim()) {
+      tokens.push(match[0].trim());
+    }
+  }
+  return tokens.length > 0 ? tokens : trimmed.split(/\s+/).filter(Boolean);
+}
+
 export function computeWordDiff(original, corrected) {
-  const orig = (original || '').trim().split(/\s+/).filter(Boolean);
-  const corr = (corrected || '').trim().split(/\s+/).filter(Boolean);
+  const orig = splitForDiff(original);
+  const corr = splitForDiff(corrected);
 
   const clean = w => (w || '').toLowerCase().replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
 

@@ -94,7 +94,11 @@ export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null,
 
   // Map pedagogical diff tags (changed, original) onto tokens if present
   if (Array.isArray(diffTokens) && diffTokens.length > 0) {
-    baseTokens = mapDiffTokensOntoTokens(baseTokens, diffTokens);
+    if (isChinese) {
+      baseTokens = mapChineseDiffTokensOntoTokens(baseTokens, diffTokens);
+    } else {
+      baseTokens = mapDiffTokensOntoTokens(baseTokens, diffTokens);
+    }
   }
 
   return baseTokens.map((t) => ({
@@ -106,6 +110,72 @@ export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null,
 
 const cleanDiffWord = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '').toLowerCase();
 const cleanDiffOriginal = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
+
+/**
+ * Maps diffTokens annotations (changed, original) onto Chinese tokens with character-level precision.
+ */
+function mapChineseDiffTokensOntoTokens(tokens, diffTokens) {
+  if (!Array.isArray(tokens) || !Array.isArray(diffTokens)) return tokens;
+
+  // Flatten diff tokens into character-level entries
+  const diffCharEntries = [];
+  diffTokens.forEach((dt) => {
+    const rawText = dt.text || '';
+    if (!rawText) return;
+    const isChanged = Boolean(dt.changed);
+    const orig = dt.original ? cleanDiffOriginal(dt.original) : null;
+    for (const c of rawText) {
+      if (c.trim()) {
+        diffCharEntries.push({
+          char: c,
+          changed: isChanged,
+          original: orig
+        });
+      }
+    }
+  });
+
+  if (diffCharEntries.length === 0 || !diffCharEntries.some((d) => d.changed)) return tokens;
+
+  let charIdx = 0;
+  return tokens.map((t) => {
+    const w = (t.text || t.word || '').trim();
+    const isPunct = t.isPunctuation || PUNCTUATION_REGEX.test(w);
+
+    if (isPunct) {
+      if (charIdx < diffCharEntries.length && diffCharEntries[charIdx].char === w) {
+        charIdx++;
+      }
+      return {
+        ...t,
+        changed: false,
+        original: null
+      };
+    }
+
+    let tokenChanged = false;
+    let tokenOriginals = [];
+
+    for (const c of w) {
+      if (charIdx < diffCharEntries.length) {
+        const entry = diffCharEntries[charIdx];
+        if (entry.changed) {
+          tokenChanged = true;
+          if (entry.original && !tokenOriginals.includes(entry.original)) {
+            tokenOriginals.push(entry.original);
+          }
+        }
+        charIdx++;
+      }
+    }
+
+    return {
+      ...t,
+      changed: tokenChanged,
+      original: tokenOriginals.length > 0 ? tokenOriginals.join('') : (tokenChanged ? t.original || null : null)
+    };
+  });
+}
 
 /**
  * Maps diffTokens annotations (changed, original) from grammar corrections onto tokens
@@ -231,14 +301,66 @@ export async function glossLiveCallTurnAsync({
           }
         });
 
+        // For Chinese, build character-level index sets of changed positions
+        const chineseChangedCharIndices = new Set();
+        const chineseOriginalsMap = new Map();
+        if (isChinese) {
+          let charOffset = 0;
+          preparedTokens.forEach(pt => {
+            const ptText = (pt.text || pt.word || '').trim();
+            const isPunct = pt.isPunctuation || PUNCTUATION_REGEX.test(ptText);
+            if (!isPunct) {
+              for (let ci = 0; ci < ptText.length; ci++) {
+                if (pt.changed) {
+                  chineseChangedCharIndices.add(charOffset + ci);
+                  if (pt.original) {
+                    chineseOriginalsMap.set(charOffset + ci, pt.original);
+                  }
+                }
+              }
+              charOffset += ptText.length;
+            }
+          });
+        }
+
+        let mergedChineseCharOffset = 0;
         return merged.map(t => {
           const w = (t.text || t.word || '').trim();
           const wLower = w.toLowerCase();
-          const changedInfo = changedTokensMap.get(wLower);
+          const isPunct = t.isPunctuation || PUNCTUATION_REGEX.test(w);
 
-          const baseWithDiff = changedInfo
-            ? { ...t, changed: true, original: changedInfo.original }
-            : t;
+          let baseWithDiff = t;
+
+          if (isChinese && !isPunct) {
+            let tokenIsChanged = false;
+            let tokenOriginal = null;
+            for (let ci = 0; ci < w.length; ci++) {
+              if (chineseChangedCharIndices.has(mergedChineseCharOffset + ci)) {
+                tokenIsChanged = true;
+                if (!tokenOriginal && chineseOriginalsMap.has(mergedChineseCharOffset + ci)) {
+                  tokenOriginal = chineseOriginalsMap.get(mergedChineseCharOffset + ci);
+                }
+              }
+            }
+            mergedChineseCharOffset += w.length;
+
+            if (tokenIsChanged) {
+              baseWithDiff = {
+                ...t,
+                changed: true,
+                original: tokenOriginal || null
+              };
+            }
+          } else {
+            const changedInfo = changedTokensMap.get(wLower);
+            if (changedInfo) {
+              baseWithDiff = {
+                ...t,
+                changed: true,
+                original: changedInfo.original
+              };
+            }
+          }
 
           if (isArabic && !t.isPunctuation) {
             const translit = t.auxiliary || t.translit || getArabicTransliteration(w);
