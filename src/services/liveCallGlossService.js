@@ -15,6 +15,9 @@ import {
   fetchBatchGlossesApi,
   mergeAiTokensWithSegmented,
   getEffectiveApiKey,
+  isGlossComplete,
+  getCachedGloss,
+  setCachedGloss,
   PUNCTUATION_REGEX
 } from './subtitleGlossService.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
@@ -277,6 +280,11 @@ export async function glossLiveCallTurnAsync({
   const preparedTokens = Array.isArray(tokens) && tokens.length > 0
     ? tokens
     : tokenizeLiveCallTurn(text, targetLang, null, nativeLang);
+
+  // Early return if all substantive tokens are already complete via offline dictionary or lexical cache
+  if (isGlossComplete({ text, tokens: preparedTokens }, targetLang, nativeLang)) {
+    return preparedTokens;
+  }
 
   try {
     const linePayload = {

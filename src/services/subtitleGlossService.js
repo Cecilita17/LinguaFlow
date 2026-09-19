@@ -17,7 +17,11 @@ import {
   CHINESE_OFFLINE_DICT,
   ARABIC_OFFLINE_DICT,
   POLISH_OFFLINE_DICT,
-  PUNCTUATION_REGEX
+  PUNCTUATION_REGEX,
+  getCachedGloss,
+  setCachedGloss,
+  clearLexicalGlossCache,
+  getLexicalGlossCacheStats
 } from './languageGlossStrategies.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
 import {
@@ -40,6 +44,10 @@ export {
   PUNCTUATION_REGEX,
   normalizeArabicForMatching,
   getLanguageGlossStrategy,
+  getCachedGloss,
+  setCachedGloss,
+  clearLexicalGlossCache,
+  getLexicalGlossCacheStats,
   computeSubtitleHash,
   getLibraryKey,
   parseLibraryKey,
@@ -627,6 +635,9 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     if (w) {
       aiMap.set(w, item);
       aiMap.set(w.toLowerCase(), item);
+      if (item.gloss && typeof item.gloss === 'string' && item.gloss.trim().length > 0 && !PUNCTUATION_REGEX.test(w)) {
+        setCachedGloss(w, targetLang, nativeLang, item);
+      }
       if (targetLang === 'ar' || /[\u0600-\u06FF]/.test(w)) {
         const norm = normalizeArabicForMatching(w);
         if (norm) {
@@ -855,6 +866,15 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
       const gloss = isManual
         ? manualGlossMap.get(currentAiToken.word)
         : (isPunct ? null : (currentAiToken.gloss || null));
+
+      if (!isPunct && gloss && !isManual) {
+        setCachedGloss(currentAiToken.word, 'zh', nativeLang, {
+          word: currentAiToken.word,
+          auxiliary: aux,
+          pinyin: aux,
+          gloss
+        });
+      }
 
       result.push({
         text: currentAiToken.word,
@@ -1287,11 +1307,10 @@ export function enrichSubtitlesWithGlosses({
         });
       }
 
-      // Identify which lines in this batch are STILL incomplete
-      const stillIncomplete = batch.filter(sub => {
-        const current = currentSubtitles.find(s => s.id === sub.id) || sub;
-        return !isGlossComplete(current, targetLang, nativeLang);
-      });
+      // Identify which lines in this batch are STILL incomplete (using latest merged tokens)
+      const stillIncomplete = batch
+        .map(sub => currentSubtitles.find(s => s.id === sub.id) || sub)
+        .filter(sub => !isGlossComplete(sub, targetLang, nativeLang));
 
       return stillIncomplete;
     };

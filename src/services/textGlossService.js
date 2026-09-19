@@ -222,10 +222,9 @@ export function enrichParagraphsWithGlosses({
         });
       }
 
-      return batch.filter(p => {
-        const current = currentParagraphs.find(cp => cp.id === p.id) || p;
-        return !isGlossComplete(current, targetLang, nativeLang);
-      });
+      return batch
+        .map(p => currentParagraphs.find(cp => cp.id === p.id) || p)
+        .filter(p => !isGlossComplete(p, targetLang, nativeLang));
     };
 
     const pendingRetries = [];

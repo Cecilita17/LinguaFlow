@@ -14,6 +14,87 @@ import { getArabicTransliteration } from './arabicTransliteration.js';
 import { ARABIC_OFFLINE_DICT } from './arabicOfflineDict.js';
 export { ARABIC_OFFLINE_DICT };
 
+// ============================================================
+// GLOBAL CONSERVATIVE LEXICAL GLOSS CACHE
+// Keyed by: targetLang:nativeLang:normalizedWord
+// ============================================================
+const lexicalGlossCache = new Map();
+const lexicalCacheStats = {
+  hits: 0,
+  misses: 0,
+  stores: 0
+};
+
+export function getLexicalCacheKey(word, targetLang = 'es', nativeLang = 'es') {
+  if (!word || typeof word !== 'string') return '';
+  const cleanWord = word.trim().toLowerCase();
+  if (!cleanWord || PUNCTUATION_REGEX.test(cleanWord)) return '';
+  const cleanTarget = (targetLang || 'es').toLowerCase().split('-')[0];
+  const cleanNative = (nativeLang || 'es').toLowerCase().split('-')[0];
+  return `${cleanTarget}:${cleanNative}:${cleanWord}`;
+}
+
+export function getCachedGloss(word, targetLang = 'es', nativeLang = 'es') {
+  const key = getLexicalCacheKey(word, targetLang, nativeLang);
+  if (!key) return null;
+  const entry = lexicalGlossCache.get(key);
+  if (entry && entry.gloss && typeof entry.gloss === 'string' && entry.gloss.trim().length > 0 && entry.gloss !== 'null' && entry.gloss !== 'undefined') {
+    lexicalCacheStats.hits++;
+    return { ...entry };
+  }
+  lexicalCacheStats.misses++;
+  return null;
+}
+
+export function setCachedGloss(word, targetLang = 'es', nativeLang = 'es', entry) {
+  if (!word || !entry || typeof entry !== 'object') return;
+  const rawGloss = entry.gloss || entry.translation;
+  if (!rawGloss || typeof rawGloss !== 'string') return;
+  const cleanGloss = rawGloss.trim();
+  if (!cleanGloss || cleanGloss === 'null' || cleanGloss === 'undefined') return;
+
+  const key = getLexicalCacheKey(word, targetLang, nativeLang);
+  if (!key) return;
+
+  const cleanTarget = (targetLang || 'es').toLowerCase().split('-')[0];
+  const cleanNative = (nativeLang || 'es').toLowerCase().split('-')[0];
+  const cleanWord = String(word).trim();
+
+  const isChinese = cleanTarget === 'zh';
+  const isArabic = cleanTarget === 'ar';
+
+  const aux = isChinese
+    ? (entry.auxiliary || entry.pinyin || null)
+    : (isArabic ? (entry.auxiliary || entry.translit || null) : null);
+
+  lexicalGlossCache.set(key, {
+    word: cleanWord,
+    text: cleanWord,
+    targetLang: cleanTarget,
+    nativeLang: cleanNative,
+    auxiliary: aux,
+    pinyin: isChinese ? aux : null,
+    translit: isArabic ? aux : null,
+    gloss: cleanGloss,
+    glossSource: 'cache'
+  });
+  lexicalCacheStats.stores++;
+}
+
+export function clearLexicalGlossCache() {
+  lexicalGlossCache.clear();
+  lexicalCacheStats.hits = 0;
+  lexicalCacheStats.misses = 0;
+  lexicalCacheStats.stores = 0;
+}
+
+export function getLexicalGlossCacheStats() {
+  return {
+    ...lexicalCacheStats,
+    size: lexicalGlossCache.size
+  };
+}
+
 export function reconcileChineseTokens(originalText, aiTokens) {
   if (!originalText || typeof originalText !== 'string' || !Array.isArray(aiTokens) || aiTokens.length === 0) {
     return null;
@@ -1167,10 +1248,16 @@ export class ChineseGlossStrategy {
 
   lookupOffline(word, nativeLang = 'es') {
     if (!word) return null;
-    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
-    if (!isSpanishNative) return null;
     const clean = word.trim();
-    return this.offlineDict[clean] || null;
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
+    if (isSpanishNative && this.offlineDict[clean]) {
+      return this.offlineDict[clean];
+    }
+    const cached = getCachedGloss(clean, 'zh', nativeLang);
+    if (cached && cached.gloss) {
+      return cached;
+    }
+    return null;
   }
 
   isTokenComplete(token, nativeLang = 'es') {
@@ -1192,8 +1279,8 @@ export class ChineseGlossStrategy {
 
     const aux = typeof (token.auxiliary || token.pinyin) === 'string' ? (token.auxiliary || token.pinyin).trim() : '';
 
-    // Verified AI gloss: MUST match targetLang ('zh') and requested nativeLang
-    if (token.glossSource === 'ai') {
+    // Verified AI or Cache gloss: MUST match targetLang ('zh') and requested nativeLang
+    if (token.glossSource === 'ai' || token.glossSource === 'cache') {
       if (tokenNative && tokenNative !== targetNative) return false;
       if (!tokenNative) return false;
       if (/[\u4E00-\u9FFF]/.test(w)) {
@@ -1215,16 +1302,14 @@ export class ChineseGlossStrategy {
       }
     }
 
-    // Direct offline fallback check for nativeLang === 'es'
-    if (targetNative === 'es') {
-      const entry = this.lookupOffline(w, 'es');
-      if (entry && entry.gloss) {
-        const entryAux = entry.auxiliary || entry.pinyin || aux;
-        if (/[\u4E00-\u9FFF]/.test(w)) {
-          return Boolean(entryAux);
-        }
-        return true;
+    // Direct offline / cache fallback check
+    const entry = this.lookupOffline(w, nativeLang);
+    if (entry && entry.gloss) {
+      const entryAux = entry.auxiliary || entry.pinyin || aux;
+      if (/[\u4E00-\u9FFF]/.test(w)) {
+        return Boolean(entryAux);
       }
+      return true;
     }
 
     return false;
@@ -1384,6 +1469,11 @@ export class ArabicGlossStrategy {
       }
     }
 
+    const cached = getCachedGloss(clean, 'ar', nativeLang);
+    if (cached && cached.gloss) {
+      return cached;
+    }
+
     return null;
   }
 
@@ -1404,8 +1494,8 @@ export class ArabicGlossStrategy {
 
     if (tokenTarget && tokenTarget !== 'ar') return false;
 
-    // Verified AI gloss: MUST match active targetLang ('ar') and requested nativeLang
-    if (token.glossSource === 'ai') {
+    // Verified AI or Cache gloss: MUST match active targetLang ('ar') and requested nativeLang
+    if (token.glossSource === 'ai' || token.glossSource === 'cache') {
       if (tokenNative && tokenNative !== targetNative) return false;
       if (!tokenNative) return false;
       return true;
@@ -1420,12 +1510,10 @@ export class ArabicGlossStrategy {
       }
     }
 
-    // Direct offline lookup fallback for nativeLang === 'es'
-    if (targetNative === 'es') {
-      const entry = this.lookupOffline(w, 'es');
-      if (entry && entry.gloss) {
-        return true;
-      }
+    // Direct offline / cache lookup fallback
+    const entry = this.lookupOffline(w, nativeLang);
+    if (entry && entry.gloss) {
+      return true;
     }
 
     return false;
@@ -1506,10 +1594,16 @@ export class PolishGlossStrategy {
 
   lookupOffline(word, nativeLang = 'es') {
     if (!word) return null;
-    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
-    if (!isSpanishNative) return null;
     const clean = word.trim().toLowerCase();
-    return this.offlineDict[clean] || null;
+    const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
+    if (isSpanishNative && this.offlineDict[clean]) {
+      return this.offlineDict[clean];
+    }
+    const cached = getCachedGloss(clean, 'pl', nativeLang);
+    if (cached && cached.gloss) {
+      return cached;
+    }
+    return null;
   }
 
   isTokenComplete(token, nativeLang = 'es') {
@@ -1529,8 +1623,8 @@ export class PolishGlossStrategy {
 
     if (tokenTarget && tokenTarget !== 'pl') return false;
 
-    // Verified AI gloss: MUST match active targetLang ('pl') and requested nativeLang
-    if (token.glossSource === 'ai') {
+    // Verified AI or Cache gloss: MUST match active targetLang ('pl') and requested nativeLang
+    if (token.glossSource === 'ai' || token.glossSource === 'cache') {
       if (tokenNative && tokenNative !== targetNative) return false;
       if (!tokenNative) return false;
       return true;
@@ -1545,12 +1639,10 @@ export class PolishGlossStrategy {
       }
     }
 
-    // Direct offline lookup fallback for nativeLang === 'es'
-    if (targetNative === 'es') {
-      const entry = this.lookupOffline(w, 'es');
-      if (entry && entry.gloss) {
-        return true;
-      }
+    // Direct offline / cache lookup fallback
+    const entry = this.lookupOffline(w, nativeLang);
+    if (entry && entry.gloss) {
+      return true;
     }
 
     return false;
@@ -1878,25 +1970,23 @@ export class TurkishGlossStrategy {
       console.warn('Intl.Segmenter fallback in TurkishGlossStrategy:', e);
     }
 
-    const parts = cleanStr.split(/([a-zA-ZçğıİöşüÇĞIÖŞÜ]+|[^\sa-zA-ZçğıİöşüÇĞIÖŞÜ]+)/).filter(Boolean);
+    const parts = cleanStr.split(/(\s+|[.,!?;:'"()\-¿¡«»]+)/).filter(p => p && p.trim().length > 0);
     const tokens = [];
 
-    for (const part of parts) {
-      const w = part.trim();
-      if (!w) continue;
+    for (const w of parts) {
       const isPunctuation = PUNCTUATION_REGEX.test(w);
-      const entry = isPunctuation ? null : this.lookupOffline(w, nativeLang);
+      const entry = (!isPunctuation) ? this.lookupOffline(w, nativeLang) : null;
 
       tokens.push({
         text: w,
         word: w,
-        targetLang: 'tr',
-        nativeLang: nativeLang || 'es',
         auxiliary: null,
         pinyin: null,
         translit: null,
         gloss: isPunctuation ? null : (entry?.gloss || null),
-        glossSource: isPunctuation ? undefined : ((isSpanishNative && entry?.gloss) ? 'offline' : null),
+        glossSource: isPunctuation ? undefined : (entry?.gloss ? (entry.glossSource || 'offline') : null),
+        targetLang: 'tr',
+        nativeLang: nativeLang || 'es',
         isPunctuation
       });
     }
@@ -1906,14 +1996,18 @@ export class TurkishGlossStrategy {
   lookupOffline(word, nativeLang = 'es') {
     if (!word) return null;
     const isSpanishNative = (nativeLang || 'es').toLowerCase().split('-')[0] === 'es';
-    if (!isSpanishNative) return null;
     const clean = word.trim().toLocaleLowerCase('tr-TR');
-    if (this.offlineDict[clean]) return this.offlineDict[clean];
+    if (isSpanishNative && this.offlineDict[clean]) return this.offlineDict[clean];
 
     // Strip proper noun apostrophe suffix e.g. "İstanbul'da" -> "İstanbul"
     if (clean.includes("'")) {
       const root = clean.split("'")[0];
-      if (this.offlineDict[root]) return this.offlineDict[root];
+      if (isSpanishNative && this.offlineDict[root]) return this.offlineDict[root];
+    }
+
+    const cached = getCachedGloss(clean, 'tr', nativeLang);
+    if (cached && cached.gloss) {
+      return cached;
     }
 
     return null;
@@ -1936,8 +2030,8 @@ export class TurkishGlossStrategy {
 
     if (tokenTarget && tokenTarget !== 'tr') return false;
 
-    // Verified AI gloss: MUST match active targetLang ('tr') and requested nativeLang
-    if (token.glossSource === 'ai') {
+    // Verified AI or Cache gloss: MUST match active targetLang ('tr') and requested nativeLang
+    if (token.glossSource === 'ai' || token.glossSource === 'cache') {
       if (tokenNative && tokenNative !== targetNative) return false;
       if (!tokenNative) return false;
       return true;
@@ -1952,12 +2046,10 @@ export class TurkishGlossStrategy {
       }
     }
 
-    // Direct offline lookup fallback for nativeLang === 'es'
-    if (targetNative === 'es') {
-      const entry = this.lookupOffline(w, 'es');
-      if (entry && entry.gloss) {
-        return true;
-      }
+    // Direct offline / cache lookup fallback
+    const entry = this.lookupOffline(w, nativeLang);
+    if (entry && entry.gloss) {
+      return true;
     }
 
     return false;
@@ -1990,6 +2082,7 @@ export class DefaultGlossStrategy {
           const w = seg.segment.trim();
           if (!w) continue;
           const isPunctuation = !seg.isWordLike || PUNCTUATION_REGEX.test(w);
+          const entry = (!isPunctuation) ? this.lookupOffline(w, nativeLang) : null;
           tokens.push({
             text: w,
             word: w,
@@ -1998,8 +2091,8 @@ export class DefaultGlossStrategy {
             auxiliary: null,
             pinyin: null,
             translit: null,
-            gloss: null,
-            glossSource: null,
+            gloss: isPunctuation ? null : (entry?.gloss || null),
+            glossSource: isPunctuation ? undefined : (entry?.gloss ? (entry.glossSource || 'offline') : null),
             isPunctuation
           });
         }
@@ -2012,6 +2105,7 @@ export class DefaultGlossStrategy {
     const parts = cleanStr.split(/(\s+|[.,!?;:'"()\-¿¡«»]+)/).filter(p => p && p.trim().length > 0);
     return parts.map(w => {
       const isPunctuation = PUNCTUATION_REGEX.test(w);
+      const entry = (!isPunctuation) ? this.lookupOffline(w, nativeLang) : null;
       return {
         text: w,
         word: w,
@@ -2020,14 +2114,20 @@ export class DefaultGlossStrategy {
         auxiliary: null,
         pinyin: null,
         translit: null,
-        gloss: null,
-        glossSource: null,
+        gloss: isPunctuation ? null : (entry?.gloss || null),
+        glossSource: isPunctuation ? undefined : (entry?.gloss ? (entry.glossSource || 'offline') : null),
         isPunctuation
       };
     });
   }
 
-  lookupOffline() {
+  lookupOffline(word, nativeLang = 'es') {
+    if (!word) return null;
+    const clean = word.trim().toLowerCase();
+    const cached = getCachedGloss(clean, this.code, nativeLang);
+    if (cached && cached.gloss) {
+      return cached;
+    }
     return null;
   }
 
@@ -2049,10 +2149,16 @@ export class DefaultGlossStrategy {
 
     if (tokenTarget && tokenTarget !== strategyTarget) return false;
 
-    // Verified AI gloss: MUST match active targetLang and requested nativeLang
-    if (token.glossSource === 'ai') {
+    // Verified AI or Cache gloss: MUST match active targetLang and requested nativeLang
+    if (token.glossSource === 'ai' || token.glossSource === 'cache') {
       if (tokenNative && tokenNative !== targetNative) return false;
       if (!tokenNative) return false;
+      return true;
+    }
+
+    // Direct cache lookup fallback
+    const entry = this.lookupOffline(w, nativeLang);
+    if (entry && entry.gloss) {
       return true;
     }
 

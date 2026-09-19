@@ -1105,12 +1105,12 @@ export async function handleBatchGloss(req, res) {
       (req.headers['x-api-key'] || '')
     ).trim().replace(/^["']|["']$/g, '');
 
-const activeModel = getSanitizedGroqModel();
+    const GLOSS_GROQ_MODEL = 'openai/gpt-oss-20b';
 
     if (effectiveApiKey) {
       const hasSpecificUnknowns = lines.some(l => Array.isArray(l.unknownTokens) && l.unknownTokens.length > 0);
       const totalUnknownTokens = lines.reduce((acc, l) => acc + (Array.isArray(l.unknownTokens) ? l.unknownTokens.length : (Array.isArray(l.words) ? l.words.length : 0)), 0);
-      console.log(`Analyzing batch gloss with Groq (${activeModel}) for ${lines.length} lines (lang: ${targetLang} -> ${nativeLang}) | Total tokens to resolve: ${totalUnknownTokens} (hybrid: ${hasSpecificUnknowns})`);
+      console.log(`Analyzing batch gloss with Groq (${GLOSS_GROQ_MODEL}) for ${lines.length} lines (lang: ${targetLang} -> ${nativeLang}) | Total tokens to resolve: ${totalUnknownTokens} (hybrid: ${hasSpecificUnknowns})`);
 
       const linesFormatted = lines
         .map((l, i) => {
@@ -1151,12 +1151,17 @@ const activeModel = getSanitizedGroqModel();
   * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").`;
       }
 
+      // Static instruction prefix optimized for Groq prompt caching (dynamic content placed strictly at the end)
       const prompt = `You are a master multilingual linguistic professor and vocabulary glossing engine.
 Analyze each subtitle line in target source language "${targetLangName}" (code: "${targetLang}") and provide authentic interlinear word-by-word glosses for a student whose native language is "${nativeLangName}" (code: "${nativeLang}").
 
 MANDATORY RULES:
 - TRANSLATION LANGUAGE: Every single gloss MUST be translated INTO the student's native language: ${nativeLangName} ("${nativeLang}"). DO NOT return Spanish glosses unless nativeLang is explicitly "es" / Spanish.
 - SOURCE MEANINGS: Word meanings MUST reflect the vocabulary, grammar, and context of the SOURCE language (${targetLangName}), even if the word's spelling is shared with other languages (e.g. "was", "is", "had", "in", "de", "baby" in Dutch must be parsed and glossed as authentic Dutch words in ${nativeLangName}).
+- ALL REAL WORDS MUST RECEIVE A GLOSS: Every substantive word, article, pronoun, preposition, conjunction, auxiliary, basic word, and shared/cognate word MUST have an accurate gloss in ${nativeLangName}.
+- Omit punctuation marks or give them null gloss and null auxiliary.
+- EXACT IDS: You MUST preserve and return the EXACT same line ID string for each line as provided in the input (e.g. "srt_1", "srt_2").
+- RETURN ALL LINES: You MUST return all ${lines.length} requested lines matching IDs [${lines.map(l => `"${l.id}"`).join(', ')}].
 
 CRITICAL REQUIREMENTS:
 ${isChinese ? `- CHINESE LEXICAL SEGMENTATION (MANDATORY):
@@ -1181,14 +1186,8 @@ ${isChinese ? `- CHINESE LEXICAL SEGMENTATION (MANDATORY):
   * Complete glossing: Provide an accurate gloss in ${nativeLangName} for all substantive words.`}
 - LANGUAGE-SPECIFIC RULES:
 ${languageRules}
-- Omit punctuation marks or give them null gloss and null auxiliary.
-- EXACT IDS: You MUST preserve and return the EXACT same line ID string for each line as provided in the input (e.g. "srt_1", "srt_2").
-- RETURN ALL LINES: You MUST return all ${lines.length} requested lines matching IDs [${lines.map(l => `"${l.id}"`).join(', ')}].
 
-Subtitle lines to process:
-${linesFormatted}
-
-Return STRICTLY valid JSON with no markdown formatting:
+Return STRICTLY valid JSON with no markdown formatting and no commentary:
 {
   "lines": [
     {
@@ -1202,7 +1201,10 @@ Return STRICTLY valid JSON with no markdown formatting:
       ]
     }
   ]
-}`;
+}
+
+Subtitle lines to process:
+${linesFormatted}`;
 
       try {
         const controller = new AbortController();
@@ -1217,17 +1219,17 @@ Return STRICTLY valid JSON with no markdown formatting:
           },
           signal: controller.signal,
           body: JSON.stringify({
-            model: activeModel,
+            model: GLOSS_GROQ_MODEL,
             messages: [
               {
                 role: 'system',
-                content: 'You are an expert multilingual linguistic parser and vocabulary glossing engine. You always return strictly valid JSON matching the schema with 100% accurate per-word glosses for all words and zero generic placeholder templates.'
+                content: 'You are an expert multilingual linguistic parser and vocabulary glossing engine. You always return strictly valid JSON matching the schema with 100% accurate per-word glosses for all words, zero generic placeholder templates, and zero conversational filler.'
               },
               { role: 'user', content: prompt }
             ],
             response_format: { type: 'json_object' },
             temperature: 0.1,
-            max_tokens: 3500
+            max_tokens: 1500
           })
         });
 
@@ -1239,7 +1241,7 @@ Return STRICTLY valid JSON with no markdown formatting:
           logCostAudit({
             provider: 'groq',
             feature: 'text_gloss_batch',
-            model: activeModel,
+            model: GLOSS_GROQ_MODEL,
             requestId,
             inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
             outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
