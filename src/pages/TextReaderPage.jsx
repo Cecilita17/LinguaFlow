@@ -57,7 +57,7 @@ import {
 } from '../services/textGlossService.js';
 import { parseEpubFile } from '../services/epubService.js';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
-import { estimateSpeechDurationMs } from '../utils/audioWordSync.js';
+import { estimateSpeechDurationMs, createAudioWordSynchronizer } from '../utils/audioWordSync.js';
 
 /**
  * Resolves the initial chapter index for a document based on its saved reading/audio bookmarks.
@@ -107,21 +107,17 @@ export function TextReaderPage({
   const visibleParagraphsRef = useRef([]);
   const handlePlayParagraphRef = useRef(null);
 
-  // Audio TTS states & visual timer refs
+  // Audio TTS states & visual synchronizer ref
   const [playingParagraphId, setPlayingParagraphId] = useState(null);
   const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
   const [audioErrorId, setAudioErrorId] = useState(null);
   const audioPlaybackIdRef = useRef(0);
-  const audioVisualTimerRef = useRef(null);
-  const audioVisualCharRef = useRef(0);
-  const lastAudioBoundaryCharRef = useRef(0);
-  const lastAudioBoundaryTimeRef = useRef(0);
-  const audioMsPerCharRef = useRef(70);
+  const audioSynchronizerRef = useRef(null);
 
   const clearAudioVisualTimer = useCallback(() => {
-    if (audioVisualTimerRef.current) {
-      clearInterval(audioVisualTimerRef.current);
-      audioVisualTimerRef.current = null;
+    if (audioSynchronizerRef.current) {
+      audioSynchronizerRef.current.stop();
+      audioSynchronizerRef.current = null;
     }
   }, []);
 
@@ -794,79 +790,43 @@ export function TextReaderPage({
       }
     } catch (voiceErr) {}
 
-    // Initialize visual progression rates
-    const estimatedDurationMs = estimateSpeechDurationMs(cleanText, activeDocLang, currentRate);
-    const initialMsPerChar = Math.max(15, estimatedDurationMs / Math.max(1, textLength));
+    // Create encapsulated Audio Word Synchronizer for boundary-anchored local token progression
+    const synchronizer = createAudioWordSynchronizer({
+      text: cleanText,
+      tokens: paragraph.tokens || [],
+      targetLang: activeDocLang,
+      speechRate: currentRate,
+      onActiveCharChange: (charIndex) => {
+        if (playbackId !== audioPlaybackIdRef.current) return;
+        setActiveAudioCharIndex(charIndex);
+      },
+      debug: process.env.NODE_ENV !== 'production'
+    });
+    audioSynchronizerRef.current = synchronizer;
 
-    audioVisualCharRef.current = 0;
-    lastAudioBoundaryCharRef.current = 0;
-    lastAudioBoundaryTimeRef.current = 0;
-    audioMsPerCharRef.current = initialMsPerChar;
-
-    utterance.onstart = () => {
+    utterance.onstart = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
-      clearAudioVisualTimer();
-
-      const startTime = Date.now();
-      lastAudioBoundaryTimeRef.current = startTime;
-      lastAudioBoundaryCharRef.current = 0;
-      audioVisualCharRef.current = 0;
-      setActiveAudioCharIndex(0);
-
-      let lastTickTime = startTime;
-
-      // Continuous visual progression timer that smoothly interpolates between speech boundaries.
-      // On platforms like Android where WebSpeech onboundary events are emitted sparsely (every 3-4 words),
-      // this ensures word-by-word highlighting advances fluidly without skipping intermediate tokens.
-      audioVisualTimerRef.current = setInterval(() => {
-        if (playbackId !== audioPlaybackIdRef.current) {
-          clearAudioVisualTimer();
-          return;
-        }
-
-        const now = Date.now();
-        const dt = now - lastTickTime;
-        lastTickTime = now;
-
-        const msPerChar = Math.max(15, audioMsPerCharRef.current);
-        const step = dt / msPerChar;
-        const nextChar = Math.min(textLength - 1, audioVisualCharRef.current + step);
-
-        if (nextChar > audioVisualCharRef.current) {
-          audioVisualCharRef.current = nextChar;
-          setActiveAudioCharIndex(Math.floor(nextChar));
-        }
-      }, 35);
+      synchronizer.handleStart(event);
     };
 
     utterance.onboundary = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
-      if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
-        const newBoundaryChar = Math.min(textLength - 1, event.charIndex);
-        const now = Date.now();
-        const prevBoundaryChar = lastAudioBoundaryCharRef.current;
-        const prevBoundaryTime = lastAudioBoundaryTimeRef.current;
-
-        // Dynamic calibration of real speech cadence based on observed boundary delta
-        if (prevBoundaryTime > 0 && newBoundaryChar > prevBoundaryChar) {
-          const elapsed = now - prevBoundaryTime;
-          const charDelta = newBoundaryChar - prevBoundaryChar;
-          if (elapsed > 50 && charDelta > 0) {
-            const measuredMsPerChar = elapsed / charDelta;
-            audioMsPerCharRef.current = Math.max(15, Math.min(350, (measuredMsPerChar * 0.6) + (audioMsPerCharRef.current * 0.4)));
-          }
-        }
-
-        lastAudioBoundaryTimeRef.current = now;
-        lastAudioBoundaryCharRef.current = newBoundaryChar;
-        audioVisualCharRef.current = newBoundaryChar;
-        setActiveAudioCharIndex(newBoundaryChar);
-      }
+      synchronizer.handleBoundary(event);
     };
 
-    utterance.onend = () => {
+    utterance.onpause = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
-      clearAudioVisualTimer();
+      synchronizer.handlePause(event);
+    };
+
+    utterance.onresume = (event) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      synchronizer.handleResume(event);
+    };
+
+    utterance.onend = (event) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      synchronizer.handleEnd(event);
       setPlayingParagraphId(null);
       setActiveAudioCharIndex(-1);
       // If Auto-play is ON and user did NOT manually pause/stop, advance to next paragraph
@@ -890,7 +850,7 @@ export function TextReaderPage({
 
     utterance.onerror = (e) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
-      clearAudioVisualTimer();
+      synchronizer.stop();
       setPlayingParagraphId(null);
       setActiveAudioCharIndex(-1);
       if (!userStoppedRef.current) {

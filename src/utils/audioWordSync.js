@@ -141,3 +141,172 @@ export function estimateSpeechDurationMs(text, targetLang = 'es', rate = 1.0) {
   const baseDuration = len * msPerChar;
   return Math.max(400, baseDuration / effectiveRate);
 }
+
+/**
+ * Creates an authoritative, boundary-driven audio token synchronizer.
+ * 
+ * Architecture:
+ * 1. Monotonic token character range mapping against spoken text.
+ * 2. Real-time boundary snapping on SpeechSynthesisUtterance.onboundary events (Single Source of Truth).
+ * 3. Zero artificial catch-up queues, zero arbitrary lookaheads, zero fake progressive animations.
+ * 4. Clean lifecycle management (onstart, onboundary, onpause, onresume, onend, onerror, stop).
+ * 5. Structured DEV-mode diagnostics to measure exact timing between WebSpeech events and token ranges.
+ */
+export function createAudioWordSynchronizer({
+  text = '',
+  tokens = [],
+  targetLang = 'es',
+  speechRate = 1.0,
+  onActiveCharChange = () => {},
+  debug = false
+}) {
+  const cleanText = normalizeAudioText(text);
+  const textLength = cleanText.length;
+  const tokenRanges = computeTokenCharRanges(cleanText, tokens, targetLang);
+
+  // Extract valid non-punctuation word tokens
+  const wordTokens = [];
+  for (let i = 0; i < tokenRanges.length; i++) {
+    const tr = tokenRanges[i];
+    if (tr && tr.startChar !== -1 && !tr.isPunctuation && tr.word) {
+      wordTokens.push({
+        tokenIndex: i,
+        startChar: tr.startChar,
+        endChar: tr.endChar,
+        word: tr.word
+      });
+    }
+  }
+
+  let isRunning = false;
+  let activeTokenPos = -1; // Index in wordTokens
+  let highestVisitedTokenPos = -1;
+  let boundaryCount = 0;
+  const effectiveRate = Math.max(0.5, Math.min(2.0, typeof speechRate === 'number' ? speechRate : 1.0));
+
+  function setActiveTokenPos(pos, isSnap = false) {
+    if (wordTokens.length === 0) return;
+    const clampedPos = Math.max(0, Math.min(wordTokens.length - 1, pos));
+
+    // Monotonic progression: during speech, do not jump backwards
+    if (!isSnap && clampedPos < highestVisitedTokenPos) {
+      return;
+    }
+
+    activeTokenPos = clampedPos;
+    if (clampedPos > highestVisitedTokenPos) {
+      highestVisitedTokenPos = clampedPos;
+    }
+
+    const tok = wordTokens[clampedPos];
+    if (tok) {
+      onActiveCharChange(tok.startChar);
+    }
+  }
+
+  function handleStart(event) {
+    isRunning = true;
+    boundaryCount = 0;
+    activeTokenPos = 0;
+    highestVisitedTokenPos = 0;
+
+    const startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+    if (debug) {
+      console.log('[TTS_DEV_DEBUG:onstart]', {
+        timestamp: startTime,
+        text: cleanText,
+        textLength,
+        targetLang,
+        speechRate: effectiveRate,
+        wordTokensCount: wordTokens.length
+      });
+    }
+
+    setActiveTokenPos(0, true);
+  }
+
+  function handleBoundary(event) {
+    if (!isRunning || wordTokens.length === 0) return;
+    boundaryCount++;
+
+    const charIndex = typeof event?.charIndex === 'number' ? event.charIndex : -1;
+    if (charIndex < 0) return;
+
+    const matchedTokenIdx = findActiveTokenIndex(charIndex, tokenRanges);
+    const matchedWordPos = wordTokens.findIndex(wt => wt.tokenIndex === matchedTokenIdx);
+    
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const elapsedTime = typeof event?.elapsedTime === 'number' ? event.elapsedTime : null;
+
+    if (debug) {
+      console.log('[TTS_DEV_DEBUG:onboundary]', {
+        timestamp: now,
+        elapsedTime,
+        charIndex,
+        charLength: event?.charLength,
+        name: event?.name,
+        tokenIndex: matchedTokenIdx,
+        token: tokenRanges[matchedTokenIdx]?.word || '',
+        activeTokenIndex: matchedTokenIdx,
+        matchedWordPos
+      });
+    }
+
+    if (matchedWordPos >= 0) {
+      // Ensure monotonic forward movement
+      const targetPos = Math.max(highestVisitedTokenPos, matchedWordPos);
+      setActiveTokenPos(targetPos, true);
+    }
+  }
+
+  function handlePause(event) {
+    if (debug) {
+      console.log('[TTS_DEV_DEBUG:onpause]', {
+        timestamp: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+        activeTokenPos
+      });
+    }
+  }
+
+  function handleResume(event) {
+    if (debug) {
+      console.log('[TTS_DEV_DEBUG:onresume]', {
+        timestamp: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+        activeTokenPos
+      });
+    }
+  }
+
+  function handleEnd(event) {
+    isRunning = false;
+    if (debug) {
+      console.log('[TTS_DEV_DEBUG:onend]', {
+        timestamp: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+        highestVisitedTokenPos,
+        lastToken: wordTokens[highestVisitedTokenPos]?.word || null,
+        totalWordTokens: wordTokens.length
+      });
+    }
+    onActiveCharChange(-1);
+  }
+
+  function stop() {
+    isRunning = false;
+    onActiveCharChange(-1);
+  }
+
+  return {
+    handleStart,
+    handleBoundary,
+    handlePause,
+    handleResume,
+    handleEnd,
+    stop,
+    wordTokens,
+    tokenRanges,
+    getActiveTokenPos: () => activeTokenPos,
+    getHighestVisitedTokenPos: () => highestVisitedTokenPos,
+    getBoundaryCount: () => boundaryCount
+  };
+}
