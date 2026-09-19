@@ -14,6 +14,7 @@ import {
   tokenizeAndGlossLineOffline,
   fetchBatchGlossesApi,
   mergeAiTokensWithSegmented,
+  getEffectiveApiKey,
   PUNCTUATION_REGEX
 } from './subtitleGlossService.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
@@ -214,7 +215,8 @@ export async function glossLiveCallTurnAsync({
       tokens: preparedTokens
     };
 
-    const aiResults = await fetchBatchGlossesApi([linePayload], targetLang, nativeLang, apiKey, abortSignal);
+    const effectiveKey = getEffectiveApiKey(apiKey);
+    const aiResults = await fetchBatchGlossesApi([linePayload], targetLang, nativeLang, effectiveKey, abortSignal);
 
     if (Array.isArray(aiResults) && aiResults.length > 0) {
       const item = aiResults[0];

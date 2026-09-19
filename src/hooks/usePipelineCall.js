@@ -659,11 +659,13 @@ export function usePipelineCall({
 
 
   // Request AI word-by-word glosses for a transcript turn
-  const triggerTurnGloss = useCallback((turnId, turnText, currentTokens = []) => {
+  const triggerTurnGloss = useCallback((turnId, turnText, currentTokens = [], force = false) => {
     if (!turnText || !turnText.trim() || !turnId) return;
     const cleanText = turnText.trim();
+    const glossKey = `${turnId}:${cleanText}`;
 
-    if (glossedTurnIdsRef.current.has(turnId)) return;
+    if (!force && glossedTurnIdsRef.current.has(glossKey)) return;
+    glossedTurnIdsRef.current.add(glossKey);
     glossedTurnIdsRef.current.add(turnId);
     sessionMetricsRef.current.glossRequests++;
 
@@ -671,19 +673,28 @@ export function usePipelineCall({
       prev.map((msg) => (msg.id === turnId ? { ...msg, isGlossing: true } : msg))
     );
 
+    const effectiveKey = getEffectiveApiKey(apiKey);
+
     glossLiveCallTurnAsync({
       turnId,
       text: cleanText,
       tokens: currentTokens,
       targetLang,
-      nativeLang
+      nativeLang,
+      apiKey: effectiveKey
     })
       .then((glossedTokens) => {
         if (Array.isArray(glossedTokens) && glossedTokens.length > 0) {
           setLiveTranscript((prev) =>
             prev.map((msg) =>
               msg.id === turnId
-                ? { ...msg, tokens: glossedTokens, isGlossing: false }
+                ? {
+                    ...msg,
+                    tokens: glossedTokens,
+                    transliteration: extractTurnTransliteration(glossedTokens, targetLang) || msg.transliteration,
+                    glosses: extractTurnGlosses(glossedTokens),
+                    isGlossing: false
+                  }
                 : msg
             )
           );
@@ -699,7 +710,7 @@ export function usePipelineCall({
           prev.map((msg) => (msg.id === turnId ? { ...msg, isGlossing: false } : msg))
         );
       });
-  }, [targetLang, nativeLang]);
+  }, [targetLang, nativeLang, apiKey]);
 
   // Process sequential audio chunks in the Web Audio queue
   const playNextInAudioQueue = useCallback(async () => {
@@ -1163,7 +1174,7 @@ export function usePipelineCall({
       sessionMetricsRef.current.userTurns++;
       processedUserTurnIdsRef.current.add(turnId);
 
-      const tokens = tokenizeLiveCallTurn(rawSTTTranscript, targetLang);
+      const tokens = tokenizeLiveCallTurn(rawSTTTranscript, targetLang, null, nativeLang);
       const transliteration = extractTurnTransliteration(tokens, targetLang);
       const glosses = extractTurnGlosses(tokens);
 
@@ -1187,6 +1198,10 @@ export function usePipelineCall({
         )
       );
 
+      if (showGlossesRef.current && rawSTTTranscript) {
+        triggerTurnGloss(turnId, rawSTTTranscript, tokens);
+      }
+
       // Dispatch assistant conversational response immediately
       dispatchAssistantResponse(rawSTTTranscript);
 
@@ -1196,7 +1211,7 @@ export function usePipelineCall({
     } finally {
       isFinalizingMobileTurnRef.current = false;
     }
-  }, [isSpanish, targetLang, stopTurnAudioCapture, startTurnAudioCapture, dispatchAssistantResponse]);
+  }, [isSpanish, targetLang, nativeLang, stopTurnAudioCapture, startTurnAudioCapture, dispatchAssistantResponse, triggerTurnGloss]);
 
   // Start mobile Web Audio VAD monitoring on the microphone stream
   const startMobileVAD = useCallback((stream) => {
@@ -1338,7 +1353,7 @@ export function usePipelineCall({
     }
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const initialTokens = tokenizeLiveCallTurn(cleanText, targetLang);
+    const initialTokens = tokenizeLiveCallTurn(cleanText, targetLang, null, nativeLang);
     const initialTranslit = extractTurnTransliteration(initialTokens, targetLang);
     const initialGlosses = extractTurnGlosses(initialTokens);
 
@@ -1390,6 +1405,10 @@ export function usePipelineCall({
       return [...prev, newUserMsg];
     });
 
+    if (showGlossesRef.current && cleanText) {
+      triggerTurnGloss(currentId, cleanText, initialTokens);
+    }
+
     if (turnAudioBlob && turnAudioBlob.size > 0) {
       sessionMetricsRef.current.sttRequests++;
       const apiKey = getEffectiveApiKey();
@@ -1408,7 +1427,7 @@ export function usePipelineCall({
           const rawSTTTranscript = whisperText || cleanText;
 
           if (rawSTTTranscript && rawSTTTranscript.toLowerCase() !== cleanText.toLowerCase()) {
-            const finalTokens = tokenizeLiveCallTurn(rawSTTTranscript, targetLang);
+            const finalTokens = tokenizeLiveCallTurn(rawSTTTranscript, targetLang, null, nativeLang);
             const finalTranslit = extractTurnTransliteration(finalTokens, targetLang);
             const finalGlosses = extractTurnGlosses(finalTokens);
 
@@ -1430,6 +1449,10 @@ export function usePipelineCall({
                   : msg
               )
             );
+
+            if (showGlossesRef.current && rawSTTTranscript) {
+              triggerTurnGloss(currentId, rawSTTTranscript, finalTokens, true);
+            }
           }
 
           // Dispatch AI assistant response with the final text
@@ -1443,7 +1466,7 @@ export function usePipelineCall({
       // Fallback if no audio blob was captured
       dispatchAssistantResponse(cleanText);
     }
-  }, [targetLang, nativeLang, isSpanish, stopTurnAudioCapture, dispatchAssistantResponse]);
+  }, [targetLang, nativeLang, isSpanish, stopTurnAudioCapture, dispatchAssistantResponse, triggerTurnGloss]);
 
   // Initialize Speech Recognition for Live VAD & Streaming STT
   const initSpeechRecognition = useCallback(() => {
@@ -1881,8 +1904,18 @@ export function usePipelineCall({
 
   // Toggle word-by-word glosses
   const toggleGlosses = useCallback(() => {
-    setShowGlosses((prev) => !prev);
-  }, []);
+    setShowGlosses((prev) => {
+      const nextVal = !prev;
+      if (nextVal) {
+        liveTranscriptRef.current.forEach((msg) => {
+          if (msg.text && msg.text.trim() && !msg.isStreaming && !msg.isTranscribing) {
+            triggerTurnGloss(msg.id, msg.text, msg.tokens || []);
+          }
+        });
+      }
+      return nextVal;
+    });
+  }, [triggerTurnGloss]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -49,7 +49,7 @@ export function CallDetailView({
     const isUser = line.sender === 'user';
     const tokens = Array.isArray(line.tokens) && line.tokens.length > 0
       ? line.tokens
-      : (line.text ? tokenizeLiveCallTurn(line.text, targetLang, line.diffTokens) : []);
+      : (line.text ? tokenizeLiveCallTurn(line.text, targetLang, line.diffTokens, nativeLang) : []);
 
     // Fallback for legacy history records without tokenization
     if (tokens.length === 0) {
@@ -208,7 +208,7 @@ export function CallDetailView({
                   nativeLang={nativeLang}
                   className={
                     isUser
-                      ? 'text-amber-200 dark:text-amber-200 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
+                      ? '!text-amber-200 dark:!text-amber-200 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
                       : 'text-rose-600 dark:text-rose-400 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
                   }
                 />

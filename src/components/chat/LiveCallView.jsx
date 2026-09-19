@@ -281,7 +281,7 @@ export function LiveCallView({
                   nativeLang={nativeLang}
                   className={
                     isUser
-                      ? 'text-amber-200 dark:text-amber-200 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
+                      ? '!text-amber-200 dark:!text-amber-200 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
                       : 'text-rose-600 dark:text-rose-400 text-xs font-normal mt-0.5 max-w-[160px] sm:max-w-[200px]'
                   }
                 />
@@ -413,8 +413,8 @@ export function LiveCallView({
           liveTranscript.length > 0 ? (
             liveTranscript.map((item) => {
               const isUser = item.sender === 'user';
-              const userTokens = item.tokens || (item.text ? tokenizeLiveCallTurn(item.text, targetLang, item.diffTokens) : []);
-              const botTokens = item.tokens || (item.text ? tokenizeLiveCallTurn(item.text, targetLang) : []);
+              const userTokens = item.tokens || (item.text ? tokenizeLiveCallTurn(item.text, targetLang, item.diffTokens, nativeLang) : []);
+              const botTokens = item.tokens || (item.text ? tokenizeLiveCallTurn(item.text, targetLang, null, nativeLang) : []);
 
               if (isUser) {
                 return (
