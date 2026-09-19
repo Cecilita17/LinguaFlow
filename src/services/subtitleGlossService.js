@@ -900,11 +900,6 @@ export function enrichSubtitlesWithGlosses({
 
   // Phase 1: Apply offline tokenization & merge cached AI tokens if available
   const prepared = subtitles.map(sub => {
-    // If line is already complete according to strategy, retain directly
-    if (isGlossComplete(sub, targetLang, nativeLang)) {
-      return sub;
-    }
-
     // If valid Chinese cache exists, restore authoritative lexical tokens directly
     if (targetLang === 'zh' && cache[sub.id] && Array.isArray(cache[sub.id]) && cache[sub.id].length > 0) {
       if (validateChineseAiSegmentation(sub.text, cache[sub.id])) {
@@ -915,16 +910,7 @@ export function enrichSubtitlesWithGlosses({
       }
     }
 
-    // If sub already has Chinese tokens with AI/manual glosses that pass coverage validation, preserve them
-    if (targetLang === 'zh' && Array.isArray(sub.tokens) && sub.tokens.length > 0) {
-      if (validateChineseAiSegmentation(sub.text, sub.tokens)) {
-        return sub;
-      }
-    }
-
-    const offlineTokens = (Array.isArray(sub.tokens) && sub.tokens.length > 0)
-      ? sub.tokens
-      : tokenizeAndGlossLineOffline(sub.text, targetLang, nativeLang);
+    const offlineTokens = tokenizeAndGlossLineOffline(sub.text, targetLang, nativeLang);
 
     if (cache[sub.id] && Array.isArray(cache[sub.id]) && cache[sub.id].length > 0) {
       const mergedTokens = mergeAiTokensWithSegmented(offlineTokens, cache[sub.id], targetLang, sub.text, nativeLang);
@@ -942,16 +928,6 @@ export function enrichSubtitlesWithGlosses({
 
   const getCompletedCount = (subsList) => subsList.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
   const initialCompleted = getCompletedCount(prepared);
-
-  if (onProgress) {
-    onProgress({
-      total: totalSubtitles,
-      completed: initialCompleted,
-      isGlossing: true,
-      isComplete: totalSubtitles > 0 && initialCompleted === totalSubtitles,
-      failed: 0
-    });
-  }
 
   if (!onUpdate) {
     return prepared;

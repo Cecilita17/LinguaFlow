@@ -298,11 +298,7 @@ export function YouTubeReaderPage({
           const updated = [...prev];
           for (const { index, tokens } of chunkResults) {
             if (updated[index]) {
-              const currentSub = updated[index];
-              const hasExistingGlosses = Array.isArray(currentSub.tokens) && currentSub.tokens.some(t => t && (t.gloss || t.glossSource === 'manual' || t.glossSource === 'ai'));
-              if (!hasExistingGlosses) {
-                updated[index] = { ...currentSub, tokens };
-              }
+              updated[index] = { ...updated[index], tokens };
             }
           }
           return updated;
@@ -348,10 +344,6 @@ export function YouTubeReaderPage({
 
     if (glossAbortControllerRef.current) {
       glossAbortControllerRef.current.abort();
-    }
-    if (progressiveTokenizeRef.current) {
-      progressiveTokenizeRef.current.abort();
-      progressiveTokenizeRef.current = null;
     }
     const controller = new AbortController();
     glossAbortControllerRef.current = controller;
@@ -426,11 +418,6 @@ export function YouTubeReaderPage({
     if (!line || !line.id) return;
     if (isGlossComplete(line, targetLang, nativeLang)) return; // $0 Groq cost, already glossed!
 
-    if (progressiveTokenizeRef.current) {
-      progressiveTokenizeRef.current.abort();
-      progressiveTokenizeRef.current = null;
-    }
-
     setLoadingLineIds(prev => new Set(prev).add(line.id));
 
     try {
@@ -449,15 +436,6 @@ export function YouTubeReaderPage({
         const effectiveTitle = (videoTitle && titleVideoIdRef.current === effectiveVid)
           ? videoTitle
           : `YouTube Video (${effectiveVid})`;
-
-        setGlossProgress(prev => ({
-          total: updatedList.length,
-          completed: completedCount,
-          isGlossing: isAutoGlossing,
-          isPaused: !isAutoGlossing,
-          isComplete: updatedList.length > 0 && completedCount === updatedList.length,
-          failed: 0
-        }));
 
         saveTranscriptToLibrary({
           videoId: effectiveVid,
@@ -486,7 +464,7 @@ export function YouTubeReaderPage({
         return next;
       });
     }
-  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, isAutoGlossing, refreshLibraryCount]);
+  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount]);
 
   // 1. Restore previous session on initial mount
   useEffect(() => {
@@ -508,26 +486,7 @@ export function YouTubeReaderPage({
         if (parsed.currentRecordId) setCurrentRecordId(parsed.currentRecordId);
         if (Array.isArray(parsed.subtitles) && parsed.subtitles.length > 0) {
           const normalized = normalizeSubtitlesSafely(parsed.subtitles, parsed.subtitleFormat || 'sub');
-          const subHash = computeSubtitleHash(normalized);
-          const effectiveVid = parsed.videoId || 'novideo';
-          getTranscriptFromLibrary(effectiveVid, subHash, targetLang, nativeLang).then(existing => {
-            if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
-              setSubtitles(existing.subtitles);
-              const actualCompleted = existing.subtitles.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
-              setGlossProgress({
-                total: existing.subtitles.length,
-                completed: actualCompleted,
-                isGlossing: false,
-                isPaused: false,
-                isComplete: existing.subtitles.length > 0 && actualCompleted === existing.subtitles.length,
-                failed: 0
-              });
-            } else {
-              launchProgressiveTokenization(normalized, targetLang);
-            }
-          }).catch(() => {
-            launchProgressiveTokenization(normalized, targetLang);
-          });
+          launchProgressiveTokenization(normalized, targetLang);
         }
         if (parsed.subtitleFormat) setSubtitleFormat(parsed.subtitleFormat);
         if (parsed.subtitleSource) setSubtitleSource(parsed.subtitleSource);
@@ -583,11 +542,11 @@ export function YouTubeReaderPage({
 
       if (videoId && Array.isArray(subtitles) && subtitles.length > 0) {
         const subHash = computeSubtitleHash(subtitles);
-        const newRecId = getLibraryKey(videoId, subHash, targetLang, nativeLang);
+        const newRecId = getLibraryKey(videoId, subHash, targetLang);
         setCurrentRecordId(newRecId);
 
         // Check if a saved transcript already exists for the new target language ($0 Groq reuse)
-        getTranscriptFromLibrary(videoId, subHash, targetLang, nativeLang).then((existing) => {
+        getTranscriptFromLibrary(videoId, subHash, targetLang).then((existing) => {
           if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
             setSubtitles(existing.subtitles);
             const actualCompleted = existing.subtitles.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
@@ -604,15 +563,6 @@ export function YouTubeReaderPage({
             // Re-tokenize offline tokens for new target language
             const resetTokens = subtitles.map(s => ({ ...s, tokens: [] }));
             launchProgressiveTokenization(resetTokens, targetLang);
-            const actualCompleted = resetTokens.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
-            setGlossProgress({
-              total: resetTokens.length,
-              completed: actualCompleted,
-              isGlossing: false,
-              isPaused: false,
-              isComplete: resetTokens.length > 0 && actualCompleted === resetTokens.length,
-              failed: 0
-            });
           }
 
           // Ensure cross-language playback position is retained
@@ -622,22 +572,13 @@ export function YouTubeReaderPage({
         }).catch(() => {
           const resetTokens = subtitles.map(s => ({ ...s, tokens: [] }));
           launchProgressiveTokenization(resetTokens, targetLang);
-          const actualCompleted = resetTokens.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
-          setGlossProgress({
-            total: resetTokens.length,
-            completed: actualCompleted,
-            isGlossing: false,
-            isPaused: false,
-            isComplete: resetTokens.length > 0 && actualCompleted === resetTokens.length,
-            failed: 0
-          });
           if (curTime > 0) {
             updateTranscriptPlaybackPosition(newRecId, curTime, curSubId).catch(() => {});
           }
         });
       }
     }
-  }, [targetLang, nativeLang, videoId, subtitles, currentTime, pendingScrollSubtitleId, launchProgressiveTokenization]);
+  }, [targetLang, videoId, subtitles, currentTime, pendingScrollSubtitleId, launchProgressiveTokenization]);
 
   // 2. Persist session when critical state changes (quota-safe)
   useEffect(() => {
@@ -913,12 +854,12 @@ export function YouTubeReaderPage({
     }
 
     const subHash = computeSubtitleHash(normalized);
-    const recId = getLibraryKey(videoId || 'novideo', subHash, targetLang, nativeLang);
+    const recId = getLibraryKey(videoId || 'novideo', subHash, targetLang);
     setCurrentRecordId(recId);
 
     // Check if transcript already exists in library ($0 Groq cost reuse)
     try {
-      const existing = await getTranscriptFromLibrary(videoId || 'novideo', subHash, targetLang, nativeLang);
+      const existing = await getTranscriptFromLibrary(videoId || 'novideo', subHash, targetLang);
       if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
         handleLoadFromLibrary(existing);
         return;
@@ -929,16 +870,6 @@ export function YouTubeReaderPage({
 
     // Launch progressive non-blocking tokenization
     launchProgressiveTokenization(normalized, targetLang);
-
-    const actualCompleted = normalized.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
-    setGlossProgress({
-      total: normalized.length,
-      completed: actualCompleted,
-      isGlossing: false,
-      isPaused: false,
-      isComplete: normalized.length > 0 && actualCompleted === normalized.length,
-      failed: 0
-    });
 
     // Persist initial record in library with position (uses shared position if existing)
     try {
@@ -961,8 +892,8 @@ export function YouTubeReaderPage({
         sourceType: sourceName || 'srt',
         subtitleHash: subHash,
         subtitlesCount: normalized.length,
-        completedLinesCount: actualCompleted,
-        isComplete: normalized.length > 0 && actualCompleted === normalized.length,
+        completedLinesCount: 0,
+        isComplete: false,
         format: format || 'srt',
         subtitles: normalized,
         lastPlaybackTime: initialTime,
@@ -1008,7 +939,7 @@ export function YouTubeReaderPage({
     }
 
     const subHash = record.subtitleHash || (Array.isArray(record.subtitles) ? computeSubtitleHash(record.subtitles) : '');
-    const recId = record.id || getLibraryKey(record.videoId, subHash, targetLang, nativeLang);
+    const recId = record.id || getLibraryKey(record.videoId, subHash, targetLang);
 
     // Restore saved playback position and subtitle marker from record or shared video position
     const sharedPos = record.videoId ? getSharedPlaybackPosition(record.videoId) : null;
