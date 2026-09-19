@@ -6,7 +6,7 @@ import {
   buildDataContextPrompt,
   cleanAndParseJSON
 } from './promptTemplates.js';
-import { SUPPORTED_LANGUAGES } from './languageData.js';
+import { SUPPORTED_LANGUAGES, computeWordDiff } from './languageData.js';
 import { processDeterministicLinguistics, processSmartConversation } from './conversationEngine.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
 
@@ -83,6 +83,116 @@ function enrichArabicPayload(data, targetLang) {
   }
 
   return data;
+}
+
+/**
+ * Normalizes any valid or semi-structured JSON response from Groq into LinguaFlow's expected chat schema:
+ * {
+ *   user_correction: { original_text, corrected_text, has_errors, diff_tokens },
+ *   bot_response: { text, translation, tokens, vocabulary }
+ * }
+ */
+export function normalizeChatPayload(parsed, rawUserText = '', targetLang = 'es') {
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  // 1. Unwrap root wrappers if any (e.g. { data: { ... } }, { result: { ... } }, { response: { ... } })
+  let root = parsed;
+  if (root.data && typeof root.data === 'object' && (root.data.user_correction || root.data.bot_response || root.data.text)) {
+    root = root.data;
+  } else if (root.result && typeof root.result === 'object' && (root.result.user_correction || root.result.bot_response || root.result.text)) {
+    root = root.result;
+  }
+
+  // 2. Extract bot_response
+  let rawBot = root.bot_response || root.botResponse || root.response || root.reply || root.bot_reply || root.assistant_response || root.ai_response || root.bot || root.assistant;
+  if (!rawBot && typeof root.text === 'string' && root.text.trim()) {
+    // Top-level object itself is the bot response
+    rawBot = root;
+  }
+
+  if (!rawBot || typeof rawBot !== 'object') {
+    return null; // A conversation turn requires a bot response
+  }
+
+  const botText = (rawBot.text || rawBot.reply || rawBot.response || rawBot.message || rawBot.content || '').trim();
+  if (!botText) {
+    return null; // Bot response must have non-empty text
+  }
+
+  const botTranslation = (rawBot.translation || rawBot.translated_text || rawBot.native_translation || rawBot.translatedText || '').trim();
+  const rawTokens = Array.isArray(rawBot.tokens)
+    ? rawBot.tokens
+    : (Array.isArray(rawBot.word_tokens) ? rawBot.word_tokens : (Array.isArray(rawBot.words) ? rawBot.words : []));
+
+  const normalizedTokens = rawTokens.map(tok => {
+    if (!tok) return null;
+    if (typeof tok === 'string') {
+      return { word: tok, clean_word: tok, translit: null };
+    }
+    const word = String(tok.word || tok.text || tok.clean_word || '').trim();
+    if (!word) return null;
+    return {
+      word,
+      clean_word: String(tok.clean_word || tok.word || tok.text || word).trim(),
+      translit: tok.translit || tok.pinyin || tok.pronunciation || null
+    };
+  }).filter(Boolean);
+
+  const rawVocab = (rawBot.vocabulary && typeof rawBot.vocabulary === 'object')
+    ? rawBot.vocabulary
+    : ((rawBot.vocab && typeof rawBot.vocab === 'object') ? rawBot.vocab : {});
+
+  // 3. Extract user_correction
+  let rawCor = root.user_correction || root.userCorrection || root.correction || root.student_correction || root.studentCorrection || root.correction_analysis || root.analysis || root.user;
+
+  let normalizedCorrection;
+  if (rawCor && typeof rawCor === 'object') {
+    const origText = String(rawCor.original_text || rawCor.originalText || rawCor.original || rawUserText).trim();
+    const corrText = String(rawCor.corrected_text || rawCor.correctedText || rawCor.corrected || rawCor.text || origText).trim();
+    const rawDiffTokens = Array.isArray(rawCor.diff_tokens)
+      ? rawCor.diff_tokens
+      : (Array.isArray(rawCor.diffTokens) ? rawCor.diffTokens : (Array.isArray(rawCor.tokens) ? rawCor.tokens : null));
+
+    let diffTokens = rawDiffTokens && rawDiffTokens.length > 0
+      ? rawDiffTokens.map(t => {
+          if (!t) return null;
+          if (typeof t === 'string') return { text: t, changed: false, original: null, translit: null };
+          return {
+            text: String(t.text || t.word || '').trim(),
+            changed: Boolean(t.changed ?? t.isChanged ?? t.is_changed),
+            original: t.original ? String(t.original).trim() : null,
+            translit: t.translit || t.pinyin || null
+          };
+        }).filter(Boolean)
+      : computeWordDiff(origText, corrText);
+
+    const hasErrors = Boolean(rawCor.has_errors ?? rawCor.hasErrors ?? diffTokens.some(t => t.changed) ?? (corrText.toLowerCase() !== origText.toLowerCase()));
+
+    normalizedCorrection = {
+      original_text: origText,
+      corrected_text: corrText,
+      has_errors: hasErrors,
+      diff_tokens: diffTokens
+    };
+  } else {
+    // If user_correction was omitted by AI (e.g. no errors found), construct default safe correction
+    normalizedCorrection = {
+      original_text: rawUserText,
+      corrected_text: rawUserText,
+      has_errors: false,
+      diff_tokens: computeWordDiff(rawUserText, rawUserText)
+    };
+  }
+
+  return {
+    user_correction: normalizedCorrection,
+    bot_response: {
+      text: botText,
+      translation: botTranslation,
+      tokens: normalizedTokens,
+      vocabulary: rawVocab
+    }
+  };
 }
 
 export function setCorsHeaders(res) {
@@ -397,76 +507,91 @@ export async function handleChat(req, res) {
     if (effectiveApiKey) {
       console.log(`Groq model selected: ${activeModel}`);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-
       let httpStatus = 0;
       let groqErrorMessage = '';
-      let parsedData = null;
+      let normalizedResult = null;
+      let attempts = 0;
+      const maxAttempts = 2; // 1 primary attempt + 1 transient retry
 
-      const startTime = Date.now();
-      try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${effectiveApiKey}`
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            model: activeModel,
-            messages: [
-              { role: 'system', content: systemInstruction },
-              { role: 'user', content: dataPrompt }
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0.6,
-            max_tokens: 4000
-          })
-        });
-
-        clearTimeout(timeoutId);
-        httpStatus = response.status;
-
-        if (response.ok) {
-          const data = await response.json();
-          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
-          logCostAudit({
-            provider: 'groq',
-            feature: 'chat_response',
-            model: activeModel,
-            requestId,
-            inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
-            outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
-            totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
-            characters: message.length,
-            durationMs: Date.now() - startTime,
-            retry: false,
-            streaming: false,
-            extra: `status=${httpStatus}`
-          });
-          const rawText = data?.choices?.[0]?.message?.content || '';
-          parsedData = cleanAndParseJSON(rawText);
-
-          if (parsedData && parsedData.user_correction && parsedData.bot_response) {
-            console.log(`✅ Groq AI answered using [${activeModel}]`);
-            const enrichedData = enrichArabicPayload(parsedData, targetLang);
-            return res.status(200).json({
-              success: true,
-              source: `groq (${activeModel})`,
-              data: enrichedData
-            });
-          } else {
-            groqErrorMessage = `La respuesta de Groq no tuvo el formato JSON esperado: ${rawText.slice(0, 120)}`;
-          }
-        } else {
-          const err = await response.json().catch(() => ({}));
-          groqErrorMessage = err?.error?.message || response.statusText;
+      while (attempts < maxAttempts && !normalizedResult) {
+        attempts++;
+        const isRetry = attempts > 1;
+        if (isRetry) {
+          console.warn(`[Groq Chat] Retrying request (attempt ${attempts}/${maxAttempts})...`);
+          await new Promise(r => setTimeout(r, 600));
         }
-      } catch (fetchErr) {
-        clearTimeout(timeoutId);
-        httpStatus = fetchErr.name === 'AbortError' ? 408 : 500;
-        groqErrorMessage = fetchErr.name === 'AbortError' ? 'Network timeout: la solicitud a Groq excedió el tiempo límite.' : fetchErr.message;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const startTime = Date.now();
+
+        try {
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${effectiveApiKey}`
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+              model: activeModel,
+              messages: [
+                { role: 'system', content: systemInstruction },
+                { role: 'user', content: dataPrompt }
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0.6,
+              max_tokens: 4000
+            })
+          });
+
+          clearTimeout(timeoutId);
+          httpStatus = response.status;
+
+          if (response.ok) {
+            const data = await response.json();
+            const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+            logCostAudit({
+              provider: 'groq',
+              feature: 'chat_response',
+              model: activeModel,
+              requestId,
+              inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+              outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+              totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+              characters: message.length,
+              durationMs: Date.now() - startTime,
+              retry: isRetry,
+              streaming: false,
+              extra: `status=${httpStatus}`
+            });
+            const rawText = data?.choices?.[0]?.message?.content || '';
+            const parsedData = cleanAndParseJSON(rawText);
+            normalizedResult = normalizeChatPayload(parsedData, message.trim(), targetLang);
+
+            if (normalizedResult) {
+              console.log(`✅ Groq AI answered using [${activeModel}] (attempt ${attempts})`);
+              const enrichedData = enrichArabicPayload(normalizedResult, targetLang);
+              return res.status(200).json({
+                success: true,
+                source: `groq (${activeModel})`,
+                data: enrichedData
+              });
+            } else {
+              groqErrorMessage = `La respuesta de Groq no tuvo el formato JSON esperado: ${rawText.slice(0, 120)}`;
+            }
+          } else {
+            const err = await response.json().catch(() => ({}));
+            groqErrorMessage = err?.error?.message || response.statusText;
+            if (httpStatus === 401 || httpStatus === 403 || httpStatus === 404) {
+              break; // Don't retry client-side authentication or bad model errors
+            }
+          }
+        } catch (fetchErr) {
+          clearTimeout(timeoutId);
+          httpStatus = fetchErr.name === 'AbortError' ? 408 : 500;
+          groqErrorMessage = fetchErr.name === 'AbortError' ? 'Network timeout: la solicitud a Groq excedió el tiempo límite.' : fetchErr.message;
+        }
       }
 
       console.error(`Groq request failed:\nmodel: ${activeModel}\nHTTP status: ${httpStatus}\nGroq error message: ${groqErrorMessage}`);

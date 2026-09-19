@@ -248,6 +248,7 @@ export default function App() {
     return { provider: 'groq', apiKey: '', level: 'A2/B1', speechRate: 0.95 };
   });
   const [apiWarning, setApiWarning] = useState(null);
+  const [lastFailedMessage, setLastFailedMessage] = useState(null);
 
   const { speechRate, autoPlayAi } = useAudioSettings();
   const playedBotMsgIdsRef = useRef(new Set());
@@ -692,39 +693,44 @@ export default function App() {
     }
   }, [messages, isProcessing, activeTab, chatViewMode]);
 
-  // Send message flow
-  const handleSendMessage = async (text) => {
+  // Send message flow (supports normal send and non-duplicating retry)
+  const handleSendMessage = async (text, retryMsgId = null) => {
     if (!text || !text.trim() || isProcessing) return;
 
     isUserScrolledUpRef.current = false;
 
-    const tempUserId = `user-${Date.now()}`;
-    const rawUserMsg = {
-      id: tempUserId,
-      sender: 'user',
-      text: text.trim(),
-      originalText: text.trim(),
-      correctedText: text.trim(),
-      hasCorrection: false,
-      diffTokens: [{ text: text.trim(), changed: false, original: null }]
-    };
+    const tempUserId = retryMsgId || `user-${Date.now()}`;
+    const cleanText = text.trim();
 
-    setMessages(prev => [...prev, rawUserMsg]);
+    if (!retryMsgId) {
+      const rawUserMsg = {
+        id: tempUserId,
+        sender: 'user',
+        text: cleanText,
+        originalText: cleanText,
+        correctedText: cleanText,
+        hasCorrection: false,
+        diffTokens: [{ text: cleanText, changed: false, original: null }]
+      };
+      setMessages(prev => [...prev, rawUserMsg]);
+    }
+
     setIsProcessing(true);
 
     try {
       const result = await sendChatMessage({
-        message: text.trim(),
+        message: cleanText,
         targetLang,
         nativeLang,
         level: config.level,
         apiKey: config.apiKey,
         provider: config.provider || 'groq',
-        history: messages.slice(-6)
+        history: messages.filter(m => m && m.id !== tempUserId).slice(-6)
       });
 
       if (result && result.data && result.data.bot_response) {
         setApiWarning(null);
+        setLastFailedMessage(null);
         const { user_correction, bot_response } = result.data;
 
         // Update user message with corrected text and amber-gold diffs
@@ -733,7 +739,7 @@ export default function App() {
             if (m.id === tempUserId) {
               return {
                 ...m,
-                originalText: text.trim(),
+                originalText: cleanText,
                 correctedText: user_correction.corrected_text || m.text,
                 hasCorrection: user_correction.has_errors || user_correction.diff_tokens?.some(t => t.changed),
                 diffTokens: user_correction.diff_tokens || m.diffTokens
@@ -776,6 +782,7 @@ export default function App() {
     } catch (err) {
       console.warn('Chat service notice:', err.message);
       setApiWarning(err.message || 'Error al comunicarse con el servidor de Groq AI.');
+      setLastFailedMessage({ text: cleanText, msgId: tempUserId });
 
       // Retain pedagogical feedback: update user message with deterministic correction if available
       if (err.user_correction) {
@@ -785,7 +792,7 @@ export default function App() {
             if (m.id === tempUserId) {
               return {
                 ...m,
-                originalText: text.trim(),
+                originalText: cleanText,
                 correctedText: cor.corrected_text || m.text,
                 hasCorrection: cor.has_errors || cor.diff_tokens?.some(t => t.changed),
                 diffTokens: cor.diff_tokens || m.diffTokens
@@ -1108,10 +1115,10 @@ export default function App() {
 
               {/* API Error Warning Banner */}
               {apiWarning && (
-                <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in">
-                  <div className="flex items-start space-x-2.5">
-                    <span className="text-base leading-none mt-0.5">⚠️</span>
-                    <div>
+                <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in gap-3">
+                  <div className="flex items-start space-x-2.5 min-w-0">
+                    <span className="text-base leading-none mt-0.5 flex-shrink-0">⚠️</span>
+                    <div className="min-w-0">
                       <p className="font-bold text-amber-100">
                         Aviso de Groq AI: {apiWarning}
                       </p>
@@ -1119,7 +1126,7 @@ export default function App() {
                         Haz clic en{' '}
                         <button
                           onClick={() => setActiveTab('settings')}
-                          className="underline font-bold text-white hover:text-amber-300"
+                          className="underline font-bold text-white hover:text-amber-300 cursor-pointer"
                         >
                           Ajustes ⚙️
                         </button>{' '}
@@ -1127,13 +1134,30 @@ export default function App() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setApiWarning(null)}
-                    className="p-1 text-amber-300/70 hover:text-white rounded-lg transition-colors flex-shrink-0 ml-2"
-                    title="Cerrar aviso"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {lastFailedMessage && (
+                      <button
+                        type="button"
+                        onClick={() => handleSendMessage(lastFailedMessage.text, lastFailedMessage.msgId)}
+                        disabled={isProcessing}
+                        className="px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer transition-all"
+                        title="Reintentar respuesta de IA"
+                      >
+                        <RotateCcw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
+                        <span>Reintentar</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setApiWarning(null);
+                        setLastFailedMessage(null);
+                      }}
+                      className="p-1 text-amber-300/70 hover:text-white rounded-lg transition-colors cursor-pointer"
+                      title="Cerrar aviso"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               )}
 

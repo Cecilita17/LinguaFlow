@@ -166,41 +166,141 @@ export function getSystemPrompt(targetLang, nativeLang, level = 'A2/B1') {
 }
 
 /**
- * Robust JSON extractor from model text (handles backticks, commentary, truncation)
+ * Robust JSON extractor from model text (handles <think> tags, markdown fences, commentary, truncation, trailing commas)
  */
 export function cleanAndParseJSON(rawText) {
-  if (!rawText) return null;
+  if (!rawText || typeof rawText !== 'string') return null;
 
-  // 1. Direct parse attempt
-  try {
-    return JSON.parse(rawText);
-  } catch (e) {}
+  // 1. Strip reasoning/thought tags (<think>...</think>, <thought>...</thought>)
+  let cleaned = rawText
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+    .trim();
 
-  // 2. Remove markdown code blocks if any
-  let cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
+  // 2. Direct parse attempt
   try {
     return JSON.parse(cleaned);
   } catch (e) {}
 
-  // 3. Extract JSON object with regex
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  if (match) {
+  // 3. Extract from markdown code fence (```json ... ``` or ``` ... ```)
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenceMatch && fenceMatch[1]) {
     try {
-      return JSON.parse(match[0]);
-    } catch (e) {}
+      return JSON.parse(fenceMatch[1].trim());
+    } catch (e) {
+      cleaned = fenceMatch[1].trim();
+    }
   }
 
-  // 4. Try basic truncation recovery
-  if (cleaned.startsWith('{')) {
-    let repaired = cleaned;
-    const quoteCount = (repaired.match(/"/g) || []).length;
-    if (quoteCount % 2 !== 0) repaired += '"';
+  // 4. Find the first outer balanced JSON object {...}
+  const firstBrace = cleaned.indexOf('{');
+  if (firstBrace !== -1) {
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let startIdx = firstBrace;
+    let endIdx = -1;
 
-    const openBraces = (repaired.match(/\{/g) || []).length;
-    const closeBraces = (repaired.match(/\}/g) || []).length;
-    for (let i = 0; i < openBraces - closeBraces; i++) {
-      repaired += '}';
+    for (let i = firstBrace; i < cleaned.length; i++) {
+      const char = cleaned[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{') {
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            endIdx = i + 1;
+            break;
+          }
+        }
+      }
     }
+
+    if (endIdx !== -1) {
+      const candidate = cleaned.slice(startIdx, endIdx);
+      try {
+        return JSON.parse(candidate);
+      } catch (e) {
+        // Try removing trailing commas
+        const noTrailingComma = candidate.replace(/,\s*([}\]])/g, '$1');
+        try {
+          return JSON.parse(noTrailingComma);
+        } catch (e2) {}
+      }
+    }
+  }
+
+  // 5. Intelligent Truncation & Malformed Recovery
+  if (firstBrace !== -1) {
+    let candidate = cleaned.slice(firstBrace);
+    // Remove trailing markdown or comments after last recognizable JSON fragment
+    candidate = candidate.replace(/```[\s\S]*$/, '').trim();
+
+    // Fix unescaped control characters inside quotes
+    candidate = candidate.replace(/(?<=:\s*"[^"]*)\n(?=[^"]*")/g, '\\n');
+
+    // Remove dangling key-value fragments at the very end like `, "key":` or `, "key": "incom`
+    candidate = candidate.replace(/,\s*"[^"]*"\s*:\s*(?:"[^"]*)?$/, '');
+
+    // Track stack of open delimiters
+    const stack = [];
+    let inString = false;
+    let escape = false;
+
+    for (let i = 0; i < candidate.length; i++) {
+      const char = candidate[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{' || char === '[') {
+          stack.push(char);
+        } else if (char === '}') {
+          if (stack.length && stack[stack.length - 1] === '{') stack.pop();
+        } else if (char === ']') {
+          if (stack.length && stack[stack.length - 1] === '[') stack.pop();
+        }
+      }
+    }
+
+    let repaired = candidate;
+    if (inString) {
+      repaired += '"';
+    }
+
+    // Remove any trailing comma before we close
+    repaired = repaired.replace(/,\s*$/, '');
+
+    // Close in reverse LIFO order
+    while (stack.length > 0) {
+      const top = stack.pop();
+      if (top === '{') repaired += '}';
+      else if (top === '[') repaired += ']';
+    }
+
+    // Clean any `,}` or `,]` created during repair
+    repaired = repaired.replace(/,\s*([}\]])/g, '$1');
 
     try {
       return JSON.parse(repaired);

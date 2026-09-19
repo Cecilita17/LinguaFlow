@@ -102,18 +102,34 @@ rt {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-/* Sincronización visual sutil de palabra activa durante reproducción de audio */
+/* ============================================================ */
+/* SINCRONIZACIÓN VISUAL SUTIL DE AUDIO (WORD SYNC HIGHLIGHT)   */
+/* Reemplaza el subrayado por un fondo suave y translúcido      */
+/* ============================================================ */
 .audio-word-active {
-  text-decoration: underline !important;
-  text-decoration-color: #f43f5e !important;
-  text-decoration-thickness: 2px !important;
-  text-underline-offset: 3px !important;
-  transition: text-decoration-color 150ms ease-in-out;
+  text-decoration: none !important;
+  background-color: rgba(244, 63, 94, 0.15) !important;
+  border-radius: 4px !important;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-color 150ms ease-in-out, box-shadow 150ms ease-in-out;
 }
 
 [data-theme="dark"] .audio-word-active,
 .dark .audio-word-active {
-  text-decoration-color: #fb7185 !important;
+  background-color: rgba(244, 63, 94, 0.28) !important;
+}
+
+/* Compatibilidad armónica con palabras guardadas (amarillo) durante la reproducción */
+.audio-word-active.bg-amber-300,
+.audio-word-active.bg-amber-400,
+[data-theme="light"] .audio-word-active.bg-amber-300,
+[data-theme="dark"] .audio-word-active.bg-amber-400,
+.dark .audio-word-active.bg-amber-400 {
+  background-color: #fcd34d !important;
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.8) !important;
 }
 
 /* RTL Specific Rules for Arabic */
