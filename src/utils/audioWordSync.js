@@ -40,18 +40,23 @@ export function computeTokenCharRanges(rawCleanText, tokens, targetLang = 'es') 
       return { startChar: -1, endChar: -1, word: '', isPunctuation };
     }
 
+    // Strictly forward search to preserve monotonic sequence and avoid mapping to earlier repeated words
     let foundIdx = cleanText.indexOf(word, pos);
 
+    // Fallback 1: case-insensitive forward search
     if (foundIdx === -1) {
-      foundIdx = cleanText.indexOf(word, 0);
+      const lowerClean = cleanText.toLowerCase();
+      const lowerWord = word.toLowerCase();
+      foundIdx = lowerClean.indexOf(lowerWord, pos);
     }
 
+    // Fallback 2: stripped word forward search (letters/numbers/marks only)
     if (foundIdx === -1) {
       const strippedWord = word.replace(/[^\p{L}\p{N}\p{M}]/gu, '').trim();
       if (strippedWord) {
         foundIdx = cleanText.indexOf(strippedWord, pos);
         if (foundIdx === -1) {
-          foundIdx = cleanText.indexOf(strippedWord, 0);
+          foundIdx = cleanText.toLowerCase().indexOf(strippedWord.toLowerCase(), pos);
         }
       }
     }
@@ -62,8 +67,9 @@ export function computeTokenCharRanges(rawCleanText, tokens, targetLang = 'es') 
       return { startChar: foundIdx, endChar, word, isPunctuation };
     }
 
-    const startChar = pos;
-    const endChar = pos + word.length;
+    // Sequential monotonic fallback positioning
+    const startChar = Math.min(cleanText.length, pos);
+    const endChar = Math.min(cleanText.length, pos + word.length);
     pos = endChar + (isChinese || isPunctuation ? 0 : 1);
     return { startChar, endChar, word, isPunctuation };
   });

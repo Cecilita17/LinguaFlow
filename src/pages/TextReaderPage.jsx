@@ -803,6 +803,8 @@ export function TextReaderPage({
     lastAudioBoundaryTimeRef.current = 0;
     audioMsPerCharRef.current = initialMsPerChar;
 
+    let hasReceivedBoundary = false;
+
     utterance.onstart = () => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       clearAudioVisualTimer();
@@ -815,9 +817,15 @@ export function TextReaderPage({
 
       let lastTickTime = startTime;
 
-      // Smooth visual progression timer running at ~40ms
+      // Fallback timer ONLY for engines/browsers where onboundary does not fire.
+      // If onboundary fires, it immediately clears this timer so real speech events take 100% control.
       audioVisualTimerRef.current = setInterval(() => {
         if (playbackId !== audioPlaybackIdRef.current) {
+          clearAudioVisualTimer();
+          return;
+        }
+
+        if (hasReceivedBoundary) {
           clearAudioVisualTimer();
           return;
         }
@@ -834,32 +842,18 @@ export function TextReaderPage({
           audioVisualCharRef.current = nextChar;
           setActiveAudioCharIndex(Math.floor(nextChar));
         }
-      }, 40);
+      }, 50);
     };
 
     utterance.onboundary = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
+        hasReceivedBoundary = true;
+        clearAudioVisualTimer();
+
         const newBoundaryChar = Math.min(textLength - 1, event.charIndex);
-        const now = Date.now();
-
-        // Calibrate real measured speed between consecutive boundaries
-        if (lastAudioBoundaryTimeRef.current > 0 && newBoundaryChar > lastAudioBoundaryCharRef.current) {
-          const charDelta = newBoundaryChar - lastAudioBoundaryCharRef.current;
-          const timeDelta = now - lastAudioBoundaryTimeRef.current;
-          if (timeDelta > 50 && charDelta > 0) {
-            const measuredMsPerChar = timeDelta / charDelta;
-            audioMsPerCharRef.current = Math.max(15, Math.min(350, measuredMsPerChar * 0.7 + audioMsPerCharRef.current * 0.3));
-          }
-        }
-
-        lastAudioBoundaryCharRef.current = newBoundaryChar;
-        lastAudioBoundaryTimeRef.current = now;
-
-        if (newBoundaryChar > audioVisualCharRef.current) {
-          audioVisualCharRef.current = newBoundaryChar;
-          setActiveAudioCharIndex(newBoundaryChar);
-        }
+        audioVisualCharRef.current = newBoundaryChar;
+        setActiveAudioCharIndex(newBoundaryChar);
       }
     };
 
