@@ -74,6 +74,17 @@ export function TextParagraphItem({
     return findActiveTokenIndex(activeAudioCharIndex, tokenCharRanges);
   }, [isPlaying, activeAudioCharIndex, tokenCharRanges]);
 
+  // --- DIAGNOSTIC: Log rendered active token on Android ---
+  const isAndroid = React.useMemo(() => typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || ''), []);
+  React.useEffect(() => {
+    if (isAndroid && isPlaying && activeAudioCharIndex >= 0) {
+      const resolvedWord = activeTokenIndex >= 0 && tokens && tokens[activeTokenIndex]
+        ? (typeof tokens[activeTokenIndex] === 'string' ? tokens[activeTokenIndex] : (tokens[activeTokenIndex].word || tokens[activeTokenIndex].text || ''))
+        : '(none)';
+      console.log(`[TextReaderSync:render] [paragraph #${paragraph.id}] activeCharIndex=${activeAudioCharIndex} resolvedTokenIndex=${activeTokenIndex} resolvedWord="${resolvedWord}"`);
+    }
+  }, [isAndroid, isPlaying, activeAudioCharIndex, activeTokenIndex, paragraph.id, tokens]);
+
   let runningChunkPos = 0;
 
   return (

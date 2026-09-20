@@ -246,6 +246,8 @@ export function createAudioWordSynchronizer({
   tokens = [],
   targetLang = 'es',
   speechRate = 1.0,
+  paragraphId = '',
+  playbackId = '',
   onActiveCharChange = () => {},
   isAndroid = (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')),
   debug = false
@@ -289,6 +291,8 @@ export function createAudioWordSynchronizer({
   let activeTokenPos = -1; // Index in wordTokens
   let highestVisitedTokenPos = -1;
   let targetBoundaryWordPos = -1;
+  let lastConfirmedWordPos = -1;
+  let hasConfirmedBoundary = false;
   let lastBoundaryWordPos = -1;
   let lastBoundaryTime = 0;
   let clockBaseTime = 0;
@@ -298,6 +302,7 @@ export function createAudioWordSynchronizer({
   let startTime = 0;
   let pausedAt = 0;
   let totalPausedDuration = 0;
+  let prevBoundaryWordPos = -1;
 
   const effectiveRate = Math.max(0.5, Math.min(2.0, typeof speechRate === 'number' ? speechRate : 1.0));
   const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, effectiveRate);
@@ -324,12 +329,35 @@ export function createAudioWordSynchronizer({
       return;
     }
 
+    const beforeActiveTokenPos = activeTokenPos;
+    const beforeHighestVisited = highestVisitedTokenPos;
+
     activeTokenPos = clampedPos;
     if (clampedPos > highestVisitedTokenPos) {
       highestVisitedTokenPos = clampedPos;
     }
 
     const tok = wordTokens[clampedPos];
+    const newActiveChar = tok ? tok.startChar : -1;
+
+    // --- DIAGNOSTIC: Log Synchronizer state transitions on Android ---
+    if (isAndroid) {
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      const elapsed = startTime > 0 ? Math.max(0, now - startTime - totalPausedDuration) : 0;
+      console.log(`[TextReaderSync:sync] [playback #${playbackId || 'default'}]
+t=${Math.round(elapsed)}ms
+activeTokenPos BEFORE: ${beforeActiveTokenPos}
+highestVisitedTokenPos BEFORE: ${beforeHighestVisited}
+targetBoundaryWordPos: ${targetBoundaryWordPos}
+lastConfirmedWordPos: ${lastConfirmedWordPos}
+new activeTokenPos: ${clampedPos} (word="${tok?.word || ''}")
+new activeCharIndex: ${newActiveChar}`);
+
+      if (!isSnap && beforeActiveTokenPos >= 0 && clampedPos - beforeActiveTokenPos > 1) {
+        console.warn(`[TextReaderSync:VISUAL_GAP] [playback #${playbackId || 'default'}] previous=${beforeActiveTokenPos} current=${clampedPos} gap=${clampedPos - beforeActiveTokenPos}`);
+      }
+    }
+
     if (tok) {
       onActiveCharChange(tok.startChar);
     }
@@ -341,24 +369,23 @@ export function createAudioWordSynchronizer({
 
     // --- ANDROID SPECIFIC ANTI-SKIP STRATEGY ---
     if (isAndroid) {
-      // 1. If a boundary arrived ahead of current visual position, step strictly 1 word towards it
-      // Guarantees 3 -> 4 -> 5 -> 6 -> 7 without jumping directly from 3 to 7
-      if (targetBoundaryWordPos > highestVisitedTokenPos) {
+      // 1. Confirmed boundary catch-up:
+      // If Android confirmed a word position ahead, step strictly 1 word at a time towards it.
+      // Guarantees 0 -> 1 -> 2 -> 3 -> 4 without leaping directly from 0 to 4.
+      const targetPos = Math.max(targetBoundaryWordPos, lastConfirmedWordPos);
+      if (targetPos > highestVisitedTokenPos) {
         const nextStepPos = highestVisitedTokenPos + 1;
         if (debug) {
-          console.log('[AndroidTextReaderSync]', {
-            current: highestVisitedTokenPos,
-            boundaryTarget: targetBoundaryWordPos,
-            next: nextStepPos
-          });
+          console.log(`[TextReaderSync:android] confirmedWordPos=${targetPos} visualWordPos=${nextStepPos}`);
         }
         setActiveTokenPos(nextStepPos, false);
         return;
       }
 
-      // 2. Conservative temporal pacing when no boundary is pending ahead:
-      // Advances at most N -> N + 1 when elapsed time for current word is reached
-      if (highestVisitedTokenPos < wordTokens.length - 1) {
+      // 2. Conservative temporal pacing only before the first boundary arrives:
+      // Once a boundary is confirmed, lastConfirmedWordPos becomes the strict ceiling
+      // so temporal estimation cannot run ahead of the audio.
+      if (!hasConfirmedBoundary && highestVisitedTokenPos < wordTokens.length - 1) {
         const elapsedSinceAnchor = Math.max(0, now - clockBaseTime);
         const safeDuration = Math.max(400, calibratedDurationMs);
         const dFrac = elapsedSinceAnchor / safeDuration;
@@ -369,12 +396,7 @@ export function createAudioWordSynchronizer({
         if (currentRange && currentFraction >= currentRange.endFraction) {
           const nextStepPos = highestVisitedTokenPos + 1;
           if (debug) {
-            console.log('[AndroidTextReaderSync:temporal]', {
-              current: highestVisitedTokenPos,
-              next: nextStepPos,
-              currentFraction,
-              endFraction: currentRange.endFraction
-            });
+            console.log(`[TextReaderSync:android:initial] visualWordPos=${nextStepPos}`);
           }
           setActiveTokenPos(nextStepPos, false);
         }
@@ -431,13 +453,26 @@ export function createAudioWordSynchronizer({
     activeTokenPos = 0;
     highestVisitedTokenPos = 0;
     targetBoundaryWordPos = 0;
+    lastConfirmedWordPos = -1;
+    hasConfirmedBoundary = false;
     lastBoundaryWordPos = 0;
     lastBoundaryTime = 0;
     totalPausedDuration = 0;
+    prevBoundaryWordPos = -1;
     calibratedDurationMs = estimatedDurationMs;
     startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     clockBaseTime = startTime;
     clockBaseFraction = 0;
+
+    if (isAndroid) {
+      console.log(`[TextReaderSync:tokens] [playback #${playbackId || 'default'}]
+paragraphId: "${paragraphId}"
+cleanText: "${cleanText}"
+paragraph.tokens count: ${Array.isArray(tokens) ? tokens.length : 0}
+wordTokens count: ${wordTokens.length}
+wordTokens:
+${wordTokens.map((wt, idx) => `  wordPos=${idx} tokenIndex=${wt.tokenIndex} word="${wt.word}" start=${wt.startChar} end=${wt.endChar}`).join('\n')}`);
+    }
 
     if (debug) {
       console.log('[TTS_DEV_DEBUG:onstart]', {
@@ -468,6 +503,25 @@ export function createAudioWordSynchronizer({
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const elapsed = Math.max(0, now - startTime - totalPausedDuration);
 
+    if (isAndroid) {
+      const matchedWord = matchedWordPos >= 0 ? wordTokens[matchedWordPos]?.word : '(none)';
+      console.log(`[TextReaderSync:boundary] [playback #${playbackId || 'default'}]
+t=${Math.round(elapsed)}ms
+charIndex=${charIndex}
+charLength=${event?.charLength ?? 'N/A'}
+name="${event?.name || 'word'}"
+tokenIndex=${matchedTokenIdx}
+wordPos=${matchedWordPos}
+word="${matchedWord}"`);
+
+      if (matchedWordPos >= 0 && prevBoundaryWordPos >= 0 && matchedWordPos - prevBoundaryWordPos > 1) {
+        console.warn(`[TextReaderSync:BOUNDARY_GAP] [playback #${playbackId || 'default'}] previous=${prevBoundaryWordPos} current=${matchedWordPos} gap=${matchedWordPos - prevBoundaryWordPos}`);
+      }
+      if (matchedWordPos >= 0) {
+        prevBoundaryWordPos = matchedWordPos;
+      }
+    }
+
     if (matchedWordPos >= 0) {
       const boundaryFraction = cumulativeRanges[matchedWordPos]?.startFraction || 0;
 
@@ -497,6 +551,8 @@ export function createAudioWordSynchronizer({
       lastBoundaryTime = now;
 
       // Set smooth catch-up target: do NOT snap directly, let tick() visit intermediate words
+      hasConfirmedBoundary = true;
+      lastConfirmedWordPos = Math.max(lastConfirmedWordPos, matchedWordPos);
       targetBoundaryWordPos = Math.max(targetBoundaryWordPos, Math.max(highestVisitedTokenPos, matchedWordPos));
     }
 

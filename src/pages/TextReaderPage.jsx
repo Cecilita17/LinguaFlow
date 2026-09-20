@@ -792,14 +792,30 @@ export function TextReaderPage({
 
     // Create encapsulated Audio Word Synchronizer for boundary-anchored local token progression
     const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+    let prevActiveCharIndex = -1;
     const synchronizer = createAudioWordSynchronizer({
       text: cleanText,
       tokens: paragraph.tokens || [],
       targetLang: activeDocLang,
       speechRate: currentRate,
+      paragraphId: paragraph.id,
+      playbackId,
       isAndroid,
       onActiveCharChange: (charIndex) => {
         if (playbackId !== audioPlaybackIdRef.current) return;
+        if (isAndroid && charIndex >= 0) {
+          const matchedTok = synchronizer.wordTokens.find(wt => wt.startChar === charIndex);
+          console.log(`[TextReaderSync:activeChar] [playback #${playbackId}] charIndex=${charIndex} word="${matchedTok?.word || ''}"`);
+          if (prevActiveCharIndex >= 0 && charIndex > prevActiveCharIndex) {
+            const prevTok = synchronizer.wordTokens.find(wt => wt.startChar === prevActiveCharIndex);
+            const prevPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === prevActiveCharIndex);
+            const currPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === charIndex);
+            if (prevPos >= 0 && currPos >= 0 && currPos - prevPos > 1) {
+              console.warn(`[TextReaderSync:CHAR_GAP] [playback #${playbackId}] previousChar=${prevActiveCharIndex} (word="${prevTok?.word || ''}") currentChar=${charIndex} (word="${matchedTok?.word || ''}") gapTokens=${currPos - prevPos}`);
+            }
+          }
+          prevActiveCharIndex = charIndex;
+        }
         setActiveAudioCharIndex(charIndex);
       },
       debug: process.env.NODE_ENV !== 'production'
