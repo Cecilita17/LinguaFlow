@@ -69,7 +69,8 @@ export async function sendChatMessage({
   nativeLang,
   level = 'A2/B1',
   apiKey,
-  history = []
+  history = [],
+  signal = null
 }) {
   const cleanMsg = (message || '').trim();
   if (!cleanMsg) {
@@ -84,7 +85,19 @@ export async function sendChatMessage({
   // 1. Communicate with Backend API (/api/chat)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    let isTimedOut = false;
+    const timeoutId = setTimeout(() => {
+      isTimedOut = true;
+      controller.abort();
+    }, 25000); // 25s timeout (coordinates with backend 18.5s max retry window)
+
+    if (signal) {
+      if (signal.aborted) {
+        controller.abort();
+      } else {
+        signal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+    }
 
     const headers = { 'Content-Type': 'application/json' };
     if (effectiveKey) {
@@ -133,10 +146,16 @@ export async function sendChatMessage({
     }
   } catch (netErr) {
     console.warn('/api/chat unreachable or timed out:', netErr.message);
-    lastAIError = netErr.name === 'AbortError'
-      ? 'Network timeout: el servidor de LinguaFlow tardó demasiado en responder.'
-      : 'No se pudo conectar con el servidor de LinguaFlow.';
-    serverCode = netErr.name === 'AbortError' ? 'NETWORK_TIMEOUT' : 'SERVER_UNREACHABLE';
+    if (isTimedOut) {
+      lastAIError = 'Network timeout: el servidor de LinguaFlow tardó demasiado en responder.';
+      serverCode = 'NETWORK_TIMEOUT';
+    } else if (netErr.name === 'AbortError') {
+      lastAIError = 'Petición cancelada por el usuario.';
+      serverCode = 'REQUEST_ABORTED';
+    } else {
+      lastAIError = 'No se pudo conectar con el servidor de LinguaFlow.';
+      serverCode = 'SERVER_UNREACHABLE';
+    }
   }
 
   // 2. AI is the SOLE generator of conversational responses.

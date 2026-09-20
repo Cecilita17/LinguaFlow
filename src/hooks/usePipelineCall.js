@@ -1087,14 +1087,45 @@ export function usePipelineCall({
       lastAiSpokenTimestampRef.current = Date.now();
 
     } catch (err) {
-      if (err.name !== 'AbortError') {
+      const isAbort = err.name === 'AbortError' || err.message?.includes('aborted');
+      if (!isAbort) {
         console.warn('[PipelineChatStream] Notice:', err);
         sessionMetricsRef.current.errors.push(err.message);
       }
+
+      const receivedText = currentAiTurnTextRef.current || '';
+      const cleanReceivedDisplay = receivedText.replace(/<\/?correction>/gi, '').trim();
+
       setLiveTranscript((prev) =>
         prev
-          .map((msg) => (msg.id === aiTurnId ? { ...msg, isStreaming: false } : msg))
-          .filter((msg) => !(msg.id === aiTurnId && (!msg.text || !msg.text.trim())))
+          .map((msg) => {
+            if (msg.id !== aiTurnId) return msg;
+            if (cleanReceivedDisplay) {
+              const partialTokens = parseIntegratedCorrectionTokens(receivedText, cleanPrompt, targetLang, nativeLang);
+              return {
+                ...msg,
+                text: cleanReceivedDisplay,
+                tokens: partialTokens,
+                isStreaming: false,
+                isInterrupted: true
+              };
+            }
+            if (isAbort) {
+              return { ...msg, text: '', isStreaming: false };
+            }
+            const isSpanish = (nativeLang || '').toLowerCase().startsWith('es');
+            const fallbackErrText = isSpanish
+              ? '⚠️ La respuesta del asistente se interrumpió.'
+              : '⚠️ Assistant response was interrupted.';
+            return {
+              ...msg,
+              text: fallbackErrText,
+              tokens: [],
+              isStreaming: false,
+              isError: true
+            };
+          })
+          .filter((msg) => !(msg.id === aiTurnId && isAbort && !cleanReceivedDisplay))
       );
       currentAiTurnIdRef.current = null;
       currentAiTurnTextRef.current = '';

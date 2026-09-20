@@ -518,11 +518,11 @@ export async function handleChat(req, res) {
         const isRetry = attempts > 1;
         if (isRetry) {
           console.warn(`[Groq Chat] Retrying request (attempt ${attempts}/${maxAttempts})...`);
-          await new Promise(r => setTimeout(r, 600));
+          await new Promise(r => setTimeout(r, 500));
         }
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 9000);
         const startTime = Date.now();
 
         try {
