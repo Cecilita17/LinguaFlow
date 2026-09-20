@@ -470,8 +470,8 @@ export function usePipelineCall({
     });
   }, []);
 
-  // Cancel active AI generation & playback (Barge-in / Interruption)
-  const interruptAssistant = useCallback(() => {
+  // Technical internal cancellation: teardown active AI generation, playback & queue without user barge-in semantics
+  const cancelAssistantInternally = useCallback(() => {
     if (restartRetryTimeoutRef.current) {
       clearTimeout(restartRetryTimeoutRef.current);
       restartRetryTimeoutRef.current = null;
@@ -510,6 +510,40 @@ export function usePipelineCall({
       currentAiTurnTextRef.current = '';
     }
   }, [stopAudioPlayback, resetTurnAudioCapture]);
+
+  // Explicit User Barge-In: triggered exclusively by direct user UI action (click/touch)
+  const bargeIn = useCallback(() => {
+    if (callStateRef.current === 'idle' || callStateRef.current === 'error') {
+      return;
+    }
+
+    console.log('[PipelineBargeIn] User initiated manual barge-in');
+    cancelAssistantInternally();
+
+    // Immediately return call state to 'listening' and unpause STT for user speech
+    callStateRef.current = 'listening';
+    setCallState('listening');
+    isSttPausedRef.current = false;
+    isEchoGuardActiveRef.current = false;
+
+    // Reset current turn to capture fresh user speech immediately
+    currentTurnRef.current = {
+      id: null,
+      confirmedText: '',
+      text: '',
+      finalized: false
+    };
+
+    startTurnAudioCapture();
+    if (isMobileDevice) {
+      isUserSpeakingMobileRef.current = false;
+    } else {
+      startSpeechRecognitionIfReady();
+    }
+  }, [cancelAssistantInternally, isMobileDevice, startTurnAudioCapture, startSpeechRecognitionIfReady]);
+
+  // Backward-compatibility alias
+  const interruptAssistant = bargeIn;
 
   // Stop mobile Web Audio VAD
   const stopMobileVAD = useCallback(() => {
@@ -552,7 +586,7 @@ export function usePipelineCall({
     speechRecognitionRestartPendingRef.current = false;
     lastAiSpokenTextRef.current = '';
 
-    interruptAssistant();
+    cancelAssistantInternally();
     resetTurnAudioCapture();
 
     // Stop and release active microphone stream tracks
@@ -593,7 +627,7 @@ export function usePipelineCall({
       text: '',
       finalized: false
     };
-  }, [interruptAssistant, stopMobileVAD]);
+  }, [cancelAssistantInternally, stopMobileVAD]);
 
   // Determine if Speech Recognition can be safely active and listening
   const canRunSpeechRecognition = useCallback(() => {
@@ -923,7 +957,7 @@ export function usePipelineCall({
     if (!userPrompt || !userPrompt.trim()) return;
     const cleanPrompt = userPrompt.trim();
 
-    interruptAssistant();
+    cancelAssistantInternally();
     isLlmStreamingRef.current = true;
     isSttPausedRef.current = true;
     console.log('[PipelineEchoGuard] TTS playback started -> STT paused');
@@ -993,8 +1027,54 @@ export function usePipelineCall({
       let sseBuffer = '';
       let sentenceBuffer = '';
 
-      // Sentence boundary detection regex: punctuation [.!?؛:\n]
-      const sentenceRegex = /([^.!?؛:\n]+[.!?؛:\n]+)/g;
+      const handleSseLine = (line) => {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) return;
+        const jsonStr = trimmed.slice(6);
+        try {
+          const data = JSON.parse(jsonStr);
+          if (data.finish_reason === 'length') {
+            console.warn('[PipelineChatStream] Stream finished due to max_tokens limit');
+          }
+          if (data.delta) {
+            currentAiTurnTextRef.current += data.delta;
+            lastAiSpokenTextRef.current = currentAiTurnTextRef.current;
+            lastAiSpokenTimestampRef.current = Date.now();
+            sentenceBuffer += data.delta;
+
+            const fullText = currentAiTurnTextRef.current;
+            const streamingTokens = parseIntegratedCorrectionTokens(fullText, cleanPrompt, targetLang, nativeLang);
+            const cleanDisplayFullText = fullText.replace(/<\/?correction>/gi, '');
+
+            setLiveTranscript((prev) =>
+              prev.map((msg) =>
+                msg.id === aiTurnId
+                  ? { ...msg, text: cleanDisplayFullText, tokens: streamingTokens, isStreaming: true }
+                  : msg
+              )
+            );
+
+            // Check for complete sentence chunk
+            sentenceRegex.lastIndex = 0;
+            let match;
+            let lastIndex = 0;
+            while ((match = sentenceRegex.exec(sentenceBuffer)) !== null) {
+              const completeSentence = match[1].trim();
+              if (completeSentence) {
+                const cleanTtsSentence = completeSentence.replace(/<\/?correction>/gi, '').trim();
+                if (cleanTtsSentence) {
+                  enqueueTextForTTS(cleanTtsSentence);
+                }
+              }
+              lastIndex = sentenceRegex.lastIndex;
+            }
+            if (lastIndex > 0) {
+              sentenceBuffer = sentenceBuffer.slice(lastIndex);
+              sentenceRegex.lastIndex = 0;
+            }
+          }
+        } catch (e) {}
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1005,53 +1085,18 @@ export function usePipelineCall({
         sseBuffer = lines.pop() || '';
 
         for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          const jsonStr = trimmed.slice(6);
-          try {
-            const data = JSON.parse(jsonStr);
-            if (data.done) {
-              break;
-            }
-            if (data.delta) {
-              currentAiTurnTextRef.current += data.delta;
-              lastAiSpokenTextRef.current = currentAiTurnTextRef.current;
-              lastAiSpokenTimestampRef.current = Date.now();
-              sentenceBuffer += data.delta;
-
-              const fullText = currentAiTurnTextRef.current;
-              const streamingTokens = parseIntegratedCorrectionTokens(fullText, cleanPrompt, targetLang, nativeLang);
-              const cleanDisplayFullText = fullText.replace(/<\/?correction>/gi, '');
-
-              setLiveTranscript((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiTurnId
-                    ? { ...msg, text: cleanDisplayFullText, tokens: streamingTokens, isStreaming: true }
-                    : msg
-                )
-              );
-
-              // Check for complete sentence chunk
-              sentenceRegex.lastIndex = 0;
-              let match;
-              let lastIndex = 0;
-              while ((match = sentenceRegex.exec(sentenceBuffer)) !== null) {
-                const completeSentence = match[1].trim();
-                if (completeSentence) {
-                  const cleanTtsSentence = completeSentence.replace(/<\/?correction>/gi, '').trim();
-                  if (cleanTtsSentence) {
-                    enqueueTextForTTS(cleanTtsSentence);
-                  }
-                }
-                lastIndex = sentenceRegex.lastIndex;
-              }
-              if (lastIndex > 0) {
-                sentenceBuffer = sentenceBuffer.slice(lastIndex);
-                sentenceRegex.lastIndex = 0;
-              }
-            }
-          } catch (e) {}
+          handleSseLine(line);
         }
+      }
+
+      // Flush remaining SSE buffer bytes and process any final lines
+      sseBuffer += decoder.decode();
+      if (sseBuffer.trim()) {
+        const remainingLines = sseBuffer.split('\n');
+        for (const line of remainingLines) {
+          handleSseLine(line);
+        }
+        sseBuffer = '';
       }
 
       // Flush any trailing text in sentenceBuffer
@@ -1060,6 +1105,7 @@ export function usePipelineCall({
         if (cleanTrailingForTTS) {
           enqueueTextForTTS(cleanTrailingForTTS);
         }
+        sentenceBuffer = '';
       }
 
       // Finalize AI message
@@ -1137,7 +1183,7 @@ export function usePipelineCall({
         playNextInAudioQueue();
       }
     }
-  }, [targetLang, nativeLang, level, interruptAssistant, enqueueTextForTTS, triggerTurnGloss, playNextInAudioQueue]);
+  }, [targetLang, nativeLang, level, cancelAssistantInternally, enqueueTextForTTS, triggerTurnGloss, playNextInAudioQueue]);
 
   // Finalize a mobile voice turn by stopping MediaRecorder and querying Groq Whisper
   const finalizeMobileTurn = useCallback(async () => {
@@ -1769,7 +1815,7 @@ export function usePipelineCall({
         clearTimeout(silenceTimeoutRef.current);
         silenceTimeoutRef.current = null;
       }
-      interruptAssistant();
+      cancelAssistantInternally();
       glossedTurnIdsRef.current.clear();
       processedUserTurnIdsRef.current.clear();
       currentTurnRef.current = {
@@ -1867,7 +1913,7 @@ export function usePipelineCall({
       setCallState('error');
       setErrorMessage(err.message || 'Error desconocido al conectar la llamada.');
     }
-  }, [isSpanish, cleanupResources, initSpeechRecognition, interruptAssistant, startSpeechRecognitionIfReady, startTurnAudioCapture, startMobileVAD]);
+  }, [isSpanish, cleanupResources, initSpeechRecognition, cancelAssistantInternally, startSpeechRecognitionIfReady, startTurnAudioCapture, startMobileVAD]);
 
   // Toggle Mute / Unmute
   const toggleMute = useCallback(() => {
@@ -1967,6 +2013,8 @@ export function usePipelineCall({
     formattedDuration: formatSeconds(callDurationSeconds),
     startCall,
     endCall,
-    toggleMute
+    toggleMute,
+    bargeIn,
+    interruptAssistant: bargeIn
   };
 }

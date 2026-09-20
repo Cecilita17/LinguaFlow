@@ -221,7 +221,7 @@ REPRESENTATIVE EXAMPLES:
         model: activeModel,
         messages: formattedMessages,
         temperature: 0.6,
-        max_tokens: 350,
+        max_tokens: 1000,
         stream: true
       })
     });
@@ -240,6 +240,29 @@ REPRESENTATIVE EXAMPLES:
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+    let finalFinishReason = 'stop';
+
+    const processSseLine = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith(':')) return;
+      if (trimmed === 'data: [DONE]') {
+        res.write(`data: ${JSON.stringify({ done: true, finish_reason: finalFinishReason })}\n\n`);
+        return;
+      }
+      if (trimmed.startsWith('data: ')) {
+        try {
+          const json = JSON.parse(trimmed.slice(6));
+          const finishReason = json?.choices?.[0]?.finish_reason;
+          if (finishReason) {
+            finalFinishReason = finishReason;
+          }
+          const delta = json?.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+          }
+        } catch (e) {}
+      }
+    };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -250,22 +273,24 @@ REPRESENTATIVE EXAMPLES:
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith(':')) continue;
-        if (trimmed === 'data: [DONE]') {
-          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-          continue;
-        }
-        if (trimmed.startsWith('data: ')) {
-          try {
-            const json = JSON.parse(trimmed.slice(6));
-            const delta = json?.choices?.[0]?.delta?.content || '';
-            if (delta) {
-              res.write(`data: ${JSON.stringify({ delta })}\n\n`);
-            }
-          } catch (e) {}
-        }
+        processSseLine(line);
       }
+    }
+
+    // Flush any remaining buffer when stream finishes
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      const remainingLines = buffer.split('\n');
+      for (const line of remainingLines) {
+        processSseLine(line);
+      }
+      buffer = '';
+    }
+
+    if (finalFinishReason === 'length') {
+      console.warn(`[PipelineChatStream] WARNING: Groq generation reached max_tokens limit (finish_reason: length).`);
+    } else {
+      console.log(`[PipelineChatStream] Groq stream completed normally (finish_reason: ${finalFinishReason}).`);
     }
 
     const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
@@ -280,10 +305,10 @@ REPRESENTATIVE EXAMPLES:
       durationMs: Date.now() - startTime,
       retry: false,
       streaming: true,
-      extra: `history_turns=${boundedHistory.length}`
+      extra: `history_turns=${boundedHistory.length}, finish_reason=${finalFinishReason}`
     });
 
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, finish_reason: finalFinishReason })}\n\n`);
     res.end();
 
   } catch (err) {

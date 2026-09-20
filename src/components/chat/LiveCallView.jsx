@@ -12,7 +12,8 @@ import {
   RotateCcw,
   CheckCircle2,
   Loader2,
-  Radio
+  Radio,
+  Hand
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLanguageMeta, getTextDirection, isRtlLanguage } from '../../constants/languages.js';
@@ -57,7 +58,8 @@ export function LiveCallView({
     formattedDuration = '00:00',
     startCall,
     endCall,
-    toggleMute
+    toggleMute,
+    bargeIn
   } = activeCall || {};
 
   // If the call was not already pre-started via user gesture (e.g. direct mount / fallback), start it once on mount
@@ -562,6 +564,19 @@ export function LiveCallView({
         >
           {isMuted ? <MicOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Mic className="w-5 h-5 sm:w-6 sm:h-6" />}
         </button>
+
+        {/* User Barge-in / Interrupt Assistant Button (shown when assistant is speaking/thinking) */}
+        {(callState === 'speaking' || callState === 'thinking') && (
+          <button
+            type="button"
+            onClick={bargeIn}
+            className="px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-amber-950/20 transition-all cursor-pointer active:scale-95 animate-fade-in"
+            title={isSpanish ? 'Interrumpir al asistente para hablar' : 'Interrupt assistant to speak'}
+          >
+            <Hand className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span>{isSpanish ? 'Interrumpir' : 'Interrupt'}</span>
+          </button>
+        )}
 
         {/* End Call Button */}
         <button
