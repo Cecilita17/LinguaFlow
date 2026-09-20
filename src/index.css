@@ -119,7 +119,10 @@ rt {
 
 [data-theme="dark"] .audio-word-active,
 .dark .audio-word-active {
-  background-color: rgba(244, 63, 94, 0.28) !important;
+  background-color: rgba(244, 63, 94, 0.5) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 1.5px rgba(251, 113, 133, 0.75), 0 2px 8px rgba(244, 63, 94, 0.35) !important;
+  font-weight: 700 !important;
 }
 
 /* Compatibilidad armónica con palabras guardadas (amarillo) durante la reproducción */

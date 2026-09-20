@@ -24,10 +24,10 @@ export function InterlinearGloss({
     <span
       dir={glossDir}
       title={gloss}
-      className={`interlinear-gloss font-normal leading-tight text-center select-text isolate [unicode-bidi:isolate] transition-colors whitespace-normal break-words [overflow-wrap:anywhere] w-max max-w-full ${
+      className={`interlinear-gloss font-normal leading-tight text-center select-text isolate [unicode-bidi:isolate] transition-colors whitespace-normal break-words [overflow-wrap:anywhere] w-max max-w-full text-[14px] sm:text-[15px] text-[var(--text-muted)] group-hover/token:text-rose-600 dark:group-hover/token:text-rose-300 group-hover/line:text-[var(--text-secondary)] ${
         isChinese
-          ? 'text-[14px] sm:text-[15px] text-[var(--text-muted)]/75 dark:text-stone-400/75 group-hover/token:text-[var(--text-secondary)] group-hover/line:text-[var(--text-secondary)] mt-0.5 max-w-[160px] sm:max-w-[200px]'
-          : 'text-[14px] sm:text-[15px] text-[var(--text-muted)] group-hover/token:text-rose-600 dark:group-hover/token:text-rose-300 group-hover/line:text-[var(--text-secondary)] mt-1 max-w-[180px] sm:max-w-[220px]'
+          ? 'mt-0.5 max-w-[160px] sm:max-w-[200px]'
+          : 'mt-1 max-w-[180px] sm:max-w-[220px]'
       } ${className}`}
     >
       {gloss}
