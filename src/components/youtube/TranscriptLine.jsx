@@ -7,6 +7,7 @@ import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
 import { useAudioSettings } from '../../context/AudioSettingsContext.jsx';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
+import { calculateActiveTokenIndexFromTime, calculateActiveChunkIndexFromTime } from '../../utils/audioWordSync.js';
 
 export function TranscriptLine({
   line,
@@ -41,82 +42,13 @@ export function TranscriptLine({
   const glossing = isGlossing || isGlossingThisLine;
 
   const activeTokenIndex = React.useMemo(() => {
-    if (!isActive || !tokens || tokens.length === 0) return -1;
-    const time = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
-    const start = typeof line.startTime === 'number' ? line.startTime : 0;
-    const end = typeof line.endTime === 'number' && line.endTime > start ? line.endTime : start + 4.0;
-    
-    // Check if tokens have individual timestamps
-    const hasPerTokenTimestamps = tokens.some(t => t && typeof t === 'object' && typeof t.startTime === 'number');
-    if (hasPerTokenTimestamps) {
-      return tokens.findIndex(t => {
-        if (!t || typeof t !== 'object') return false;
-        const tStart = t.startTime ?? start;
-        const tEnd = t.endTime ?? end;
-        return time >= tStart && time <= tEnd;
-      });
-    }
-
-    // Proportional progress based on character count of non-punctuation tokens
-    const duration = Math.max(0.4, end - start);
-    const elapsed = Math.max(0, Math.min(duration, time - start));
-    const progress = elapsed / duration;
-
-    const tokenWeights = tokens.map(tok => {
-      if (!tok) return 0;
-      const rawWord = typeof tok === 'string' ? tok : (tok.word ?? tok.text ?? '');
-      const isPunct = tok && typeof tok === 'object' && typeof tok.isPunctuation === 'boolean'
-        ? tok.isPunctuation
-        : PUNCTUATION_REGEX.test(rawWord);
-      return isPunct ? 0 : Math.max(1, rawWord.length);
-    });
-
-    const totalWeight = tokenWeights.reduce((sum, w) => sum + w, 0);
-    if (totalWeight === 0) return -1;
-
-    const targetCharOffset = progress * totalWeight;
-    let accumulated = 0;
-    for (let i = 0; i < tokens.length; i++) {
-      accumulated += tokenWeights[i];
-      if (tokenWeights[i] > 0 && targetCharOffset < accumulated) {
-        return i;
-      }
-    }
-    for (let i = tokens.length - 1; i >= 0; i--) {
-      if (tokenWeights[i] > 0) return i;
-    }
-    return -1;
+    if (!isActive) return -1;
+    return calculateActiveTokenIndexFromTime(tokens, currentTime, line.startTime, line.endTime);
   }, [isActive, tokens, currentTime, line.startTime, line.endTime]);
 
   const activeChunkIndex = React.useMemo(() => {
-    if (!isActive || !text) return -1;
-    const chunks = text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/);
-    const time = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
-    const start = typeof line.startTime === 'number' ? line.startTime : 0;
-    const end = typeof line.endTime === 'number' && line.endTime > start ? line.endTime : start + 4.0;
-    const duration = Math.max(0.4, end - start);
-    const elapsed = Math.max(0, Math.min(duration, time - start));
-    const progress = elapsed / duration;
-
-    const chunkWeights = chunks.map(c => {
-      const trimmed = (c || '').trim();
-      return (trimmed && !PUNCTUATION_REGEX.test(trimmed)) ? Math.max(1, trimmed.length) : 0;
-    });
-    const totalWeight = chunkWeights.reduce((sum, w) => sum + w, 0);
-    if (totalWeight === 0) return -1;
-
-    const targetCharOffset = progress * totalWeight;
-    let accumulated = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      accumulated += chunkWeights[i];
-      if (chunkWeights[i] > 0 && targetCharOffset < accumulated) {
-        return i;
-      }
-    }
-    for (let i = chunks.length - 1; i >= 0; i--) {
-      if (chunkWeights[i] > 0) return i;
-    }
-    return -1;
+    if (!isActive) return -1;
+    return calculateActiveChunkIndexFromTime(text, currentTime, line.startTime, line.endTime);
   }, [isActive, text, currentTime, line.startTime, line.endTime]);
 
   // Font size classes

@@ -143,14 +143,100 @@ export function estimateSpeechDurationMs(text, targetLang = 'es', rate = 1.0) {
 }
 
 /**
- * Creates an authoritative, boundary-driven audio token synchronizer.
+ * Calculates the active token index based on current playback time and segment duration.
+ * Reusable single-source-of-truth matching the algorithm used in YouTube Reader.
+ */
+export function calculateActiveTokenIndexFromTime(tokens, currentTime, startTime = 0, endTime = 0) {
+  if (!tokens || !Array.isArray(tokens) || tokens.length === 0) return -1;
+  const time = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
+  const start = typeof startTime === 'number' ? startTime : 0;
+  const end = typeof endTime === 'number' && endTime > start ? endTime : start + 4.0;
+
+  // Check if tokens have individual timestamps
+  const hasPerTokenTimestamps = tokens.some(t => t && typeof t === 'object' && typeof t.startTime === 'number');
+  if (hasPerTokenTimestamps) {
+    return tokens.findIndex(t => {
+      if (!t || typeof t !== 'object') return false;
+      const tStart = t.startTime ?? start;
+      const tEnd = t.endTime ?? end;
+      return time >= tStart && time <= tEnd;
+    });
+  }
+
+  // Proportional progress based on character count of non-punctuation tokens
+  const duration = Math.max(0.4, end - start);
+  const elapsed = Math.max(0, Math.min(duration, time - start));
+  const progress = elapsed / duration;
+
+  const tokenWeights = tokens.map(tok => {
+    if (!tok) return 0;
+    const rawWord = typeof tok === 'string' ? tok : (tok.word ?? tok.text ?? '');
+    const isPunct = tok && typeof tok === 'object' && typeof tok.isPunctuation === 'boolean'
+      ? tok.isPunctuation
+      : PUNCTUATION_REGEX.test(rawWord);
+    return isPunct ? 0 : Math.max(1, rawWord.length);
+  });
+
+  const totalWeight = tokenWeights.reduce((sum, w) => sum + w, 0);
+  if (totalWeight === 0) return -1;
+
+  const targetCharOffset = progress * totalWeight;
+  let accumulated = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    accumulated += tokenWeights[i];
+    if (tokenWeights[i] > 0 && targetCharOffset < accumulated) {
+      return i;
+    }
+  }
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    if (tokenWeights[i] > 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Calculates the active chunk index for plain text based on current playback time.
+ */
+export function calculateActiveChunkIndexFromTime(text, currentTime, startTime = 0, endTime = 0) {
+  if (!text) return -1;
+  const chunks = text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/);
+  const time = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
+  const start = typeof startTime === 'number' ? startTime : 0;
+  const end = typeof endTime === 'number' && endTime > start ? endTime : start + 4.0;
+  const duration = Math.max(0.4, end - start);
+  const elapsed = Math.max(0, Math.min(duration, time - start));
+  const progress = elapsed / duration;
+
+  const chunkWeights = chunks.map(c => {
+    const trimmed = (c || '').trim();
+    return (trimmed && !PUNCTUATION_REGEX.test(trimmed)) ? Math.max(1, trimmed.length) : 0;
+  });
+  const totalWeight = chunkWeights.reduce((sum, w) => sum + w, 0);
+  if (totalWeight === 0) return -1;
+
+  const targetCharOffset = progress * totalWeight;
+  let accumulated = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    accumulated += chunkWeights[i];
+    if (chunkWeights[i] > 0 && targetCharOffset < accumulated) {
+      return i;
+    }
+  }
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    if (chunkWeights[i] > 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Creates an authoritative, boundary-calibrated continuous audio token synchronizer.
  * 
  * Architecture:
  * 1. Monotonic token character range mapping against spoken text.
- * 2. Real-time boundary snapping on SpeechSynthesisUtterance.onboundary events (Single Source of Truth).
- * 3. Zero artificial catch-up queues, zero arbitrary lookaheads, zero fake progressive animations.
- * 4. Clean lifecycle management (onstart, onboundary, onpause, onresume, onend, onerror, stop).
- * 5. Structured DEV-mode diagnostics to measure exact timing between WebSpeech events and token ranges.
+ * 2. Continuous time progression timer based on paragraph speech duration (matching YouTube Reader's model).
+ * 3. Real-time boundary snapping on SpeechSynthesisUtterance.onboundary events when available.
+ * 4. Zero freezing on word 0 when browser onboundary events are missing (e.g. Android / WebSpeech).
+ * 5. Clean lifecycle management (onstart, onboundary, onpause, onresume, onend, onerror, stop).
  */
 export function createAudioWordSynchronizer({
   text = '',
@@ -179,10 +265,24 @@ export function createAudioWordSynchronizer({
   }
 
   let isRunning = false;
+  let isPaused = false;
   let activeTokenPos = -1; // Index in wordTokens
   let highestVisitedTokenPos = -1;
   let boundaryCount = 0;
+  let timerId = null;
+  let startTime = 0;
+  let pausedAt = 0;
+  let totalPausedDuration = 0;
+
   const effectiveRate = Math.max(0.5, Math.min(2.0, typeof speechRate === 'number' ? speechRate : 1.0));
+  const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, effectiveRate);
+
+  function clearTimer() {
+    if (timerId !== null) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+  }
 
   function setActiveTokenPos(pos, isSnap = false) {
     if (wordTokens.length === 0) return;
@@ -190,6 +290,11 @@ export function createAudioWordSynchronizer({
 
     // Monotonic progression: during speech, do not jump backwards
     if (!isSnap && clampedPos < highestVisitedTokenPos) {
+      return;
+    }
+
+    // Skip redundant calls if active token hasn't changed
+    if (!isSnap && clampedPos === activeTokenPos) {
       return;
     }
 
@@ -204,13 +309,46 @@ export function createAudioWordSynchronizer({
     }
   }
 
+  function startTimer() {
+    clearTimer();
+    if (!isRunning || wordTokens.length === 0) return;
+
+    timerId = setInterval(() => {
+      if (!isRunning || isPaused || wordTokens.length === 0) return;
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      const elapsed = Math.max(0, now - startTime - totalPausedDuration);
+      const progress = Math.min(1.0, elapsed / Math.max(400, estimatedDurationMs));
+
+      // Calculate active token based on character weights (identical to YouTube's proportional logic)
+      const tokenWeights = wordTokens.map(wt => Math.max(1, wt.word.length));
+      const totalWeight = tokenWeights.reduce((sum, w) => sum + w, 0);
+      if (totalWeight > 0) {
+        const targetOffset = progress * totalWeight;
+        let accumulated = 0;
+        let targetPos = 0;
+        for (let i = 0; i < wordTokens.length; i++) {
+          accumulated += tokenWeights[i];
+          if (tokenWeights[i] > 0 && targetOffset < accumulated) {
+            targetPos = i;
+            break;
+          }
+        }
+        if (targetOffset >= totalWeight) {
+          targetPos = wordTokens.length - 1;
+        }
+        setActiveTokenPos(targetPos, false);
+      }
+    }, 80);
+  }
+
   function handleStart(event) {
     isRunning = true;
+    isPaused = false;
     boundaryCount = 0;
     activeTokenPos = 0;
     highestVisitedTokenPos = 0;
-
-    const startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    totalPausedDuration = 0;
+    startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
     if (debug) {
       console.log('[TTS_DEV_DEBUG:onstart]', {
@@ -219,11 +357,13 @@ export function createAudioWordSynchronizer({
         textLength,
         targetLang,
         speechRate: effectiveRate,
+        estimatedDurationMs,
         wordTokensCount: wordTokens.length
       });
     }
 
     setActiveTokenPos(0, true);
+    startTimer();
   }
 
   function handleBoundary(event) {
@@ -261,25 +401,39 @@ export function createAudioWordSynchronizer({
   }
 
   function handlePause(event) {
+    isPaused = true;
+    pausedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    clearTimer();
     if (debug) {
       console.log('[TTS_DEV_DEBUG:onpause]', {
-        timestamp: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+        timestamp: pausedAt,
         activeTokenPos
       });
     }
   }
 
   function handleResume(event) {
-    if (debug) {
-      console.log('[TTS_DEV_DEBUG:onresume]', {
-        timestamp: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
-        activeTokenPos
-      });
+    if (isPaused) {
+      isPaused = false;
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      if (pausedAt > 0) {
+        totalPausedDuration += Math.max(0, now - pausedAt);
+      }
+      startTimer();
+      if (debug) {
+        console.log('[TTS_DEV_DEBUG:onresume]', {
+          timestamp: now,
+          activeTokenPos,
+          totalPausedDuration
+        });
+      }
     }
   }
 
   function handleEnd(event) {
     isRunning = false;
+    isPaused = false;
+    clearTimer();
     if (debug) {
       console.log('[TTS_DEV_DEBUG:onend]', {
         timestamp: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
@@ -293,6 +447,8 @@ export function createAudioWordSynchronizer({
 
   function stop() {
     isRunning = false;
+    isPaused = false;
+    clearTimer();
     onActiveCharChange(-1);
   }
 
