@@ -247,6 +247,7 @@ export function createAudioWordSynchronizer({
   targetLang = 'es',
   speechRate = 1.0,
   onActiveCharChange = () => {},
+  isAndroid = (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')),
   debug = false
 }) {
   const cleanText = normalizeAudioText(text);
@@ -338,8 +339,51 @@ export function createAudioWordSynchronizer({
     if (!isRunning || isPaused || wordTokens.length === 0) return;
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
+    // --- ANDROID SPECIFIC ANTI-SKIP STRATEGY ---
+    if (isAndroid) {
+      // 1. If a boundary arrived ahead of current visual position, step strictly 1 word towards it
+      // Guarantees 3 -> 4 -> 5 -> 6 -> 7 without jumping directly from 3 to 7
+      if (targetBoundaryWordPos > highestVisitedTokenPos) {
+        const nextStepPos = highestVisitedTokenPos + 1;
+        if (debug) {
+          console.log('[AndroidTextReaderSync]', {
+            current: highestVisitedTokenPos,
+            boundaryTarget: targetBoundaryWordPos,
+            next: nextStepPos
+          });
+        }
+        setActiveTokenPos(nextStepPos, false);
+        return;
+      }
+
+      // 2. Conservative temporal pacing when no boundary is pending ahead:
+      // Advances at most N -> N + 1 when elapsed time for current word is reached
+      if (highestVisitedTokenPos < wordTokens.length - 1) {
+        const elapsedSinceAnchor = Math.max(0, now - clockBaseTime);
+        const safeDuration = Math.max(400, calibratedDurationMs);
+        const dFrac = elapsedSinceAnchor / safeDuration;
+        const currentFraction = Math.min(1.0, clockBaseFraction + dFrac);
+        const currentRange = cumulativeRanges[highestVisitedTokenPos];
+
+        // Advance to next word only when current word's end fraction is reached
+        if (currentRange && currentFraction >= currentRange.endFraction) {
+          const nextStepPos = highestVisitedTokenPos + 1;
+          if (debug) {
+            console.log('[AndroidTextReaderSync:temporal]', {
+              current: highestVisitedTokenPos,
+              next: nextStepPos,
+              currentFraction,
+              endFraction: currentRange.endFraction
+            });
+          }
+          setActiveTokenPos(nextStepPos, false);
+        }
+      }
+      return;
+    }
+
+    // --- DESKTOP / NON-ANDROID STRATEGY (UNCHANGED) ---
     // 1. If a boundary arrived ahead of our current visual position, smoothly step towards it
-    // (e.g. 1 -> 2 -> 3 -> 4 -> 5 on subsequent ticks rather than an instant jump)
     if (targetBoundaryWordPos > highestVisitedTokenPos) {
       const nextStepPos = highestVisitedTokenPos + 1;
       setActiveTokenPos(nextStepPos, false);
@@ -453,7 +497,7 @@ export function createAudioWordSynchronizer({
       lastBoundaryTime = now;
 
       // Set smooth catch-up target: do NOT snap directly, let tick() visit intermediate words
-      targetBoundaryWordPos = Math.max(highestVisitedTokenPos, matchedWordPos);
+      targetBoundaryWordPos = Math.max(targetBoundaryWordPos, Math.max(highestVisitedTokenPos, matchedWordPos));
     }
 
     if (debug) {

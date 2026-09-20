@@ -791,11 +791,13 @@ export function TextReaderPage({
     } catch (voiceErr) {}
 
     // Create encapsulated Audio Word Synchronizer for boundary-anchored local token progression
+    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
     const synchronizer = createAudioWordSynchronizer({
       text: cleanText,
       tokens: paragraph.tokens || [],
       targetLang: activeDocLang,
       speechRate: currentRate,
+      isAndroid,
       onActiveCharChange: (charIndex) => {
         if (playbackId !== audioPlaybackIdRef.current) return;
         setActiveAudioCharIndex(charIndex);
