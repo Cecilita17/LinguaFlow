@@ -233,9 +233,12 @@ export function calculateActiveChunkIndexFromTime(text, currentTime, startTime =
  * 
  * Architecture:
  * 1. Monotonic token character range mapping against spoken text.
- * 2. Continuous time progression timer based on paragraph speech duration (matching YouTube Reader's model).
- * 3. Real-time boundary snapping on SpeechSynthesisUtterance.onboundary events when available.
- * 4. Zero freezing on word 0 when browser onboundary events are missing (e.g. Android / WebSpeech).
+ * 2. Absolute time-derived progression: Visual token position is a continuous function
+ *    of elapsed absolute time, NEVER a counter of received callbacks.
+ * 3. Boundary Auto-Calibration: SpeechSynthesisUtterance.onboundary events serve as
+ *    speed calibration anchors rather than instant jump triggers, preventing skipped words.
+ * 4. Continuous High-Frequency Interpolation (25ms loop): Smoothly visits every intermediate
+ *    word (1 -> 2 -> 3 -> 4 -> 5) even when Android/mobile browsers skip onboundary events.
  * 5. Clean lifecycle management (onstart, onboundary, onpause, onresume, onend, onerror, stop).
  */
 export function createAudioWordSynchronizer({
@@ -264,10 +267,31 @@ export function createAudioWordSynchronizer({
     }
   }
 
+  // Precalculate cumulative character weight ranges for every word token
+  const tokenWeights = wordTokens.map(wt => Math.max(1, wt.word.length));
+  const totalWeight = tokenWeights.reduce((sum, w) => sum + w, 0);
+  const cumulativeRanges = [];
+  let cumWeight = 0;
+  for (let i = 0; i < wordTokens.length; i++) {
+    const w = tokenWeights[i];
+    cumulativeRanges.push({
+      startOffset: cumWeight,
+      endOffset: cumWeight + w,
+      startFraction: totalWeight > 0 ? cumWeight / totalWeight : 0,
+      endFraction: totalWeight > 0 ? (cumWeight + w) / totalWeight : 1
+    });
+    cumWeight += w;
+  }
+
   let isRunning = false;
   let isPaused = false;
   let activeTokenPos = -1; // Index in wordTokens
   let highestVisitedTokenPos = -1;
+  let targetBoundaryWordPos = -1;
+  let lastBoundaryWordPos = -1;
+  let lastBoundaryTime = 0;
+  let clockBaseTime = 0;
+  let clockBaseFraction = 0;
   let boundaryCount = 0;
   let timerId = null;
   let startTime = 0;
@@ -276,6 +300,7 @@ export function createAudioWordSynchronizer({
 
   const effectiveRate = Math.max(0.5, Math.min(2.0, typeof speechRate === 'number' ? speechRate : 1.0));
   const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, effectiveRate);
+  let calibratedDurationMs = estimatedDurationMs;
 
   function clearTimer() {
     if (timerId !== null) {
@@ -309,36 +334,50 @@ export function createAudioWordSynchronizer({
     }
   }
 
+  function tick() {
+    if (!isRunning || isPaused || wordTokens.length === 0) return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+    // 1. If a boundary arrived ahead of our current visual position, smoothly step towards it
+    // (e.g. 1 -> 2 -> 3 -> 4 -> 5 on subsequent ticks rather than an instant jump)
+    if (targetBoundaryWordPos > highestVisitedTokenPos) {
+      const nextStepPos = highestVisitedTokenPos + 1;
+      setActiveTokenPos(nextStepPos, false);
+      return;
+    }
+
+    // 2. Absolute continuous time progression from calibrated anchor
+    const elapsedSinceAnchor = Math.max(0, now - clockBaseTime);
+    const safeDuration = Math.max(400, calibratedDurationMs);
+    const dFrac = elapsedSinceAnchor / safeDuration;
+    const currentFraction = Math.min(1.0, clockBaseFraction + dFrac);
+
+    // Absolute time-derived word position lookup
+    const targetOffset = currentFraction * totalWeight;
+    let targetPos = 0;
+    for (let i = 0; i < cumulativeRanges.length; i++) {
+      if (targetOffset < cumulativeRanges[i].endOffset) {
+        targetPos = i;
+        break;
+      }
+    }
+    if (currentFraction >= 1.0 || targetOffset >= totalWeight) {
+      targetPos = wordTokens.length - 1;
+    }
+
+    // Advance smoothly and monotonically
+    const nextPos = Math.max(highestVisitedTokenPos, targetPos);
+    setActiveTokenPos(nextPos, false);
+  }
+
   function startTimer() {
     clearTimer();
     if (!isRunning || wordTokens.length === 0) return;
 
+    // High frequency 25ms tick loop guarantees smooth word-by-word visits on mobile & desktop
     timerId = setInterval(() => {
-      if (!isRunning || isPaused || wordTokens.length === 0) return;
-      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      const elapsed = Math.max(0, now - startTime - totalPausedDuration);
-      const progress = Math.min(1.0, elapsed / Math.max(400, estimatedDurationMs));
-
-      // Calculate active token based on character weights (identical to YouTube's proportional logic)
-      const tokenWeights = wordTokens.map(wt => Math.max(1, wt.word.length));
-      const totalWeight = tokenWeights.reduce((sum, w) => sum + w, 0);
-      if (totalWeight > 0) {
-        const targetOffset = progress * totalWeight;
-        let accumulated = 0;
-        let targetPos = 0;
-        for (let i = 0; i < wordTokens.length; i++) {
-          accumulated += tokenWeights[i];
-          if (tokenWeights[i] > 0 && targetOffset < accumulated) {
-            targetPos = i;
-            break;
-          }
-        }
-        if (targetOffset >= totalWeight) {
-          targetPos = wordTokens.length - 1;
-        }
-        setActiveTokenPos(targetPos, false);
-      }
-    }, 80);
+      tick();
+    }, 25);
   }
 
   function handleStart(event) {
@@ -347,8 +386,14 @@ export function createAudioWordSynchronizer({
     boundaryCount = 0;
     activeTokenPos = 0;
     highestVisitedTokenPos = 0;
+    targetBoundaryWordPos = 0;
+    lastBoundaryWordPos = 0;
+    lastBoundaryTime = 0;
     totalPausedDuration = 0;
+    calibratedDurationMs = estimatedDurationMs;
     startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    clockBaseTime = startTime;
+    clockBaseFraction = 0;
 
     if (debug) {
       console.log('[TTS_DEV_DEBUG:onstart]', {
@@ -375,28 +420,54 @@ export function createAudioWordSynchronizer({
 
     const matchedTokenIdx = findActiveTokenIndex(charIndex, tokenRanges);
     const matchedWordPos = wordTokens.findIndex(wt => wt.tokenIndex === matchedTokenIdx);
-    
+
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-    const elapsedTime = typeof event?.elapsedTime === 'number' ? event.elapsedTime : null;
+    const elapsed = Math.max(0, now - startTime - totalPausedDuration);
+
+    if (matchedWordPos >= 0) {
+      const boundaryFraction = cumulativeRanges[matchedWordPos]?.startFraction || 0;
+
+      // Speed calibration between consecutive boundaries
+      if (lastBoundaryWordPos >= 0 && matchedWordPos > lastBoundaryWordPos && lastBoundaryTime > 0) {
+        const dt = now - lastBoundaryTime;
+        const dFrac = boundaryFraction - (cumulativeRanges[lastBoundaryWordPos]?.startFraction || 0);
+        if (dFrac > 0.02 && dt > 40) {
+          const boundaryEstimatedTotal = dt / dFrac;
+          const minSafe = estimatedDurationMs * 0.35;
+          const maxSafe = estimatedDurationMs * 2.8;
+          const clamped = Math.max(minSafe, Math.min(maxSafe, boundaryEstimatedTotal));
+          calibratedDurationMs = 0.6 * calibratedDurationMs + 0.4 * clamped;
+        }
+      } else if (boundaryFraction > 0.05 && elapsed > 150) {
+        const empiricalDuration = elapsed / boundaryFraction;
+        const minSafe = estimatedDurationMs * 0.35;
+        const maxSafe = estimatedDurationMs * 2.8;
+        const clampedEmpirical = Math.max(minSafe, Math.min(maxSafe, empiricalDuration));
+        calibratedDurationMs = 0.65 * calibratedDurationMs + 0.35 * clampedEmpirical;
+      }
+
+      // Update anchor point
+      clockBaseTime = now;
+      clockBaseFraction = boundaryFraction;
+      lastBoundaryWordPos = matchedWordPos;
+      lastBoundaryTime = now;
+
+      // Set smooth catch-up target: do NOT snap directly, let tick() visit intermediate words
+      targetBoundaryWordPos = Math.max(highestVisitedTokenPos, matchedWordPos);
+    }
 
     if (debug) {
       console.log('[TTS_DEV_DEBUG:onboundary]', {
         timestamp: now,
-        elapsedTime,
         charIndex,
         charLength: event?.charLength,
         name: event?.name,
         tokenIndex: matchedTokenIdx,
         token: tokenRanges[matchedTokenIdx]?.word || '',
-        activeTokenIndex: matchedTokenIdx,
-        matchedWordPos
+        matchedWordPos,
+        targetBoundaryWordPos,
+        calibratedDurationMs
       });
-    }
-
-    if (matchedWordPos >= 0) {
-      // Ensure monotonic forward movement
-      const targetPos = Math.max(highestVisitedTokenPos, matchedWordPos);
-      setActiveTokenPos(targetPos, true);
     }
   }
 
@@ -417,7 +488,12 @@ export function createAudioWordSynchronizer({
       isPaused = false;
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       if (pausedAt > 0) {
-        totalPausedDuration += Math.max(0, now - pausedAt);
+        const pauseDt = Math.max(0, now - pausedAt);
+        totalPausedDuration += pauseDt;
+        clockBaseTime += pauseDt;
+        if (lastBoundaryTime > 0) {
+          lastBoundaryTime += pauseDt;
+        }
       }
       startTimer();
       if (debug) {
