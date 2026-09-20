@@ -511,6 +511,84 @@ export function usePipelineCall({
     }
   }, [stopAudioPlayback, resetTurnAudioCapture]);
 
+  // Stop mobile Web Audio VAD
+  const stopMobileVAD = useCallback(() => {
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
+    if (vadSourceNodeRef.current) {
+      try { vadSourceNodeRef.current.disconnect(); } catch (e) {}
+      vadSourceNodeRef.current = null;
+    }
+    vadAnalyserNodeRef.current = null;
+    isUserSpeakingMobileRef.current = false;
+    isFinalizingMobileTurnRef.current = false;
+    mobileLastVoiceTimestampRef.current = 0;
+    mobileSpeechStartTimestampRef.current = 0;
+  }, []);
+
+  // Determine if Speech Recognition can be safely active and listening
+  const canRunSpeechRecognition = useCallback(() => {
+    const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
+    const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
+    const isQueueActive = ttsQueueRef.current.length > 0;
+    const isLlmActive = isLlmStreamingRef.current || Boolean(currentAiTurnIdRef.current);
+
+    return Boolean(
+      isRecognitionActiveRef.current &&
+      recognitionRef.current &&
+      !isSttPausedRef.current &&
+      !isEchoGuardActiveRef.current &&
+      !isPlaybackActive &&
+      !isQueueActive &&
+      !isLlmActive &&
+      !isSpeakingState &&
+      callStateRef.current !== 'idle' &&
+      callStateRef.current !== 'error'
+    );
+  }, []);
+
+  // Safely start Speech Recognition if ready, handling Chrome state races and retries
+  const startSpeechRecognitionIfReady = useCallback(() => {
+    if (restartRetryTimeoutRef.current) {
+      clearTimeout(restartRetryTimeoutRef.current);
+      restartRetryTimeoutRef.current = null;
+    }
+
+    if (!canRunSpeechRecognition()) {
+      console.log('[PipelineSTT] startSpeechRecognitionIfReady: not ready to run STT currently (paused/speaking/thinking)');
+      return;
+    }
+
+    if (isSpeechRecognitionRunningRef.current) {
+      console.log('[PipelineSTT] SpeechRecognition is already running');
+      return;
+    }
+
+    try {
+      console.log('[PipelineAndroidTest] recognition.start ABOUT TO RUN');
+      console.log('[PipelineAndroidTest] userActivation.isActive =', typeof navigator !== 'undefined' && navigator.userActivation ? navigator.userActivation.isActive : 'unavailable');
+      console.log('[PipelineSTT] SpeechRecognition start requested');
+      speechRecognitionRestartPendingRef.current = false;
+      recognitionRef.current.start();
+      isSpeechRecognitionRunningRef.current = true;
+      console.log('[PipelineSTT] SpeechRecognition.start() initiated successfully');
+    } catch (err) {
+      isSpeechRecognitionRunningRef.current = false;
+      console.warn('[PipelineSTT] SpeechRecognition.start() notice:', err?.name || err?.message || err);
+      // If error is InvalidStateError or recognition is in a transitional closing state, mark pending and retry safely
+      if (err?.name === 'InvalidStateError' || (err?.message && err.message.includes('already started'))) {
+        speechRecognitionRestartPendingRef.current = true;
+        restartRetryTimeoutRef.current = setTimeout(() => {
+          if (canRunSpeechRecognition() && !isSpeechRecognitionRunningRef.current) {
+            startSpeechRecognitionIfReady();
+          }
+        }, 150);
+      }
+    }
+  }, [canRunSpeechRecognition]);
+
   // Explicit User Barge-In: triggered exclusively by direct user UI action (click/touch)
   const bargeIn = useCallback(() => {
     if (callStateRef.current === 'idle' || callStateRef.current === 'error') {
@@ -544,23 +622,6 @@ export function usePipelineCall({
 
   // Backward-compatibility alias
   const interruptAssistant = bargeIn;
-
-  // Stop mobile Web Audio VAD
-  const stopMobileVAD = useCallback(() => {
-    if (vadIntervalRef.current) {
-      clearInterval(vadIntervalRef.current);
-      vadIntervalRef.current = null;
-    }
-    if (vadSourceNodeRef.current) {
-      try { vadSourceNodeRef.current.disconnect(); } catch (e) {}
-      vadSourceNodeRef.current = null;
-    }
-    vadAnalyserNodeRef.current = null;
-    isUserSpeakingMobileRef.current = false;
-    isFinalizingMobileTurnRef.current = false;
-    mobileLastVoiceTimestampRef.current = 0;
-    mobileSpeechStartTimestampRef.current = 0;
-  }, []);
 
   // Teardown all resources
   const cleanupResources = useCallback(() => {
@@ -628,67 +689,6 @@ export function usePipelineCall({
       finalized: false
     };
   }, [cancelAssistantInternally, stopMobileVAD]);
-
-  // Determine if Speech Recognition can be safely active and listening
-  const canRunSpeechRecognition = useCallback(() => {
-    const isSpeakingState = callStateRef.current === 'speaking' || callStateRef.current === 'thinking';
-    const isPlaybackActive = isPlayingQueueRef.current || Boolean(activeAudioSourceRef.current) || Boolean(activeAudioElementRef.current);
-    const isQueueActive = ttsQueueRef.current.length > 0;
-    const isLlmActive = isLlmStreamingRef.current || Boolean(currentAiTurnIdRef.current);
-
-    return Boolean(
-      isRecognitionActiveRef.current &&
-      recognitionRef.current &&
-      !isSttPausedRef.current &&
-      !isEchoGuardActiveRef.current &&
-      !isPlaybackActive &&
-      !isQueueActive &&
-      !isLlmActive &&
-      !isSpeakingState &&
-      callStateRef.current !== 'idle' &&
-      callStateRef.current !== 'error'
-    );
-  }, []);
-
-  // Safely start Speech Recognition if ready, handling Chrome state races and retries
-  const startSpeechRecognitionIfReady = useCallback(() => {
-    if (restartRetryTimeoutRef.current) {
-      clearTimeout(restartRetryTimeoutRef.current);
-      restartRetryTimeoutRef.current = null;
-    }
-
-    if (!canRunSpeechRecognition()) {
-      console.log('[PipelineSTT] startSpeechRecognitionIfReady: not ready to run STT currently (paused/speaking/thinking)');
-      return;
-    }
-
-    if (isSpeechRecognitionRunningRef.current) {
-      console.log('[PipelineSTT] SpeechRecognition is already running');
-      return;
-    }
-
-    try {
-      console.log('[PipelineAndroidTest] recognition.start ABOUT TO RUN');
-      console.log('[PipelineAndroidTest] userActivation.isActive =', typeof navigator !== 'undefined' && navigator.userActivation ? navigator.userActivation.isActive : 'unavailable');
-      console.log('[PipelineSTT] SpeechRecognition start requested');
-      speechRecognitionRestartPendingRef.current = false;
-      recognitionRef.current.start();
-      isSpeechRecognitionRunningRef.current = true;
-      console.log('[PipelineSTT] SpeechRecognition.start() initiated successfully');
-    } catch (err) {
-      isSpeechRecognitionRunningRef.current = false;
-      console.warn('[PipelineSTT] SpeechRecognition.start() notice:', err?.name || err?.message || err);
-      // If error is InvalidStateError or recognition is in a transitional closing state, mark pending and retry safely
-      if (err?.name === 'InvalidStateError' || (err?.message && err.message.includes('already started'))) {
-        speechRecognitionRestartPendingRef.current = true;
-        restartRetryTimeoutRef.current = setTimeout(() => {
-          if (canRunSpeechRecognition() && !isSpeechRecognitionRunningRef.current) {
-            startSpeechRecognitionIfReady();
-          }
-        }, 150);
-      }
-    }
-  }, [canRunSpeechRecognition]);
 
 
 
