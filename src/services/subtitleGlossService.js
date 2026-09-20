@@ -467,12 +467,52 @@ export function findMatchingSubtitleIndex(subtitlesList, chunkList, aiItem, item
  *   - Preserves all punctuation in exact positions (whether returned by AI or in source text).
  *   - Preserves any user manual glosses for words.
  *   - If validation passes: returns the new authoritative lexical token array.
- * /**
+/**
+ * Safe speaker prefix regex for subtitle lines.
+ * Matches leading speaker labels such as:
+ * - Emoji + colon/dash: "🐼: ", "🐼：", "🐼 - ", "👩‍🏫: "
+ * - Named speakers: "Speaker 1: ", "Narrator: ", "Host: "
+ * - Bracketed speakers: "[John]: ", "(Mary): "
+ * 
+ * Only matches at the very START of the string (^). Does not strip emojis elsewhere in the sentence.
+ */
+export const SPEAKER_PREFIX_REGEX = /^(\s*(?:[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\u200D]+|\b(?:Speaker|SPEAKER|Hablante|Person|Host|Narrator|Narrador)\s*\d*|\[[^\]]+\]|\([^)]+\))\s*[:：\-—]\s*)/u;
+
+/**
+ * Extracts speaker prefix if present at the start of a subtitle line.
+ * @param {string} text
+ * @returns {{ prefix: string, content: string }}
+ */
+export function extractSpeakerPrefix(text) {
+  if (typeof text !== 'string') return { prefix: '', content: '' };
+  const match = text.match(SPEAKER_PREFIX_REGEX);
+  if (match) {
+    return {
+      prefix: match[0],
+      content: text.slice(match[0].length)
+    };
+  }
+  return { prefix: '', content: text };
+}
+
+/**
+ * Strips speaker prefix if present at the start of a subtitle line.
+ * @param {string} text
+ * @returns {string}
+ */
+export function stripSpeakerPrefix(text) {
+  if (typeof text !== 'string') return '';
+  const match = text.match(SPEAKER_PREFIX_REGEX);
+  return match ? text.slice(match[0].length) : text;
+}
+
+/**
  * Validates whether the given AI tokens accurately and completely cover the original Chinese text:
  * - No characters omitted
  * - No characters invented or duplicated
  * - Order is preserved exactly
  * - Ignores harmless whitespace differences
+ * - Tolerates leading speaker prefixes (e.g. "🐼: ") stripped by AI
  *
  * @param {string} originalText
  * @param {Array} aiTokens
@@ -483,21 +523,33 @@ export function validateChineseAiSegmentation(originalText, aiTokens) {
     return false;
   }
 
-  const cleanOriginal = originalText.replace(/\s+/g, '');
-  if (!cleanOriginal) return false;
-
-  // 1. Check if direct concatenation of all AI tokens matches cleanOriginal
   const cleanAiChars = aiTokens.map(t => (t.word || t.text || '').replace(/\s+/g, '')).join('');
+  if (!cleanAiChars) return false;
+
+  const PUNCT_STRIP_REGEX = /[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]/g;
+  const nonPunctAi = cleanAiChars.replace(PUNCT_STRIP_REGEX, '');
+  if (!nonPunctAi) return false;
+
+  // 1. Check against original text with speaker prefix stripped (standard case where AI returns only dialogue)
+  const textWithoutSpeaker = stripSpeakerPrefix(originalText);
+  const cleanOriginal = textWithoutSpeaker.replace(/\s+/g, '');
   if (cleanAiChars === cleanOriginal) {
     return true;
   }
 
-  // 2. Check if AI tokens covered all non-punctuation characters in exact order
-  // (AI often omits or reformats punctuation like trailing 。or quotes)
-  const PUNCT_STRIP_REGEX = /[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]/g;
   const nonPunctOrig = cleanOriginal.replace(PUNCT_STRIP_REGEX, '');
-  const nonPunctAi = cleanAiChars.replace(PUNCT_STRIP_REGEX, '');
   if (nonPunctOrig.length > 0 && nonPunctAi === nonPunctOrig) {
+    return true;
+  }
+
+  // 2. Also check against full original text (in case AI retained the speaker prefix)
+  const cleanFullOriginal = originalText.replace(/\s+/g, '');
+  if (cleanAiChars === cleanFullOriginal) {
+    return true;
+  }
+
+  const nonPunctFullOrig = cleanFullOriginal.replace(PUNCT_STRIP_REGEX, '');
+  if (nonPunctFullOrig.length > 0 && nonPunctAi === nonPunctFullOrig) {
     return true;
   }
 
@@ -529,7 +581,8 @@ export function mergeChineseAiTokensByCoverage(originalTokens = [], aiTokens = [
   // 1. Validate coverage
   const isValid = validateChineseAiSegmentation(authoritativeText, aiTokens);
   if (!isValid) {
-    const cleanOriginal = authoritativeText.replace(/\s+/g, '');
+    const textWithoutSpeaker = stripSpeakerPrefix(authoritativeText);
+    const cleanOriginal = textWithoutSpeaker.replace(/\s+/g, '');
     const cleanAiChars = aiTokens.map(t => (t.word || t.text || '').replace(/\s+/g, '')).join('');
     const PUNCT_STRIP_REGEX = /[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]/g;
     const nonPunctOrig = cleanOriginal.replace(PUNCT_STRIP_REGEX, '');
@@ -820,6 +873,28 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
   let textIdx = 0;
   let aiIdx = 0;
   const textLen = fullOriginalText.length;
+
+  // 4. Handle leading speaker prefix if present and not emitted by AI as its first token
+  const speakerInfo = extractSpeakerPrefix(fullOriginalText);
+  if (speakerInfo.prefix) {
+    const firstAiWord = cleanAiTokens[0]?.word;
+    const matchesFirstAi = firstAiWord && (speakerInfo.prefix.startsWith(firstAiWord) || matchWordAt(fullOriginalText, 0, firstAiWord) === speakerInfo.prefix.length);
+    if (!matchesFirstAi) {
+      const p = speakerInfo.prefix.trim();
+      if (p) {
+        result.push({
+          text: p,
+          word: p,
+          auxiliary: null,
+          pinyin: null,
+          translit: null,
+          gloss: null,
+          isPunctuation: true
+        });
+      }
+      textIdx += speakerInfo.prefix.length;
+    }
+  }
 
   while (textIdx < textLen) {
     // Skip whitespace in original text
