@@ -859,22 +859,30 @@ export async function handleTranscribe(req, res) {
     let cleanMime = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
     if (!cleanMime || cleanMime === 'audio/x-m4a') cleanMime = 'audio/mp4';
 
-    console.log(`Audio transcription requested with Groq Whisper [whisper-large-v3] (targetLang=${targetLang}, nativeLang=${nativeLang})`);
+    console.log(`Audio transcription requested with Groq Whisper [whisper-large-v3] (targetLang=${targetLang}, nativeLang=${nativeLang}, mime=${cleanMime})`);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutMs = Number(body.timeoutMs) || 35000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     let httpStatus = 0;
     let groqErrorMessage = '';
 
     try {
       const audioBuffer = Buffer.from(cleanBase64, 'base64');
-      const fileExt = cleanMime.includes('mp4') ? 'mp4' : (cleanMime.includes('wav') ? 'wav' : 'webm');
+      let fileExt = 'webm';
+      if (cleanMime.includes('mp3') || cleanMime.includes('mpeg')) fileExt = 'mp3';
+      else if (cleanMime.includes('wav')) fileExt = 'wav';
+      else if (cleanMime.includes('mp4') || cleanMime.includes('m4a')) fileExt = 'm4a';
+      else if (cleanMime.includes('ogg') || cleanMime.includes('opus')) fileExt = 'ogg';
+      else if (cleanMime.includes('webm')) fileExt = 'webm';
+
       const audioBlob = new Blob([audioBuffer], { type: cleanMime });
 
       const formData = new FormData();
-      formData.append('file', audioBlob, `speech.${fileExt}`);
+      const outputFileName = body.fileName ? body.fileName.replace(/\s+/g, '_') : `speech.${fileExt}`;
+      formData.append('file', audioBlob, outputFileName);
       formData.append('model', 'whisper-large-v3');
       formData.append('temperature', '0');
-      formData.append('response_format', 'json');
+      formData.append('response_format', 'verbose_json');
 
       const whisperPrompt = getWhisperPromptForLanguage(targetLang);
       formData.append('prompt', whisperPrompt);
@@ -895,6 +903,8 @@ export async function handleTranscribe(req, res) {
       if (groqRes.ok) {
         const groqData = await groqRes.json();
         let transcript = groqData?.text?.trim();
+        const segments = Array.isArray(groqData?.segments) ? groqData.segments : [];
+        const duration = typeof groqData?.duration === 'number' ? groqData.duration : 0;
         const requestId = groqRes.headers.get('x-request-id') || 'no disponible directamente';
         logCostAudit({
           provider: 'groq',
@@ -912,11 +922,13 @@ export async function handleTranscribe(req, res) {
         });
         if (transcript) {
           transcript = stripSttTranslationArtifacts(transcript, targetLang);
-          console.log(`✅ Audio transcribed via Groq Whisper: "${transcript}"`);
+          console.log(`✅ Audio transcribed via Groq Whisper (${segments.length} segments, ${duration}s): "${transcript.slice(0, 80)}..."`);
           return res.status(200).json({
             success: true,
             source: 'groq (whisper-large-v3)',
-            transcript
+            transcript,
+            segments,
+            duration
           });
         }
       } else {

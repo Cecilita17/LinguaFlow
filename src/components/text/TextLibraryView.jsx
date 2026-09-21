@@ -369,6 +369,12 @@ export function TextLibraryView({
                       </span>
                     )}
 
+                    {(doc.sourceType === 'audio' || doc.format === 'audio') && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 font-mono font-bold tracking-wider">
+                        AUDIO
+                      </span>
+                    )}
+
                     {isCurrent && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-bold tracking-wide">
                         {isSpanish ? 'EN LECTURA' : 'CURRENT'}

@@ -307,6 +307,8 @@ export function normalizeDocument(rawDoc) {
   const lastReadingPosition = (rawDoc.lastReadingPosition && typeof rawDoc.lastReadingPosition === 'object')
     ? rawDoc.lastReadingPosition
     : null;
+  const audioSegments = Array.isArray(rawDoc.audioSegments) ? rawDoc.audioSegments : (rawDoc.audioMetadata?.segments || []);
+  const audioDuration = typeof rawDoc.audioDuration === 'number' ? rawDoc.audioDuration : (rawDoc.audioMetadata?.duration || 0);
 
   return {
     id,
@@ -321,6 +323,8 @@ export function normalizeDocument(rawDoc) {
     paragraphs,
     chapters,
     languageStates,
+    audioSegments,
+    audioDuration,
     lastAudioPosition: rawDoc.lastAudioPosition || null,
     lastReadingPosition,
     createdAt: rawDoc.createdAt || now,
@@ -343,6 +347,8 @@ export function normalizeDocument(rawDoc) {
  * @param {Array} [params.paragraphs]
  * @param {Array} [params.chapters]
  * @param {object} [params.languageStates]
+ * @param {Array} [params.audioSegments]
+ * @param {number} [params.audioDuration]
  * @param {object} [params.lastAudioPosition]
  * @param {object} [params.lastReadingPosition]
  * @param {string} [params.createdAt]
@@ -360,6 +366,8 @@ export function createTextDocument({
   paragraphs = null,
   chapters = null,
   languageStates = null,
+  audioSegments = null,
+  audioDuration = null,
   lastAudioPosition = null,
   lastReadingPosition = null,
   createdAt = null
@@ -409,6 +417,8 @@ export function createTextDocument({
     paragraphs: effectiveParagraphs,
     chapters: Array.isArray(chapters) ? chapters : [],
     languageStates: initialStates,
+    audioSegments: Array.isArray(audioSegments) ? audioSegments : [],
+    audioDuration: typeof audioDuration === 'number' ? audioDuration : (Number(audioDuration) || 0),
     lastAudioPosition: lastAudioPosition || null,
     lastReadingPosition: lastReadingPosition || null,
     createdAt: createdAt || now,
@@ -752,6 +762,105 @@ export async function translateParagraphTextApi({
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
       throw new Error('Tiempo de espera agotado al conectar con el servidor de traducción.');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Transcribes an uploaded audio file (.mp3, .wav, .m4a, .webm, .ogg)
+ * using Groq Whisper via LinguaFlow's /api/transcribe endpoint.
+ *
+ * @param {object} params
+ * @param {File|Blob} params.audioFile - The audio file or blob to transcribe
+ * @param {string} [params.targetLang='zh'] - Target language
+ * @param {string} [params.nativeLang='es'] - Native language
+ * @param {string} [params.apiKey=''] - Optional client Groq API key override
+ * @param {Function} [params.onProgress] - Optional progress callback
+ * @returns {Promise<{ success: boolean, transcript: string, segments: Array, duration: number, source?: string }>}
+ */
+export async function transcribeAudioFileApi({
+  audioFile,
+  targetLang = 'zh',
+  nativeLang = 'es',
+  apiKey = '',
+  onProgress = null
+}) {
+  if (!audioFile) {
+    throw new Error('No se seleccionó ningún archivo de audio.');
+  }
+
+  // Max 25 MB client validation (express payload limit is 35 MB base64)
+  const MAX_BYTES = 25 * 1024 * 1024;
+  if (audioFile.size > MAX_BYTES) {
+    const mbSize = (audioFile.size / (1024 * 1024)).toFixed(1);
+    throw new Error(`El archivo de audio (${mbSize} MB) supera el límite permitido de 25 MB. Por favor elige un archivo más pequeño.`);
+  }
+
+  if (typeof onProgress === 'function') {
+    onProgress('Leyendo archivo de audio...');
+  }
+
+  const base64Data = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Error al leer el archivo de audio local.'));
+    reader.readAsDataURL(audioFile);
+  });
+
+  if (typeof onProgress === 'function') {
+    onProgress('Transcribiendo con Groq Whisper (whisper-large-v3)...');
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 125000);
+
+  const headers = { 'Content-Type': 'application/json' };
+  const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
+  if (effectiveKey) {
+    headers['x-api-key'] = effectiveKey;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/transcribe`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        audioBase64: base64Data,
+        mimeType: audioFile.type || 'audio/webm',
+        fileName: audioFile.name || 'audio.webm',
+        targetLang,
+        nativeLang,
+        apiKey: effectiveKey,
+        timeoutMs: 120000
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const errMsg = data?.error || `Error del servidor de transcripción (${res.status})`;
+      throw new Error(errMsg);
+    }
+
+    if (!data.success || !data.transcript) {
+      throw new Error(data?.error || 'No se detectó contenido de voz en el audio.');
+    }
+
+    return {
+      success: true,
+      transcript: data.transcript.trim(),
+      segments: Array.isArray(data.segments) ? data.segments : [],
+      duration: typeof data.duration === 'number' ? data.duration : (Number(data.duration) || 0),
+      source: data.source || 'groq (whisper-large-v3)'
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado al transcribir el audio. Por favor intenta de nuevo con un audio más corto.');
     }
     throw err;
   }

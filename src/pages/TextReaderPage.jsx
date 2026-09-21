@@ -25,7 +25,8 @@ import {
   Home,
   Settings,
   Gauge,
-  Plus
+  Plus,
+  Headphones
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
@@ -41,7 +42,8 @@ import {
   saveActiveDocumentDraft,
   loadActiveDocumentDraft,
   clearActiveDocumentDraft,
-  translateParagraphTextApi
+  translateParagraphTextApi,
+  transcribeAudioFileApi
 } from '../services/textDocumentService.js';
 import {
   saveTextDocument,
@@ -1375,6 +1377,78 @@ export function TextReaderPage({
     reader.readAsText(file, 'utf-8');
   };
 
+  // Audio File Upload & Transcription handler (.mp3, .wav, .m4a, .webm, .ogg)
+  const handleAudioFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input value so selecting same file again re-triggers
+    e.target.value = '';
+
+    setIsImporting(true);
+    setImportStatus(isSpanish ? 'Leyendo archivo de audio...' : 'Reading audio file...');
+    try {
+      const result = await transcribeAudioFileApi({
+        audioFile: file,
+        targetLang,
+        nativeLang,
+        apiKey,
+        onProgress: (msg) => setImportStatus(msg)
+      });
+
+      const transcriptText = result.transcript;
+      if (!transcriptText) {
+        throw new Error(isSpanish ? 'No se detectó contenido de voz en el audio.' : 'No speech content detected in audio.');
+      }
+
+      const defaultTitle = file.name ? file.name.replace(/\.[^/.]+$/, '') : (isSpanish ? 'Audio transcrito' : 'Transcribed audio');
+
+      const docToSave = createTextDocument({
+        title: defaultTitle,
+        sourceType: 'audio',
+        format: 'audio',
+        rawText: transcriptText,
+        targetLang,
+        nativeLang,
+        audioSegments: Array.isArray(result.segments) ? result.segments : [],
+        audioDuration: typeof result.duration === 'number' ? result.duration : 0,
+        createdAt: new Date().toISOString()
+      });
+
+      const saved = await saveDocument(docToSave);
+      setDocument(saved);
+      setInputText(saved.rawText || '');
+      setInputTitle(saved.title || '');
+      setIsEditing(false);
+      setIsHeaderHidden(false);
+      setLastAudioParagraphId(null);
+      setPendingScrollParagraphId(null);
+      previousScrollTopRef.current = 0;
+      await refreshLibraryCount();
+
+      // Auto-glossing is OFF by default:
+      const alreadyComplete = Array.isArray(saved.paragraphs) && saved.paragraphs.every(p => isGlossComplete(p, targetLang, nativeLang));
+      const completedCount = Array.isArray(saved.paragraphs) ? saved.paragraphs.filter(p => isGlossComplete(p, targetLang, nativeLang)).length : 0;
+
+      setGlossingProgress({
+        total: Array.isArray(saved.paragraphs) ? saved.paragraphs.length : 0,
+        completed: completedCount,
+        isGlossing: false,
+        isPaused: false,
+        isComplete: alreadyComplete,
+        failed: 0
+      });
+      setIsAutoGlossing(false);
+      navigateToView('reader');
+    } catch (err) {
+      console.error('Error al importar audio:', err);
+      alert(isSpanish ? `Error al importar el audio: ${err.message || err}` : `Error importing audio: ${err.message || err}`);
+    } finally {
+      setIsImporting(false);
+      setImportStatus('');
+    }
+  };
+
   // Paste from clipboard handler
   const handlePasteClipboard = async () => {
     try {
@@ -1624,6 +1698,15 @@ export function TextReaderPage({
                 </div>
               </div>
 
+              {/* Import status indicator banner */}
+              {isImporting && (
+                <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-amber-700 dark:text-amber-300 animate-pulse">
+                  <Loader2 className="w-5 h-5 animate-spin shrink-0 text-amber-500" />
+                  <span className="text-xs sm:text-sm font-semibold">
+                    {importStatus || (isSpanish ? 'Procesando archivo...' : 'Processing file...')}
+                  </span>
+                </div>
+              )}
 
               {/* Title Input */}
               <div className="mb-4">
@@ -1677,7 +1760,7 @@ export function TextReaderPage({
                 />
               </div>
 
-              {/* Action Buttons Strip (Paste clipboard, Upload .txt file, Create with AI, Start Reading) */}
+              {/* Action Buttons Strip (Paste clipboard, Upload .txt/.epub file, Upload audio, Create with AI, Start Reading) */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Paste from Clipboard */}
@@ -1702,6 +1785,19 @@ export function TextReaderPage({
                     />
                   </label>
 
+                  {/* Audio File Upload Button (.mp3, .wav, .m4a, .webm, .ogg) */}
+                  <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
+                    <Headphones className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+                    <span>Importar audio</span>
+                    <input
+                      type="file"
+                      accept=".mp3,.wav,.m4a,.webm,.ogg,audio/*"
+                      onChange={handleAudioFileUpload}
+                      disabled={isImporting}
+                      className="hidden"
+                    />
+                  </label>
+
                   {/* Create with AI Button */}
                   <button
                     type="button"
@@ -1716,10 +1812,10 @@ export function TextReaderPage({
                 {/* Submit / Start Reading CTA */}
                 <button
                   type="button"
-                  disabled={!inputText.trim()}
+                  disabled={!inputText.trim() || isImporting}
                   onClick={handleStartReading}
                   className={`py-3 px-6 rounded-2xl font-bold text-sm shadow-lg flex items-center space-x-2 transition-all cursor-pointer ${
-                    inputText.trim()
+                    inputText.trim() && !isImporting
                       ? 'bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/70 hover:shadow-rose-900/90 active:scale-95'
                       : 'bg-[var(--surface-secondary)] text-[var(--text-muted)] border border-[var(--border-primary)] cursor-not-allowed opacity-60'
                   }`}

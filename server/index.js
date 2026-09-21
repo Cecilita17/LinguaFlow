@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '35mb' }));
 
 // Auth Routes (Backend-verified Google OAuth & Session Management)
 app.post('/api/auth/google', handleGoogleAuth);
