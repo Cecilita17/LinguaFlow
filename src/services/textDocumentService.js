@@ -689,5 +689,70 @@ export async function generateAiTextDocument({
   }
 }
 
+/**
+ * Calls backend /api/translate-text to translate an individual paragraph text into native language.
+ * @param {Object} options
+ * @param {string} options.text - Raw text of the paragraph to translate
+ * @param {string} options.targetLang - Source target language code (e.g. 'de', 'ar', 'zh', 'ru', etc.)
+ * @param {string} options.nativeLang - Student's native language code (e.g. 'es', 'en', etc.)
+ * @param {string} [options.apiKey=''] - Optional client override API key
+ * @returns {Promise<{ success: boolean, translation: string }>}
+ */
+export async function translateParagraphTextApi({
+  text,
+  targetLang = 'es',
+  nativeLang = 'es',
+  apiKey = ''
+}) {
+  const trimmedText = (text || '').trim();
+  if (!trimmedText) {
+    throw new Error('No hay texto para traducir.');
+  }
 
+  const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
+  const headers = { 'Content-Type': 'application/json' };
+  if (effectiveKey) {
+    headers['x-api-key'] = effectiveKey;
+  }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/translate-text`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        text: trimmedText,
+        targetLang,
+        nativeLang,
+        apiKey: effectiveKey
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const errMsg = data?.error || `Error del servidor (${response.status})`;
+      throw new Error(errMsg);
+    }
+
+    if (!data.success || !data.translation) {
+      throw new Error(data?.error || 'No se pudo obtener la traducción en este momento.');
+    }
+
+    return {
+      success: true,
+      translation: data.translation
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado al conectar con el servidor de traducción.');
+    }
+    throw err;
+  }
+}

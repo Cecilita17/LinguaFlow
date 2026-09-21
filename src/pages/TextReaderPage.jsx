@@ -40,7 +40,8 @@ import {
   saveDocument,
   saveActiveDocumentDraft,
   loadActiveDocumentDraft,
-  clearActiveDocumentDraft
+  clearActiveDocumentDraft,
+  translateParagraphTextApi
 } from '../services/textDocumentService.js';
 import {
   saveTextDocument,
@@ -152,6 +153,9 @@ export function TextReaderPage({
   const loadingParagraphIds = glossingParagraphIds; // Alias for backward compatibility
   const setLoadingParagraphIds = setGlossingParagraphIds;
   const abortControllerRef = useRef(null);
+
+  // On-demand paragraph translation state: { [paragraphId]: { text, isTranslating, isVisible, error } }
+  const [paragraphTranslations, setParagraphTranslations] = useState({});
 
   // Load existing draft if available
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
@@ -1038,6 +1042,76 @@ export function TextReaderPage({
 
   // Alias for backwards compatibility
   const handleGlossSingleParagraph = handleGlossParagraph;
+
+  // Individual paragraph full translation (Groq openai/gpt-oss-120b, cached in-memory per paragraph)
+  const handleTranslateParagraph = useCallback(async (paragraph) => {
+    if (!paragraph || !paragraph.id) return;
+    const paraId = paragraph.id;
+
+    // Check current state for this paragraph
+    setParagraphTranslations(prev => {
+      const currentState = prev[paraId];
+
+      // If currently translating, ignore double trigger
+      if (currentState?.isTranslating) return prev;
+
+      // If already translated without error, toggle visibility
+      if (currentState?.text && !currentState?.error) {
+        return {
+          ...prev,
+          [paraId]: {
+            ...currentState,
+            isVisible: !currentState.isVisible
+          }
+        };
+      }
+
+      // Otherwise set loading state and initiate fetch
+      return {
+        ...prev,
+        [paraId]: {
+          text: currentState?.text || null,
+          isTranslating: true,
+          isVisible: true,
+          error: null
+        }
+      };
+    });
+
+    // If already translated without error or already translating, don't re-fetch
+    if (paragraphTranslations[paraId]?.isTranslating) return;
+    if (paragraphTranslations[paraId]?.text && !paragraphTranslations[paraId]?.error) return;
+
+    try {
+      const result = await translateParagraphTextApi({
+        text: paragraph.text,
+        targetLang: activeDocLang,
+        nativeLang,
+        apiKey
+      });
+
+      setParagraphTranslations(prev => ({
+        ...prev,
+        [paraId]: {
+          text: result.translation,
+          isTranslating: false,
+          isVisible: true,
+          error: null
+        }
+      }));
+    } catch (err) {
+      console.error('Failed to translate paragraph:', err);
+      setParagraphTranslations(prev => ({
+        ...prev,
+        [paraId]: {
+          text: null,
+          isTranslating: false,
+          isVisible: true,
+          error: err.message || 'Error al traducir el párrafo.'
+        }
+      }));
+    }
+  }, [paragraphTranslations, activeDocLang, nativeLang, apiKey]);
 
   // Submit / Start reading parsed text (OFFLINE ONLY: Zero AI calls!)
   const handleStartReading = async () => {
@@ -2000,11 +2074,17 @@ export function TextReaderPage({
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
                       isLastAudioPosition={lastAudioParagraphId === paragraph.id}
+                      translation={paragraphTranslations[paragraph.id]?.text || null}
+                      isTranslating={Boolean(paragraphTranslations[paragraph.id]?.isTranslating)}
+                      isTranslationVisible={Boolean(paragraphTranslations[paragraph.id]?.isVisible)}
+                      translationError={paragraphTranslations[paragraph.id]?.error || null}
                       onPlay={handlePlayParagraph}
                       onStop={handleStopAudio}
                       onWordClick={onWordClick}
                       onGloss={handleGlossParagraph}
                       onGlossParagraph={handleGlossParagraph}
+                      onTranslate={handleTranslateParagraph}
+                      onTranslateParagraph={handleTranslateParagraph}
                     />
                   </React.Fragment>
                 );

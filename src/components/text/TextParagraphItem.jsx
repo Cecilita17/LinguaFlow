@@ -32,11 +32,17 @@ export function TextParagraphItem({
   isGlossing = false,
   hasGloss = false,
   isLastAudioPosition = false,
+  translation = null,
+  isTranslating = false,
+  isTranslationVisible = false,
+  translationError = null,
   onPlay = null,
   onStop = null,
   onWordClick = null,
   onGloss = null,
-  onGlossParagraph = null
+  onGlossParagraph = null,
+  onTranslate = null,
+  onTranslateParagraph = null
 }) {
   const { isWordSaved } = useSavedWords();
   const { wordHighlightEnabled } = useAudioSettings();
@@ -46,6 +52,7 @@ export function TextParagraphItem({
   const textDirection = getTextDirection(targetLang);
   const isComplete = hasGloss || isGlossComplete(paragraph, targetLang, nativeLang);
   const handleGloss = onGloss || onGlossParagraph;
+  const handleTranslate = onTranslate || onTranslateParagraph;
 
   // Responsive font size classes
   const fontClassMap = {
@@ -113,9 +120,9 @@ export function TextParagraphItem({
         className="flex items-start justify-between gap-2.5 sm:gap-3.5 w-full"
         dir={textDirection}
       >
-        {/* TEXT CONTENT / INTERLINEAR GLOSSES */}
+        {/* TEXT CONTENT / INTERLINEAR TOKENS */}
         <div className="flex-1 min-w-0" dir={textDirection}>
-          {interlinearMode && Array.isArray(tokens) && tokens.length > 0 ? (
+          {Array.isArray(tokens) && tokens.length > 0 ? (
             <div
               dir={textDirection}
               style={{ direction: textDirection }}
@@ -207,8 +214,8 @@ export function TextParagraphItem({
                       );
                     })()}
 
-                    {/* Tier 3 (BOTTOM): Gloss in student's native language */}
-                    {cleanGloss && (
+                    {/* Tier 3 (BOTTOM): Gloss in student's native language (Only shown when interlinearMode is enabled) */}
+                    {interlinearMode && cleanGloss && (
                       <InterlinearGloss
                         gloss={cleanGloss}
                         isChinese={isChinese}
@@ -220,7 +227,7 @@ export function TextParagraphItem({
               })}
             </div>
           ) : (
-            /* Normal paragraph text */
+            /* Fallback paragraph text when tokens have not been parsed yet */
             <p
               dir={textDirection}
               style={{ direction: textDirection }}
@@ -232,40 +239,92 @@ export function TextParagraphItem({
             >
               {text.split(/([\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+)/).map((chunk, cIdx) => {
                 if (!chunk) return null;
+                const isPunctuationOrSpace = /^[\s.,!?;:()¿¡'"“”‘’—–\-_/\\`~，。！？；：、“”‘’（）《》…]+$/.test(chunk);
                 const cleanWord = chunk.trim();
                 const chunkStart = runningChunkPos;
                 const chunkEnd = runningChunkPos + chunk.length;
                 runningChunkPos = chunkEnd;
                 const isAudioActive = wordHighlightEnabled && isPlaying && activeAudioCharIndex >= 0 && chunkStart <= activeAudioCharIndex && activeAudioCharIndex < chunkEnd;
 
-                if (cleanWord && isWordSaved(cleanWord, targetLang)) {
+                if (isPunctuationOrSpace || !cleanWord) {
                   return (
-                    <span
-                      key={cIdx}
-                      onClick={(e) => {
-                        if (onWordClick) {
-                          e.stopPropagation();
-                          onWordClick(cleanWord, null);
-                        }
-                      }}
-                      className={`bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs cursor-pointer inline-block ring-1 ring-amber-400/60 ${isAudioActive ? 'audio-word-active' : ''}`}
-                      title={`Palabra guardada: "${cleanWord}"`}
-                    >
+                    <span key={cIdx} className={isAudioActive ? 'audio-word-active' : ''}>
                       {chunk}
                     </span>
                   );
                 }
+
+                const isSaved = isWordSaved(cleanWord, targetLang);
+
                 return (
-                  <span key={cIdx} className={isAudioActive ? 'audio-word-active' : ''}>
+                  <span
+                    key={cIdx}
+                    onClick={(e) => {
+                      if (onWordClick) {
+                        e.stopPropagation();
+                        onWordClick(cleanWord, { word: cleanWord });
+                      }
+                    }}
+                    role={onWordClick ? 'button' : undefined}
+                    tabIndex={onWordClick ? 0 : undefined}
+                    className={`cursor-pointer transition-colors rounded px-0.5 hover:bg-black/5 dark:hover:bg-white/10 active:bg-rose-500/20 ${
+                      isSaved
+                        ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 font-bold shadow-xs ring-1 ring-amber-400/60'
+                        : isPlaying
+                        ? 'text-white font-semibold drop-shadow-xs'
+                        : 'text-[var(--text-primary)] hover:text-rose-600 dark:hover:text-rose-400'
+                    } ${isAudioActive ? 'audio-word-active' : ''}`}
+                    title={isSaved ? `Palabra guardada: "${cleanWord}"` : `Consultar "${cleanWord}"`}
+                  >
                     {chunk}
                   </span>
                 );
               })}
             </p>
           )}
+
+          {/* PARAGRAPH TRANSLATION DISPLAY (Below paragraph content) */}
+          {isTranslationVisible && (
+            <div
+              dir={isRtlLanguage(nativeLang) ? 'rtl' : 'ltr'}
+              className="mt-3 pt-2.5 pb-0.5 border-t border-[var(--border-subtle)] text-xs sm:text-sm select-text transition-all"
+            >
+              {isTranslating ? (
+                <div className="flex items-center gap-2 text-violet-600 dark:text-violet-400 py-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  <span className="text-xs font-medium italic">Traduciendo párrafo completo...</span>
+                </div>
+              ) : translationError ? (
+                <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs">
+                  <span className="italic">{translationError}</span>
+                  {handleTranslate && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTranslate(paragraph);
+                      }}
+                      className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-100 font-semibold cursor-pointer active:scale-95 transition-all text-[11px]"
+                    >
+                      Reintentar
+                    </button>
+                  )}
+                </div>
+              ) : translation ? (
+                <div className="flex items-start gap-2.5 leading-relaxed">
+                  <span className="not-italic text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 dark:text-violet-300 shrink-0 border border-violet-500/30 select-none mt-0.5">
+                    TRADUCCIÓN
+                  </span>
+                  <span className="flex-1 select-text text-[var(--text-primary)] dark:text-stone-200 italic">
+                    {translation}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
 
-        {/* VERTICAL ACTIONS COLUMN: Audio on top, Gloss below. Compact (w-8 h-8 / sm:w-9 sm:h-9) */}
+        {/* VERTICAL ACTIONS COLUMN: Audio on top, Gloss below, Paragraph Translation 3rd. Compact (w-8 h-8 / sm:w-9 sm:h-9) */}
         <div
           dir="ltr"
           className="shrink-0 flex flex-col items-center gap-1.5 self-start pt-0.5"
@@ -338,6 +397,51 @@ export function TextParagraphItem({
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Languages className={`w-4 h-4 ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`} />
+            )}
+          </button>
+
+          {/* Paragraph Translation Button (A文) - Translates ONLY this paragraph */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (handleTranslate) {
+                handleTranslate(paragraph);
+              }
+            }}
+            disabled={isTranslating}
+            aria-label={
+              isTranslating
+                ? 'Traduciendo párrafo...'
+                : isTranslationVisible && translation
+                ? 'Ocultar traducción del párrafo'
+                : 'Traducir párrafo completo'
+            }
+            title={
+              isTranslating
+                ? 'Traduciendo párrafo con IA...'
+                : isTranslationVisible && translation
+                ? 'Ocultar traducción del párrafo'
+                : translation
+                ? 'Mostrar traducción del párrafo'
+                : 'Traducir este párrafo con IA'
+            }
+            className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer ${
+              isTranslating
+                ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/50 cursor-wait'
+                : isTranslationVisible && translation
+                ? 'bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/60 shadow-xs ring-1 ring-violet-500/30'
+                : translation
+                ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/30 hover:border-violet-500/60'
+                : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] hover:border-violet-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            {isTranslating ? (
+              <Loader2 className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400" />
+            ) : (
+              <span className="font-bold text-[11px] sm:text-[12px] tracking-tight select-none">
+                A文
+              </span>
             )}
           </button>
         </div>

@@ -1536,5 +1536,112 @@ Write the complete reading text in ${targetName} now.`;
   }
 }
 
+// Translate text endpoint (Groq openai/gpt-oss-120b)
+export async function handleTranslateText(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
+  try {
+    const body = parseRequestBody(req);
+    const { text, targetLang = 'es', nativeLang = 'es', apiKey: clientApiKey } = body;
+    const trimmedText = (text || '').trim();
 
+    if (!trimmedText) {
+      return res.status(400).json({ error: 'No se recibió texto para traducir.' });
+    }
+
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
+
+    const activeModel = getSanitizedGroqModel();
+
+    if (effectiveApiKey) {
+      try {
+        const systemPrompt = `You are a professional literary and pedagogical translator. Translate the provided text from ${targetLang} into natural, accurate ${nativeLang}. Maintain the nuance, style, and meaning faithfully without adding commentary. Always return strictly valid JSON matching the schema: {"translation": "..."}`;
+        const userPrompt = `Translate the following text into ${nativeLang}:\n\n${trimmedText}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const startTime = Date.now();
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+            max_tokens: 1000
+          })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+          logCostAudit({
+            provider: 'groq',
+            feature: 'paragraph_translation',
+            model: activeModel,
+            requestId,
+            inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+            outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+            totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+            characters: trimmedText.length,
+            durationMs: Date.now() - startTime,
+            retry: false,
+            streaming: false,
+            extra: `targetLang=${targetLang} nativeLang=${nativeLang}`
+          });
+
+          const rawText = data?.choices?.[0]?.message?.content;
+          const parsed = cleanAndParseJSON(rawText);
+          const translationResult = (parsed && (parsed.translation || parsed.translated_text || parsed.text)) || rawText;
+
+          if (translationResult && typeof translationResult === 'string') {
+            return res.status(200).json({
+              success: true,
+              source: `groq (${activeModel})`,
+              translation: translationResult.trim()
+            });
+          }
+        } else {
+          const errText = await response.text();
+          console.warn(`Groq translation error HTTP ${response.status}:`, errText);
+          const categorized = categorizeGroqError(response.status, errText);
+          return res.status(response.status >= 400 && response.status < 600 ? response.status : 500).json({
+            error: categorized.userMessage,
+            error_type: categorized.type
+          });
+        }
+      } catch (err) {
+        console.warn('Groq translate text error:', err.message);
+        const isTimeout = err.name === 'AbortError';
+        return res.status(isTimeout ? 408 : 500).json({
+          error: isTimeout
+            ? 'Tiempo de espera agotado al traducir el texto. Inténtalo de nuevo.'
+            : `Error de conexión: ${err.message}`
+        });
+      }
+    }
+
+    return res.status(400).json({
+      error: 'Para traducir el párrafo con IA, configura tu GROQ_API_KEY en el servidor o en Ajustes ⚙️.'
+    });
+  } catch (err) {
+    console.error('Server error in /api/translate-text:', err);
+    res.status(500).json({ error: 'Error interno en el servidor al traducir el texto.' });
+  }
+}
