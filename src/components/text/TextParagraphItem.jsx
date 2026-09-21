@@ -94,6 +94,54 @@ export function TextParagraphItem({
 
   let runningChunkPos = 0;
 
+  const renderTranslateButton = () => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (handleTranslate) {
+          handleTranslate(paragraph);
+        }
+      }}
+      disabled={isTranslating}
+      aria-label={
+        isTranslating
+          ? 'Traduciendo párrafo...'
+          : isTranslationVisible && translation
+          ? 'Ocultar traducción del párrafo'
+          : 'Traducir párrafo completo'
+      }
+      title={
+        isTranslating
+          ? 'Traduciendo párrafo con IA...'
+          : isTranslationVisible && translation
+          ? 'Ocultar traducción del párrafo'
+          : translation
+          ? 'Mostrar traducción del párrafo'
+          : 'Traducir este párrafo'
+      }
+      className={`inline-flex items-center justify-center align-middle w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg transition-all cursor-pointer select-none active:scale-90 self-center ${
+        isRtl ? 'mr-1 sm:mr-1.5' : 'ml-1 sm:ml-1.5'
+      } ${
+        isTranslating
+          ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 cursor-wait'
+          : isTranslationVisible && translation
+          ? 'bg-violet-500/20 text-violet-700 dark:text-violet-300 ring-1 ring-violet-500/30'
+          : translation
+          ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-500/20'
+          : 'text-[var(--text-muted)] hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-500/10'
+      }`}
+    >
+      {isTranslating ? (
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600 dark:text-violet-400" />
+      ) : (
+        <span className="font-bold text-[11px] sm:text-[12px] tracking-tight leading-none">
+          A文
+        </span>
+      )}
+    </button>
+  );
+
   return (
     <div
       data-paragraph-id={paragraph.id}
@@ -126,7 +174,7 @@ export function TextParagraphItem({
             <div
               dir={textDirection}
               style={{ direction: textDirection }}
-              className={`flex flex-wrap items-start ${
+              className={`flex flex-wrap items-center ${
                 isChinese
                   ? 'gap-x-1 sm:gap-x-1.5 gap-y-3 sm:gap-y-3.5'
                   : 'gap-x-1.5 sm:gap-x-2 gap-y-2.5 sm:gap-y-3'
@@ -225,6 +273,8 @@ export function TextParagraphItem({
                   </div>
                 );
               })}
+              {/* Inline Paragraph Translation Icon (At end of tokens flow) */}
+              {renderTranslateButton()}
             </div>
           ) : (
             /* Fallback paragraph text when tokens have not been parsed yet */
@@ -280,6 +330,8 @@ export function TextParagraphItem({
                   </span>
                 );
               })}
+              {/* Inline Paragraph Translation Icon (At end of text flow) */}
+              {renderTranslateButton()}
             </p>
           )}
 
@@ -324,7 +376,7 @@ export function TextParagraphItem({
           )}
         </div>
 
-        {/* VERTICAL ACTIONS COLUMN: Audio on top, Gloss below, Paragraph Translation 3rd. Compact (w-8 h-8 / sm:w-9 sm:h-9) */}
+        {/* VERTICAL ACTIONS COLUMN: Audio on top, Gloss below. Compact (w-8 h-8 / sm:w-9 sm:h-9) */}
         <div
           dir="ltr"
           className="shrink-0 flex flex-col items-center gap-1.5 self-start pt-0.5"
@@ -397,51 +449,6 @@ export function TextParagraphItem({
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Languages className={`w-4 h-4 ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`} />
-            )}
-          </button>
-
-          {/* Paragraph Translation Button (A文) - Translates ONLY this paragraph */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (handleTranslate) {
-                handleTranslate(paragraph);
-              }
-            }}
-            disabled={isTranslating}
-            aria-label={
-              isTranslating
-                ? 'Traduciendo párrafo...'
-                : isTranslationVisible && translation
-                ? 'Ocultar traducción del párrafo'
-                : 'Traducir párrafo completo'
-            }
-            title={
-              isTranslating
-                ? 'Traduciendo párrafo con IA...'
-                : isTranslationVisible && translation
-                ? 'Ocultar traducción del párrafo'
-                : translation
-                ? 'Mostrar traducción del párrafo'
-                : 'Traducir este párrafo con IA'
-            }
-            className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer ${
-              isTranslating
-                ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/50 cursor-wait'
-                : isTranslationVisible && translation
-                ? 'bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/60 shadow-xs ring-1 ring-violet-500/30'
-                : translation
-                ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/30 hover:border-violet-500/60'
-                : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] hover:border-violet-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            {isTranslating ? (
-              <Loader2 className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400" />
-            ) : (
-              <span className="font-bold text-[11px] sm:text-[12px] tracking-tight select-none">
-                A文
-              </span>
             )}
           </button>
         </div>
