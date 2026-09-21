@@ -12,6 +12,7 @@ import {
   isGlossComplete,
   tokenizeAndGlossLineOffline
 } from '../services/subtitleGlossService.js';
+import { translateParagraphTextApi } from '../services/textDocumentService.js';
 import { parseSubtitlesAuto } from '../services/subtitleService.js';
 import {
   getSavedTranscriptsCount,
@@ -196,6 +197,9 @@ export function YouTubeReaderPage({
   const [glossingLineIds, setGlossingLineIds] = useState(new Set());
   const loadingLineIds = glossingLineIds; // Alias for backward compatibility
   const setLoadingLineIds = setGlossingLineIds;
+
+  // On-demand subtitle line translation state: { [lineId]: { text, isTranslating, isVisible, error } }
+  const [lineTranslations, setLineTranslations] = useState({});
 
   // Count how many subtitle lines are completely glossed
   const completedLinesCount = useMemo(() => {
@@ -461,6 +465,75 @@ export function YouTubeReaderPage({
       });
     }
   }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount]);
+
+  // Individual subtitle line translation (Groq openai/gpt-oss-120b, cached in-memory per line)
+  const handleTranslateLine = useCallback(async (line) => {
+    if (!line || !line.id) return;
+    const lineId = line.id;
+
+    // Check current state for this line
+    setLineTranslations(prev => {
+      const currentState = prev[lineId];
+
+      // If currently translating, ignore double trigger
+      if (currentState?.isTranslating) return prev;
+
+      // If already translated without error, toggle visibility
+      if (currentState?.text && !currentState?.error) {
+        return {
+          ...prev,
+          [lineId]: {
+            ...currentState,
+            isVisible: !currentState.isVisible
+          }
+        };
+      }
+
+      // Otherwise set loading state and initiate fetch
+      return {
+        ...prev,
+        [lineId]: {
+          text: currentState?.text || null,
+          isTranslating: true,
+          isVisible: true,
+          error: null
+        }
+      };
+    });
+
+    if (lineTranslations[lineId]?.isTranslating) return;
+    if (lineTranslations[lineId]?.text && !lineTranslations[lineId]?.error) return;
+
+    try {
+      const result = await translateParagraphTextApi({
+        text: line.text,
+        targetLang,
+        nativeLang,
+        apiKey
+      });
+
+      setLineTranslations(prev => ({
+        ...prev,
+        [lineId]: {
+          text: result.translation,
+          isTranslating: false,
+          isVisible: true,
+          error: null
+        }
+      }));
+    } catch (err) {
+      console.error('Failed to translate subtitle line:', err);
+      setLineTranslations(prev => ({
+        ...prev,
+        [lineId]: {
+          text: null,
+          isTranslating: false,
+          isVisible: true,
+          error: err.message || 'Error al traducir la línea.'
+        }
+      }));
+    }
+  }, [lineTranslations, targetLang, nativeLang, apiKey]);
 
   // 1. Restore previous session on initial mount
   useEffect(() => {
@@ -1541,6 +1614,9 @@ export function YouTubeReaderPage({
                   onGlossLine={handleGlossSingleLine}
                   glossingLineIds={loadingLineIds}
                   loadingLineIds={loadingLineIds}
+                  lineTranslations={lineTranslations}
+                  onTranslate={handleTranslateLine}
+                  onTranslateLine={handleTranslateLine}
                   autoScroll={autoScroll}
                   fontSize={fontSize}
                   showTimestamps={showTimestamps}

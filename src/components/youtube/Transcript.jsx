@@ -11,6 +11,9 @@ export function Transcript({
   onGlossLine = null,
   glossingLineIds = null,
   loadingLineIds = null,
+  lineTranslations = {},
+  onTranslate = null,
+  onTranslateLine = null,
   autoScroll = true,
   fontSize = 'base',
   showTimestamps = true,
@@ -26,6 +29,7 @@ export function Transcript({
   const activeLineRef = useRef(null);
   const userInteractingRef = useRef(false);
   const handleGloss = onGloss || onGlossLine;
+  const handleTranslate = onTranslate || onTranslateLine;
   const activeGlossingIds = glossingLineIds || loadingLineIds;
 
   // 1. Identify active subtitle line based on currentTime
@@ -150,6 +154,7 @@ export function Transcript({
     >
       {filteredSubtitles.map((line, idx) => {
         const isCurrentActive = subtitles[activeIndex]?.id === line.id;
+        const lineTranslationObj = lineTranslations && lineTranslations[line.id];
 
         return (
           <div
@@ -167,6 +172,12 @@ export function Transcript({
               isGlossing={Boolean(activeGlossingIds && (activeGlossingIds instanceof Set ? activeGlossingIds.has(line.id) : activeGlossingIds[line.id]))}
               isGlossingThisLine={Boolean(activeGlossingIds && (activeGlossingIds instanceof Set ? activeGlossingIds.has(line.id) : activeGlossingIds[line.id]))}
               hasGloss={isGlossComplete(line, targetLang, nativeLang)}
+              translation={lineTranslationObj?.text || null}
+              isTranslating={Boolean(lineTranslationObj?.isTranslating)}
+              isTranslationVisible={Boolean(lineTranslationObj?.isVisible)}
+              translationError={lineTranslationObj?.error || null}
+              onTranslate={handleTranslate}
+              onTranslateLine={handleTranslate}
               fontSize={fontSize}
               showTimestamps={showTimestamps}
               searchQuery={searchQuery}
