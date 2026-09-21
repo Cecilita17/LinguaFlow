@@ -7,6 +7,7 @@
 import { getLanguageMeta } from '../constants/languages.js';
 import { API_BASE_URL } from './chatService.js';
 import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
+import { upload } from '@vercel/blob/client';
 import {
   saveTextDocument,
   getTextDocumentById,
@@ -769,7 +770,8 @@ export async function translateParagraphTextApi({
 
 /**
  * Transcribes an uploaded audio file (.mp3, .wav, .m4a, .webm, .ogg)
- * using Groq Whisper via LinguaFlow's /api/transcribe endpoint.
+ * by uploading binary directly to temporary storage (@vercel/blob)
+ * and processing via Groq Whisper (/api/transcribe).
  *
  * @param {object} params
  * @param {File|Blob} params.audioFile - The audio file or blob to transcribe
@@ -790,7 +792,7 @@ export async function transcribeAudioFileApi({
     throw new Error('No se seleccionó ningún archivo de audio.');
   }
 
-  // Max 25 MB client validation (express payload limit is 35 MB base64)
+  // Max 25 MB client validation
   const MAX_BYTES = 25 * 1024 * 1024;
   if (audioFile.size > MAX_BYTES) {
     const mbSize = (audioFile.size / (1024 * 1024)).toFixed(1);
@@ -798,16 +800,31 @@ export async function transcribeAudioFileApi({
   }
 
   if (typeof onProgress === 'function') {
-    onProgress('Leyendo archivo de audio...');
+    onProgress('Subiendo archivo de audio a almacenamiento temporal...');
   }
 
-  const base64Data = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Error al leer el archivo de audio local.'));
-    reader.readAsDataURL(audioFile);
-  });
+  const rawExt = (audioFile.name || '').split('.').pop()?.toLowerCase();
+  const validExts = ['mp3', 'wav', 'm4a', 'webm', 'ogg', 'aac', 'flac', 'opus'];
+  const fileExt = validExts.includes(rawExt) ? rawExt : 'webm';
+  const safePathname = `transcribe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
 
+  // 1. Direct binary upload to Vercel Blob storage (bypasses 4.5 MB Serverless body limit)
+  let blobResult;
+  try {
+    blobResult = await upload(safePathname, audioFile, {
+      access: 'public',
+      handleUploadUrl: `${API_BASE_URL}/api/transcribe-ticket`
+    });
+  } catch (uploadErr) {
+    console.error('Direct audio upload to storage failed:', uploadErr);
+    throw new Error(`Error al subir el archivo de audio al servidor: ${uploadErr.message || 'Fallo de red'}`);
+  }
+
+  if (!blobResult || !blobResult.url) {
+    throw new Error('No se recibió la confirmación de almacenamiento del archivo temporal.');
+  }
+
+  // 2. Request backend transcription from the uploaded storage URL
   if (typeof onProgress === 'function') {
     onProgress('Transcribiendo con Groq Whisper (whisper-large-v3)...');
   }
@@ -827,9 +844,9 @@ export async function transcribeAudioFileApi({
       headers,
       signal: controller.signal,
       body: JSON.stringify({
-        audioBase64: base64Data,
+        fileUrl: blobResult.url,
+        fileName: audioFile.name || safePathname,
         mimeType: audioFile.type || 'audio/webm',
-        fileName: audioFile.name || 'audio.webm',
         targetLang,
         nativeLang,
         apiKey: effectiveKey,
@@ -842,7 +859,7 @@ export async function transcribeAudioFileApi({
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      const errMsg = data?.error || `Error del servidor de transcripción (${res.status})`;
+      const errMsg = data?.error || (res.status === 413 ? 'El archivo excede el tamaño máximo permitido por el servidor (HTTP 413).' : `Error del servidor de transcripción (${res.status})`);
       throw new Error(errMsg);
     }
 
@@ -860,7 +877,7 @@ export async function transcribeAudioFileApi({
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      throw new Error('Tiempo de espera agotado al transcribir el audio. Por favor intenta de nuevo con un audio más corto.');
+      throw new Error('Tiempo de espera agotado al transcribir el audio. Por favor intenta de nuevo.');
     }
     throw err;
   }

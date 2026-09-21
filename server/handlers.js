@@ -1,4 +1,6 @@
 import dotenv from 'dotenv';
+import { handleUpload } from '@vercel/blob/client';
+import { del } from '@vercel/blob';
 import {
   GROQ_MODEL_CONFIG,
   buildSystemInstruction,
@@ -826,23 +828,67 @@ export function getWhisperPromptForLanguage(targetLang = 'es') {
   return `${targetName} spoken dialogue. Exact verbatim transcription of spoken words including code-switching. Do not translate.`;
 }
 
-// Transcribe audio endpoint (Groq Whisper-large-v3)
-export async function handleTranscribe(req, res) {
+// Endpoint to generate upload authorization ticket for direct-to-storage audio upload (Vercel Blob)
+export async function handleTranscribeTicket(req, res) {
   setCorsHeaders(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
     const body = parseRequestBody(req);
+    const token = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+
+    if (!token) {
+      return res.status(500).json({
+        error: 'No se encontró BLOB_READ_WRITE_TOKEN configurado en el servidor para carga de audio temporal.'
+      });
+    }
+
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      token,
+      onBeforeGenerateToken: async (pathname) => {
+        return {
+          allowedContentTypes: [
+            'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav',
+            'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac',
+            'audio/ogg', 'audio/opus', 'audio/webm', 'audio/x-matroska',
+            'audio/flac', 'audio/x-flac'
+          ],
+          maximumSizeInBytes: 25 * 1024 * 1024 // Strict 25 MB limit
+        };
+      },
+      onUploadCompleted: async () => {}
+    });
+
+    return res.status(200).json(jsonResponse);
+  } catch (error) {
+    console.error('Error generating transcribe ticket:', error);
+    return res.status(400).json({ error: `Error al autorizar subida de audio: ${error.message}` });
+  }
+}
+
+// Transcribe audio endpoint (Groq Whisper-large-v3)
+export async function handleTranscribe(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  let storageFileUrl = null;
+
+  try {
+    const body = parseRequestBody(req);
     const {
+      fileUrl,
       audioBase64,
       mimeType,
+      fileName,
       targetLang = 'es',
       nativeLang = 'es',
       apiKey: clientApiKey
     } = body;
 
-    if (!audioBase64) {
-      return res.status(400).json({ error: 'No se recibió archivo de audio.' });
+    if (!fileUrl && !audioBase64) {
+      return res.status(400).json({ error: 'No se recibió archivo ni enlace de audio.' });
     }
 
     const effectiveApiKey = (
@@ -855,30 +901,63 @@ export async function handleTranscribe(req, res) {
       return res.status(400).json({ error: 'No hay GROQ_API_KEY configurada en el servidor para transcripción de audio.' });
     }
 
-    const cleanBase64 = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
-    let cleanMime = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
-    if (!cleanMime || cleanMime === 'audio/x-m4a') cleanMime = 'audio/mp4';
+    let audioBlob;
+    let cleanMime = (mimeType || '').split(';')[0].trim().toLowerCase();
 
-    console.log(`Audio transcription requested with Groq Whisper [whisper-large-v3] (targetLang=${targetLang}, nativeLang=${nativeLang}, mime=${cleanMime})`);
+    if (fileUrl) {
+      storageFileUrl = fileUrl;
+      // Validate storage URL to prevent SSRF
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(fileUrl);
+      } catch {
+        return res.status(400).json({ error: 'URL de audio inválida.' });
+      }
+
+      if (parsedUrl.protocol !== 'https:' || !parsedUrl.hostname.endsWith('.blob.vercel-storage.com')) {
+        return res.status(400).json({ error: 'Origen de archivo no autorizado.' });
+      }
+
+      console.log(`Downloading temporary audio from storage for Whisper: ${parsedUrl.pathname}`);
+      const fetchAudioRes = await fetch(fileUrl, {
+        redirect: 'error'
+      });
+      if (!fetchAudioRes.ok) {
+        throw new Error(`No se pudo descargar el archivo temporal desde el storage (${fetchAudioRes.status})`);
+      }
+
+      if (!cleanMime) {
+        cleanMime = fetchAudioRes.headers.get('content-type')?.split(';')[0].trim().toLowerCase() || 'audio/webm';
+      }
+
+      const audioBuffer = Buffer.from(await fetchAudioRes.arrayBuffer());
+      audioBlob = new Blob([audioBuffer], { type: cleanMime });
+    } else {
+      // Fast in-memory Base64 path (e.g. Live Calls)
+      const cleanBase64 = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
+      if (!cleanMime || cleanMime === 'audio/x-m4a') cleanMime = 'audio/mp4';
+      const audioBuffer = Buffer.from(cleanBase64, 'base64');
+      audioBlob = new Blob([audioBuffer], { type: cleanMime || 'audio/webm' });
+    }
+
+    let fileExt = 'webm';
+    if (cleanMime.includes('mp3') || cleanMime.includes('mpeg')) fileExt = 'mp3';
+    else if (cleanMime.includes('wav')) fileExt = 'wav';
+    else if (cleanMime.includes('mp4') || cleanMime.includes('m4a')) fileExt = 'm4a';
+    else if (cleanMime.includes('ogg') || cleanMime.includes('opus')) fileExt = 'ogg';
+    else if (cleanMime.includes('webm')) fileExt = 'webm';
+
+    console.log(`Audio transcription requested with Groq Whisper [whisper-large-v3] (targetLang=${targetLang}, nativeLang=${nativeLang}, mime=${cleanMime}, size=${audioBlob.size} bytes)`);
+
     const controller = new AbortController();
-    const timeoutMs = Number(body.timeoutMs) || 35000;
+    const timeoutMs = Number(body.timeoutMs) || 120000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     let httpStatus = 0;
     let groqErrorMessage = '';
 
     try {
-      const audioBuffer = Buffer.from(cleanBase64, 'base64');
-      let fileExt = 'webm';
-      if (cleanMime.includes('mp3') || cleanMime.includes('mpeg')) fileExt = 'mp3';
-      else if (cleanMime.includes('wav')) fileExt = 'wav';
-      else if (cleanMime.includes('mp4') || cleanMime.includes('m4a')) fileExt = 'm4a';
-      else if (cleanMime.includes('ogg') || cleanMime.includes('opus')) fileExt = 'ogg';
-      else if (cleanMime.includes('webm')) fileExt = 'webm';
-
-      const audioBlob = new Blob([audioBuffer], { type: cleanMime });
-
       const formData = new FormData();
-      const outputFileName = body.fileName ? body.fileName.replace(/\s+/g, '_') : `speech.${fileExt}`;
+      const outputFileName = fileName ? fileName.replace(/\s+/g, '_') : `speech.${fileExt}`;
       formData.append('file', audioBlob, outputFileName);
       formData.append('model', 'whisper-large-v3');
       formData.append('temperature', '0');
@@ -908,7 +987,7 @@ export async function handleTranscribe(req, res) {
         const requestId = groqRes.headers.get('x-request-id') || 'no disponible directamente';
         logCostAudit({
           provider: 'groq',
-          feature: 'live_call_stt',
+          feature: fileUrl ? 'audio_import_stt' : 'live_call_stt',
           model: 'whisper-large-v3',
           requestId,
           inputTokens: 'no disponible directamente',
@@ -918,7 +997,7 @@ export async function handleTranscribe(req, res) {
           durationMs: Date.now() - startTime,
           retry: false,
           streaming: false,
-          extra: `status=${httpStatus} mime=${cleanMime}`
+          extra: `status=${httpStatus} mime=${cleanMime} size=${audioBlob.size}`
         });
         if (transcript) {
           transcript = stripSttTranslationArtifacts(transcript, targetLang);
@@ -949,7 +1028,14 @@ export async function handleTranscribe(req, res) {
     });
   } catch (err) {
     console.error('Server error in /api/transcribe:', err);
-    res.status(500).json({ error: 'Error en el servidor durante la transcripción de audio.' });
+    res.status(500).json({ error: `Error en el servidor durante la transcripción de audio: ${err.message}` });
+  } finally {
+    // Clean up temporary blob from Vercel storage immediately after processing
+    if (storageFileUrl && process.env.BLOB_READ_WRITE_TOKEN) {
+      del(storageFileUrl, { token: process.env.BLOB_READ_WRITE_TOKEN }).catch(delErr => {
+        console.warn('Notice: Failed to delete temporary storage blob:', delErr.message);
+      });
+    }
   }
 }
 
