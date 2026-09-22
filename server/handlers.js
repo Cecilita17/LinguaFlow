@@ -857,8 +857,11 @@ export async function handleTranscribeTicket(req, res) {
           ],
           maximumSizeInBytes: 25 * 1024 * 1024 // Strict 25 MB limit
         };
-      },
-      onUploadCompleted: async () => {}
+      }
+      // Note: onUploadCompleted intentionally omitted — not needed for this flow.
+      // When present, the SDK computes a callbackUrl and embeds it in the client
+      // token; if that URL doesn't resolve correctly through Vercel's rewrite
+      // chain the Blob API gateway rejects the upload with HTTP 400.
     });
 
     return res.status(200).json(jsonResponse);
