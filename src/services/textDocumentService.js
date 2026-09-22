@@ -813,7 +813,8 @@ export async function transcribeAudioFileApi({
   try {
     blobResult = await upload(safePathname, audioFile, {
       access: 'public',
-      handleUploadUrl: `${API_BASE_URL}/api/transcribe-ticket`
+      handleUploadUrl: `${API_BASE_URL}/api/transcribe-ticket`,
+      contentType: audioFile.type || 'audio/webm'
     });
   } catch (uploadErr) {
     console.error('Direct audio upload to storage failed:', uploadErr);
