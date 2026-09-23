@@ -19,7 +19,7 @@ import { normalizeChineseTokens, validateChineseTokens } from './services/chines
 import { useSiteLanguage } from './context/SiteLanguageContext.jsx';
 import { useAudioSettings } from './context/AudioSettingsContext.jsx';
 import { useAuth } from './context/AuthContext.jsx';
-import { initAutoBackupService, stopAutoBackupService } from './services/autoBackupService.js';
+import { initAutoBackupService, stopAutoBackupService, requestAutoBackup } from './services/autoBackupService.js';
 import { ChatHubView } from './components/chat/ChatHubView.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
@@ -181,6 +181,17 @@ export default function App() {
         }
       }
     } catch (e) {}
+  }, [activeTab]);
+
+  // Trigger auto-backup when navigating away from an active content tab
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => {
+    if (activeTabRef.current !== activeTab) {
+      if (['text', 'youtube', 'chat'].includes(activeTabRef.current)) {
+        requestAutoBackup('tab-change');
+      }
+    }
+    activeTabRef.current = activeTab;
   }, [activeTab]);
 
   // Handle browser Back / Forward buttons and URL changes
@@ -926,6 +937,12 @@ export default function App() {
       }
     }
     setChatViewMode('hub');
+    requestAutoBackup('live-call-end');
+  };
+
+  const handleReturnToChatHub = () => {
+    setChatViewMode('hub');
+    requestAutoBackup('chat-exit');
   };
 
   // Get call voice preference for active target language
@@ -1114,7 +1131,7 @@ export default function App() {
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-primary)]/70">
                 <button
                   type="button"
-                  onClick={() => setChatViewMode('hub')}
+                  onClick={handleReturnToChatHub}
                   className="px-3.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs font-semibold shadow-xs active:scale-95"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />

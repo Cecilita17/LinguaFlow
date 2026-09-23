@@ -19,7 +19,7 @@
  *    and never block Text Reader.
  */
 
-import { onDocumentSaved } from './textLibraryStorage.js';
+import { waitForPendingSaves } from './textLibraryStorage.js';
 import {
   createBackupPayload,
   serializeBackupToBlob,
@@ -36,7 +36,7 @@ import {
 import { validateBackupPayload } from './restoreService.js';
 
 // Configuration Constants
-export const AUTO_BACKUP_DEBOUNCE_MS = 30000; // 30 seconds quiet period after last save
+export const AUTO_BACKUP_SETTLE_MS = 1000; // 1 second settlement/coalescing period after content exit
 export const MAX_AUTO_BACKUP_RETENTION = 3; // Keep latest 3 auto-backups
 export const AUTO_BACKUP_FILE_PREFIX = 'linguaflow-autobackup-';
 
@@ -45,7 +45,6 @@ let currentUser = null;
 let isUploading = false;
 let hasPendingChange = false;
 let debounceTimer = null;
-let unsubscribeSaveListener = null;
 
 const statusListeners = new Set();
 
@@ -108,20 +107,15 @@ function updateStatus(newStatus) {
 
 /**
  * Initializes the auto-backup service with the current authenticated user.
- * Subscribes to document persistence events from textLibraryStorage.js.
  * 
  * @param {object} user - Current authenticated user
  */
 export function initAutoBackupService(user) {
   currentUser = user;
-
-  if (!unsubscribeSaveListener) {
-    unsubscribeSaveListener = onDocumentSaved(handleDocumentPersisted);
-  }
 }
 
 /**
- * Stops auto-backup service, clears timers, and unsubscribes from events.
+ * Stops auto-backup service and clears pending timers.
  */
 export function stopAutoBackupService() {
   currentUser = null;
@@ -129,36 +123,32 @@ export function stopAutoBackupService() {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
-  if (unsubscribeSaveListener) {
-    unsubscribeSaveListener();
-    unsubscribeSaveListener = null;
-  }
   updateStatus({ status: 'idle', error: null });
 }
 
 /**
- * Called automatically when IndexedDB confirms a document has been saved.
+ * Requests an automatic background backup triggered strictly by content exit / closure.
+ * Coalesces duplicate exit events within 1000ms into a single backup.
+ *
+ * @param {string} [reason='content-exit'] - Informative exit reason for debugging
  */
-function handleDocumentPersisted() {
-  // SILENT CHECK: If Drive is not connected or user is not signed in, do nothing!
-  // Never trigger OAuth popups or prompt during reading.
+export function requestAutoBackup(reason = 'content-exit') {
+  // Silent check: If Drive is not connected or user is not signed in, do nothing!
   if (!currentUser || !isDriveConnected()) {
     return;
   }
 
-  // Clear existing debounce timer if new changes keep coming (coalescing)
+  // Deduplicate and coalesce rapid exit events (e.g. back button + unmount + route change)
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
 
-  updateStatus({ status: 'debouncing', error: null });
-
-  // Schedule auto-backup execution after quiet period
+  // Schedule auto-backup execution after short settle period
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
     executeAutoBackup();
-  }, AUTO_BACKUP_DEBOUNCE_MS);
+  }, AUTO_BACKUP_SETTLE_MS);
 }
 
 /**
@@ -186,7 +176,10 @@ async function executeAutoBackup() {
     // 1. Double-check token is valid without prompting popup
     const accessToken = await requestDriveAccessToken(currentUser.email);
 
-    // 2. Read full persisted state and build backup snapshot
+    // 2. Ensure all active IndexedDB save operations have fully settled
+    await waitForPendingSaves();
+
+    // 3. Read full persisted state and build backup snapshot
     const backupPayload = await createBackupPayload(currentUser);
     updateStatus({ status: 'uploading', lastAttemptAt: now.toISOString(), error: null, counts: backupPayload.counts });
 

@@ -61,6 +61,7 @@ import {
   isGlossComplete
 } from '../services/textGlossService.js';
 import { parseEpubFile } from '../services/epubService.js';
+import { requestAutoBackup } from '../services/autoBackupService.js';
 import { useAudioSettings, SPEECH_RATE_OPTIONS, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 import { estimateSpeechDurationMs, createAudioWordSynchronizer } from '../utils/audioWordSync.js';
 
@@ -242,6 +243,23 @@ export function TextReaderPage({
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [document]);
+
+  // Auto-backup trigger strictly upon content exit/closure
+  const viewModeRef = useRef(viewMode);
+  useEffect(() => {
+    if (viewModeRef.current === 'reader' && viewMode !== 'reader') {
+      requestAutoBackup('text-reader-exit');
+    }
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
+  useEffect(() => {
+    return () => {
+      if (viewModeRef.current === 'reader') {
+        requestAutoBackup('text-reader-unmount');
+      }
+    };
+  }, []);
 
   const isEditing = viewMode === 'importer';
   const setIsEditing = (val) => navigateToView(val ? 'importer' : 'reader');

@@ -54,6 +54,7 @@ import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx
 import { ErrorBoundary } from '../components/common/ErrorBoundary.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
+import { requestAutoBackup } from '../services/autoBackupService.js';
 
 const SESSION_STORAGE_KEY = 'linguaflow_youtube_reader_session';
 
@@ -149,6 +150,23 @@ export function YouTubeReaderPage({
   const [interlinearMode, setInterlinearMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
+
+  // Auto-backup trigger strictly upon content exit/closure
+  const viewModeRef = useRef(viewMode);
+  useEffect(() => {
+    if (viewModeRef.current === 'reader' && viewMode !== 'reader') {
+      requestAutoBackup('youtube-reader-exit');
+    }
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
+  useEffect(() => {
+    return () => {
+      if (viewModeRef.current === 'reader') {
+        requestAutoBackup('youtube-reader-unmount');
+      }
+    };
+  }, []);
 
   // Hamburger actions menu state & ref
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);

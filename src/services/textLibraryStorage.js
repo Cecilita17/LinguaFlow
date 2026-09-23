@@ -18,6 +18,27 @@ const STORE_NAME = 'saved_text_documents';
 // In-memory fallback if IndexedDB is unavailable, blocked, or running in testing environment
 const memoryStore = new Map();
 
+// Track in-flight IndexedDB writes across services
+let activeSaveCount = 0;
+
+export function registerSaveStart() {
+  activeSaveCount++;
+}
+
+export function registerSaveEnd() {
+  activeSaveCount = Math.max(0, activeSaveCount - 1);
+}
+
+/**
+ * Returns a Promise that resolves when all active/pending IndexedDB save writes have settled.
+ */
+export async function waitForPendingSaves() {
+  const startTime = Date.now();
+  while (activeSaveCount > 0 && Date.now() - startTime < 3000) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
+
 // Event listeners notified ONLY AFTER a document is successfully saved/persisted
 const saveListeners = new Set();
 
@@ -219,9 +240,11 @@ export async function saveTextDocument(rawDoc) {
 
   // Always update in-memory fallback
   memoryStore.set(toSave.id, toSave);
+  registerSaveStart();
 
   const db = await openDatabase();
   if (!db) {
+    registerSaveEnd();
     notifyDocumentSaved(toSave);
     return toSave;
   }
@@ -233,14 +256,17 @@ export async function saveTextDocument(rawDoc) {
       const request = store.put(toSave);
 
       request.onsuccess = () => {
+        registerSaveEnd();
         notifyDocumentSaved(toSave);
         resolve(toSave);
       };
       request.onerror = (e) => {
+        registerSaveEnd();
         console.warn('[TextLibraryStorage] Error saving document to IndexedDB:', e.target.error);
         resolve(toSave);
       };
     } catch (err) {
+      registerSaveEnd();
       console.warn('[TextLibraryStorage] Exception saving document to IndexedDB:', err);
       resolve(toSave);
     }
