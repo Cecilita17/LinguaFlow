@@ -26,6 +26,7 @@ import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
 import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
 import { recordHabitActivityForToday } from './services/habitTrackerService.js';
+import { loadActiveDocumentDraft } from './services/textDocumentService.js';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -192,8 +193,24 @@ export default function App() {
   const activeTabRef = useRef(activeTab);
   useEffect(() => {
     if (activeTabRef.current !== activeTab) {
-      if (['text', 'youtube', 'chat'].includes(activeTabRef.current)) {
-        requestAutoBackup('tab-change');
+      const prevTab = activeTabRef.current;
+      if (prevTab === 'chat') {
+        requestAutoBackup({ type: 'chat-history', reason: 'tab-change' });
+      } else if (prevTab === 'text') {
+        const draft = loadActiveDocumentDraft();
+        if (draft && draft.id) {
+          requestAutoBackup({ type: 'text-document', id: draft.id, reason: 'tab-change' });
+        }
+      } else if (prevTab === 'youtube') {
+        try {
+          const rawYt = localStorage.getItem('linguaflow_yt_session_v1');
+          if (rawYt) {
+            const parsed = JSON.parse(rawYt);
+            if (parsed && parsed.videoId && parsed.videoId !== 'novideo') {
+              requestAutoBackup({ type: 'youtube-transcript', id: parsed.videoId, reason: 'tab-change' });
+            }
+          }
+        } catch (e) {}
       }
     }
     activeTabRef.current = activeTab;
@@ -942,12 +959,12 @@ export default function App() {
       }
     }
     setChatViewMode('hub');
-    requestAutoBackup('live-call-end');
+    requestAutoBackup({ type: 'call-history', reason: 'live-call-end' });
   };
 
   const handleReturnToChatHub = () => {
     setChatViewMode('hub');
-    requestAutoBackup('chat-exit');
+    requestAutoBackup({ type: 'chat-history', reason: 'chat-exit' });
   };
 
   // Get call voice preference for active target language

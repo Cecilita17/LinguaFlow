@@ -311,11 +311,18 @@ export function TextReaderPage({
     return () => window.removeEventListener('popstate', handlePopState);
   }, [document]);
 
-  // Auto-backup trigger strictly upon content exit/closure
+  // Auto-backup trigger strictly upon content exit/closure with stable document.id
   const viewModeRef = useRef(viewMode);
   useEffect(() => {
     if (viewModeRef.current === 'reader' && viewMode !== 'reader') {
-      requestAutoBackup('text-reader-exit');
+      const docId = documentRef.current?.id;
+      if (docId) {
+        requestAutoBackup({
+          type: 'text-document',
+          id: docId,
+          reason: 'text-reader-exit'
+        });
+      }
     }
     viewModeRef.current = viewMode;
   }, [viewMode]);
@@ -323,7 +330,14 @@ export function TextReaderPage({
   useEffect(() => {
     return () => {
       if (viewModeRef.current === 'reader') {
-        requestAutoBackup('text-reader-unmount');
+        const docId = documentRef.current?.id;
+        if (docId) {
+          requestAutoBackup({
+            type: 'text-document',
+            id: docId,
+            reason: 'text-reader-unmount'
+          });
+        }
       }
     };
   }, []);

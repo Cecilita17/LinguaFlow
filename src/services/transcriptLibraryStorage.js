@@ -7,6 +7,8 @@
  * Ensures zero-cost ($0) Groq reuse for previously processed content.
  */
 
+import { requestAutoBackup } from './autoBackupService.js';
+
 const DB_NAME = 'LinguaFlow_Transcripts_DB';
 const DB_VERSION = 1;
 const STORE_NAME = 'saved_transcripts';
@@ -519,8 +521,26 @@ export async function deleteTranscriptFromLibrary(id) {
   memoryStore.delete(id);
   memoryStore.delete(cleanId);
 
+  const parsed = parseLibraryKey(cleanId);
+  const videoId = parsed.videoId || cleanId;
+
+  function notifyAutoBackup() {
+    try {
+      findTranscriptsByVideoId(videoId).then((remaining) => {
+        if (!remaining || remaining.length === 0) {
+          requestAutoBackup({ type: 'youtube-transcript', id: videoId, deleted: true, reason: 'transcript-deleted' });
+        } else {
+          requestAutoBackup({ type: 'youtube-transcript', id: videoId, deleted: false, reason: 'transcript-updated' });
+        }
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
   const db = await openDatabase();
-  if (!db) return true;
+  if (!db) {
+    notifyAutoBackup();
+    return true;
+  }
 
   return new Promise((resolve) => {
     try {
@@ -534,6 +554,7 @@ export async function deleteTranscriptFromLibrary(id) {
       transaction.oncomplete = () => {
         memoryStore.delete(id);
         memoryStore.delete(cleanId);
+        notifyAutoBackup();
         resolve(true);
       };
 

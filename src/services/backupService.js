@@ -17,6 +17,8 @@ import { gatherAllHabitTrackerData } from './habitTrackerService.js';
 import {
   requestDriveAccessToken,
   getOrCreateBackupFolder,
+  getOrCreateAutoBackupFolder,
+  findDriveFile,
   uploadBackupFile,
   listBackupFiles,
   downloadBackupContent,
@@ -28,6 +30,7 @@ export const BACKUP_FORMAT = 'linguaflow-backup';
 export const BACKUP_SCHEMA_VERSION = 1;
 export const STORAGE_KEY_LAST_BACKUP = 'linguaflow_last_backup_meta';
 export const STORAGE_KEY_LAST_BACKUP_FINGERPRINT = 'linguaflow_last_backup_fingerprint';
+export const STORAGE_KEY_RESOURCE_FINGERPRINTS = 'linguaflow_resource_fingerprints';
 
 /**
  * Reads metadata of the last successful backup stored locally.
@@ -79,6 +82,62 @@ export function saveLastSuccessfulFingerprint(userEmail, fingerprint) {
       localStorage.setItem(`${STORAGE_KEY_LAST_BACKUP_FINGERPRINT}_${userEmail}`, fingerprint);
     }
   } catch (e) {}
+}
+
+/**
+ * Reads the last successful resource fingerprint for a specific resource key from localStorage.
+ * @param {string} userEmail
+ * @param {string} resourceKey
+ * @returns {string|null}
+ */
+export function getResourceFingerprint(userEmail, resourceKey) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && userEmail && resourceKey) {
+      const raw = localStorage.getItem(`${STORAGE_KEY_RESOURCE_FINGERPRINTS}_${userEmail}`);
+      if (raw) {
+        const map = JSON.parse(raw);
+        return map[resourceKey] || null;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
+ * Saves or deletes the resource fingerprint for a specific resource key in localStorage.
+ * @param {string} userEmail
+ * @param {string} resourceKey
+ * @param {string|null} fingerprint
+ */
+export function saveResourceFingerprint(userEmail, resourceKey, fingerprint) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && userEmail && resourceKey) {
+      const key = `${STORAGE_KEY_RESOURCE_FINGERPRINTS}_${userEmail}`;
+      const raw = localStorage.getItem(key);
+      const map = raw ? JSON.parse(raw) : {};
+      if (fingerprint) {
+        map[resourceKey] = fingerprint;
+      } else {
+        delete map[resourceKey];
+      }
+      localStorage.setItem(key, JSON.stringify(map));
+    }
+  } catch (e) {}
+}
+
+/**
+ * Returns all saved resource fingerprints for a user.
+ * @param {string} userEmail
+ * @returns {object}
+ */
+export function getAllResourceFingerprints(userEmail) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && userEmail) {
+      const raw = localStorage.getItem(`${STORAGE_KEY_RESOURCE_FINGERPRINTS}_${userEmail}`);
+      if (raw) return JSON.parse(raw);
+    }
+  } catch (e) {}
+  return {};
 }
 
 /**
@@ -310,6 +369,98 @@ async function hashYoutubeTranscripts(youtubeTranscripts) {
 }
 
 /**
+ * Computes a deterministic SHA-256 fingerprint for a single text document.
+ * 
+ * @param {object} doc
+ * @returns {Promise<string>}
+ */
+export async function hashSingleTextDocument(doc) {
+  if (!doc || typeof doc !== 'object') return 'empty';
+  const { paragraphs = [], lastReadingPosition, lastAudioPosition, ...otherDocProps } = doc;
+  const cleanDocMeta = {
+    ...otherDocProps,
+    lastReadingPosition: cleanPosition(lastReadingPosition),
+    lastAudioPosition: cleanPosition(lastAudioPosition)
+  };
+  const metaHash = await hashStringChunk(fastCanonicalJson(cleanDocMeta));
+
+  const paragraphChunkHashes = [];
+  const CHUNK_SIZE = 50;
+  for (let p = 0; p < paragraphs.length; p += CHUNK_SIZE) {
+    const slice = paragraphs.slice(p, p + CHUNK_SIZE);
+    paragraphChunkHashes.push(await hashStringChunk(fastCanonicalJson(slice)));
+  }
+  const paragraphsHash = paragraphChunkHashes.length > 0
+    ? await hashStringChunk(paragraphChunkHashes.join(':'))
+    : 'no_paragraphs';
+
+  return await hashStringChunk(`${doc.id || 'noid'}|${metaHash}|${paragraphsHash}`);
+}
+
+/**
+ * Computes a deterministic SHA-256 fingerprint for a YouTube transcript or array of transcripts.
+ * 
+ * @param {object|Array} transcripts
+ * @returns {Promise<string>}
+ */
+export async function hashSingleYoutubeTranscript(transcripts) {
+  const items = Array.isArray(transcripts) ? transcripts : (transcripts ? [transcripts] : []);
+  if (items.length === 0) return 'empty';
+
+  const transcriptHashes = [];
+  for (const item of items) {
+    if (!item) continue;
+    const { subtitles = [], segments = [], ...otherProps } = item;
+    const lines = subtitles.length > 0 ? subtitles : segments;
+    const metaHash = await hashStringChunk(fastCanonicalJson(otherProps));
+
+    const lineChunkHashes = [];
+    const CHUNK_SIZE = 50;
+    for (let s = 0; s < lines.length; s += CHUNK_SIZE) {
+      const slice = lines.slice(s, s + CHUNK_SIZE);
+      lineChunkHashes.push(await hashStringChunk(fastCanonicalJson(slice)));
+    }
+    const linesHash = lineChunkHashes.length > 0
+      ? await hashStringChunk(lineChunkHashes.join(':'))
+      : 'no_lines';
+
+    const itemHash = await hashStringChunk(`${item.videoId || item.id || 'noid'}|${metaHash}|${linesHash}`);
+    transcriptHashes.push(itemHash);
+  }
+
+  return await hashStringChunk(transcriptHashes.join(';'));
+}
+
+/**
+ * Computes a deterministic SHA-256 fingerprint for any individual resource.
+ * 
+ * @param {string} type - 'text-document' | 'youtube-transcript' | 'saved-words' | 'chat-history' | 'call-history' | 'habit-tracker' | 'settings'
+ * @param {*} resourceData - Raw data of the resource
+ * @returns {Promise<string>} Hex fingerprint
+ */
+export async function computeResourceFingerprint(type, resourceData) {
+  switch (type) {
+    case 'text-document':
+      return await hashSingleTextDocument(resourceData);
+    case 'youtube-transcript':
+      return await hashSingleYoutubeTranscript(resourceData);
+    case 'saved-words':
+      return await hashSavedWords(resourceData);
+    case 'chat-history':
+      return await hashChatHistory(resourceData);
+    case 'call-history':
+      return await hashCallHistory(resourceData);
+    case 'habit-tracker':
+      return await hashHabitTracker(resourceData);
+    case 'settings':
+      return await hashSettings(resourceData);
+    default:
+      if (resourceData === null || resourceData === undefined) return 'empty';
+      return await hashStringChunk(fastCanonicalJson(resourceData));
+  }
+}
+
+/**
  * Computes a deterministic composite SHA-256 fingerprint for a backup payload.
  * Processes data section-by-section and chunk-by-chunk without ever creating a monolithic string of the backup.
  * 
@@ -365,7 +516,7 @@ export async function computePayloadFingerprint(payload) {
 /**
  * Gathers all chat conversations from localStorage (keys matching 'linguaflow_chat_*').
  */
-function gatherChatHistory() {
+export function gatherChatHistory() {
   const chatHistory = {};
   if (typeof window === 'undefined' || !window.localStorage) return chatHistory;
 
@@ -393,7 +544,7 @@ function gatherChatHistory() {
 /**
  * Gathers cached YouTube gloss maps from localStorage (keys matching 'linguaflow_yt_gloss_v3_*').
  */
-function gatherCachedGlosses() {
+export function gatherCachedGlosses() {
   const glossMap = {};
   if (typeof window === 'undefined' || !window.localStorage) return glossMap;
 
@@ -417,7 +568,7 @@ function gatherCachedGlosses() {
 /**
  * Gathers user settings and preferences, stripping all sensitive secrets and tokens.
  */
-function gatherCleanSettings() {
+export function gatherCleanSettings() {
   const settings = {
     siteLang: 'es',
     targetLang: 'pl',
@@ -717,8 +868,150 @@ export async function performManualBackup(user, onProgress = () => {}) {
   }
 }
 
+export const RESOURCE_BACKUP_FORMAT = 'linguaflow-auto-resource';
+
+/**
+ * Creates an individual portable resource backup payload.
+ * 
+ * @param {string} type
+ * @param {string} id
+ * @param {*} data
+ * @param {object} [user=null]
+ * @returns {object}
+ */
+export function createResourcePayload(type, id, data, user = null) {
+  return {
+    format: RESOURCE_BACKUP_FORMAT,
+    version: 1,
+    type,
+    id: id || type,
+    updatedAt: new Date().toISOString(),
+    user: {
+      email: user?.email || '',
+      displayName: user?.displayName || ''
+    },
+    data
+  };
+}
+
+export function createTextDocumentBackupPayload(doc, user = null) {
+  return createResourcePayload('text-document', doc?.id || 'noid', doc, user);
+}
+
+export function createYoutubeTranscriptBackupPayload(videoId, transcripts, user = null) {
+  return createResourcePayload('youtube-transcript', videoId || 'novideo', transcripts, user);
+}
+
+export function createSavedWordsBackupPayload(savedWords, user = null) {
+  return createResourcePayload('saved-words', 'saved-words', savedWords, user);
+}
+
+export function createChatHistoryBackupPayload(chatHistory, user = null) {
+  return createResourcePayload('chat-history', 'chat-history', chatHistory, user);
+}
+
+export function createCallHistoryBackupPayload(callHistory, user = null) {
+  return createResourcePayload('call-history', 'call-history', callHistory, user);
+}
+
+export function createHabitTrackerBackupPayload(habitTracker, user = null) {
+  return createResourcePayload('habit-tracker', 'habit-tracker', habitTracker, user);
+}
+
+export function createSettingsBackupPayload(settings, user = null) {
+  return createResourcePayload('settings', 'settings', settings, user);
+}
+
+/**
+ * Reconstructs a full standard backup snapshot from the incremental auto/ folder in Google Drive.
+ * 
+ * @param {string} accessToken
+ * @param {string} userEmail
+ * @returns {Promise<object>} Standard portable backup payload
+ */
+export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
+  const rootFolderId = await getOrCreateBackupFolder(accessToken);
+  const autoFolderId = await getOrCreateAutoBackupFolder(accessToken, rootFolderId);
+  const manifestFile = await findDriveFile(accessToken, autoFolderId, 'manifest.json');
+
+  if (!manifestFile) {
+    throw new Error('No se encontró el índice de sincronización automática en Google Drive.');
+  }
+
+  const manifest = await downloadBackupPayload(accessToken, manifestFile.id);
+  const resources = manifest?.resources || {};
+
+  const textLibrary = [];
+  const youtubeTranscripts = [];
+  let savedWords = [];
+  let chatHistory = {};
+  let callHistory = [];
+  let habitTracker = {};
+  let settings = gatherCleanSettings();
+
+  for (const [resKey, info] of Object.entries(resources)) {
+    if (!info?.fileId) continue;
+    try {
+      const resPayload = await downloadBackupPayload(accessToken, info.fileId);
+      const data = resPayload?.data;
+      if (resKey.startsWith('text-document:') && data) {
+        textLibrary.push(data);
+      } else if (resKey.startsWith('youtube-transcript:') && data) {
+        if (Array.isArray(data)) {
+          youtubeTranscripts.push(...data);
+        } else if (data) {
+          youtubeTranscripts.push(data);
+        }
+      } else if (resKey === 'saved-words' && Array.isArray(data)) {
+        savedWords = data;
+      } else if (resKey === 'chat-history' && data) {
+        chatHistory = data;
+      } else if (resKey === 'call-history' && Array.isArray(data)) {
+        callHistory = data;
+      } else if (resKey === 'habit-tracker' && data) {
+        habitTracker = data;
+      } else if (resKey === 'settings' && data) {
+        settings = data;
+      }
+    } catch (err) {
+      console.warn(`[BackupService] Warning reading incremental resource ${resKey}:`, err);
+    }
+  }
+
+  return {
+    format: BACKUP_FORMAT,
+    version: BACKUP_SCHEMA_VERSION,
+    createdAt: manifest.updatedAt || new Date().toISOString(),
+    appVersion: '1.0.0',
+    user: {
+      email: userEmail || manifest.user || '',
+      displayName: ''
+    },
+    counts: {
+      textDocumentsCount: textLibrary.length,
+      youtubeTranscriptsCount: youtubeTranscripts.length,
+      savedWordsCount: savedWords.length,
+      chatConversationsCount: Object.keys(chatHistory).length,
+      callSessionsCount: callHistory.length,
+      habitTrackerKeysCount: Object.keys(habitTracker).length
+    },
+    data: {
+      settings,
+      savedWords,
+      chatHistory,
+      callHistory,
+      habitTracker,
+      activeSessions: { textDraft: null, youtubeSession: null },
+      cachedGlosses: {},
+      textLibrary,
+      youtubeTranscripts
+    }
+  };
+}
+
 /**
  * Fetches available backups from Google Drive folder.
+ * Includes manual backups and an option for the latest auto-sync state if available.
  * 
  * @param {string} userEmail
  * @returns {Promise<Array<object>>}
@@ -726,11 +1019,33 @@ export async function performManualBackup(user, onProgress = () => {}) {
 export async function getAvailableBackups(userEmail) {
   const accessToken = await requestDriveAccessToken(userEmail);
   const folderId = await getOrCreateBackupFolder(accessToken);
-  return await listBackupFiles(accessToken, folderId);
+  const rootFiles = await listBackupFiles(accessToken, folderId);
+
+  // Check if auto-sync manifest exists to offer restoring the latest incremental auto-backup
+  try {
+    const autoFolderId = await getOrCreateAutoBackupFolder(accessToken, folderId);
+    const manifestFile = await findDriveFile(accessToken, autoFolderId, 'manifest.json');
+    if (manifestFile) {
+      const autoOption = {
+        id: 'auto-sync-latest',
+        name: 'Auto-Sync (Último estado sincronizado)',
+        size: manifestFile.size,
+        createdTime: manifestFile.createdTime,
+        modifiedTime: manifestFile.modifiedTime,
+        isAutoSync: true
+      };
+      return [autoOption, ...rootFiles];
+    }
+  } catch (e) {
+    // Non-fatal if auto folder check fails
+  }
+
+  return rootFiles;
 }
 
 /**
  * Downloads a backup from Google Drive.
+ * Supports standard backup files as well as 'auto-sync-latest'.
  * 
  * @param {string} userEmail
  * @param {string} fileId
@@ -738,6 +1053,9 @@ export async function getAvailableBackups(userEmail) {
  */
 export async function fetchBackupPayload(userEmail, fileId) {
   const accessToken = await requestDriveAccessToken(userEmail);
+  if (fileId === 'auto-sync-latest') {
+    return await reconstructAutoBackupSnapshot(accessToken, userEmail);
+  }
   try {
     return await downloadBackupPayload(accessToken, fileId);
   } catch (err) {

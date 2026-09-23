@@ -154,22 +154,36 @@ export function YouTubeReaderPage({
   const [searchQuery, setSearchQuery] = useState('');
   const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
 
-  // Auto-backup trigger strictly upon content exit/closure
+  // Auto-backup trigger strictly upon content exit/closure with stable videoId
   const viewModeRef = useRef(viewMode);
   useEffect(() => {
     if (viewModeRef.current === 'reader' && viewMode !== 'reader') {
-      requestAutoBackup('youtube-reader-exit');
+      const vid = activeVideoIdRef.current || videoId;
+      if (vid && vid !== 'novideo') {
+        requestAutoBackup({
+          type: 'youtube-transcript',
+          id: vid,
+          reason: 'youtube-reader-exit'
+        });
+      }
     }
     viewModeRef.current = viewMode;
-  }, [viewMode]);
+  }, [viewMode, videoId]);
 
   useEffect(() => {
     return () => {
       if (viewModeRef.current === 'reader') {
-        requestAutoBackup('youtube-reader-unmount');
+        const vid = activeVideoIdRef.current || videoId;
+        if (vid && vid !== 'novideo') {
+          requestAutoBackup({
+            type: 'youtube-transcript',
+            id: vid,
+            reason: 'youtube-reader-unmount'
+          });
+        }
       }
     };
-  }, []);
+  }, [videoId]);
 
   // Hamburger actions menu state & ref
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);

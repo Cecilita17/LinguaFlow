@@ -619,3 +619,204 @@ export async function deleteDriveFile(accessToken, fileId) {
     return false;
   }
 }
+
+export const AUTO_BACKUP_SUBFOLDER_NAME = 'auto';
+
+/**
+ * Gets or creates the "auto" subfolder inside the "LinguaFlow Backups" folder.
+ * 
+ * @param {string} accessToken
+ * @param {string} parentFolderId
+ * @returns {Promise<string>} Subfolder ID
+ */
+export async function getOrCreateAutoBackupFolder(accessToken, parentFolderId) {
+  const query = encodeURIComponent(`mimeType = 'application/vnd.google-apps.folder' and name = '${AUTO_BACKUP_SUBFOLDER_NAME}' and '${parentFolderId}' in parents and trashed = false`);
+  const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`;
+
+  const searchRes = await fetch(searchUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (!searchRes.ok) {
+    const errText = await searchRes.text();
+    throw new Error(`Error al buscar subcarpeta de auto-backup en Google Drive: ${errText}`);
+  }
+
+  const searchData = await searchRes.json();
+  if (Array.isArray(searchData.files) && searchData.files.length > 0) {
+    return searchData.files[0].id;
+  }
+
+  // Create "auto" subfolder
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: AUTO_BACKUP_SUBFOLDER_NAME,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentFolderId]
+    })
+  });
+
+  if (!createRes.ok) {
+    const errText = await createRes.text();
+    throw new Error(`Error al crear subcarpeta de auto-backup en Google Drive: ${errText}`);
+  }
+
+  const folderData = await createRes.json();
+  return folderData.id;
+}
+
+/**
+ * Finds a file by name inside a specific folder.
+ * 
+ * @param {string} accessToken
+ * @param {string} folderId
+ * @param {string} fileName
+ * @returns {Promise<object|null>} File metadata { id, name, size, modifiedTime } or null
+ */
+export async function findDriveFile(accessToken, folderId, fileName) {
+  if (!accessToken || !folderId || !fileName) return null;
+  const escapedName = fileName.replace(/'/g, "\\'");
+  const query = encodeURIComponent(`'${folderId}' in parents and name = '${escapedName}' and trashed = false`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,size,modifiedTime)&spaces=drive&pageSize=1`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (!res.ok) {
+    return null;
+  }
+
+  const data = await res.json();
+  return (Array.isArray(data.files) && data.files.length > 0) ? data.files[0] : null;
+}
+
+/**
+ * Lists all files inside a specific folder.
+ * 
+ * @param {string} accessToken
+ * @param {string} folderId
+ * @returns {Promise<Array<object>>}
+ */
+export async function listFolderFiles(accessToken, folderId) {
+  if (!accessToken || !folderId) return [];
+  const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,size,modifiedTime)&pageSize=1000`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Error al listar archivos de carpeta en Google Drive: ${errText}`);
+  }
+
+  const data = await res.json();
+  return Array.isArray(data.files) ? data.files : [];
+}
+
+/**
+ * Uploads a new resource file to a designated folder in Google Drive.
+ * 
+ * @param {string} accessToken
+ * @param {string} folderId
+ * @param {string} fileName
+ * @param {Blob|string} fileData
+ * @returns {Promise<object>} Uploaded file metadata
+ */
+export async function uploadDriveResource(accessToken, folderId, fileName, fileData) {
+  return await uploadBackupFile(accessToken, folderId, fileName, fileData);
+}
+
+/**
+ * Updates an existing file's content in Google Drive by its fileId using PATCH.
+ * Completely replaces content without creating duplicates or changing file ID.
+ * 
+ * @param {string} accessToken
+ * @param {string} fileId
+ * @param {Blob|string} fileData
+ * @returns {Promise<object>} Updated file metadata
+ */
+export async function updateDriveResource(accessToken, fileId, fileData) {
+  if (!accessToken || !fileId) {
+    throw new Error('Parámetros inválidos para actualizar recurso en Google Drive.');
+  }
+
+  const blob = (typeof Blob !== 'undefined' && fileData instanceof Blob)
+    ? fileData
+    : new Blob([fileData], { type: 'application/json' });
+
+  // For large payloads (>4MB), use resumable PATCH
+  if (blob.size > 4 * 1024 * 1024) {
+    return await updateResumableDriveResource(accessToken, fileId, blob);
+  }
+
+  const updateUrl = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,name,size,modifiedTime`;
+
+  const updateRes = await fetch(updateUrl, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: blob
+  });
+
+  if (!updateRes.ok) {
+    if (updateRes.status === 403 || updateRes.status === 507) {
+      throw new Error('Espacio insuficiente o permisos denegados en Google Drive.');
+    }
+    const errText = await updateRes.text();
+    throw new Error(`Error al actualizar recurso en Google Drive (${updateRes.status}): ${errText}`);
+  }
+
+  return await updateRes.json();
+}
+
+/**
+ * Resumable PATCH for large files.
+ */
+async function updateResumableDriveResource(accessToken, fileId, blob) {
+  const initUrl = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=resumable&fields=id,name,size,modifiedTime`;
+
+  const initRes = await fetch(initUrl, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': 'application/json',
+      'X-Upload-Content-Length': String(blob.size)
+    }
+  });
+
+  if (!initRes.ok) {
+    const errText = await initRes.text();
+    throw new Error(`Error al iniciar actualización resumable en Google Drive: ${errText}`);
+  }
+
+  const locationUrl = initRes.headers.get('Location');
+  if (!locationUrl) {
+    throw new Error('Google Drive no devolvió la URL de sesión de actualización.');
+  }
+
+  const uploadRes = await fetch(locationUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: blob
+  });
+
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text();
+    throw new Error(`Error durante la actualización resumable en Google Drive: ${errText}`);
+  }
+
+  return await uploadRes.json();
+}

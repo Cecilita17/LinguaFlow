@@ -10,6 +10,7 @@
  */
 
 import { normalizeDocument, splitTextIntoParagraphs } from './textDocumentService.js';
+import { requestAutoBackup } from './autoBackupService.js';
 
 const DB_NAME = 'LinguaFlow_TextDocuments_DB';
 const DB_VERSION = 1;
@@ -399,7 +400,12 @@ export async function deleteTextDocument(id) {
   }
 
   const db = await openDatabase();
-  if (!db) return true;
+  if (!db) {
+    try {
+      requestAutoBackup({ type: 'text-document', id, deleted: true, reason: 'document-deleted' });
+    } catch (_) {}
+    return true;
+  }
 
   return new Promise((resolve) => {
     try {
@@ -407,7 +413,12 @@ export async function deleteTextDocument(id) {
       const store = transaction.objectStore(STORE_NAME);
       const request = store.delete(id);
 
-      request.onsuccess = () => resolve(true);
+      request.onsuccess = () => {
+        try {
+          requestAutoBackup({ type: 'text-document', id, deleted: true, reason: 'document-deleted' });
+        } catch (_) {}
+        resolve(true);
+      };
       request.onerror = (e) => {
         console.warn('[TextLibraryStorage] Error deleting document from IndexedDB:', e.target.error);
         resolve(false);
