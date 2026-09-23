@@ -195,10 +195,15 @@ async function executeAutoBackup() {
     }
 
     // 4. Content Fingerprint Comparison
-    const currentFingerprint = await computePayloadFingerprint(backupPayload);
+    let currentFingerprint = null;
+    try {
+      currentFingerprint = await computePayloadFingerprint(backupPayload);
+    } catch (fpErr) {
+      console.warn('[AutoBackup] Fingerprint computation notice:', fpErr);
+    }
     const lastFingerprint = getLastSuccessfulFingerprint(currentUser.email);
 
-    if (lastFingerprint && currentFingerprint === lastFingerprint) {
+    if (currentFingerprint && lastFingerprint && currentFingerprint === lastFingerprint) {
       console.log('[AutoBackup] skipped: no changes');
       updateStatus({ status: 'idle' });
       return;
@@ -262,7 +267,9 @@ async function executeAutoBackup() {
       isAutoBackup: true
     };
     saveLastBackupMeta(lastBackupMeta);
-    saveLastSuccessfulFingerprint(currentUser.email, currentFingerprint);
+    if (currentFingerprint) {
+      saveLastSuccessfulFingerprint(currentUser.email, currentFingerprint);
+    }
 
     console.log('[AutoBackup] upload successful');
     updateStatus({

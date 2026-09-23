@@ -82,111 +82,284 @@ export function saveLastSuccessfulFingerprint(userEmail, fingerprint) {
 }
 
 /**
- * Recursively serializes an object with sorted keys to produce a deterministic canonical JSON string.
- * @param {*} value
+ * Fast deterministic canonical JSON stringifier for small objects or chunks.
+ * Sorts object keys recursively to ensure consistent hashing across runs.
+ * Note: Must ONLY be called on small objects or batches, NEVER on the entire backup payload!
+ * 
+ * @param {*} val
  * @returns {string}
  */
-export function canonicalStringify(value) {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value);
+export function fastCanonicalJson(val) {
+  if (val === null || val === undefined) {
+    return 'null';
   }
-  if (Array.isArray(value)) {
-    return '[' + value.map(item => canonicalStringify(item)).join(',') + ']';
+  if (typeof val !== 'object') {
+    return JSON.stringify(val) ?? 'null';
   }
-  const keys = Object.keys(value).sort();
-  return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalStringify(value[k])).join(',') + '}';
+  if (Array.isArray(val)) {
+    return '[' + val.map(fastCanonicalJson).join(',') + ']';
+  }
+  const keys = Object.keys(val).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + fastCanonicalJson(val[k])).join(',') + '}';
 }
 
-/**
- * Normalizes a backup payload for content fingerprinting.
- * Filters out non-content fields like root `createdAt`, and strips volatile
- * transient timestamps (e.g. `updatedAt` in `lastReadingPosition` or `lastAudioPosition`).
- *
- * @param {object} payload
- * @returns {object} Normalized representation of persistent user data
- */
-export function normalizePayloadForFingerprint(payload) {
-  if (!payload || !payload.data) return {};
-
-  const cleanPosition = (pos) => {
-    if (!pos || typeof pos !== 'object') return pos;
-    const { updatedAt, timestamp, ...rest } = pos;
-    return rest;
-  };
-
-  const data = payload.data;
-
-  // Clean activeSessions
-  let normalizedActiveSessions = null;
-  if (data.activeSessions) {
-    normalizedActiveSessions = {
-      textDraft: data.activeSessions.textDraft ? {
-        ...data.activeSessions.textDraft,
-        lastReadingPosition: cleanPosition(data.activeSessions.textDraft.lastReadingPosition),
-        lastAudioPosition: cleanPosition(data.activeSessions.textDraft.lastAudioPosition)
-      } : null,
-      youtubeSession: data.activeSessions.youtubeSession || null
-    };
-  }
-
-  // Clean textLibrary documents
-  const normalizedTextLibrary = Array.isArray(data.textLibrary)
-    ? data.textLibrary.map(doc => {
-        if (!doc) return doc;
-        return {
-          ...doc,
-          lastReadingPosition: cleanPosition(doc.lastReadingPosition),
-          lastAudioPosition: cleanPosition(doc.lastAudioPosition)
-        };
-      })
-    : [];
-
-  return {
-    settings: data.settings || {},
-    savedWords: data.savedWords || [],
-    chatHistory: data.chatHistory || {},
-    callHistory: data.callHistory || [],
-    habitTracker: data.habitTracker || {},
-    cachedGlosses: data.cachedGlosses || {},
-    textLibrary: normalizedTextLibrary,
-    youtubeTranscripts: data.youtubeTranscripts || [],
-    activeSessions: normalizedActiveSessions
-  };
-}
+// Backward-compatibility alias
+export const canonicalStringify = fastCanonicalJson;
 
 /**
- * Computes a deterministic SHA-256 fingerprint hash for a backup payload.
- *
- * @param {object} payload
+ * Computes a SHA-256 hash (or FNV-1a fallback) for an individual string chunk.
+ * 
+ * @param {string} str
  * @returns {Promise<string>} Hex hash string
  */
-export async function computePayloadFingerprint(payload) {
-  const normalized = normalizePayloadForFingerprint(payload);
-  const canonicalJson = canonicalStringify(normalized);
-
+async function hashStringChunk(str) {
+  if (!str) return '0000000000000000';
   if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
     try {
       const encoder = new TextEncoder();
-      const data = encoder.encode(canonicalJson);
+      const data = encoder.encode(str);
       const hashBuffer = await crypto.subtle.digest('SHA-256', data);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     } catch (e) {
-      console.warn('[BackupService] crypto.subtle.digest failed, falling back to fast hash:', e);
+      // Fall through to fast 64-bit FNV-1a hash
     }
   }
 
-  // Fallback 64-bit FNV-1a hash
   let h1 = 0xdeadbeef ^ 0;
   let h2 = 0x41c6ce57 ^ 0;
-  for (let i = 0; i < canonicalJson.length; i++) {
-    const ch = canonicalJson.charCodeAt(i);
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
     h1 = Math.imul(h1 ^ ch, 2654435761);
     h2 = Math.imul(h2 ^ ch, 1597334677);
   }
   h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+}
+
+/**
+ * Removes transient timestamps (updatedAt, timestamp) from reading/audio positions.
+ */
+function cleanPosition(pos) {
+  if (!pos || typeof pos !== 'object') return null;
+  const { updatedAt, timestamp, ...rest } = pos;
+  return rest;
+}
+
+async function hashSettings(settings) {
+  if (!settings || typeof settings !== 'object') return 'empty';
+  return await hashStringChunk(fastCanonicalJson(settings));
+}
+
+async function hashHabitTracker(habitTracker) {
+  if (!habitTracker || typeof habitTracker !== 'object') return 'empty';
+  return await hashStringChunk(fastCanonicalJson(habitTracker));
+}
+
+async function hashActiveSessions(activeSessions) {
+  if (!activeSessions || typeof activeSessions !== 'object') return 'empty';
+  const cleanActive = {
+    textDraft: activeSessions.textDraft ? {
+      ...activeSessions.textDraft,
+      lastReadingPosition: cleanPosition(activeSessions.textDraft.lastReadingPosition),
+      lastAudioPosition: cleanPosition(activeSessions.textDraft.lastAudioPosition)
+    } : null,
+    youtubeSession: activeSessions.youtubeSession || null
+  };
+  return await hashStringChunk(fastCanonicalJson(cleanActive));
+}
+
+async function hashSavedWords(savedWords) {
+  if (!Array.isArray(savedWords) || savedWords.length === 0) return 'empty';
+  const sorted = [...savedWords].sort((a, b) => {
+    const keyA = String(a?.id || a?.word || '');
+    const keyB = String(b?.id || b?.word || '');
+    return keyA.localeCompare(keyB);
+  });
+
+  const chunkHashes = [];
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < sorted.length; i += CHUNK_SIZE) {
+    const slice = sorted.slice(i, i + CHUNK_SIZE);
+    chunkHashes.push(await hashStringChunk(fastCanonicalJson(slice)));
+  }
+  return await hashStringChunk(chunkHashes.join(':'));
+}
+
+async function hashChatHistory(chatHistory) {
+  if (!chatHistory || typeof chatHistory !== 'object') return 'empty';
+  const langs = Object.keys(chatHistory).sort();
+  if (langs.length === 0) return 'empty';
+
+  const langHashes = [];
+  for (const lang of langs) {
+    const messages = chatHistory[lang] || [];
+    const msgChunkHashes = [];
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < messages.length; i += CHUNK_SIZE) {
+      const slice = messages.slice(i, i + CHUNK_SIZE);
+      msgChunkHashes.push(await hashStringChunk(fastCanonicalJson(slice)));
+    }
+    const combinedMsgs = await hashStringChunk(msgChunkHashes.join(':'));
+    langHashes.push(`${lang}=${combinedMsgs}`);
+  }
+  return await hashStringChunk(langHashes.join(';'));
+}
+
+async function hashCallHistory(callHistory) {
+  if (!Array.isArray(callHistory) || callHistory.length === 0) return 'empty';
+  const sorted = [...callHistory].sort((a, b) => {
+    const keyA = String(a?.id || a?.startedAt || '');
+    const keyB = String(b?.id || b?.startedAt || '');
+    return keyA.localeCompare(keyB);
+  });
+
+  const chunkHashes = [];
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < sorted.length; i += CHUNK_SIZE) {
+    const slice = sorted.slice(i, i + CHUNK_SIZE);
+    chunkHashes.push(await hashStringChunk(fastCanonicalJson(slice)));
+  }
+  return await hashStringChunk(chunkHashes.join(':'));
+}
+
+async function hashCachedGlosses(cachedGlosses) {
+  if (!cachedGlosses || typeof cachedGlosses !== 'object') return 'empty';
+  const keys = Object.keys(cachedGlosses).sort();
+  if (keys.length === 0) return 'empty';
+
+  const entryHashes = [];
+  for (const key of keys) {
+    const entryHash = await hashStringChunk(key + '=' + fastCanonicalJson(cachedGlosses[key]));
+    entryHashes.push(entryHash);
+  }
+  return await hashStringChunk(entryHashes.join(';'));
+}
+
+async function hashTextLibrary(textLibrary) {
+  if (!Array.isArray(textLibrary) || textLibrary.length === 0) return 'empty';
+
+  const sortedDocs = [...textLibrary].sort((a, b) => {
+    const idA = String(a?.id || '');
+    const idB = String(b?.id || '');
+    return idA.localeCompare(idB);
+  });
+
+  const docHashes = [];
+  for (const doc of sortedDocs) {
+    if (!doc) continue;
+    const { paragraphs = [], lastReadingPosition, lastAudioPosition, ...otherDocProps } = doc;
+    const cleanDocMeta = {
+      ...otherDocProps,
+      lastReadingPosition: cleanPosition(lastReadingPosition),
+      lastAudioPosition: cleanPosition(lastAudioPosition)
+    };
+    const metaHash = await hashStringChunk(fastCanonicalJson(cleanDocMeta));
+
+    // Chunk paragraphs in small batches (50 per chunk) to avoid large contiguous allocations
+    const paragraphChunkHashes = [];
+    const CHUNK_SIZE = 50;
+    for (let p = 0; p < paragraphs.length; p += CHUNK_SIZE) {
+      const slice = paragraphs.slice(p, p + CHUNK_SIZE);
+      paragraphChunkHashes.push(await hashStringChunk(fastCanonicalJson(slice)));
+    }
+    const paragraphsHash = paragraphChunkHashes.length > 0
+      ? await hashStringChunk(paragraphChunkHashes.join(':'))
+      : 'no_paragraphs';
+
+    const docHash = await hashStringChunk(`${doc.id || 'noid'}|${metaHash}|${paragraphsHash}`);
+    docHashes.push(docHash);
+  }
+
+  return await hashStringChunk(docHashes.join(';'));
+}
+
+async function hashYoutubeTranscripts(youtubeTranscripts) {
+  if (!Array.isArray(youtubeTranscripts) || youtubeTranscripts.length === 0) return 'empty';
+
+  const sortedTranscripts = [...youtubeTranscripts].sort((a, b) => {
+    const idA = String(a?.videoId || a?.id || '');
+    const idB = String(b?.videoId || b?.id || '');
+    return idA.localeCompare(idB);
+  });
+
+  const transcriptHashes = [];
+  for (const item of sortedTranscripts) {
+    if (!item) continue;
+    const { subtitles = [], segments = [], ...otherProps } = item;
+    const lines = subtitles.length > 0 ? subtitles : segments;
+    const metaHash = await hashStringChunk(fastCanonicalJson(otherProps));
+
+    // Chunk subtitle lines in small batches (50 lines per chunk)
+    const lineChunkHashes = [];
+    const CHUNK_SIZE = 50;
+    for (let s = 0; s < lines.length; s += CHUNK_SIZE) {
+      const slice = lines.slice(s, s + CHUNK_SIZE);
+      lineChunkHashes.push(await hashStringChunk(fastCanonicalJson(slice)));
+    }
+    const linesHash = lineChunkHashes.length > 0
+      ? await hashStringChunk(lineChunkHashes.join(':'))
+      : 'no_lines';
+
+    const itemHash = await hashStringChunk(`${item.videoId || item.id || 'noid'}|${metaHash}|${linesHash}`);
+    transcriptHashes.push(itemHash);
+  }
+
+  return await hashStringChunk(transcriptHashes.join(';'));
+}
+
+/**
+ * Computes a deterministic composite SHA-256 fingerprint for a backup payload.
+ * Processes data section-by-section and chunk-by-chunk without ever creating a monolithic string of the backup.
+ * 
+ * @param {object} payload
+ * @returns {Promise<string|null>} Hex hash string, or null on unexpected failure
+ */
+export async function computePayloadFingerprint(payload) {
+  try {
+    if (!payload || !payload.data) return null;
+    const data = payload.data;
+
+    const [
+      settingsHash,
+      savedWordsHash,
+      chatHistoryHash,
+      callHistoryHash,
+      habitTrackerHash,
+      activeSessionsHash,
+      cachedGlossesHash,
+      textLibraryHash,
+      youtubeTranscriptsHash
+    ] = await Promise.all([
+      hashSettings(data.settings),
+      hashSavedWords(data.savedWords),
+      hashChatHistory(data.chatHistory),
+      hashCallHistory(data.callHistory),
+      hashHabitTracker(data.habitTracker),
+      hashActiveSessions(data.activeSessions),
+      hashCachedGlosses(data.cachedGlosses),
+      hashTextLibrary(data.textLibrary),
+      hashYoutubeTranscripts(data.youtubeTranscripts)
+    ]);
+
+    const masterDescriptor = [
+      `settings:${settingsHash}`,
+      `savedWords:${savedWordsHash}`,
+      `chatHistory:${chatHistoryHash}`,
+      `callHistory:${callHistoryHash}`,
+      `habitTracker:${habitTrackerHash}`,
+      `activeSessions:${activeSessionsHash}`,
+      `cachedGlosses:${cachedGlossesHash}`,
+      `textLibrary:${textLibraryHash}`,
+      `youtubeTranscripts:${youtubeTranscriptsHash}`
+    ].join('|');
+
+    return await hashStringChunk(masterDescriptor);
+  } catch (err) {
+    console.warn('[BackupService] computePayloadFingerprint error handled safely:', err);
+    return null;
+  }
 }
 
 /**
@@ -527,7 +700,9 @@ export async function performManualBackup(user, onProgress = () => {}) {
 
     try {
       const fingerprint = await computePayloadFingerprint(backupPayload);
-      saveLastSuccessfulFingerprint(user.email, fingerprint);
+      if (fingerprint) {
+        saveLastSuccessfulFingerprint(user.email, fingerprint);
+      }
     } catch (fpErr) {
       console.warn('[BackupService] Failed to compute/save fingerprint after manual backup:', fpErr);
     }
