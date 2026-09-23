@@ -849,7 +849,24 @@ export async function handleTranscribeTicket(req, res) {
       token,
       onBeforeGenerateToken: async (pathname) => {
         return {
-          maximumSizeInBytes: 25 * 1024 * 1024 // Strict 25 MB limit
+          allowedContentTypes: [
+            'audio/mp3',
+            'audio/mpeg',
+            'audio/wav',
+            'audio/x-wav',
+            'audio/m4a',
+            'audio/x-m4a',
+            'audio/mp4',
+            'audio/webm',
+            'audio/ogg',
+            'audio/aac',
+            'audio/flac',
+            'audio/opus',
+            'audio/webm;codecs=opus',
+            'application/octet-stream'
+          ],
+          maximumSizeInBytes: 25 * 1024 * 1024, // Strict 25 MB limit
+          addRandomSuffix: false
         };
       }
       // Note: onUploadCompleted intentionally omitted — not needed for this flow.
