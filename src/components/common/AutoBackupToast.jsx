@@ -23,7 +23,7 @@ export function AutoBackupToast() {
   const { isSpanish } = useSiteLanguage();
   const [autoStatus, setAutoStatus] = useState(getAutoBackupStatus());
   const [visible, setVisible] = useState(false);
-  const [dismissedStatus, setDismissedStatus] = useState(null);
+  const [dismissedAttemptAt, setDismissedAttemptAt] = useState(null);
 
   useEffect(() => {
     // Sync initial state
@@ -37,31 +37,40 @@ export function AutoBackupToast() {
   }, []);
 
   useEffect(() => {
-    const { status } = autoStatus;
+    const { status, lastAttemptAt } = autoStatus;
+    const currentAttemptKey = lastAttemptAt || status;
 
     if (status === 'uploading') {
-      setVisible(true);
-      setDismissedStatus(null);
+      if (!currentAttemptKey || currentAttemptKey !== dismissedAttemptAt) {
+        setVisible(true);
+      }
     } else if (status === 'success') {
-      setVisible(true);
-      setDismissedStatus(null);
+      if (!currentAttemptKey || currentAttemptKey !== dismissedAttemptAt) {
+        setVisible(true);
+      }
       const timer = setTimeout(() => {
         setVisible(false);
       }, 4000);
       return () => clearTimeout(timer);
     } else if (status === 'error' || status === 'partial') {
-      setVisible(true);
-      setDismissedStatus(null);
+      if (!currentAttemptKey || currentAttemptKey !== dismissedAttemptAt) {
+        setVisible(true);
+      }
       const timer = setTimeout(() => {
         setVisible(false);
       }, 8000);
       return () => clearTimeout(timer);
-    } else if (status === 'idle' || status === 'debouncing') {
-      // Don't show toast for idle/debouncing unless user is seeing active success/error
     }
-  }, [autoStatus]);
+  }, [autoStatus, dismissedAttemptAt]);
 
-  if (!visible || autoStatus.status === 'idle' || autoStatus.status === 'debouncing' || dismissedStatus === autoStatus.status) {
+  const currentAttemptKey = autoStatus.lastAttemptAt || autoStatus.status;
+
+  if (
+    !visible ||
+    autoStatus.status === 'idle' ||
+    autoStatus.status === 'debouncing' ||
+    (dismissedAttemptAt && dismissedAttemptAt === currentAttemptKey)
+  ) {
     return null;
   }
 
@@ -116,20 +125,18 @@ export function AutoBackupToast() {
         </span>
       </div>
 
-      {(isError || isPartial || isSuccess) && (
-        <button
-          type="button"
-          onClick={() => {
-            setVisible(false);
-            setDismissedStatus(status);
-          }}
-          className="p-1 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0"
-          title={isSpanish ? 'Cerrar' : 'Dismiss'}
-          aria-label={isSpanish ? 'Cerrar notificación' : 'Dismiss notification'}
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => {
+          setVisible(false);
+          setDismissedAttemptAt(autoStatus.lastAttemptAt || autoStatus.status);
+        }}
+        className="p-1 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0 min-w-[28px] min-h-[28px] flex items-center justify-center"
+        title={isSpanish ? 'Cerrar' : 'Dismiss'}
+        aria-label={isSpanish ? 'Cerrar notificación' : 'Dismiss notification'}
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
