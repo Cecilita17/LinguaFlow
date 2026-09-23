@@ -20,7 +20,7 @@ import { computeTokenCharRanges, findActiveTokenIndex } from '../../utils/audioW
  * 4. Interactive word click for dictionary definition lookup and saved words yellow highlighting
  * 5. Authentic RTL support for Arabic, Hebrew, etc.
  */
-export function TextParagraphItem({
+function TextParagraphItemComponent({
   paragraph,
   targetLang = 'zh',
   fontSize = 'base',
@@ -82,16 +82,6 @@ export function TextParagraphItem({
     return findActiveTokenIndex(activeAudioCharIndex, tokenCharRanges);
   }, [isPlaying, activeAudioCharIndex, tokenCharRanges]);
 
-  // --- DIAGNOSTIC: Log rendered active token on Android ---
-  const isAndroid = React.useMemo(() => typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || ''), []);
-  React.useEffect(() => {
-    if (isAndroid && isPlaying && activeAudioCharIndex >= 0) {
-      const resolvedWord = activeTokenIndex >= 0 && tokens && tokens[activeTokenIndex]
-        ? (typeof tokens[activeTokenIndex] === 'string' ? tokens[activeTokenIndex] : (tokens[activeTokenIndex].word || tokens[activeTokenIndex].text || ''))
-        : '(none)';
-      console.log(`[TextReaderSync:render] [paragraph #${paragraph.id}] activeCharIndex=${activeAudioCharIndex} resolvedTokenIndex=${activeTokenIndex} resolvedWord="${resolvedWord}"`);
-    }
-  }, [isAndroid, isPlaying, activeAudioCharIndex, activeTokenIndex, paragraph.id, tokens]);
 
   let runningChunkPos = 0;
 
@@ -458,4 +448,29 @@ export function TextParagraphItem({
   );
 }
 
+function arePropsEqual(prevProps, nextProps) {
+  if (prevProps.paragraph !== nextProps.paragraph) return false;
+  if (prevProps.targetLang !== nextProps.targetLang) return false;
+  if (prevProps.fontSize !== nextProps.fontSize) return false;
+  if (prevProps.interlinearMode !== nextProps.interlinearMode) return false;
+  if (prevProps.nativeLang !== nextProps.nativeLang) return false;
+  if (prevProps.isPlaying !== nextProps.isPlaying) return false;
+  if (prevProps.isAudioError !== nextProps.isAudioError) return false;
+  if (prevProps.isGlossing !== nextProps.isGlossing) return false;
+  if (prevProps.hasGloss !== nextProps.hasGloss) return false;
+  if (prevProps.isLastAudioPosition !== nextProps.isLastAudioPosition) return false;
+  if (prevProps.translation !== nextProps.translation) return false;
+  if (prevProps.isTranslating !== nextProps.isTranslating) return false;
+  if (prevProps.isTranslationVisible !== nextProps.isTranslationVisible) return false;
+  if (prevProps.translationError !== nextProps.translationError) return false;
+
+  // Only check character index if this paragraph is actively playing audio
+  if (nextProps.isPlaying && prevProps.activeAudioCharIndex !== nextProps.activeAudioCharIndex) {
+    return false;
+  }
+
+  return true;
+}
+
+export const TextParagraphItem = React.memo(TextParagraphItemComponent, arePropsEqual);
 export default TextParagraphItem;

@@ -340,8 +340,8 @@ export function createAudioWordSynchronizer({
     const tok = wordTokens[clampedPos];
     const newActiveChar = tok ? tok.startChar : -1;
 
-    // --- DIAGNOSTIC: Log Synchronizer state transitions on Android ---
-    if (isAndroid) {
+    // --- DIAGNOSTIC: Log Synchronizer state transitions on Android (debug only) ---
+    if (debug && isAndroid) {
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       const elapsed = startTime > 0 ? Math.max(0, now - startTime - totalPausedDuration) : 0;
       console.log(`[TextReaderSync:sync] [playback #${playbackId || 'default'}]
@@ -464,7 +464,7 @@ new activeCharIndex: ${newActiveChar}`);
     clockBaseTime = startTime;
     clockBaseFraction = 0;
 
-    if (isAndroid) {
+    if (debug && isAndroid) {
       console.log(`[TextReaderSync:tokens] [playback #${playbackId || 'default'}]
 paragraphId: "${paragraphId}"
 cleanText: "${cleanText}"

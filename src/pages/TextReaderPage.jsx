@@ -177,6 +177,8 @@ export function TextReaderPage({
 
   // Load existing draft if available
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
+  const documentRef = useRef(document);
+  documentRef.current = document;
 
   // EPUB Chapter-by-chapter state
   const isEpub = Boolean(
@@ -208,7 +210,7 @@ export function TextReaderPage({
       return document.paragraphs;
     }
     return document.paragraphs.filter(p => p.chapterId === currentChapter.id);
-  }, [document, isEpub, chapters, currentChapter]);
+  }, [document?.id, document?.paragraphs, isEpub, chapters, currentChapter]);
   visibleParagraphsRef.current = visibleParagraphs;
 
   // Navigation mode: 'library' | 'importer' | 'reader'
@@ -438,24 +440,20 @@ export function TextReaderPage({
             if (pRect.bottom >= containerRect.top + 60 && pRect.top <= containerRect.bottom) {
               const pid = pEl.getAttribute('data-paragraph-id');
               if (pid) {
-                setDocument(prev => {
-                  if (!prev || prev.lastReadingPosition?.paragraphId === pid) return prev;
+                const prev = documentRef.current;
+                if (prev && prev.lastReadingPosition?.paragraphId !== pid) {
                   const posData = {
                     paragraphId: pid,
                     chapterIndex: currentChapterIndex,
                     chapterId: currentChapter?.id,
                     updatedAt: Date.now()
                   };
-                  const updated = {
-                    ...prev,
-                    lastReadingPosition: posData
-                  };
-                  saveActiveDocumentDraft(updated);
-                  if (updated.id) {
-                    saveTextDocument(updated).catch(() => {});
+                  prev.lastReadingPosition = posData;
+                  saveActiveDocumentDraft(prev);
+                  if (prev.id) {
+                    saveTextDocument(prev).catch(() => {});
                   }
-                  return updated;
-                });
+                }
               }
               break;
             }
