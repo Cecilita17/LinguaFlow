@@ -241,3 +241,57 @@ export function gatherAllHabitTrackerData() {
 
   return result;
 }
+
+export function getLocalDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function recordAutomaticHabitActivity(currentData, dateStr, langCode, activityKey, user = null) {
+  if (!langCode || !activityKey) return currentData;
+
+  const data = currentData || loadHabitTrackerData(user);
+  const effectiveDateStr = dateStr || getLocalDateString();
+
+  const currentTracked = Array.isArray(data.settings?.trackedLanguages)
+    ? [...data.settings.trackedLanguages]
+    : [];
+
+  let nextTracked = currentTracked;
+  if (!currentTracked.includes(langCode)) {
+    nextTracked = [...currentTracked, langCode];
+  }
+
+  const manualEntries = { ...(data.manualEntries || {}) };
+  const dateObj = { ...(manualEntries[effectiveDateStr] || {}) };
+  const langObj = { ...(dateObj[langCode] || {}) };
+
+  if (langObj[activityKey] === true && currentTracked.includes(langCode)) {
+    return data;
+  }
+
+  langObj[activityKey] = true;
+  dateObj[langCode] = langObj;
+  manualEntries[effectiveDateStr] = dateObj;
+
+  const updatedData = {
+    ...data,
+    settings: {
+      ...(data.settings || {}),
+      trackedLanguages: nextTracked
+    },
+    manualEntries
+  };
+
+  saveHabitTrackerData(updatedData, user);
+  return updatedData;
+}
+
+export function recordHabitActivityForToday({ user = null, langCode, activityKey }) {
+  if (!langCode || !activityKey) return null;
+  const currentData = loadHabitTrackerData(user);
+  const todayStr = getLocalDateString();
+  return recordAutomaticHabitActivity(currentData, todayStr, langCode, activityKey, user);
+}

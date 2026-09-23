@@ -35,8 +35,9 @@ import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx'
 import { CreateWithAiModal } from '../components/text/CreateWithAiModal.jsx';
 import { TextLibraryView } from '../components/text/TextLibraryView.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
-import { getLanguageMeta } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
 import {
   splitTextIntoParagraphs,
   createTextDocument,
@@ -95,6 +96,7 @@ export function TextReaderPage({
   onWordClick = null,
   setActiveTab = null
 }) {
+  const { user } = useAuth();
   const { t, isSpanish } = useSiteLanguage();
   const {
     speechRate,
@@ -1237,6 +1239,11 @@ export function TextReaderPage({
   // Open / select document from saved library modal
   const handleSelectSavedDocument = useCallback((doc) => {
     if (!doc) return;
+    recordHabitActivityForToday({
+      user,
+      langCode: doc.targetLang || targetLang,
+      activityKey: 'reading'
+    });
     audioPlaybackIdRef.current++;
     clearAudioVisualTimer();
     if (window.speechSynthesis) {
@@ -1303,7 +1310,7 @@ export function TextReaderPage({
     setIsAutoGlossing(false);
     setLoadingParagraphIds(new Set());
     navigateToView('reader');
-  }, [setTargetLang, navigateToView, nativeLang]);
+  }, [setTargetLang, navigateToView, nativeLang, targetLang, user]);
 
   // Delete document handler from library modal / view
   const handleDeleteDocumentFromLibrary = useCallback(async (deletedId) => {

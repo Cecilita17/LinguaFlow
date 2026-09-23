@@ -24,6 +24,7 @@ import { ChatHubView } from './components/chat/ChatHubView.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
 import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
+import { recordHabitActivityForToday } from './services/habitTrackerService.js';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -1093,12 +1094,25 @@ export default function App() {
             targetLang={targetLang}
             setTargetLang={handleTargetLangChange}
             languages={languages}
-            onStartChat={() => setChatViewMode('chat')}
+            onStartChat={() => {
+              recordHabitActivityForToday({
+                user,
+                langCode: targetLang,
+                activityKey: 'conversation'
+              });
+              setChatViewMode('chat');
+            }}
             onStartCall={handleStartCall}
             onOpenChatSession={(langCode) => {
+              const effectiveLang = langCode || targetLang;
               if (langCode && langCode !== targetLang) {
                 handleTargetLangChange(langCode);
               }
+              recordHabitActivityForToday({
+                user,
+                langCode: effectiveLang,
+                activityKey: 'conversation'
+              });
               setChatViewMode('chat');
             }}
             onOpenCallDetail={(callData) => {

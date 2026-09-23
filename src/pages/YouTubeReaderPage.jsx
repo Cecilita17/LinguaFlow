@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext.jsx';
+import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
 import { YouTubePlayer } from '../components/youtube/YouTubePlayer.jsx';
 import { YouTubeImporter } from '../components/youtube/YouTubeImporter.jsx';
 import { SubtitleImporter } from '../components/youtube/SubtitleImporter.jsx';
@@ -100,6 +102,7 @@ export function YouTubeReaderPage({
   onWordClick = null,
   setActiveTab = null
 }) {
+  const { user } = useAuth();
   const { isSpanish } = useSiteLanguage();
   const {
     wordHighlightEnabled,
@@ -1046,6 +1049,12 @@ export function YouTubeReaderPage({
 
   const handleLoadFromLibrary = (record) => {
     if (!record) return;
+    const effectiveLang = record.targetLang || record.lang || targetLang;
+    recordHabitActivityForToday({
+      user,
+      langCode: effectiveLang,
+      activityKey: 'youtube'
+    });
     flushPlaybackPosition();
     abortGlossWithLog('handleLoadFromLibrary');
     if (progressiveTokenizeRef.current) {
