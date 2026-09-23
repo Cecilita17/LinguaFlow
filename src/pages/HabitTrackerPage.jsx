@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   CalendarCheck,
@@ -34,6 +34,168 @@ const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
+
+function MonthlyHabitCard({
+  lang,
+  targetLang,
+  isSpanish,
+  monthName,
+  currentYear,
+  currentMonth,
+  daysInCurrentMonth,
+  trackerData,
+  handleToggleCell,
+  getActivityIcon,
+  getActivityLabel
+}) {
+  const scrollContainerRef = useRef(null);
+  const todayRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollContainerRef.current && todayRef.current) {
+      const container = scrollContainerRef.current;
+      const todayElem = todayRef.current;
+      const containerWidth = container.clientWidth;
+      const todayLeft = todayElem.offsetLeft;
+      const todayWidth = todayElem.clientWidth;
+
+      const scrollPos = todayLeft - (containerWidth / 2) + (todayWidth / 2);
+      container.scrollTo({
+        left: Math.max(0, scrollPos),
+        behavior: 'smooth'
+      });
+    } else if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = 0;
+    }
+  }, [currentYear, currentMonth]);
+
+  const isCurrentContext = lang.code === targetLang;
+
+  const langCompletedCount = useMemo(() => {
+    let count = 0;
+    daysInCurrentMonth.forEach(day => {
+      HABIT_ACTIVITIES.forEach(act => {
+        if (isHabitCompleted(trackerData, day.dateStr, lang.code, act.key)) {
+          count++;
+        }
+      });
+    });
+    return count;
+  }, [daysInCurrentMonth, trackerData, lang.code]);
+
+  return (
+    <div className="p-4 sm:p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md dark:bg-[#241009]/95 dark:border-[#4a2216] dark:shadow-xl transition-all">
+      {/* Header of Language Card */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-3">
+          <span className="text-2xl sm:text-3xl">{lang.flag || '🌐'}</span>
+          <div>
+            <div className="flex items-center space-x-2">
+              <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white">
+                {lang.name}
+              </h3>
+              {isCurrentContext && (
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                  {isSpanish ? 'Idioma actual' : 'Current language'}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70">
+              {monthName} {currentYear}
+            </p>
+          </div>
+        </div>
+
+        <div className="px-3 py-1.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs font-bold">
+          {langCompletedCount} {isSpanish ? 'completados' : 'completed'}
+        </div>
+      </div>
+
+      {/* Grid Container */}
+      <div className="flex w-full items-stretch border rounded-2xl border-[var(--border-primary)] dark:border-[#3b170e] bg-[var(--surface-secondary)]/30 dark:bg-[#1a0b06]/40 overflow-hidden shadow-inner">
+        {/* Left Fixed Column: Day / Activity labels */}
+        <div className="w-32 sm:w-36 shrink-0 border-r border-[var(--border-primary)] dark:border-[#3b170e] bg-[var(--surface-primary)] dark:bg-[#241009] flex flex-col z-10 shadow-xs">
+          {/* Header Row */}
+          <div className="h-10 px-3 flex items-center border-b border-[var(--border-primary)] dark:border-[#3b170e] text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+            {isSpanish ? 'DÍA / ACTIVIDAD' : 'DAY / ACTIVITY'}
+          </div>
+
+          {/* Activity Rows */}
+          {HABIT_ACTIVITIES.map((act) => (
+            <div
+              key={act.key}
+              className="h-9 px-3 flex items-center gap-2 border-b last:border-b-0 border-[var(--border-primary)]/50 dark:border-[#3b170e]/50 text-xs font-semibold truncate text-[var(--text-primary)] dark:text-rose-100"
+            >
+              {getActivityIcon(act.key)}
+              <span className="truncate">{getActivityLabel(act.key)}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Right Scrollable Column: Days */}
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-x-auto select-none scrollbar-thin scrollbar-thumb-rose-500/30 dark:scrollbar-thumb-rose-500/20"
+        >
+          <div className="min-w-max flex flex-col">
+            {/* Header Row: Days */}
+            <div className="flex h-10 border-b border-[var(--border-primary)] dark:border-[#3b170e]">
+              {daysInCurrentMonth.map((day) => {
+                const dayName = isSpanish ? day.dayNameEs : day.dayNameEn;
+                return (
+                  <div
+                    key={day.dayNumber}
+                    ref={day.isToday ? todayRef : null}
+                    className={`w-8 sm:w-9 shrink-0 flex flex-col items-center justify-center text-center font-bold border-r border-[var(--border-primary)]/30 dark:border-[#3b170e]/30 ${
+                      day.isToday
+                        ? 'bg-rose-500 text-white dark:bg-rose-600 shadow-sm'
+                        : day.isWeekend
+                        ? 'bg-rose-500/5 text-rose-600 dark:bg-rose-950/20 dark:text-rose-300'
+                        : 'text-[var(--text-primary)] dark:text-rose-100'
+                    }`}
+                  >
+                    <span className="text-[9px] uppercase leading-none opacity-80">{dayName}</span>
+                    <span className="text-xs leading-tight font-extrabold">{day.dayNumber}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Activity Rows: Cells */}
+            {HABIT_ACTIVITIES.map((act) => (
+              <div
+                key={act.key}
+                className="flex h-9 border-b last:border-b-0 border-[var(--border-primary)]/50 dark:border-[#3b170e]/50"
+              >
+                {daysInCurrentMonth.map((day) => {
+                  const completed = isHabitCompleted(trackerData, day.dateStr, lang.code, act.key);
+                  return (
+                    <div
+                      key={day.dayNumber}
+                      onClick={() => handleToggleCell(day.dateStr, lang.code, act.key)}
+                      className={`w-8 sm:w-9 shrink-0 flex items-center justify-center border-r border-[var(--border-primary)]/30 dark:border-[#3b170e]/30 cursor-pointer transition-colors ${
+                        completed
+                          ? act.colorClasses?.activeBg || 'bg-rose-500/20 text-rose-600'
+                          : day.isToday
+                          ? 'bg-rose-500/10 hover:bg-rose-500/20'
+                          : 'hover:bg-stone-500/10 dark:hover:bg-white/5'
+                      }`}
+                      title={`${day.dateStr} - ${getActivityLabel(act.key)}`}
+                    >
+                      {completed && (
+                        <div className={`w-2.5 h-2.5 rounded-full ${act.colorClasses?.activeDot || 'bg-rose-500'} shadow-xs`} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function HabitTrackerPage({
   onBack,
@@ -348,120 +510,22 @@ export function HabitTrackerPage({
           </div>
         ) : (
           <div className="space-y-6">
-            {trackedLanguages.map((lang) => {
-              const isCurrentStudy = lang.code === targetLang;
-
-              return (
-                <div
-                  key={lang.code}
-                  className="rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md dark:bg-[#241009]/95 dark:border-[#4a2216] dark:shadow-xl overflow-hidden transition-all"
-                >
-                  {/* Language Card Top Header */}
-                  <div className="px-5 py-4 bg-[var(--surface-secondary)]/40 dark:bg-[#1f0d07] border-b border-[var(--border-primary)]/60 dark:border-[#3b170e] flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{lang.flag || '🌐'}</span>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <h3 className="text-base font-bold text-[var(--text-primary)] dark:text-white">
-                            {lang.name}
-                          </h3>
-                          {lang.nativeName && lang.nativeName !== lang.name && (
-                            <span className="text-xs text-[var(--text-secondary)] dark:text-rose-200/60 font-medium">
-                              ({lang.nativeName})
-                            </span>
-                          )}
-                          {isCurrentStudy && (
-                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
-                              {isSpanish ? 'En curso' : 'Active'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 font-medium">
-                      <span>{monthName} {currentYear}</span>
-                    </div>
-                  </div>
-
-                  {/* Calendar Matrix Scroll Container */}
-                  <div className="p-4 sm:p-5 overflow-x-auto">
-                    <div className="min-w-[760px]">
-                      {/* Days Header Row */}
-                      <div className="grid grid-cols-[140px_repeat(31,minmax(28px,1fr))] gap-1 items-center pb-2 mb-2 border-b border-[var(--border-primary)]/40 dark:border-[#3b170e]">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] dark:text-rose-200/60 px-2">
-                          {isSpanish ? 'Día / Actividad' : 'Day / Activity'}
-                        </div>
-                        {daysInCurrentMonth.map((day) => (
-                          <div
-                            key={day.dateStr}
-                            className={`flex flex-col items-center justify-center py-1 rounded-lg text-center select-none ${
-                              day.isToday
-                                ? 'bg-rose-500/20 text-rose-600 dark:bg-rose-500/30 dark:text-rose-200 font-black border border-rose-500/50'
-                                : day.isWeekend
-                                ? 'text-[var(--text-secondary)] dark:text-rose-200/50 opacity-80'
-                                : 'text-[var(--text-primary)] dark:text-stone-300'
-                            }`}
-                          >
-                            <span className="text-[10px] font-semibold leading-none">
-                              {isSpanish ? day.dayNameEs : day.dayNameEn}
-                            </span>
-                            <span className="text-xs font-bold leading-tight mt-0.5">
-                              {day.dayNumber}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* 3 Activity Rows */}
-                      <div className="space-y-2">
-                        {HABIT_ACTIVITIES.map((act) => {
-                          return (
-                            <div
-                              key={act.id}
-                              className="grid grid-cols-[140px_repeat(31,minmax(28px,1fr))] gap-1 items-center py-1"
-                            >
-                              {/* Left Column Activity Label */}
-                              <div className="flex items-center space-x-2 px-2 select-none">
-                                <div className="shrink-0">{getActivityIcon(act.id)}</div>
-                                <span className="text-xs font-bold truncate text-[var(--text-primary)] dark:text-stone-200">
-                                  {getActivityLabel(act.id)}
-                                </span>
-                              </div>
-
-                              {/* Day Checkboxes */}
-                              {daysInCurrentMonth.map((day) => {
-                                const completed = isHabitCompleted(trackerData, day.dateStr, lang.code, act.key);
-
-                                return (
-                                  <button
-                                    key={day.dateStr}
-                                    type="button"
-                                    onClick={() => handleToggleCell(day.dateStr, lang.code, act.key)}
-                                    title={`${day.dateStr} | ${lang.name} | ${getActivityLabel(act.id)}: ${completed ? (isSpanish ? 'Completado' : 'Completed') : (isSpanish ? 'Sin marcar' : 'Not completed')}`}
-                                    className={`h-8 rounded-xl border flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
-                                      completed
-                                        ? act.colorClasses.activeBg + ' shadow-xs'
-                                        : 'bg-[var(--surface-secondary)]/30 border-[var(--border-primary)]/60 hover:border-stone-400 dark:bg-[#1a0b06]/40 dark:border-[#3b170e] dark:hover:border-[#663022]'
-                                    } ${day.isToday ? 'ring-1 ring-rose-500/40' : ''}`}
-                                  >
-                                    {completed ? (
-                                      <Check className="w-4 h-4 stroke-[3]" />
-                                    ) : (
-                                      <span className="w-1.5 h-1.5 rounded-full bg-stone-300 dark:bg-stone-700 opacity-40" />
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {trackedLanguages.map((lang) => (
+              <MonthlyHabitCard
+                key={lang.code}
+                lang={lang}
+                targetLang={targetLang}
+                isSpanish={isSpanish}
+                monthName={monthName}
+                currentYear={currentYear}
+                currentMonth={currentMonth}
+                daysInCurrentMonth={daysInCurrentMonth}
+                trackerData={trackerData}
+                handleToggleCell={handleToggleCell}
+                getActivityIcon={getActivityIcon}
+                getActivityLabel={getActivityLabel}
+              />
+            ))}
           </div>
         )}
 
