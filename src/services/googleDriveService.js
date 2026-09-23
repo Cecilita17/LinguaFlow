@@ -8,89 +8,224 @@
  * and folders created by LinguaFlow itself. Never accesses or touches user personal files.
  */
 
-const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const BACKUP_FOLDER_NAME = 'LinguaFlow Backups';
+
+// Storage keys
 const STORAGE_KEY_DRIVE_TOKEN = 'linguaflow_drive_access_token';
 const STORAGE_KEY_DRIVE_EXPIRES = 'linguaflow_drive_token_expires_at';
+const STORAGE_KEY_DRIVE_AUTHORIZED = 'linguaflow_drive_authorized';
+const STORAGE_KEY_DRIVE_USER = 'linguaflow_drive_authorized_user';
 
 // In-memory cache of access token
 let cachedDriveToken = null;
 let cachedExpiresAt = 0;
+let inFlightTokenPromise = null;
+
+const connectionListeners = new Set();
 
 /**
- * Check if the stored Google Drive token is still valid.
+ * Subscribes a listener to Drive connection changes.
+ * @param {function(boolean): void} listener
+ * @returns {function(): void} Unsubscribe callback
  */
-export function isDriveConnected() {
-  const now = Date.now();
-  if (cachedDriveToken && cachedExpiresAt > now + 60000) {
-    return true;
+export function onDriveConnectionChanged(listener) {
+  if (typeof listener === 'function') {
+    connectionListeners.add(listener);
   }
+  return () => {
+    connectionListeners.delete(listener);
+  };
+}
+
+function notifyConnectionChanged() {
+  const connected = isDriveConnected();
+  connectionListeners.forEach(fn => {
+    try { fn(connected); } catch (e) {}
+  });
+}
+
+/**
+ * Checks whether the user has previously authorized Google Drive in LinguaFlow.
+ * Persists in localStorage across browser sessions.
+ * 
+ * @param {string} [userEmail]
+ * @returns {boolean}
+ */
+export function isDriveAuthorized(userEmail = '') {
   try {
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      const stored = sessionStorage.getItem(STORAGE_KEY_DRIVE_TOKEN);
-      const expires = parseInt(sessionStorage.getItem(STORAGE_KEY_DRIVE_EXPIRES) || '0', 10);
-      if (stored && expires > now + 60000) {
-        cachedDriveToken = stored;
-        cachedExpiresAt = expires;
-        return true;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const authorized = localStorage.getItem(STORAGE_KEY_DRIVE_AUTHORIZED) === 'true';
+      if (!authorized) return false;
+      if (userEmail) {
+        const storedUser = localStorage.getItem(STORAGE_KEY_DRIVE_USER);
+        if (storedUser && storedUser.toLowerCase() !== userEmail.toLowerCase()) {
+          return false;
+        }
       }
+      return true;
     }
   } catch (e) {}
   return false;
 }
 
 /**
- * Clear Drive token state (e.g. on logout or disconnect)
+ * Records that the user has authorized Google Drive.
  */
-export function disconnectDrive() {
-  cachedDriveToken = null;
-  cachedExpiresAt = 0;
+function setDriveAuthorized(userEmail = '') {
   try {
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      sessionStorage.removeItem(STORAGE_KEY_DRIVE_TOKEN);
-      sessionStorage.removeItem(STORAGE_KEY_DRIVE_EXPIRES);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(STORAGE_KEY_DRIVE_AUTHORIZED, 'true');
+      if (userEmail) {
+        localStorage.setItem(STORAGE_KEY_DRIVE_USER, userEmail);
+      }
     }
   } catch (e) {}
 }
 
 /**
- * Requests an access token with the drive.file scope using Google Identity Services.
- * Reuses the existing Google Client ID configured in LinguaFlow.
- * 
- * @param {string} userEmail - Hint for account selection
- * @returns {Promise<string>} Valid access token
+ * Clears all stored tokens and authorization flags.
  */
-export async function requestDriveAccessToken(userEmail = '') {
-  if (isDriveConnected() && cachedDriveToken) {
+function clearDriveStorage() {
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage) {
+        localStorage.removeItem(STORAGE_KEY_DRIVE_AUTHORIZED);
+        localStorage.removeItem(STORAGE_KEY_DRIVE_USER);
+        localStorage.removeItem(STORAGE_KEY_DRIVE_TOKEN);
+        localStorage.removeItem(STORAGE_KEY_DRIVE_EXPIRES);
+      }
+      if (window.sessionStorage) {
+        sessionStorage.removeItem(STORAGE_KEY_DRIVE_TOKEN);
+        sessionStorage.removeItem(STORAGE_KEY_DRIVE_EXPIRES);
+      }
+    }
+  } catch (e) {}
+}
+
+/**
+ * Attempts to load an unexpired access token from memory or local storage.
+ * @returns {string|null} Valid access token, or null if expired/missing
+ */
+function loadStoredToken() {
+  const now = Date.now();
+  if (cachedDriveToken && cachedExpiresAt > now + 60000) {
     return cachedDriveToken;
   }
 
-  const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
-  if (!clientId) {
-    throw new Error('VITE_GOOGLE_CLIENT_ID no está configurado.');
-  }
+  try {
+    if (typeof window !== 'undefined') {
+      // Check localStorage first, fallback to sessionStorage
+      const token = (window.localStorage && localStorage.getItem(STORAGE_KEY_DRIVE_TOKEN)) ||
+                    (window.sessionStorage && sessionStorage.getItem(STORAGE_KEY_DRIVE_TOKEN));
+      const expiresStr = (window.localStorage && localStorage.getItem(STORAGE_KEY_DRIVE_EXPIRES)) ||
+                         (window.sessionStorage && sessionStorage.getItem(STORAGE_KEY_DRIVE_EXPIRES));
+      const expires = parseInt(expiresStr || '0', 10);
 
-  if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
-    // Wait up to 2.5s for Google Identity Services script
-    const isLoaded = await new Promise((resolve) => {
-      let attempts = 0;
-      const interval = setInterval(() => {
-        attempts++;
-        if (window.google?.accounts?.oauth2) {
-          clearInterval(interval);
-          resolve(true);
-        } else if (attempts >= 25) {
-          clearInterval(interval);
-          resolve(false);
-        }
-      }, 100);
-    });
+      if (token && expires > now + 60000) {
+        cachedDriveToken = token;
+        cachedExpiresAt = expires;
+        return token;
+      }
+    }
+  } catch (e) {}
 
-    if (!isLoaded) {
-      throw new Error('Google Identity Services no está disponible en este momento.');
+  return null;
+}
+
+/**
+ * Saves access token in memory and storage (localStorage + sessionStorage).
+ */
+function persistToken(token, expiresAt, userEmail = '') {
+  cachedDriveToken = token;
+  cachedExpiresAt = expiresAt;
+
+  setDriveAuthorized(userEmail);
+
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage) {
+        localStorage.setItem(STORAGE_KEY_DRIVE_TOKEN, token);
+        localStorage.setItem(STORAGE_KEY_DRIVE_EXPIRES, String(expiresAt));
+      }
+      if (window.sessionStorage) {
+        sessionStorage.setItem(STORAGE_KEY_DRIVE_TOKEN, token);
+        sessionStorage.setItem(STORAGE_KEY_DRIVE_EXPIRES, String(expiresAt));
+      }
+    }
+  } catch (e) {}
+}
+
+/**
+ * Checks if a valid, unexpired Google Drive access token is currently available.
+ * Does not check just for an arbitrary string; verifies expiration > current time.
+ * 
+ * @returns {boolean}
+ */
+export function isDriveConnected() {
+  return Boolean(loadStoredToken());
+}
+
+/**
+ * Disconnects Google Drive: revokes token if possible, clears in-memory and local storage state,
+ * and notifies listeners. Ensures LinguaFlow will NOT attempt silent reconnection.
+ */
+export function disconnectDrive() {
+  const tokenToRevoke = cachedDriveToken || (typeof window !== 'undefined' && window.localStorage ? localStorage.getItem(STORAGE_KEY_DRIVE_TOKEN) : null);
+
+  cachedDriveToken = null;
+  cachedExpiresAt = 0;
+  clearDriveStorage();
+
+  // Best-effort token revocation with Google Identity Services
+  if (tokenToRevoke && typeof window !== 'undefined' && window.google?.accounts?.oauth2?.revoke) {
+    try {
+      window.google.accounts.oauth2.revoke(tokenToRevoke, () => {
+        console.log('[GoogleDrive] Token revoked successfully.');
+      });
+    } catch (e) {
+      console.warn('[GoogleDrive] Notice revoking token with Google:', e);
     }
   }
 
+  notifyConnectionChanged();
+}
+
+/**
+ * Waits for the Google Identity Services client script to load if not already ready.
+ */
+async function waitForGoogleIdentityServices() {
+  if (typeof window === 'undefined') {
+    throw new Error('Google Identity Services no está disponible en este entorno.');
+  }
+  if (window.google?.accounts?.oauth2) {
+    return true;
+  }
+
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (window.google?.accounts?.oauth2) {
+        clearInterval(interval);
+        resolve(true);
+      } else if (attempts >= 30) {
+        clearInterval(interval);
+        reject(new Error('Google Identity Services no está disponible en este momento.'));
+      }
+    }, 100);
+  });
+}
+
+/**
+ * Performs an OAuth token request via Google Identity Services TokenClient.
+ * 
+ * @param {string} clientId
+ * @param {string} userEmail
+ * @param {string} prompt - '' for silent renewal without consent screen, or 'consent'
+ * @returns {Promise<{ token: string, expiresAt: number }>}
+ */
+function requestGisToken(clientId, userEmail, prompt) {
   return new Promise((resolve, reject) => {
     try {
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
@@ -99,11 +234,13 @@ export async function requestDriveAccessToken(userEmail = '') {
         hint: userEmail || undefined,
         callback: (tokenResponse) => {
           if (tokenResponse.error) {
-            console.error('Drive OAuth error:', tokenResponse);
-            if (tokenResponse.error === 'popup_closed_by_user' || tokenResponse.error === 'access_denied') {
+            const errCode = tokenResponse.error;
+            if (errCode === 'popup_closed_by_user' || errCode === 'access_denied') {
               reject(new Error('Autorización de Google Drive cancelada por el usuario.'));
+            } else if (errCode === 'interaction_required' || errCode === 'consent_required') {
+              reject(new Error('Se requiere interacción del usuario para renovar el acceso a Google Drive.'));
             } else {
-              reject(new Error(`Error de autorización: ${tokenResponse.error_description || tokenResponse.error}`));
+              reject(new Error(`Error de autorización: ${tokenResponse.error_description || errCode}`));
             }
             return;
           }
@@ -117,29 +254,115 @@ export async function requestDriveAccessToken(userEmail = '') {
           const expiresInSeconds = parseInt(tokenResponse.expires_in || '3599', 10);
           const expiresAt = Date.now() + expiresInSeconds * 1000;
 
-          cachedDriveToken = token;
-          cachedExpiresAt = expiresAt;
-
-          try {
-            if (typeof window !== 'undefined' && window.sessionStorage) {
-              sessionStorage.setItem(STORAGE_KEY_DRIVE_TOKEN, token);
-              sessionStorage.setItem(STORAGE_KEY_DRIVE_EXPIRES, String(expiresAt));
-            }
-          } catch (e) {}
-
-          resolve(token);
+          resolve({ token, expiresAt });
         },
         error_callback: (err) => {
-          console.error('Drive token client error callback:', err);
-          reject(new Error(err.message || 'No se pudo abrir la ventana de autorización de Google Drive.'));
+          console.warn('[GoogleDrive] Token client error callback:', err);
+          reject(new Error(err?.message || 'Error en cliente de autorización de Google.'));
         }
       });
 
-      tokenClient.requestAccessToken({ prompt: isDriveConnected() ? '' : 'consent' });
+      tokenClient.requestAccessToken({
+        prompt,
+        hint: userEmail || undefined
+      });
     } catch (err) {
       reject(err);
     }
   });
+}
+
+/**
+ * Requests an access token with the drive.file scope using Google Identity Services.
+ * - Reuses existing valid token if unexpired.
+ * - If expired or opening across sessions, attempts silent renewal (prompt: '') if previously authorized.
+ * - Never prompts consent popup automatically on app launch.
+ * - Falls back to interactive prompt only when user interaction is allowed and required.
+ * 
+ * @param {string} [userEmail=''] - Hint for account selection
+ * @param {object} [options={}]
+ * @param {boolean} [options.silentOnly=false] - If true, never opens a popup; fails silently if interaction required
+ * @param {boolean} [options.forceConsent=false] - If true, forces consent screen (e.g. user explicitly clicking connect)
+ * @returns {Promise<string>} Valid access token
+ */
+export async function requestDriveAccessToken(userEmail = '', options = {}) {
+  const { silentOnly = false, forceConsent = false } = options;
+
+  // 1. If valid unexpired token exists, return it immediately
+  const existingToken = loadStoredToken();
+  if (existingToken && !forceConsent) {
+    return existingToken;
+  }
+
+  // 2. Concurrency lock: reuse in-flight token request
+  if (inFlightTokenPromise) {
+    return inFlightTokenPromise;
+  }
+
+  inFlightTokenPromise = (async () => {
+    try {
+      const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+      if (!clientId) {
+        throw new Error('VITE_GOOGLE_CLIENT_ID no está configurado.');
+      }
+
+      await waitForGoogleIdentityServices();
+
+      const previouslyAuthorized = isDriveAuthorized(userEmail);
+
+      // Attempt silent renewal if previously authorized and not forcing consent
+      if (previouslyAuthorized && !forceConsent) {
+        try {
+          const silentResult = await requestGisToken(clientId, userEmail, '');
+          persistToken(silentResult.token, silentResult.expiresAt, userEmail);
+          notifyConnectionChanged();
+          return silentResult.token;
+        } catch (silentErr) {
+          console.warn('[GoogleDrive] Silent renewal notice:', silentErr?.message || silentErr);
+          if (silentOnly) {
+            throw silentErr;
+          }
+          // Fall through to interactive prompt if interaction is allowed
+        }
+      } else if (silentOnly) {
+        throw new Error('Google Drive no está autorizado previamente para renovación silenciosa.');
+      }
+
+      // Interactive request: opens OAuth popup
+      const promptOption = forceConsent || !previouslyAuthorized ? 'consent' : '';
+      const interactiveResult = await requestGisToken(clientId, userEmail, promptOption);
+      persistToken(interactiveResult.token, interactiveResult.expiresAt, userEmail);
+      notifyConnectionChanged();
+      return interactiveResult.token;
+    } finally {
+      inFlightTokenPromise = null;
+    }
+  })();
+
+  return inFlightTokenPromise;
+}
+
+/**
+ * Silently restores Google Drive connection if user previously authorized it.
+ * Never displays a consent prompt or popup window.
+ * 
+ * @param {string} [userEmail='']
+ * @returns {Promise<boolean>} True if connection is active/restored, false otherwise
+ */
+export async function restoreDriveConnectionSilently(userEmail = '') {
+  if (isDriveConnected()) {
+    return true;
+  }
+  if (!isDriveAuthorized(userEmail)) {
+    return false;
+  }
+
+  try {
+    const token = await requestDriveAccessToken(userEmail, { silentOnly: true });
+    return Boolean(token);
+  } catch (err) {
+    return false;
+  }
 }
 
 /**

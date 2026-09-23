@@ -30,7 +30,10 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import {
   isDriveConnected,
+  isDriveAuthorized,
   requestDriveAccessToken,
+  restoreDriveConnectionSilently,
+  onDriveConnectionChanged,
   disconnectDrive
 } from '../../services/googleDriveService.js';
 import {
@@ -63,32 +66,47 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
   const [restoring, setRestoring] = useState(false);
   const [autoStatus, setAutoStatus] = useState(getAutoBackupStatus());
 
-  // Initialize last backup meta from localStorage and subscribe to auto-backup status
+  // Initialize last backup meta from localStorage and subscribe to auto-backup and Drive status
   useEffect(() => {
+    let isMounted = true;
     const meta = getLastBackupMeta();
     if (meta) {
       setLastBackup(meta);
     }
-    setConnected(isDriveConnected());
+
+    if (isDriveConnected()) {
+      setConnected(true);
+    } else if (isAuthenticated && user?.email && isDriveAuthorized(user.email)) {
+      setConnecting(true);
+      restoreDriveConnectionSilently(user.email).then((ok) => {
+        if (isMounted) {
+          setConnected(ok);
+          setConnecting(false);
+        }
+      });
+    } else {
+      setConnected(false);
+    }
+
     setAutoStatus(getAutoBackupStatus());
-    const unsub = onAutoBackupStatusChanged((newStatus) => {
+    const unsubAuto = onAutoBackupStatusChanged((newStatus) => {
       setAutoStatus(newStatus);
       const updatedMeta = getLastBackupMeta();
       if (updatedMeta) setLastBackup(updatedMeta);
     });
-    return () => unsub();
-  }, []);
 
+    const unsubConn = onDriveConnectionChanged((isConnected) => {
+      if (isMounted) {
+        setConnected(isConnected);
+      }
+    });
 
-  // Sync connected state with auth
-  useEffect(() => {
-    if (!isAuthenticated) {
-      disconnectDrive();
-      setConnected(false);
-    } else {
-      setConnected(isDriveConnected());
-    }
-  }, [isAuthenticated]);
+    return () => {
+      isMounted = false;
+      unsubAuto();
+      unsubConn();
+    };
+  }, [user, isAuthenticated]);
 
   const showNotification = useCallback((type, text) => {
     setNotice({ type, text });
@@ -132,7 +150,7 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
     setConnecting(true);
     setNotice(null);
     try {
-      await requestDriveAccessToken(user.email);
+      await requestDriveAccessToken(user.email, { forceConsent: true });
       setConnected(true);
       showNotification('success', isSpanish ? 'Google Drive conectado correctamente.' : 'Connected to Google Drive successfully.');
     } catch (err) {
@@ -141,6 +159,13 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
     } finally {
       setConnecting(false);
     }
+  };
+
+  // Disconnect Google Drive
+  const handleDisconnectDrive = () => {
+    disconnectDrive();
+    setConnected(false);
+    showNotification('success', isSpanish ? 'Google Drive desconectado.' : 'Google Drive disconnected.');
   };
 
   // 2. Perform Manual Backup
@@ -413,6 +438,17 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
                   {formatDateTime(autoStatus.lastSuccessAt)}
                 </span>
               )}
+            </div>
+
+            {/* Disconnect Google Drive button */}
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={handleDisconnectDrive}
+                className="text-[11px] text-[var(--text-muted)] hover:text-rose-600 dark:hover:text-rose-400 underline cursor-pointer transition-colors"
+              >
+                {isSpanish ? 'Desconectar Google Drive' : 'Disconnect Google Drive'}
+              </button>
             </div>
           </div>
         )}

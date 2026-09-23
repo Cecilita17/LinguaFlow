@@ -20,6 +20,7 @@ import { useSiteLanguage } from './context/SiteLanguageContext.jsx';
 import { useAudioSettings } from './context/AudioSettingsContext.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { initAutoBackupService, stopAutoBackupService, requestAutoBackup } from './services/autoBackupService.js';
+import { isDriveAuthorized, isDriveConnected, restoreDriveConnectionSilently } from './services/googleDriveService.js';
 import { ChatHubView } from './components/chat/ChatHubView.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
@@ -115,6 +116,9 @@ export default function App() {
   useEffect(() => {
     if (user && user.email) {
       initAutoBackupService(user);
+      if (isDriveAuthorized(user.email) && !isDriveConnected()) {
+        restoreDriveConnectionSilently(user.email).catch(() => {});
+      }
     } else {
       stopAutoBackupService();
     }

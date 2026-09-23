@@ -30,6 +30,7 @@ import {
 } from './backupService.js';
 import {
   isDriveConnected,
+  isDriveAuthorized,
   requestDriveAccessToken,
   getOrCreateBackupFolder,
   uploadBackupFile,
@@ -136,8 +137,8 @@ export function stopAutoBackupService() {
  * @param {string} [reason='content-exit'] - Informative exit reason for debugging
  */
 export function requestAutoBackup(reason = 'content-exit') {
-  // Silent check: If Drive is not connected or user is not signed in, do nothing!
-  if (!currentUser || !isDriveConnected()) {
+  // Silent check: If Drive is neither connected nor authorized, or user is not signed in, do nothing!
+  if (!currentUser || (!isDriveConnected() && !isDriveAuthorized(currentUser.email))) {
     return;
   }
 
@@ -160,8 +161,8 @@ export function requestAutoBackup(reason = 'content-exit') {
  * Executes a single background auto-backup run.
  */
 async function executeAutoBackup() {
-  // Silent check: if Drive not connected or no user, abort silently
-  if (!currentUser || !isDriveConnected()) {
+  // Silent check: if Drive not connected/authorized or no user, abort silently
+  if (!currentUser || (!isDriveConnected() && !isDriveAuthorized(currentUser.email))) {
     updateStatus({ status: 'idle' });
     return;
   }
@@ -178,8 +179,8 @@ async function executeAutoBackup() {
   const now = new Date();
 
   try {
-    // 1. Double-check token is valid without prompting popup
-    const accessToken = await requestDriveAccessToken(currentUser.email);
+    // 1. Double-check token is valid without prompting popup (strictly silent)
+    const accessToken = await requestDriveAccessToken(currentUser.email, { silentOnly: true });
 
     // 2. Ensure all active IndexedDB save operations have fully settled
     await waitForPendingSaves();
