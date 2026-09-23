@@ -56,8 +56,10 @@ function MonthlyHabitCard({
       const container = scrollContainerRef.current;
       const todayElem = todayRef.current;
       const containerWidth = container.clientWidth;
-      const todayLeft = todayElem.offsetLeft;
       const todayWidth = todayElem.clientWidth;
+      const containerRect = container.getBoundingClientRect();
+      const todayRect = todayElem.getBoundingClientRect();
+      const todayLeft = todayRect.left - containerRect.left + container.scrollLeft;
 
       const scrollPos = todayLeft - (containerWidth / 2) + (todayWidth / 2);
       container.scrollTo({
