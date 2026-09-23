@@ -88,6 +88,31 @@ function resolveChapterIndexForDoc(doc) {
   return 0;
 }
 
+const PARAGRAPHS_PER_PAGE = 15;
+
+/**
+ * Resolves the initial 0-based paragraph page for an EPUB chapter based on
+ * lastAudioPosition or lastReadingPosition paragraphId.
+ */
+function resolvePageIndexForDoc(doc, chapterIdx = 0) {
+  if (!doc || !Array.isArray(doc.paragraphs) || doc.paragraphs.length === 0) return 0;
+  const isEp = Boolean(
+    doc.format === 'epub' || doc.sourceType === 'epub' || (Array.isArray(doc.chapters) && doc.chapters.length > 0)
+  );
+  if (!isEp || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
+  const ch = doc.chapters[chapterIdx] || doc.chapters[0];
+  if (!ch) return 0;
+  const chapterParas = doc.paragraphs.filter(p => p.chapterId === ch.id);
+  const targetId = doc.lastAudioPosition?.paragraphId || doc.lastReadingPosition?.paragraphId;
+  if (targetId) {
+    const pIdx = chapterParas.findIndex(p => p.id === targetId);
+    if (pIdx !== -1) {
+      return Math.floor(pIdx / PARAGRAPHS_PER_PAGE);
+    }
+  }
+  return 0;
+}
+
 export function TextReaderPage({
   targetLang = 'zh',
   setTargetLang = null,
@@ -114,6 +139,8 @@ export function TextReaderPage({
   autoPlayTextReaderRef.current = autoPlayTextReader;
   const userStoppedRef = useRef(false);
   const visibleParagraphsRef = useRef([]);
+  const chapterParagraphsRef = useRef([]);
+  const currentParagraphPageRef = useRef(0);
   const handlePlayParagraphRef = useRef(null);
 
   // Audio TTS states & visual synchronizer ref
@@ -193,24 +220,59 @@ export function TextReaderPage({
     return resolveChapterIndexForDoc(loadActiveDocumentDraft());
   });
 
-  // Synchronize chapter index when switching documents or after EPUB import
+  const [currentParagraphPage, setCurrentParagraphPage] = useState(() => {
+    const draft = loadActiveDocumentDraft();
+    const chIdx = resolveChapterIndexForDoc(draft);
+    return resolvePageIndexForDoc(draft, chIdx);
+  });
+  currentParagraphPageRef.current = currentParagraphPage;
+
+  // Synchronize chapter and page index when switching documents or after EPUB import
   useEffect(() => {
     if (document && isEpub && chapters.length > 0) {
       const idx = resolveChapterIndexForDoc(document);
       setCurrentChapterIndex(idx);
+      const pageIdx = resolvePageIndexForDoc(document, idx);
+      setCurrentParagraphPage(pageIdx);
+    } else {
+      setCurrentParagraphPage(0);
     }
   }, [document?.id, isEpub, chapters.length]);
 
   const currentChapter = isEpub && chapters[currentChapterIndex] ? chapters[currentChapterIndex] : null;
 
-  // Render ONLY the current chapter's paragraphs for EPUB, or all paragraphs for TXT
-  const visibleParagraphs = useMemo(() => {
+  // All paragraphs belonging to the active chapter (or entire document for TXT)
+  const chapterParagraphs = useMemo(() => {
     if (!document || !Array.isArray(document.paragraphs)) return [];
     if (!isEpub || chapters.length === 0 || !currentChapter) {
       return document.paragraphs;
     }
     return document.paragraphs.filter(p => p.chapterId === currentChapter.id);
   }, [document?.id, document?.paragraphs, isEpub, chapters, currentChapter]);
+  chapterParagraphsRef.current = chapterParagraphs;
+
+  // Total pages: fixed 15 paragraphs per page for EPUB, 1 page for TXT (continuous scroll)
+  const totalPages = useMemo(() => {
+    if (!isEpub || chapters.length === 0) return 1;
+    return Math.max(1, Math.ceil(chapterParagraphs.length / PARAGRAPHS_PER_PAGE));
+  }, [isEpub, chapters.length, chapterParagraphs.length]);
+
+  // Ensure currentParagraphPage does not exceed totalPages
+  useEffect(() => {
+    if (currentParagraphPage >= totalPages) {
+      setCurrentParagraphPage(Math.max(0, totalPages - 1));
+    }
+  }, [currentParagraphPage, totalPages]);
+
+  // Render ONLY the current 15 paragraphs for EPUB, or all paragraphs for TXT
+  const visibleParagraphs = useMemo(() => {
+    if (!isEpub || chapters.length === 0) {
+      return chapterParagraphs;
+    }
+    const safePage = Math.min(Math.max(0, currentParagraphPage), totalPages - 1);
+    const start = safePage * PARAGRAPHS_PER_PAGE;
+    return chapterParagraphs.slice(start, start + PARAGRAPHS_PER_PAGE);
+  }, [isEpub, chapters.length, chapterParagraphs, currentParagraphPage, totalPages]);
   visibleParagraphsRef.current = visibleParagraphs;
 
   // Navigation mode: 'library' | 'importer' | 'reader'
@@ -479,13 +541,19 @@ export function TextReaderPage({
     setPlayingParagraphId(null);
     setActiveAudioCharIndex(-1);
     setCurrentChapterIndex(newIndex);
+    setCurrentParagraphPage(0);
 
     if (scrollContainerRef.current) {
       isProgrammaticScrollRef.current = true;
       scrollContainerRef.current.scrollTop = 0;
+      previousScrollTopRef.current = 0;
+      setIsHeaderHidden(false);
       setTimeout(() => {
         isProgrammaticScrollRef.current = false;
-      }, 150);
+        if (scrollContainerRef.current) {
+          previousScrollTopRef.current = scrollContainerRef.current.scrollTop;
+        }
+      }, 200);
     }
 
     const targetChapter = chapters[newIndex];
@@ -509,7 +577,60 @@ export function TextReaderPage({
         return updated;
       });
     }
-  }, [chapters]);
+  }, [chapters, clearAudioVisualTimer]);
+
+  // Navigate to another page within the current chapter (resets scroll to top cleanly)
+  const handleNavigatePage = useCallback((newPage) => {
+    if (newPage < 0 || newPage >= totalPages || newPage === currentParagraphPage) return;
+    audioPlaybackIdRef.current++;
+    clearAudioVisualTimer();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setPlayingParagraphId(null);
+    setActiveAudioCharIndex(-1);
+
+    if (saveReadingPositionTimeoutRef.current) {
+      clearTimeout(saveReadingPositionTimeoutRef.current);
+    }
+
+    isProgrammaticScrollRef.current = true;
+    setCurrentParagraphPage(newPage);
+
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+      previousScrollTopRef.current = 0;
+    }
+    setIsHeaderHidden(false);
+
+    setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+      if (scrollContainerRef.current) {
+        previousScrollTopRef.current = scrollContainerRef.current.scrollTop;
+      }
+    }, 200);
+
+    const firstParaOfPage = chapterParagraphs[newPage * PARAGRAPHS_PER_PAGE];
+    if (firstParaOfPage) {
+      setDocument(prev => {
+        if (!prev) return prev;
+        const updated = {
+          ...prev,
+          lastReadingPosition: {
+            paragraphId: firstParaOfPage.id,
+            chapterIndex: currentChapterIndex,
+            chapterId: currentChapter?.id,
+            updatedAt: Date.now()
+          }
+        };
+        saveActiveDocumentDraft(updated);
+        if (updated.id) {
+          saveTextDocument(updated).catch(() => {});
+        }
+        return updated;
+      });
+    }
+  }, [totalPages, currentParagraphPage, chapterParagraphs, currentChapterIndex, currentChapter, clearAudioVisualTimer]);
 
 
   // Cleanup speech synthesis, glossing & timers on unmount
@@ -880,18 +1001,37 @@ export function TextReaderPage({
       setActiveAudioCharIndex(-1);
       // If Auto-play is ON and user did NOT manually pause/stop, advance to next paragraph
       if (autoPlayTextReaderRef.current && !userStoppedRef.current) {
-        const paras = visibleParagraphsRef.current || [];
-        const currentIndex = paras.findIndex(p => p.id === paragraph.id);
-        if (currentIndex >= 0 && currentIndex < paras.length - 1) {
-          const nextPara = paras[currentIndex + 1];
+        const allParas = chapterParagraphsRef.current || [];
+        const currentIndex = allParas.findIndex(p => p.id === paragraph.id);
+        if (currentIndex >= 0 && currentIndex < allParas.length - 1) {
+          const nextPara = allParas[currentIndex + 1];
           if (nextPara && handlePlayParagraphRef.current) {
-            handlePlayParagraphRef.current(nextPara);
-            try {
-              const el = window.document.querySelector(`[data-paragraph-id="${nextPara.id}"]`);
-              if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const nextParaIndex = currentIndex + 1;
+            const nextPage = Math.floor(nextParaIndex / PARAGRAPHS_PER_PAGE);
+            if (isEpub && nextPage !== currentParagraphPageRef.current) {
+              isProgrammaticScrollRef.current = true;
+              setCurrentParagraphPage(nextPage);
+              if (scrollContainerRef.current) {
+                scrollContainerRef.current.scrollTop = 0;
+                previousScrollTopRef.current = 0;
               }
-            } catch (scrollErr) {}
+              setIsHeaderHidden(false);
+              setTimeout(() => {
+                isProgrammaticScrollRef.current = false;
+                if (scrollContainerRef.current) {
+                  previousScrollTopRef.current = scrollContainerRef.current.scrollTop;
+                }
+              }, 250);
+            }
+            handlePlayParagraphRef.current(nextPara);
+            setTimeout(() => {
+              try {
+                const el = window.document.querySelector(`[data-paragraph-id="${nextPara.id}"]`);
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              } catch (scrollErr) {}
+            }, 80);
           }
         }
       }
@@ -1250,6 +1390,10 @@ export function TextReaderPage({
     setActiveAudioCharIndex(-1);
     setAudioErrorId(null);
     setDocument(doc);
+    const targetChapterIdx = resolveChapterIndexForDoc(doc);
+    setCurrentChapterIndex(targetChapterIdx);
+    const targetPageIdx = resolvePageIndexForDoc(doc, targetChapterIdx);
+    setCurrentParagraphPage(targetPageIdx);
     setInputText(doc.rawText || '');
     setInputTitle(doc.title || '');
     setIsEditing(false);
@@ -2192,6 +2336,42 @@ export function TextReaderPage({
               </div>
             )}
 
+            {/* EPUB Page Navigation Bar (Top): Shown when chapter has multiple 15-paragraph pages */}
+            {isEpub && totalPages > 1 && (
+              <div className="flex items-center justify-between py-2 px-3 mb-3 rounded-xl bg-[var(--surface-primary)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] shadow-sm">
+                <button
+                  type="button"
+                  disabled={currentParagraphPage === 0}
+                  onClick={() => handleNavigatePage(currentParagraphPage - 1)}
+                  className="px-2.5 py-1 rounded-lg font-medium flex items-center space-x-1 transition-all bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                  title="Página anterior"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Página anterior</span>
+                  <span className="sm:hidden">Anterior</span>
+                </button>
+                <div className="flex items-center space-x-1.5 font-semibold text-[var(--text-primary)]">
+                  <span>Página</span>
+                  <span className="px-2 py-0.5 rounded-md bg-[var(--surface-secondary)] border border-[var(--border-subtle)] text-rose-500 font-bold">
+                    {currentParagraphPage + 1}
+                  </span>
+                  <span className="text-[var(--text-muted)]">de</span>
+                  <span>{totalPages}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={currentParagraphPage === totalPages - 1}
+                  onClick={() => handleNavigatePage(currentParagraphPage + 1)}
+                  className="px-2.5 py-1 rounded-lg font-medium flex items-center space-x-1 transition-all bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                  title="Siguiente página"
+                >
+                  <span className="hidden sm:inline">Siguiente página</span>
+                  <span className="sm:hidden">Siguiente</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             <div className="space-y-4 sm:space-y-5">
               {visibleParagraphs.map((paragraph, pIdx) => {
                 const isChapterHeading = paragraph.isChapterStart && paragraph.chapterTitle;
@@ -2240,6 +2420,42 @@ export function TextReaderPage({
                 );
               })}
             </div>
+
+            {/* EPUB Page Navigation Bar (Bottom): Shown when chapter has multiple 15-paragraph pages */}
+            {isEpub && totalPages > 1 && (
+              <div className="flex items-center justify-between py-2.5 px-3 mt-4 mb-2 rounded-xl bg-[var(--surface-primary)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] shadow-sm">
+                <button
+                  type="button"
+                  disabled={currentParagraphPage === 0}
+                  onClick={() => handleNavigatePage(currentParagraphPage - 1)}
+                  className="px-3 py-1.5 rounded-lg font-medium flex items-center space-x-1.5 transition-all bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                  title="Página anterior"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Página anterior</span>
+                  <span className="sm:hidden">Anterior</span>
+                </button>
+                <div className="flex items-center space-x-1.5 font-semibold text-[var(--text-primary)]">
+                  <span>Página</span>
+                  <span className="px-2 py-0.5 rounded-md bg-[var(--surface-secondary)] border border-[var(--border-subtle)] text-rose-500 font-bold">
+                    {currentParagraphPage + 1}
+                  </span>
+                  <span className="text-[var(--text-muted)]">de</span>
+                  <span>{totalPages}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={currentParagraphPage === totalPages - 1}
+                  onClick={() => handleNavigatePage(currentParagraphPage + 1)}
+                  className="px-3 py-1.5 rounded-lg font-medium flex items-center space-x-1.5 transition-all bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                  title="Siguiente página"
+                >
+                  <span className="hidden sm:inline">Siguiente página</span>
+                  <span className="sm:hidden">Siguiente</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* EPUB Bottom Chapter Navigation Footer Card */}
             {isEpub && chapters.length > 1 && (
