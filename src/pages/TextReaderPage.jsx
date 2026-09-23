@@ -35,6 +35,7 @@ import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx'
 import { CreateWithAiModal } from '../components/text/CreateWithAiModal.jsx';
 import { TextLibraryView } from '../components/text/TextLibraryView.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
+import { getLanguageMeta } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
