@@ -26,7 +26,9 @@ import {
   Settings,
   Gauge,
   Plus,
-  Headphones
+  Headphones,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
@@ -151,10 +153,20 @@ export function TextReaderPage({
     failed: 0
   });
   const [isAutoGlossing, setIsAutoGlossing] = useState(false);
+  const [glossNotice, setGlossNotice] = useState(null); // { message: string, type: 'success' | 'warning' }
   const [glossingParagraphIds, setGlossingParagraphIds] = useState(new Set());
   const loadingParagraphIds = glossingParagraphIds; // Alias for backward compatibility
   const setLoadingParagraphIds = setGlossingParagraphIds;
   const abortControllerRef = useRef(null);
+
+  // Auto-dismiss gloss notice toast after 5 seconds
+  useEffect(() => {
+    if (!glossNotice) return;
+    const timer = setTimeout(() => {
+      setGlossNotice(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [glossNotice]);
 
   // On-demand paragraph translation state: { [paragraphId]: { text, isTranslating, isVisible, error } }
   const [paragraphTranslations, setParagraphTranslations] = useState({});
@@ -935,8 +947,24 @@ export function TextReaderPage({
       },
       onProgress: (prog) => {
         setGlossingProgress(prog);
-        if (prog.isComplete) {
+        if (!prog.isGlossing) {
           setIsAutoGlossing(false);
+          if (!prog.isPaused) {
+            const completedCount = prog.completed;
+            const totalCount = prog.total;
+            const failedCount = (typeof prog.failed === 'number' && prog.failed >= 0) ? prog.failed : (totalCount - completedCount);
+            if (completedCount === totalCount) {
+              setGlossNotice({
+                message: `Glosado terminado: ${totalCount}/${totalCount}`,
+                type: 'success'
+              });
+            } else {
+              setGlossNotice({
+                message: `Glosado terminado: ${completedCount}/${totalCount}. ${failedCount} pendientes.`,
+                type: 'warning'
+              });
+            }
+          }
         }
       }
     });
@@ -971,10 +999,22 @@ export function TextReaderPage({
         ? visibleParagraphs
         : (document?.paragraphs || []);
       if (!paragraphsToGloss || paragraphsToGloss.length === 0) return;
+
+      const activeTarget = activeDocLang || targetLang;
+      const missing = paragraphsToGloss.filter(p => !isGlossComplete(p, activeTarget, nativeLang));
+
+      if (missing.length === 0) {
+        setGlossNotice({
+          message: `Glosado terminado: ${paragraphsToGloss.length}/${paragraphsToGloss.length}`,
+          type: 'success'
+        });
+        return;
+      }
+
       setIsAutoGlossing(true);
       triggerGlossing(paragraphsToGloss, activeDocLang);
     }
-  }, [isAutoGlossing, document, activeDocLang, triggerGlossing]);
+  }, [isAutoGlossing, document, isEpub, visibleParagraphs, activeDocLang, targetLang, nativeLang, triggerGlossing]);
 
   // Stop/Pause glossing
   const handleStopGlossing = () => {
@@ -2352,6 +2392,28 @@ export function TextReaderPage({
         apiKey={apiKey}
         onTextGenerated={handleAiTextGenerated}
       />
+
+      {/* Gloss Notice Toast */}
+      {glossNotice && (
+        <div className="fixed bottom-20 right-4 z-50 max-w-sm w-full sm:w-auto px-4 py-3 rounded-xl shadow-xl border backdrop-blur-md transition-all animate-fade-in flex items-center justify-between gap-3 bg-slate-900/95 text-white border-slate-700 dark:bg-slate-800/95 dark:border-slate-600">
+          <div className="flex items-center gap-2.5 text-sm font-medium">
+            {glossNotice.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            )}
+            <span>{glossNotice.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGlossNotice(null)}
+            className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            title="Cerrar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

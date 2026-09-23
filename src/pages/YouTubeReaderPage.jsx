@@ -47,7 +47,8 @@ import {
   Upload,
   Settings,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  AlertCircle
 } from 'lucide-react';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { ErrorBoundary } from '../components/common/ErrorBoundary.jsx';
@@ -117,6 +118,16 @@ export function YouTubeReaderPage({
   const [subtitleFormat, setSubtitleFormat] = useState(null);
   const [subtitleSource, setSubtitleSource] = useState('');
   const [glossProgress, setGlossProgress] = useState(null);
+  const [glossNotice, setGlossNotice] = useState(null); // { message: string, type: 'success' | 'warning' }
+
+  // Auto-dismiss gloss notice toast after 5 seconds
+  useEffect(() => {
+    if (!glossNotice) return;
+    const timer = setTimeout(() => {
+      setGlossNotice(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [glossNotice]);
 
   // Library modal state
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -376,8 +387,24 @@ export function YouTubeReaderPage({
       },
       onProgress: (p) => {
         setGlossProgress(p);
-        if (p.isComplete) {
+        if (!p.isGlossing) {
           setIsAutoGlossing(false);
+          if (!p.isPaused) {
+            const completedCount = p.completed;
+            const totalCount = p.total;
+            const failedCount = (typeof p.failed === 'number' && p.failed >= 0) ? p.failed : (totalCount - completedCount);
+            if (completedCount === totalCount) {
+              setGlossNotice({
+                message: `Glosado terminado: ${totalCount}/${totalCount}`,
+                type: 'success'
+              });
+            } else {
+              setGlossNotice({
+                message: `Glosado terminado: ${completedCount}/${totalCount}. ${failedCount} pendientes.`,
+                type: 'warning'
+              });
+            }
+          }
         }
       }
     });
@@ -394,10 +421,20 @@ export function YouTubeReaderPage({
       setGlossProgress(prev => prev ? ({ ...prev, isGlossing: false, isPaused: true }) : null);
     } else {
       if (!subtitles || subtitles.length === 0) return;
+
+      const missing = subtitles.filter(sub => !isGlossComplete(sub, targetLang, nativeLang));
+      if (missing.length === 0) {
+        setGlossNotice({
+          message: `Glosado terminado: ${subtitles.length}/${subtitles.length}`,
+          type: 'success'
+        });
+        return;
+      }
+
       setIsAutoGlossing(true);
       startGlossing(subtitles, subtitleSource);
     }
-  }, [isAutoGlossing, subtitles, subtitleSource, startGlossing, abortGlossWithLog]);
+  }, [isAutoGlossing, subtitles, subtitleSource, startGlossing, abortGlossWithLog, targetLang, nativeLang]);
 
   // Stop / Pause glossing
   const handleStopOrPauseGlossing = useCallback(() => {
@@ -1724,6 +1761,28 @@ export function YouTubeReaderPage({
         onDeleteTranscript={handleTranscriptDeleted}
         currentVideoId={videoId}
       />
+
+      {/* Gloss Notice Toast */}
+      {glossNotice && (
+        <div className="fixed bottom-20 right-4 z-50 max-w-sm w-full sm:w-auto px-4 py-3 rounded-xl shadow-xl border backdrop-blur-md transition-all animate-fade-in flex items-center justify-between gap-3 bg-slate-900/95 text-white border-slate-700 dark:bg-slate-800/95 dark:border-slate-600">
+          <div className="flex items-center gap-2.5 text-sm font-medium">
+            {glossNotice.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            )}
+            <span>{glossNotice.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGlossNotice(null)}
+            className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            title="Cerrar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </ErrorBoundary>
   );
 }
