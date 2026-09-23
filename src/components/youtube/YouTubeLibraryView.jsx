@@ -81,7 +81,8 @@ export function YouTubeLibraryView({
   };
 
   const languageFiltered = transcripts.filter(item => {
-    return item.targetLanguage === targetLang;
+    const itemLang = item.targetLanguage || item.targetLang;
+    return itemLang === targetLang;
   });
 
   const filtered = languageFiltered.filter(item => {

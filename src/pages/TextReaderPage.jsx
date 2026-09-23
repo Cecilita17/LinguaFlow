@@ -642,12 +642,6 @@ export function TextReaderPage({
     return document.paragraphs.filter(p => isGlossComplete(p, activeDocLang, nativeLang)).length;
   }, [document, activeDocLang, nativeLang]);
 
-  // Initial sync: if draft document exists with its own targetLang, synchronize targetLang once on mount
-  useEffect(() => {
-    if (document?.targetLang && setTargetLang && document.targetLang !== targetLang) {
-      setTargetLang(document.targetLang);
-    }
-  }, []);
 
   // Change target language safely without silently deleting user manual glosses or prior language states
   const handleLanguageChange = useCallback(async (newLang) => {
@@ -2409,6 +2403,7 @@ export function TextReaderPage({
         onNewDocument={handleNewDocumentFromModal}
         onDeleteDocument={handleDeleteDocumentFromLibrary}
         currentDocumentId={document?.id || ''}
+        targetLang={targetLang}
       />
 
       {/* Create with AI Modal */}

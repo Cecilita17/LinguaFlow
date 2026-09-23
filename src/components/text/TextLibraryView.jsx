@@ -110,7 +110,8 @@ export function TextLibraryView({
   };
 
   const languageFiltered = documents.filter((doc) => {
-    return doc.targetLang === targetLang;
+    const docLang = doc.targetLang || doc.targetLanguage;
+    return docLang === targetLang;
   });
 
   const filtered = languageFiltered.filter((doc) => {

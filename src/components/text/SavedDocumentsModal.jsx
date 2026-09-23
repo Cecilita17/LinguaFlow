@@ -39,7 +39,8 @@ export function SavedDocumentsModal({
   onSelectDocument,
   onNewDocument,
   onDeleteDocument = null,
-  currentDocumentId = ''
+  currentDocumentId = '',
+  targetLang = 'zh'
 }) {
   const { isSpanish } = useSiteLanguage();
   const [documents, setDocuments] = useState([]);
@@ -136,13 +137,17 @@ export function SavedDocumentsModal({
     onClose();
   };
 
-  const filtered = documents.filter(doc => {
+  const languageFiltered = documents.filter(doc => {
+    const docLang = doc.targetLang || doc.targetLanguage;
+    return docLang === targetLang;
+  });
+
+  const filtered = languageFiltered.filter(doc => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const title = (doc.title || '').toLowerCase();
     const raw = (doc.rawText || '').toLowerCase();
-    const lang = (doc.targetLang || '').toLowerCase();
-    return title.includes(q) || raw.includes(q) || lang.includes(q);
+    return title.includes(q) || raw.includes(q);
   });
 
   const formatDate = (isoStr) => {

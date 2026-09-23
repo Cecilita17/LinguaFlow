@@ -34,7 +34,8 @@ export function SavedTranscriptsModal({
   onClose,
   onLoadTranscript,
   onDeleteTranscript,
-  currentVideoId = ''
+  currentVideoId = '',
+  targetLang = 'zh'
 }) {
   const { isSpanish } = useSiteLanguage();
   const [transcripts, setTranscripts] = useState([]);
@@ -88,13 +89,17 @@ export function SavedTranscriptsModal({
     onClose();
   };
 
-  const filtered = transcripts.filter(item => {
+  const languageFiltered = transcripts.filter(item => {
+    const itemLang = item.targetLanguage || item.targetLang;
+    return itemLang === targetLang;
+  });
+
+  const filtered = languageFiltered.filter(item => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const title = (item.videoTitle || '').toLowerCase();
     const vid = (item.videoId || '').toLowerCase();
-    const lang = (item.targetLanguage || '').toLowerCase();
-    return title.includes(q) || vid.includes(q) || lang.includes(q);
+    return title.includes(q) || vid.includes(q);
   });
 
   const formatDate = (isoStr) => {

@@ -1788,6 +1788,7 @@ export function YouTubeReaderPage({
         onLoadTranscript={handleLoadFromLibrary}
         onDeleteTranscript={handleTranscriptDeleted}
         currentVideoId={videoId}
+        targetLang={targetLang}
       />
 
       {/* Gloss Notice Toast */}
