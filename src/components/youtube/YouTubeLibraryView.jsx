@@ -33,6 +33,7 @@ const LANGUAGE_META = {
 };
 
 export function YouTubeLibraryView({
+  targetLang = 'zh',
   onSelectVideo,
   onAddNew,
   onBackToHome,
@@ -79,13 +80,16 @@ export function YouTubeLibraryView({
     }
   };
 
-  const filtered = transcripts.filter(item => {
+  const languageFiltered = transcripts.filter(item => {
+    return item.targetLanguage === targetLang;
+  });
+
+  const filtered = languageFiltered.filter(item => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const title = (item.videoTitle || '').toLowerCase();
     const vid = (item.videoId || '').toLowerCase();
-    const lang = (item.targetLanguage || '').toLowerCase();
-    return title.includes(q) || vid.includes(q) || lang.includes(q);
+    return title.includes(q) || vid.includes(q);
   });
 
   const formatDate = (isoStr) => {
@@ -155,7 +159,7 @@ export function YouTubeLibraryView({
             <h1 className="text-base sm:text-lg font-bold text-[var(--text-primary)] tracking-wide flex items-center gap-2">
               <span>{isSpanish ? 'Biblioteca de YouTube' : 'YouTube Library'}</span>
               <span className="text-[11px] bg-rose-500/15 text-rose-600 dark:text-rose-300 font-mono px-2 py-0.5 rounded-full border border-rose-500/30">
-                {transcripts.length}
+                {languageFiltered.length}
               </span>
             </h1>
             <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">

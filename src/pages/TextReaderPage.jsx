@@ -1680,6 +1680,7 @@ export function TextReaderPage({
       {viewMode === 'library' || (!document && viewMode === 'reader') ? (
         /* =================== VIEW 1: DEDICATED TEXT LIBRARY =================== */
         <TextLibraryView
+          targetLang={targetLang}
           onSelectDocument={handleSelectSavedDocument}
           onAddNew={handleAddNewDocument}
           onBackToHome={handleGoHome}

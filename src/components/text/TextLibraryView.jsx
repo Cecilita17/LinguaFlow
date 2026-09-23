@@ -35,6 +35,7 @@ const LANGUAGE_META = {
 };
 
 export function TextLibraryView({
+  targetLang = 'zh',
   onSelectDocument,
   onAddNew,
   onBackToHome = null,
@@ -108,14 +109,17 @@ export function TextLibraryView({
     }
   };
 
-  const filtered = documents.filter((doc) => {
+  const languageFiltered = documents.filter((doc) => {
+    return doc.targetLang === targetLang;
+  });
+
+  const filtered = languageFiltered.filter((doc) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const title = (doc.title || '').toLowerCase();
     const author = (doc.author || '').toLowerCase();
     const raw = (doc.rawText || '').toLowerCase();
-    const lang = (doc.targetLang || '').toLowerCase();
-    return title.includes(q) || author.includes(q) || raw.includes(q) || lang.includes(q);
+    return title.includes(q) || author.includes(q) || raw.includes(q);
   });
 
   const formatDate = (isoStr) => {
@@ -213,7 +217,7 @@ export function TextLibraryView({
             <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] tracking-wide flex items-center gap-2">
               <span>{isSpanish ? 'Biblioteca de Textos' : 'Text Library'}</span>
               <span className="text-[11px] bg-rose-500/15 text-rose-600 dark:text-rose-300 font-mono font-bold px-2 py-0.5 rounded-full border border-rose-500/30">
-                {documents.length}
+                {languageFiltered.length}
               </span>
             </h2>
             <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">

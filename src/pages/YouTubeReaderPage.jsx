@@ -1236,6 +1236,7 @@ export function YouTubeReaderPage({
       {viewMode === 'library' ? (
         /* =================== VIEW 1: DEDICATED YOUTUBE LIBRARY =================== */
         <YouTubeLibraryView
+          targetLang={targetLang}
           onSelectVideo={handleLoadFromLibrary}
           onAddNew={() => navigateToView('importer')}
           onBackToHome={setActiveTab ? () => setActiveTab('home') : null}
