@@ -59,7 +59,7 @@ import {
   isGlossComplete
 } from '../services/textGlossService.js';
 import { parseEpubFile } from '../services/epubService.js';
-import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
+import { useAudioSettings, SPEECH_RATE_OPTIONS, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 import { estimateSpeechDurationMs, createAudioWordSynchronizer } from '../utils/audioWordSync.js';
 
 /**
@@ -1603,16 +1603,6 @@ export function TextReaderPage({
     }
   }, [setActiveTab]);
 
-  // Cycle to the next speech rate option, reusing the existing setSpeechRate
-  const cycleSpeechRate = useCallback(() => {
-    const options = Array.isArray(speechRateOptions) && speechRateOptions.length > 0
-      ? speechRateOptions
-      : [];
-    if (options.length === 0) return;
-    const currentIdx = options.findIndex(r => Math.abs(r - speechRate) < 0.001);
-    const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % options.length;
-    setSpeechRate(options[nextIdx]);
-  }, [speechRate, setSpeechRate, speechRateOptions]);
 
   const currentLangMeta = getLanguageMeta(targetLang);
   // Reuses the existing scroll-direction detection but now applies to the chapter bar only.
@@ -1973,20 +1963,25 @@ export function TextReaderPage({
                         </span>
                       </button>
 
-                      {/* Playback speed — cycles through SPEECH_RATE_OPTIONS using setSpeechRate */}
-                      <button
-                        type="button"
-                        onClick={cycleSpeechRate}
-                        className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
-                      >
-                        <span className="flex items-center space-x-2.5">
+                      {/* Playback speed */}
+                      <div className="w-full px-3 py-1.5 rounded-xl flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors">
+                        <span className="flex items-center space-x-2.5 text-xs text-[var(--text-primary)]">
                           <Gauge className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
                           <span>Playback speed</span>
                         </span>
-                        <span className="text-[11px] font-mono font-bold text-rose-600 dark:text-rose-300 shrink-0">
-                          {Number(speechRate).toFixed(2)}×
-                        </span>
-                      </button>
+                        <select
+                          value={speechRate}
+                          onChange={(e) => setSpeechRate(parseFloat(e.target.value) || 1.0)}
+                          aria-label="Playback speed"
+                          className="bg-[var(--surface-secondary)] text-rose-600 dark:text-rose-300 font-mono font-bold text-[11px] px-2 py-1 rounded-lg border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
+                        >
+                          {(Array.isArray(speechRateOptions) && speechRateOptions.length > 0 ? speechRateOptions : [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]).map((rate) => (
+                            <option key={rate} value={rate} className="bg-[var(--surface-primary)] text-[var(--text-primary)]">
+                              {rate.toFixed(2)}×
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
                       {/* Transliterations — same setInterlinearMode as bottom bar */}
                       <button
@@ -2252,19 +2247,25 @@ export function TextReaderPage({
               <Play className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </button>
 
-            {/* Playback speed — cycles through SPEECH_RATE_OPTIONS via setSpeechRate */}
-            <button
-              type="button"
-              onClick={cycleSpeechRate}
-              title={`Velocidad de reproducción (${Number(speechRate).toFixed(2)}×) — clic para cambiar`}
-              aria-label="Playback speed"
-              className="min-w-9 h-9 sm:min-w-10 sm:h-10 px-1.5 rounded-lg sm:rounded-xl flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            {/* Playback speed — Select dropdown directly selecting from SPEECH_RATE_OPTIONS */}
+            <div
+              className="relative inline-flex items-center"
+              title={`Velocidad de reproducción (${Number(speechRate).toFixed(2)}×)`}
             >
-              <Gauge className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="text-[10px] sm:text-[11px] font-mono font-bold leading-none">
-                {Number(speechRate).toFixed(2)}×
-              </span>
-            </button>
+              <Gauge className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[var(--text-secondary)] absolute left-2 pointer-events-none z-10" />
+              <select
+                value={speechRate}
+                onChange={(e) => setSpeechRate(parseFloat(e.target.value) || 1.0)}
+                aria-label="Velocidad de reproducción"
+                className="h-9 sm:h-10 pl-7 pr-2 rounded-lg sm:rounded-xl text-[10px] sm:text-[11px] font-mono font-bold transition-all shadow-xs cursor-pointer bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-1 focus:ring-rose-500 appearance-none"
+              >
+                {(Array.isArray(speechRateOptions) && speechRateOptions.length > 0 ? speechRateOptions : SPEECH_RATE_OPTIONS).map((rate) => (
+                  <option key={rate} value={rate} className="bg-[var(--surface-primary)] text-[var(--text-primary)]">
+                    {rate.toFixed(2)}×
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Translation / Glosses — same interlinearMode / setInterlinearMode */}
             <button

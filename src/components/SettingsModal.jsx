@@ -366,22 +366,22 @@ export function SettingsModal({ isOpen, onClose, config, onSaveConfig }) {
               </span>
               <span className="text-rose-700 font-bold font-mono">{Number(speechRate).toFixed(2)}×</span>
             </label>
-            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-1 mt-2">
+            <select
+              value={speechRate}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value) || 1.0;
+                setSpeechRate(val);
+                setGlobalSpeechRate(val);
+              }}
+              aria-label={isSpanish ? 'Velocidad Global de Reproducción' : 'Global Playback Speed'}
+              className="w-full mt-2 bg-stone-50 text-stone-900 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
+            >
               {SPEECH_RATE_OPTIONS.map((rate) => (
-                <button
-                  key={rate}
-                  type="button"
-                  onClick={() => setSpeechRate(rate)}
-                  className={`py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
-                    Math.abs(speechRate - rate) < 0.001
-                      ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                      : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100 hover:text-stone-900'
-                  }`}
-                >
+                <option key={rate} value={rate}>
                   {rate.toFixed(2)}×
-                </button>
+                </option>
               ))}
-            </div>
+            </select>
             <p className="text-[11px] text-stone-500 mt-1.5">
               {isSpanish
                 ? 'Aplica al Chat, Text Reader, libros EPUB y audios de pronunciación.'
