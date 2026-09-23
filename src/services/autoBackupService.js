@@ -50,11 +50,30 @@ let unsubscribeSaveListener = null;
 const statusListeners = new Set();
 
 let autoBackupStatus = {
-  status: 'idle', // 'idle' | 'debouncing' | 'uploading' | 'error'
+  status: 'idle', // 'idle' | 'debouncing' | 'uploading' | 'success' | 'partial' | 'error'
   lastSuccessAt: null,
   lastAttemptAt: null,
-  error: null
+  error: null,
+  counts: null
 };
+
+/**
+ * Formats error messages safely for user notifications, stripping technical traces.
+ */
+function formatSafeBackupError(err) {
+  const msg = typeof err === 'string' ? err : (err?.message || '');
+  if (!msg || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Network Error')) {
+    return 'Google Drive no disponible';
+  }
+  if (msg.includes('401') || msg.includes('403') || msg.includes('token') || msg.includes('auth')) {
+    return 'Sesión expirada';
+  }
+  if (msg.includes('validation')) {
+    return 'Error de validación de datos';
+  }
+  const clean = msg.split('\n')[0].replace(/https?:\/\/[^\s]+/g, '').trim();
+  return clean.length > 50 ? `${clean.slice(0, 47)}...` : clean || 'Error en backup';
+}
 
 /**
  * Reads the current auto-backup status.
@@ -169,6 +188,7 @@ async function executeAutoBackup() {
 
     // 2. Read full persisted state and build backup snapshot
     const backupPayload = await createBackupPayload(currentUser);
+    updateStatus({ status: 'uploading', lastAttemptAt: now.toISOString(), error: null, counts: backupPayload.counts });
 
     // 3. Validate snapshot before uploading (protect against corrupt/empty state)
     validateBackupPayload(backupPayload);
@@ -234,9 +254,10 @@ async function executeAutoBackup() {
     saveLastBackupMeta(lastBackupMeta);
 
     updateStatus({
-      status: 'idle',
+      status: 'success',
       lastSuccessAt: now.toISOString(),
-      error: null
+      error: null,
+      counts: backupPayload.counts
     });
   } catch (err) {
     // SILENT ERROR HANDLING FOR TEXT READER UX:
@@ -244,7 +265,8 @@ async function executeAutoBackup() {
     console.warn('[AutoBackup] Background auto-backup notice:', err.message || err);
     updateStatus({
       status: 'error',
-      error: err.message || 'Error en backup automático en segundo plano.'
+      error: formatSafeBackupError(err),
+      counts: null
     });
   } finally {
     isUploading = false;

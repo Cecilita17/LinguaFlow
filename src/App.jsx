@@ -23,6 +23,7 @@ import { initAutoBackupService, stopAutoBackupService } from './services/autoBac
 import { ChatHubView } from './components/chat/ChatHubView.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
+import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -1291,6 +1292,9 @@ export default function App() {
         config={config}
         onSaveConfig={handleSaveConfig}
       />
+
+      {/* Global Background Auto-Backup Toast */}
+      <AutoBackupToast />
     </div>
   );
 }
