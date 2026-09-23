@@ -40,6 +40,10 @@ import {
   fetchBackupPayload
 } from '../../services/backupService.js';
 import { restoreBackupData } from '../../services/restoreService.js';
+import {
+  getAutoBackupStatus,
+  onAutoBackupStatusChanged
+} from '../../services/autoBackupService.js';
 
 export function GoogleDriveBackupSection({ onNavigateToAccount }) {
   const { user, isAuthenticated } = useAuth();
@@ -57,15 +61,24 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
   const [loadingBackups, setLoadingBackups] = useState(false);
   const [selectedBackupId, setSelectedBackupId] = useState('');
   const [restoring, setRestoring] = useState(false);
+  const [autoStatus, setAutoStatus] = useState(getAutoBackupStatus());
 
-  // Initialize last backup meta from localStorage
+  // Initialize last backup meta from localStorage and subscribe to auto-backup status
   useEffect(() => {
     const meta = getLastBackupMeta();
     if (meta) {
       setLastBackup(meta);
     }
     setConnected(isDriveConnected());
+    setAutoStatus(getAutoBackupStatus());
+    const unsub = onAutoBackupStatusChanged((newStatus) => {
+      setAutoStatus(newStatus);
+      const updatedMeta = getLastBackupMeta();
+      if (updatedMeta) setLastBackup(updatedMeta);
+    });
+    return () => unsub();
   }, []);
+
 
   // Sync connected state with auth
   useEffect(() => {
@@ -381,6 +394,25 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
                   ? 'Usa el permiso seguro "drive.file": LinguaFlow solo puede leer y crear copias dentro de su propia carpeta.'
                   : 'Uses the secure "drive.file" scope: LinguaFlow can only create and access files in its own backup folder.'}
               </span>
+            </div>
+
+            {/* Auto backup status indicator */}
+            <div className="p-2.5 rounded-xl bg-[var(--surface-primary)] border border-[var(--border-primary)] text-[11px] text-[var(--text-secondary)] flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${autoStatus.status === 'uploading' ? 'bg-amber-500 animate-ping' : autoStatus.status === 'debouncing' ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}`} />
+                <span>
+                  {autoStatus.status === 'uploading'
+                    ? (isSpanish ? 'Sincronizando copia automática en Google Drive...' : 'Syncing auto-backup to Google Drive...')
+                    : autoStatus.status === 'debouncing'
+                    ? (isSpanish ? 'Cambios guardados localmente. Sincronización programada en 30s...' : 'Changes saved locally. Auto-sync scheduled in 30s...')
+                    : (isSpanish ? 'Copia automática activa (conserva las últimas 3 copias completas)' : 'Auto-backup active (retains latest 3 complete backups)')}
+                </span>
+              </div>
+              {autoStatus.lastSuccessAt && (
+                <span className="text-[10px] text-[var(--text-muted)] font-mono shrink-0">
+                  {formatDateTime(autoStatus.lastSuccessAt)}
+                </span>
+              )}
             </div>
           </div>
         )}

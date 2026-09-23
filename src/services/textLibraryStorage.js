@@ -18,6 +18,36 @@ const STORE_NAME = 'saved_text_documents';
 // In-memory fallback if IndexedDB is unavailable, blocked, or running in testing environment
 const memoryStore = new Map();
 
+// Event listeners notified ONLY AFTER a document is successfully saved/persisted
+const saveListeners = new Set();
+
+/**
+ * Subscribes a callback to document save events.
+ * Triggered strictly after IndexedDB (or memory store fallback) persistence is confirmed.
+ *
+ * @param {function} listener - Callback receiving saved normalized document
+ * @returns {function} Unsubscribe function
+ */
+export function onDocumentSaved(listener) {
+  if (typeof listener === 'function') {
+    saveListeners.add(listener);
+  }
+  return () => {
+    saveListeners.delete(listener);
+  };
+}
+
+function notifyDocumentSaved(savedDoc) {
+  if (!savedDoc) return;
+  saveListeners.forEach(listener => {
+    try {
+      listener(savedDoc);
+    } catch (err) {
+      console.warn('[TextLibraryStorage] Error in save listener:', err);
+    }
+  });
+}
+
 /**
  * Checks if IndexedDB is available in the current environment.
  */
@@ -192,6 +222,7 @@ export async function saveTextDocument(rawDoc) {
 
   const db = await openDatabase();
   if (!db) {
+    notifyDocumentSaved(toSave);
     return toSave;
   }
 
@@ -201,7 +232,10 @@ export async function saveTextDocument(rawDoc) {
       const store = transaction.objectStore(STORE_NAME);
       const request = store.put(toSave);
 
-      request.onsuccess = () => resolve(toSave);
+      request.onsuccess = () => {
+        notifyDocumentSaved(toSave);
+        resolve(toSave);
+      };
       request.onerror = (e) => {
         console.warn('[TextLibraryStorage] Error saving document to IndexedDB:', e.target.error);
         resolve(toSave);

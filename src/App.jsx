@@ -18,6 +18,8 @@ import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './servic
 import { normalizeChineseTokens, validateChineseTokens } from './services/chineseTokenNormalizer';
 import { useSiteLanguage } from './context/SiteLanguageContext.jsx';
 import { useAudioSettings } from './context/AudioSettingsContext.jsx';
+import { useAuth } from './context/AuthContext.jsx';
+import { initAutoBackupService, stopAutoBackupService } from './services/autoBackupService.js';
 import { ChatHubView } from './components/chat/ChatHubView.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
@@ -104,7 +106,18 @@ function saveChatToStorage(lang, messagesList) {
 }
 
 export default function App() {
+  const { user } = useAuth();
   const { t, isSpanish } = useSiteLanguage();
+
+  // Initialize background auto-backup service when user is logged in
+  useEffect(() => {
+    if (user && user.email) {
+      initAutoBackupService(user);
+    } else {
+      stopAutoBackupService();
+    }
+  }, [user]);
+
   const [languages, setLanguages] = useState(SUPPORTED_LANGUAGES);
   const [targetLang, setTargetLang] = useState(() => {
     try {

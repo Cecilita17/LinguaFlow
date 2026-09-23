@@ -365,3 +365,34 @@ export async function downloadBackupContent(accessToken, fileId) {
 
   return await res.text();
 }
+
+/**
+ * Deletes a backup file from Google Drive by its file ID.
+ * Used for auto-backup retention policy cleanup after confirming a new upload.
+ *
+ * @param {string} accessToken
+ * @param {string} fileId
+ * @returns {Promise<boolean>}
+ */
+export async function deleteDriveFile(accessToken, fileId) {
+  if (!accessToken || !fileId) return false;
+  const deleteUrl = `https://www.googleapis.com/drive/v3/files/${fileId}`;
+
+  try {
+    const res = await fetch(deleteUrl, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!res.ok && res.status !== 404) {
+      const errText = await res.text();
+      console.warn(`[GoogleDriveService] Failed to delete file ${fileId}:`, errText);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.warn(`[GoogleDriveService] Exception deleting file ${fileId}:`, err);
+    return false;
+  }
+}
