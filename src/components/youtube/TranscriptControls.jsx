@@ -8,7 +8,7 @@ export function TranscriptControls({
   onResetToStart,
   autoScroll = true,
   onToggleAutoScroll,
-  fontSize = 'base', // 'sm' | 'base' | 'lg' | 'xl'
+  fontSize = 'base', // 'sm' | 'base' | 'lg' | 'xl' | '2xl'
   onChangeFontSize,
   onFileUpload,
   showTimestamps = true,
@@ -18,7 +18,7 @@ export function TranscriptControls({
 }) {
   const { isSpanish } = useSiteLanguage();
   const fileInputRef = useRef(null);
-  const fontSizes = ['sm', 'base', 'lg', 'xl'];
+  const fontSizes = ['sm', 'base', 'lg', 'xl', '2xl'];
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -156,7 +156,7 @@ export function TranscriptControls({
           <button
             type="button"
             onClick={handleZoomIn}
-            disabled={fontSize === 'xl'}
+            disabled={fontSize === '2xl'}
             title="Aumentar tamaño de letra"
             className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors"
           >

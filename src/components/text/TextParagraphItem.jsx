@@ -59,7 +59,8 @@ export function TextParagraphItem({
     sm: 'text-xs sm:text-sm leading-relaxed',
     base: 'text-sm sm:text-base leading-relaxed',
     lg: 'text-base sm:text-lg leading-relaxed',
-    xl: 'text-lg sm:text-xl leading-relaxed'
+    xl: 'text-lg sm:text-xl leading-relaxed',
+    '2xl': 'text-xl sm:text-2xl leading-relaxed'
   };
   const fontClass = fontClassMap[fontSize] || fontClassMap.base;
 

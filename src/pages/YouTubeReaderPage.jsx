@@ -133,7 +133,7 @@ export function YouTubeReaderPage({
 
   // Transcript view preferences
   const [autoScroll, setAutoScroll] = useState(true);
-  const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl'
+  const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl' | '2xl'
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [interlinearMode, setInterlinearMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -172,7 +172,7 @@ export function YouTubeReaderPage({
   }, [isActionsMenuOpen]);
 
   // Helpers to cycle font size and playback speed
-  const fontSizes = ['sm', 'base', 'lg', 'xl'];
+  const fontSizes = ['sm', 'base', 'lg', 'xl', '2xl'];
   const cycleFontSize = () => {
     const currentIndex = fontSizes.indexOf(fontSize);
     const nextIndex = (currentIndex + 1) % fontSizes.length;

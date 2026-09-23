@@ -256,7 +256,7 @@ export function TextReaderPage({
     setInputTitle('');
     navigateToView('importer');
   }, [clearAudioVisualTimer, navigateToView]);
-  const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl'
+  const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl' | '2xl'
   const [interlinearMode, setInterlinearMode] = useState(true);
 
   // Saved documents library modal
@@ -1496,7 +1496,7 @@ export function TextReaderPage({
 
   // Font size cycle
   const cycleFontSize = () => {
-    const order = ['sm', 'base', 'lg', 'xl'];
+    const order = ['sm', 'base', 'lg', 'xl', '2xl'];
     const nextIdx = (order.indexOf(fontSize) + 1) % order.length;
     setFontSize(order[nextIdx]);
   };
