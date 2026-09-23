@@ -2471,36 +2471,6 @@ export function TextReaderPage({
               </div>
             )}
 
-            {/* EPUB Bottom Chapter Navigation Footer Card */}
-            {isEpub && chapters.length > 1 && (
-              <div className="mt-8 pt-5 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-3">
-                <button
-                  type="button"
-                  disabled={currentChapterIndex === 0}
-                  onClick={() => handleNavigateChapter(currentChapterIndex - 1)}
-                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-primary)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center space-x-1.5 transition-all active:scale-95 cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Capítulo anterior</span>
-                </button>
-                <span className="text-xs text-[var(--text-muted)] font-medium text-center">
-                  Capítulo {currentChapterIndex + 1} de {chapters.length}
-                  {currentChapter?.title && !/^cap[ií]tulo\s+\d+$/i.test(currentChapter.title.trim()) && !/^chapter\s+\d+$/i.test(currentChapter.title.trim()) && (
-                    <span className="text-[var(--text-primary)] font-bold ml-1">• {currentChapter.title}</span>
-                  )}
-                </span>
-                <button
-                  type="button"
-                  disabled={currentChapterIndex === chapters.length - 1}
-                  onClick={() => handleNavigateChapter(currentChapterIndex + 1)}
-                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-md shadow-rose-950/40 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center space-x-1.5 transition-all active:scale-95 cursor-pointer"
-                >
-                  <span>Siguiente capítulo</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
             {/* FOOTER: Placed at the end of the text inside scroll container, never fixed/sticky */}
             <footer className="mt-10 py-6 border-t border-[var(--border-subtle)] text-center text-xs text-[var(--text-muted)] flex items-center justify-center space-x-2">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
