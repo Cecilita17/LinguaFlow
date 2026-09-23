@@ -23,7 +23,10 @@ import { waitForPendingSaves } from './textLibraryStorage.js';
 import {
   createBackupPayload,
   serializeBackupToBlob,
-  saveLastBackupMeta
+  saveLastBackupMeta,
+  computePayloadFingerprint,
+  getLastSuccessfulFingerprint,
+  saveLastSuccessfulFingerprint
 } from './backupService.js';
 import {
   isDriveConnected,
@@ -36,7 +39,7 @@ import {
 import { validateBackupPayload } from './restoreService.js';
 
 // Configuration Constants
-export const AUTO_BACKUP_SETTLE_MS = 1000; // 1 second settlement/coalescing period after content exit
+export const AUTO_BACKUP_SETTLE_MS = 30000; // 30 seconds settlement/coalescing period after content exit
 export const MAX_AUTO_BACKUP_RETENTION = 3; // Keep latest 3 auto-backups
 export const AUTO_BACKUP_FILE_PREFIX = 'linguaflow-autobackup-';
 
@@ -138,13 +141,15 @@ export function requestAutoBackup(reason = 'content-exit') {
     return;
   }
 
+  console.log(`[AutoBackup] scheduled (${reason}, settle in 30s)`);
+
   // Deduplicate and coalesce rapid exit events (e.g. back button + unmount + route change)
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
 
-  // Schedule auto-backup execution after short settle period
+  // Schedule auto-backup execution after 30s settle period
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
     executeAutoBackup();
@@ -163,6 +168,7 @@ async function executeAutoBackup() {
 
   // Concurrency check: If upload is already in progress, mark pending change and exit
   if (isUploading) {
+    console.log('[AutoBackup] skipped: upload already in progress');
     hasPendingChange = true;
     return;
   }
@@ -170,7 +176,6 @@ async function executeAutoBackup() {
   isUploading = true;
   hasPendingChange = false;
   const now = new Date();
-  updateStatus({ status: 'uploading', lastAttemptAt: now.toISOString(), error: null });
 
   try {
     // 1. Double-check token is valid without prompting popup
@@ -181,33 +186,45 @@ async function executeAutoBackup() {
 
     // 3. Read full persisted state and build backup snapshot
     const backupPayload = await createBackupPayload(currentUser);
-    updateStatus({ status: 'uploading', lastAttemptAt: now.toISOString(), error: null, counts: backupPayload.counts });
 
-    // 3. Validate snapshot before uploading (protect against corrupt/empty state)
+    // Validate snapshot before proceeding (protect against corrupt/empty state)
     validateBackupPayload(backupPayload);
 
     if (!backupPayload.data || !Array.isArray(backupPayload.data.textLibrary)) {
       throw new Error('Snapshot validation failed: textLibrary is not an array');
     }
 
-    // 4. Serialize to Blob
+    // 4. Content Fingerprint Comparison
+    const currentFingerprint = await computePayloadFingerprint(backupPayload);
+    const lastFingerprint = getLastSuccessfulFingerprint(currentUser.email);
+
+    if (lastFingerprint && currentFingerprint === lastFingerprint) {
+      console.log('[AutoBackup] skipped: no changes');
+      updateStatus({ status: 'idle' });
+      return;
+    }
+
+    console.log('[AutoBackup] uploading');
+    updateStatus({ status: 'uploading', lastAttemptAt: now.toISOString(), error: null, counts: backupPayload.counts });
+
+    // 5. Serialize to Blob
     const backupBlob = serializeBackupToBlob(backupPayload);
 
-    // 5. Get or create LinguaFlow Backups folder in Drive
+    // 6. Get or create LinguaFlow Backups folder in Drive
     const folderId = await getOrCreateBackupFolder(accessToken);
 
-    // 6. Generate distinct auto-backup filename
+    // 7. Generate distinct auto-backup filename
     const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const fileName = `${AUTO_BACKUP_FILE_PREFIX}${dateStr}.json`;
 
-    // 7. Upload file to Google Drive
+    // 8. Upload file to Google Drive
     const uploadResult = await uploadBackupFile(accessToken, folderId, fileName, backupBlob);
 
     if (!uploadResult || !uploadResult.id) {
       throw new Error('Google Drive no devolvió confirmación del archivo subido.');
     }
 
-    // 8. RETENTION CLEANUP (ONLY EXECUTED AFTER SUCCESSFUL UPLOAD CONFIRMATION)
+    // 9. RETENTION CLEANUP (ONLY EXECUTED AFTER SUCCESSFUL UPLOAD CONFIRMATION)
     try {
       const allFiles = await listBackupFiles(accessToken, folderId);
 
@@ -235,7 +252,7 @@ async function executeAutoBackup() {
       console.warn('[AutoBackup] Retention cleanup notice:', retentionErr);
     }
 
-    // 9. Update last backup metadata
+    // 10. Update last backup metadata and persist successful fingerprint
     const lastBackupMeta = {
       fileId: uploadResult.id,
       fileName: uploadResult.name,
@@ -245,7 +262,9 @@ async function executeAutoBackup() {
       isAutoBackup: true
     };
     saveLastBackupMeta(lastBackupMeta);
+    saveLastSuccessfulFingerprint(currentUser.email, currentFingerprint);
 
+    console.log('[AutoBackup] upload successful');
     updateStatus({
       status: 'success',
       lastSuccessAt: now.toISOString(),
@@ -264,13 +283,14 @@ async function executeAutoBackup() {
   } finally {
     isUploading = false;
 
-    // If changes occurred while uploading, schedule follow-up backup after 5s pause
+    // If changes occurred while uploading, schedule follow-up backup after 30s settle window
     if (hasPendingChange) {
       hasPendingChange = false;
+      console.log('[AutoBackup] scheduled (pending changes during upload, settle in 30s)');
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
         executeAutoBackup();
-      }, 5000);
+      }, AUTO_BACKUP_SETTLE_MS);
     }
   }
 }

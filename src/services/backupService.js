@@ -27,6 +27,7 @@ import {
 export const BACKUP_FORMAT = 'linguaflow-backup';
 export const BACKUP_SCHEMA_VERSION = 1;
 export const STORAGE_KEY_LAST_BACKUP = 'linguaflow_last_backup_meta';
+export const STORAGE_KEY_LAST_BACKUP_FINGERPRINT = 'linguaflow_last_backup_fingerprint';
 
 /**
  * Reads metadata of the last successful backup stored locally.
@@ -50,6 +51,142 @@ export function saveLastBackupMeta(meta) {
       localStorage.setItem(STORAGE_KEY_LAST_BACKUP, JSON.stringify(meta));
     }
   } catch (e) {}
+}
+
+/**
+ * Reads the last successful backup fingerprint for a specific user from localStorage.
+ * @param {string} userEmail
+ * @returns {string|null}
+ */
+export function getLastSuccessfulFingerprint(userEmail) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && userEmail) {
+      const raw = localStorage.getItem(`${STORAGE_KEY_LAST_BACKUP_FINGERPRINT}_${userEmail}`);
+      return raw || null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
+ * Saves the last successful backup fingerprint for a specific user in localStorage.
+ * @param {string} userEmail
+ * @param {string} fingerprint
+ */
+export function saveLastSuccessfulFingerprint(userEmail, fingerprint) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && userEmail && fingerprint) {
+      localStorage.setItem(`${STORAGE_KEY_LAST_BACKUP_FINGERPRINT}_${userEmail}`, fingerprint);
+    }
+  } catch (e) {}
+}
+
+/**
+ * Recursively serializes an object with sorted keys to produce a deterministic canonical JSON string.
+ * @param {*} value
+ * @returns {string}
+ */
+export function canonicalStringify(value) {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map(item => canonicalStringify(item)).join(',') + ']';
+  }
+  const keys = Object.keys(value).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalStringify(value[k])).join(',') + '}';
+}
+
+/**
+ * Normalizes a backup payload for content fingerprinting.
+ * Filters out non-content fields like root `createdAt`, and strips volatile
+ * transient timestamps (e.g. `updatedAt` in `lastReadingPosition` or `lastAudioPosition`).
+ *
+ * @param {object} payload
+ * @returns {object} Normalized representation of persistent user data
+ */
+export function normalizePayloadForFingerprint(payload) {
+  if (!payload || !payload.data) return {};
+
+  const cleanPosition = (pos) => {
+    if (!pos || typeof pos !== 'object') return pos;
+    const { updatedAt, timestamp, ...rest } = pos;
+    return rest;
+  };
+
+  const data = payload.data;
+
+  // Clean activeSessions
+  let normalizedActiveSessions = null;
+  if (data.activeSessions) {
+    normalizedActiveSessions = {
+      textDraft: data.activeSessions.textDraft ? {
+        ...data.activeSessions.textDraft,
+        lastReadingPosition: cleanPosition(data.activeSessions.textDraft.lastReadingPosition),
+        lastAudioPosition: cleanPosition(data.activeSessions.textDraft.lastAudioPosition)
+      } : null,
+      youtubeSession: data.activeSessions.youtubeSession || null
+    };
+  }
+
+  // Clean textLibrary documents
+  const normalizedTextLibrary = Array.isArray(data.textLibrary)
+    ? data.textLibrary.map(doc => {
+        if (!doc) return doc;
+        return {
+          ...doc,
+          lastReadingPosition: cleanPosition(doc.lastReadingPosition),
+          lastAudioPosition: cleanPosition(doc.lastAudioPosition)
+        };
+      })
+    : [];
+
+  return {
+    settings: data.settings || {},
+    savedWords: data.savedWords || [],
+    chatHistory: data.chatHistory || {},
+    callHistory: data.callHistory || [],
+    habitTracker: data.habitTracker || {},
+    cachedGlosses: data.cachedGlosses || {},
+    textLibrary: normalizedTextLibrary,
+    youtubeTranscripts: data.youtubeTranscripts || [],
+    activeSessions: normalizedActiveSessions
+  };
+}
+
+/**
+ * Computes a deterministic SHA-256 fingerprint hash for a backup payload.
+ *
+ * @param {object} payload
+ * @returns {Promise<string>} Hex hash string
+ */
+export async function computePayloadFingerprint(payload) {
+  const normalized = normalizePayloadForFingerprint(payload);
+  const canonicalJson = canonicalStringify(normalized);
+
+  if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(canonicalJson);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+      console.warn('[BackupService] crypto.subtle.digest failed, falling back to fast hash:', e);
+    }
+  }
+
+  // Fallback 64-bit FNV-1a hash
+  let h1 = 0xdeadbeef ^ 0;
+  let h2 = 0x41c6ce57 ^ 0;
+  for (let i = 0; i < canonicalJson.length; i++) {
+    const ch = canonicalJson.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
 
 /**
@@ -378,7 +515,7 @@ export async function performManualBackup(user, onProgress = () => {}) {
     onProgress({ step: 'uploading', message: 'Subiendo copia a Google Drive...' });
     const uploadResult = await uploadBackupFile(accessToken, folderId, fileName, backupBlob);
 
-    // 6. Save metadata of last successful backup
+    // 6. Save metadata of last successful backup and update fingerprint
     const lastBackupMeta = {
       fileId: uploadResult.id,
       fileName: uploadResult.name,
@@ -387,6 +524,13 @@ export async function performManualBackup(user, onProgress = () => {}) {
       counts: backupPayload.counts
     };
     saveLastBackupMeta(lastBackupMeta);
+
+    try {
+      const fingerprint = await computePayloadFingerprint(backupPayload);
+      saveLastSuccessfulFingerprint(user.email, fingerprint);
+    } catch (fpErr) {
+      console.warn('[BackupService] Failed to compute/save fingerprint after manual backup:', fpErr);
+    }
 
     onProgress({ step: 'done', message: 'Copia de seguridad completada con éxito.' });
     return lastBackupMeta;
