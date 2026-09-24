@@ -1112,76 +1112,50 @@ export async function handleAudioStream(req, res) {
     return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN no configurado en el servidor.' });
   }
 
-  const rangeHeader = req.headers.range || null;
   console.log(`[AudioStream] pathname=${cleanPathname}`);
-  console.log(`[AudioStream] range=${rangeHeader || 'none'}`);
 
   try {
-    // 1. Fetch blob stream directly using official @vercel/blob get() API for private blobs
-    let blobResult;
+    console.log(`[AudioStream] calling get()`);
+    let result;
     try {
-      const getOptions = {
-        access: 'private',
-        token
-      };
-      if (rangeHeader) {
-        getOptions.headers = { range: rangeHeader };
-      }
-      blobResult = await get(cleanPathname, getOptions);
-    } catch (err) {
-      // Fallback for public stores if configured with public access
+      result = await get(cleanPathname, { access: 'private', token });
+    } catch (privateErr) {
+      console.warn(`[AudioStream] private get() failed:`, privateErr.message);
       try {
-        const publicOptions = {
-          access: 'public',
-          token
-        };
-        if (rangeHeader) {
-          publicOptions.headers = { range: rangeHeader };
-        }
-        blobResult = await get(cleanPathname, publicOptions);
+        result = await get(cleanPathname, { access: 'public', token });
       } catch (publicErr) {
-        console.warn(`[AudioStream] get() failed for pathname "${cleanPathname}":`, err.message);
-        return res.status(404).json({ error: 'Archivo de audio no encontrado en el almacenamiento.' });
+        console.warn(`[AudioStream] public get() failed:`, publicErr.message);
+        result = null;
       }
     }
 
-    if (!blobResult || !blobResult.stream) {
-      console.warn(`[AudioStream] blob not found for pathname "${cleanPathname}"`);
+    console.log(`[AudioStream] result status=${result?.statusCode}`);
+    console.log(`[AudioStream] stream=${Boolean(result?.stream)}`);
+    console.log(`[AudioStream] contentType=${result?.blob?.contentType}`);
+    console.log(`[AudioStream] size=${result?.blob?.size}`);
+
+    if (!result || result.statusCode !== 200 || !result.stream) {
+      console.warn(`[AudioStream] blob not found or status not 200 for pathname "${cleanPathname}"`);
       return res.status(404).json({ error: 'Archivo de audio no encontrado.' });
     }
 
-    console.log(`[AudioStream] blob found`);
-
-    // 2. Set streaming headers
-    const contentType = blobResult.headers?.get('content-type') || blobResult.blob?.contentType || 'audio/mpeg';
-    console.log(`[AudioStream] contentType=${contentType}`);
-
-    const contentRange = blobResult.headers?.get('content-range') || null;
-    const contentLength = blobResult.headers?.get('content-length') || (blobResult.blob?.size && !contentRange ? String(blobResult.blob.size) : null);
-
-    const statusCode = contentRange ? 206 : 200;
-    res.status(statusCode);
+    res.status(200);
+    res.setHeader('Content-Type', result.blob?.contentType || 'audio/mpeg');
+    if (typeof result.blob?.size === 'number') {
+      res.setHeader('Content-Length', String(result.blob.size));
+    }
     res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Content-Type', contentType);
-
-    if (contentLength) {
-      res.setHeader('Content-Length', contentLength);
-    }
-    if (contentRange) {
-      res.setHeader('Content-Range', contentRange);
-    }
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Cache-Control', 'private, no-cache');
 
     if (req.method === 'HEAD') {
       return res.end();
     }
 
-    console.log(`[AudioStream] stream ready`);
+    console.log(`[AudioStream] sending stream`);
 
-    // 3. Pipe stream directly to client without destroying stream on req.close
-    const outputStream = typeof blobResult.stream.pipe === 'function'
-      ? blobResult.stream
-      : Readable.fromWeb(blobResult.stream);
+    const outputStream = typeof result.stream.pipe === 'function'
+      ? result.stream
+      : Readable.fromWeb(result.stream);
 
     outputStream.on('error', (streamErr) => {
       console.warn('[AudioStream] Stream transmission error:', streamErr.message);

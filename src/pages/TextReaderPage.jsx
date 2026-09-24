@@ -153,6 +153,27 @@ export function TextReaderPage({
   const nativeAudioPlayerRef = useRef(null);
   const nativeAudioCheckIntervalRef = useRef(null);
 
+  // Temporary diagnostic event listeners for audio player
+  useEffect(() => {
+    const audio = nativeAudioPlayerRef.current;
+    if (!audio) return;
+    const logEvent = (e) => {
+      console.log(`[OriginalAudio] event=${e.type}`, {
+        src: audio.src,
+        readyState: audio.readyState,
+        networkState: audio.networkState,
+        currentTime: audio.currentTime,
+        duration: audio.duration,
+        error: audio.error ? { code: audio.error.code, message: audio.error.message } : null
+      });
+    };
+    const events = ['loadedmetadata', 'canplay', 'playing', 'pause', 'error', 'stalled'];
+    events.forEach(evt => audio.addEventListener(evt, logEvent));
+    return () => {
+      events.forEach(evt => audio.removeEventListener(evt, logEvent));
+    };
+  }, []);
+
   const clearNativeAudioMonitor = useCallback(() => {
     if (nativeAudioCheckIntervalRef.current) {
       clearInterval(nativeAudioCheckIntervalRef.current);
@@ -1022,6 +1043,13 @@ export function TextReaderPage({
           audio.currentTime = startTime;
         } catch (e) {}
 
+        console.log('[OriginalAudio] src=', audio.src);
+        console.log('[OriginalAudio] readyState=', audio.readyState);
+        console.log('[OriginalAudio] networkState=', audio.networkState);
+        console.log('[OriginalAudio] duration=', audio.duration);
+        console.log('[OriginalAudio] start=', startTime);
+        console.log('[OriginalAudio] end=', endTime);
+
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.catch(err => {
@@ -1072,6 +1100,8 @@ export function TextReaderPage({
       };
 
       audio.onerror = (e) => {
+        console.log('[OriginalAudio] error=', audio.error);
+        console.log('[OriginalAudio] networkState=', audio.networkState);
         if (playbackId !== audioPlaybackIdRef.current) return;
         clearNativeAudioMonitor();
         setPlayingParagraphId(null);
@@ -1771,6 +1801,16 @@ export function TextReaderPage({
       });
 
       const saved = await saveDocument(docToSave);
+      console.log('[AudioImport] Document verification:', {
+        sourceType: saved.sourceType,
+        format: saved.format,
+        audioPathname: saved.audioPathname,
+        audioMimeType: saved.audioMimeType,
+        audioDuration: saved.audioDuration,
+        audioSegmentsLength: saved.audioSegments?.length,
+        firstParagraphAudioStart: saved.paragraphs?.[0]?.audioStart,
+        firstParagraphAudioEnd: saved.paragraphs?.[0]?.audioEnd
+      });
       setDocument(saved);
       setInputText(saved.rawText || '');
       setInputTitle(saved.title || '');
