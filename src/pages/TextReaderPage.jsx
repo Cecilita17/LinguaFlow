@@ -156,6 +156,7 @@ export function TextReaderPage({
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const latestAudioPositionRef = useRef({ time: 0, paragraphId: null });
   const audioSaveThrottlerRef = useRef({ lastSavedTime: 0, timer: null });
+  const flushAudioPlaybackPositionRef = useRef(null);
 
   const clearAudioVisualTimer = useCallback(() => {
     if (audioSynchronizerRef.current) {
@@ -341,7 +342,11 @@ export function TextReaderPage({
 
   useEffect(() => {
     return () => {
-      flushAudioPlaybackPosition();
+      if (flushAudioPlaybackPositionRef.current) {
+        try {
+          flushAudioPlaybackPositionRef.current();
+        } catch (e) {}
+      }
       if (audioPlayerRef.current) {
         try { audioPlayerRef.current.pause(); } catch (e) {}
       }
@@ -356,7 +361,7 @@ export function TextReaderPage({
         }
       }
     };
-  }, [flushAudioPlaybackPosition]);
+  }, []);
 
   const isEditing = viewMode === 'importer';
   const setIsEditing = (val) => navigateToView(val ? 'importer' : 'reader');
@@ -949,7 +954,7 @@ export function TextReaderPage({
       clearTimeout(audioSaveThrottlerRef.current.timer);
       audioSaveThrottlerRef.current.timer = null;
     }
-    const currentDoc = document;
+    const currentDoc = documentRef.current || document;
     const effectiveDocId = explicitDocId || currentDoc?.id;
     if (!effectiveDocId) return;
     const isAudioDoc = currentDoc?.sourceType === 'audio' || currentDoc?.format === 'audio';
@@ -961,22 +966,25 @@ export function TextReaderPage({
     const cleanTime = Math.round(time * 100) / 100;
     const effectiveParaId = paragraphId || lastAudioParagraphId;
 
+    const updated = {
+      ...currentDoc,
+      lastAudioPosition: cleanTime,
+      lastAudioParagraphId: effectiveParaId,
+      updatedAt: new Date().toISOString()
+    };
+    try { saveActiveDocumentDraft(updated); } catch (e) {}
+    saveTextDocument(updated).then(() => {
+      refreshLibraryCount();
+    }).catch(err => console.warn('Failed to save lastAudioPosition to library:', err));
+
     setDocument(prev => {
       if (!prev || prev.id !== effectiveDocId) return prev;
-      const updated = {
-        ...prev,
-        lastAudioPosition: cleanTime,
-        lastAudioParagraphId: effectiveParaId,
-        updatedAt: new Date().toISOString()
-      };
-      try { saveActiveDocumentDraft(updated); } catch (e) {}
-      saveTextDocument(updated).then(() => {
-        refreshLibraryCount();
-      }).catch(err => console.warn('Failed to save lastAudioPosition to library:', err));
       return updated;
     });
     audioSaveThrottlerRef.current.lastSavedTime = Date.now();
   }, [document, lastAudioParagraphId, refreshLibraryCount]);
+
+  flushAudioPlaybackPositionRef.current = flushAudioPlaybackPosition;
 
   // Flush position on window beforeunload
   useEffect(() => {
