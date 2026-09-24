@@ -1949,7 +1949,7 @@ export async function handleImageDescription(req, res) {
     const effectiveApiKey = (
       process.env.GROQ_API_KEY ||
       (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
-      (req.headers['x-api-key'] || '')
+      (req.headers?.['x-api-key'] || '')
     ).trim().replace(/^["']|["']$/g, '');
 
     if (!effectiveApiKey) {
@@ -1988,136 +1988,143 @@ INSTRUCTIONS:
      "description": "The pedagogical description in ${targetLangName} (2-3 paragraphs separated by double linebreaks)"
    }`;
 
-    const PRIMARY_VISION_MODEL = 'llama-3.2-11b-vision-preview';
-    const FALLBACK_VISION_MODEL = 'llama-3.2-90b-vision-preview';
-    const candidateModels = [
-      (process.env.GROQ_VISION_MODEL || '').trim() || PRIMARY_VISION_MODEL,
-      FALLBACK_VISION_MODEL
-    ].filter(Boolean);
-    const uniqueModels = [...new Set(candidateModels)];
-
-    let lastError = null;
+    const DEFAULT_VISION_MODEL = 'qwen/qwen3.8-27b';
+    const activeModel = (process.env.GROQ_VISION_MODEL || '').trim() || DEFAULT_VISION_MODEL;
     const startTime = Date.now();
 
-    for (const activeModel of uniqueModels) {
-      try {
-        console.log(`[ImageDescription] requesting vision description via Groq (${activeModel}) for lang=${targetLang}, level=${level}`);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000);
+    console.log(`[ImageDescription] requesting vision description via Groq (${activeModel}) for lang=${targetLang}, level=${level}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${effectiveApiKey}`
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            model: activeModel,
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: promptText },
-                  {
-                    type: 'image_url',
-                    image_url: {
-                      url: `data:${cleanMime};base64,${cleanBase64}`
-                    }
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${effectiveApiKey}`
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: activeModel,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: promptText },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${cleanMime};base64,${cleanBase64}`
                   }
-                ]
+                }
+              ]
+            }
+          ],
+          temperature: 0.5,
+          max_tokens: 1200,
+          reasoning_effort: 'none',
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'image_description',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  title: {
+                    type: 'string',
+                    description: 'A concise, engaging title in the target language'
+                  },
+                  description: {
+                    type: 'string',
+                    description: 'The pedagogical description in the target language (2-3 paragraphs separated by double linebreaks)'
+                  }
+                },
+                required: ['title', 'description'],
+                additionalProperties: false
               }
-            ],
-            temperature: 0.5,
-            max_tokens: 1200,
-            response_format: { type: 'json_object' }
-          })
+            }
+          }
+        })
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+
+        logCostAudit({
+          provider: 'groq',
+          feature: 'image_description',
+          model: activeModel,
+          requestId,
+          inputTokens: data?.usage?.prompt_tokens ?? null,
+          outputTokens: data?.usage?.completion_tokens ?? null,
+          totalTokens: data?.usage?.total_tokens ?? null,
+          characters: cleanBase64.length,
+          durationMs: Date.now() - startTime,
+          retry: false,
+          streaming: false,
+          extra: `targetLang=${targetLang} level=${level}`
         });
 
-        clearTimeout(timeoutId);
+        const rawContent = data?.choices?.[0]?.message?.content || '';
+        const parsed = cleanAndParseJSON(rawContent);
 
-        if (response.ok) {
-          const data = await response.json();
-          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+        let title = '';
+        let description = '';
 
-          logCostAudit({
-            provider: 'groq',
-            feature: 'image_description',
+        if (parsed && typeof parsed.description === 'string' && parsed.description.trim()) {
+          title = (parsed.title || '').trim();
+          description = parsed.description.trim();
+        } else if (parsed && typeof parsed.text === 'string' && parsed.text.trim()) {
+          title = (parsed.title || '').trim();
+          description = parsed.text.trim();
+        } else if (rawContent.trim()) {
+          description = rawContent.trim();
+        }
+
+        if (!title) {
+          title = `Descripción en ${targetLangName}`;
+        }
+
+        if (description) {
+          return res.status(200).json({
+            success: true,
+            source: `groq (${activeModel})`,
             model: activeModel,
-            requestId,
-            inputTokens: data?.usage?.prompt_tokens ?? null,
-            outputTokens: data?.usage?.completion_tokens ?? null,
-            totalTokens: data?.usage?.total_tokens ?? null,
-            characters: cleanBase64.length,
-            durationMs: Date.now() - startTime,
-            retry: activeModel !== uniqueModels[0],
-            streaming: false,
-            extra: `targetLang=${targetLang} level=${level}`
-          });
-
-          const rawContent = data?.choices?.[0]?.message?.content || '';
-          const parsed = cleanAndParseJSON(rawContent);
-
-          let title = '';
-          let description = '';
-
-          if (parsed && typeof parsed.description === 'string' && parsed.description.trim()) {
-            title = (parsed.title || '').trim();
-            description = parsed.description.trim();
-          } else if (parsed && typeof parsed.text === 'string' && parsed.text.trim()) {
-            title = (parsed.title || '').trim();
-            description = parsed.text.trim();
-          } else if (rawContent.trim()) {
-            description = rawContent.trim();
-          }
-
-          if (!title) {
-            title = `Descripción en ${targetLangName}`;
-          }
-
-          if (description) {
-            return res.status(200).json({
-              success: true,
-              source: `groq (${activeModel})`,
-              model: activeModel,
-              title,
-              description,
-              targetLang,
-              level
-            });
-          }
-        } else {
-          const errText = await response.text();
-          console.warn(`[ImageDescription] Groq Vision error HTTP ${response.status} (${activeModel}):`, errText);
-          lastError = { status: response.status, message: errText };
-
-          // If model decommissioned or not found, try fallback
-          if (response.status === 404 || errText.includes('model_not_found') || errText.includes('decommissioned')) {
-            continue;
-          }
-
-          const categorized = categorizeGroqError(response.status, errText);
-          return res.status(response.status >= 400 && response.status < 600 ? response.status : 500).json({
-            error: categorized.userMessage,
-            error_type: categorized.type
+            title,
+            description,
+            targetLang,
+            level
           });
         }
-      } catch (reqErr) {
-        console.warn(`[ImageDescription] Request failed for model ${activeModel}:`, reqErr.message);
-        lastError = reqErr;
-        if (reqErr.name === 'AbortError') {
-          return res.status(408).json({
-            error: 'Tiempo de espera agotado al analizar la imagen con IA. Inténtalo de nuevo.'
-          });
-        }
+
+        return res.status(500).json({
+          error: 'La respuesta de la IA no incluyó una descripción válida.'
+        });
+      } else {
+        const errText = await response.text();
+        console.warn(`[ImageDescription] Groq Vision error HTTP ${response.status} (${activeModel}):`, errText);
+        const categorized = categorizeGroqError(response.status, errText);
+        return res.status(response.status >= 400 && response.status < 600 ? response.status : 500).json({
+          error: categorized.userMessage,
+          error_type: categorized.type
+        });
       }
+    } catch (reqErr) {
+      clearTimeout(timeoutId);
+      console.warn(`[ImageDescription] Request failed for model ${activeModel}:`, reqErr.message);
+      if (reqErr.name === 'AbortError') {
+        return res.status(408).json({
+          error: 'Tiempo de espera agotado al analizar la imagen con IA. Inténtalo de nuevo.'
+        });
+      }
+      return res.status(500).json({
+        error: `Error al conectar con Groq Vision: ${reqErr.message || 'Error de red'}`
+      });
     }
-
-    return res.status(500).json({
-      error: lastError?.message
-        ? `Error al analizar la imagen con Groq Vision: ${lastError.message}`
-        : 'No se pudo generar la descripción de la imagen con la IA.'
-    });
   } catch (err) {
     console.error('Server error in /api/image-description:', err);
     res.status(500).json({ error: 'Error interno en el servidor al procesar la imagen.' });
