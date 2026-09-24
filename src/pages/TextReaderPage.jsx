@@ -1039,11 +1039,13 @@ export function TextReaderPage({
       if (audio.readyState >= 1) {
         seekAndPlay();
       } else {
-        const handleLoadedMetadata = () => {
-          audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        const handleReady = () => {
+          audio.removeEventListener('loadedmetadata', handleReady);
+          audio.removeEventListener('canplay', handleReady);
           seekAndPlay();
         };
-        audio.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+        audio.addEventListener('loadedmetadata', handleReady, { once: true });
+        audio.addEventListener('canplay', handleReady, { once: true });
       }
 
       const checkSegmentEnd = () => {

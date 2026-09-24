@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { handleUpload } from '@vercel/blob/client';
-import { del, head } from '@vercel/blob';
+import { del, get } from '@vercel/blob';
 import { Readable } from 'stream';
 import {
   GROQ_MODEL_CONFIG,
@@ -1112,60 +1112,61 @@ export async function handleAudioStream(req, res) {
     return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN no configurado en el servidor.' });
   }
 
+  const rangeHeader = req.headers.range || null;
+  console.log(`[AudioStream] pathname=${cleanPathname}`);
+  console.log(`[AudioStream] range=${rangeHeader || 'none'}`);
+
   try {
-    // 1. Resolve blob metadata from Vercel Blob store using server token
-    let blobMeta;
+    // 1. Fetch blob stream directly using official @vercel/blob get() API for private blobs
+    let blobResult;
     try {
-      blobMeta = await head(cleanPathname, { token });
-    } catch (headErr) {
-      console.warn(`[AudioStream] head() failed for pathname "${cleanPathname}":`, headErr.message);
-      return res.status(404).json({ error: 'Archivo de audio no encontrado en el almacenamiento.' });
+      const getOptions = {
+        access: 'private',
+        token
+      };
+      if (rangeHeader) {
+        getOptions.headers = { range: rangeHeader };
+      }
+      blobResult = await get(cleanPathname, getOptions);
+    } catch (err) {
+      // Fallback for public stores if configured with public access
+      try {
+        const publicOptions = {
+          access: 'public',
+          token
+        };
+        if (rangeHeader) {
+          publicOptions.headers = { range: rangeHeader };
+        }
+        blobResult = await get(cleanPathname, publicOptions);
+      } catch (publicErr) {
+        console.warn(`[AudioStream] get() failed for pathname "${cleanPathname}":`, err.message);
+        return res.status(404).json({ error: 'Archivo de audio no encontrado en el almacenamiento.' });
+      }
     }
 
-    if (!blobMeta || !blobMeta.url) {
+    if (!blobResult || !blobResult.stream) {
+      console.warn(`[AudioStream] blob not found for pathname "${cleanPathname}"`);
       return res.status(404).json({ error: 'Archivo de audio no encontrado.' });
     }
 
-    // 2. Fetch the audio stream from Vercel Blob, forwarding Range headers
-    const fetchHeaders = {
-      authorization: `Bearer ${token}`
-    };
-    if (req.headers.range) {
-      fetchHeaders.range = req.headers.range;
-    }
+    console.log(`[AudioStream] blob found`);
 
-    let blobRes = await fetch(blobMeta.url, {
-      method: req.method === 'HEAD' ? 'HEAD' : 'GET',
-      headers: fetchHeaders
-    });
+    // 2. Set streaming headers
+    const contentType = blobResult.headers?.get('content-type') || blobResult.blob?.contentType || 'audio/mpeg';
+    console.log(`[AudioStream] contentType=${contentType}`);
 
-    // Fallback for public blob stores if auth header caused 403
-    if (!blobRes.ok && blobRes.status === 403) {
-      const publicHeaders = {};
-      if (req.headers.range) publicHeaders.range = req.headers.range;
-      blobRes = await fetch(blobMeta.url, {
-        method: req.method === 'HEAD' ? 'HEAD' : 'GET',
-        headers: publicHeaders
-      });
-    }
+    const contentRange = blobResult.headers?.get('content-range') || null;
+    const contentLength = blobResult.headers?.get('content-length') || (blobResult.blob?.size && !contentRange ? String(blobResult.blob.size) : null);
 
-    if (!blobRes.ok && blobRes.status !== 206) {
-      return res.status(blobRes.status).json({
-        error: `Error al obtener stream de audio (${blobRes.status}): ${blobRes.statusText}`
-      });
-    }
-
-    // 3. Set standard streaming headers
-    res.status(blobRes.status);
+    const statusCode = contentRange ? 206 : 200;
+    res.status(statusCode);
     res.setHeader('Accept-Ranges', 'bytes');
-    const contentType = blobRes.headers.get('content-type') || blobMeta.contentType || 'audio/mpeg';
     res.setHeader('Content-Type', contentType);
 
-    const contentLength = blobRes.headers.get('content-length');
     if (contentLength) {
       res.setHeader('Content-Length', contentLength);
     }
-    const contentRange = blobRes.headers.get('content-range');
     if (contentRange) {
       res.setHeader('Content-Range', contentRange);
     }
@@ -1175,24 +1176,21 @@ export async function handleAudioStream(req, res) {
       return res.end();
     }
 
-    // 4. Pipe stream to client
-    if (!blobRes.body) {
-      return res.end();
-    }
+    console.log(`[AudioStream] stream ready`);
 
-    const nodeStream = Readable.fromWeb(blobRes.body);
-    nodeStream.on('error', (streamErr) => {
+    // 3. Pipe stream directly to client without destroying stream on req.close
+    const outputStream = typeof blobResult.stream.pipe === 'function'
+      ? blobResult.stream
+      : Readable.fromWeb(blobResult.stream);
+
+    outputStream.on('error', (streamErr) => {
       console.warn('[AudioStream] Stream transmission error:', streamErr.message);
       if (!res.headersSent) {
         res.status(500).end();
       }
     });
 
-    req.on('close', () => {
-      nodeStream.destroy();
-    });
-
-    nodeStream.pipe(res);
+    outputStream.pipe(res);
   } catch (err) {
     console.error('[AudioStream] Server error streaming audio:', err);
     if (!res.headersSent) {
