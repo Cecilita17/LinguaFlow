@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleTranscribeTicket, handleSentenceBreakdown, handleBatchGloss, handleGenerateText, handleTranslateText, handleAudioStream } from './handlers.js';
+import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleTranscribeTicket, handleSentenceBreakdown, handleBatchGloss, handleGenerateText, handleTranslateText, handleAudioStream, handleImageDescription } from './handlers.js';
 import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
 import { handlePipelineChatStream, handlePipelineTTS, handleListCartesiaVoices } from './pipelineHandlers.js';
 
@@ -61,6 +61,9 @@ app.post('/generate-text', handleGenerateText);
 
 app.post('/api/translate-text', handleTranslateText);
 app.post('/translate-text', handleTranslateText);
+
+app.post('/api/image-description', handleImageDescription);
+app.post('/image-description', handleImageDescription);
 
 // Voice Call Endpoints (Pipeline Architecture: STT + Groq LLM + Cartesia Sonic TTS)
 app.post('/api/pipeline/chat-stream', handlePipelineChatStream);

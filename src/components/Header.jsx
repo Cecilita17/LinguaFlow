@@ -212,6 +212,18 @@ export function Header({
                 <span>📖</span>
                 <span>{t('nav_text_reader') || 'Importar texto'}</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab && setActiveTab('image')}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                  activeTab === 'image'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <span>📷</span>
+                <span>{t('nav_image_reader') || 'Image Reader'}</span>
+              </button>
             </div>
 
             {/* Aesthetic Language Selectors */}

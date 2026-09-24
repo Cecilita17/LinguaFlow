@@ -7,6 +7,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
 import { YouTubeReaderPage } from './pages/YouTubeReaderPage';
 import { TextReaderPage } from './pages/TextReaderPage';
+import { ImageReaderPage } from './pages/ImageReaderPage.jsx';
 import { SettingsPage } from './pages/SettingsPage';
 import { HabitTrackerPage } from './pages/HabitTrackerPage.jsx';
 import HomePage from './pages/HomePage';
@@ -47,7 +48,7 @@ const TARGET_LANG_KEY = 'linguaflow_target_lang';
 const NATIVE_LANG_KEY = 'linguaflow_native_lang';
 const ACTIVE_TAB_KEY = 'linguaflow_active_tab';
 const CALL_STORAGE_KEY = 'linguaflow_call_history';
-const VALID_TABS = ['home', 'chat', 'youtube', 'text', 'settings', 'habits'];
+const VALID_TABS = ['home', 'chat', 'youtube', 'text', 'image', 'settings', 'habits'];
 
 function getActiveTabFromLocation() {
   try {
@@ -1001,8 +1002,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
-      {/* Global Header — hidden in Text Reader, YouTube Reader & Live Call because they own their dedicated full-screen headers */}
-      {activeTab !== 'text' && activeTab !== 'youtube' && !(activeTab === 'chat' && chatViewMode === 'call') && (
+      {/* Global Header — hidden in Text Reader, YouTube Reader, Image Reader & Live Call because they own their dedicated full-screen headers */}
+      {activeTab !== 'text' && activeTab !== 'youtube' && activeTab !== 'image' && !(activeTab === 'chat' && chatViewMode === 'call') && (
         <Header
           languages={languages}
           targetLang={targetLang}
@@ -1076,6 +1077,18 @@ export default function App() {
       ) : activeTab === 'text' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
           <TextReaderPage
+            targetLang={targetLang}
+            setTargetLang={handleTargetLangChange}
+            nativeLang={nativeLang}
+            languages={languages}
+            apiKey={config?.apiKey}
+            onWordClick={handleWordClick}
+            setActiveTab={setActiveTab}
+          />
+        </main>
+      ) : activeTab === 'image' ? (
+        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
+          <ImageReaderPage
             targetLang={targetLang}
             setTargetLang={handleTargetLangChange}
             nativeLang={nativeLang}

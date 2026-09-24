@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CheckCircle2,
   FileText,
+  Camera,
   CalendarCheck,
   Settings as SettingsIcon,
   Zap,
@@ -158,6 +159,37 @@ export default function HomePage({
             </div>
             <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-pink-600 dark:text-pink-300">
               <span>{isSpanish ? 'Abrir Text Reader' : 'Open Text Reader'}</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* CARD 4: IMAGE READER */}
+          <div
+            onClick={() => onSelectMode('image')}
+            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-emerald-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-emerald-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+          >
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-emerald-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <Camera className="w-6 h-6 sm:w-7 sm:h-7" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-emerald-500 dark:group-hover:text-emerald-200 transition-colors">
+                    Image Reader
+                  </h2>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
+                    Vision IA
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                  {isSpanish
+                    ? 'Sube una foto y obtén una descripción pedagógica adaptada a tu nivel con lectura y audio.'
+                    : 'Upload a photo to get a level-adapted pedagogical description with reading and audio.'}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-emerald-600 dark:text-emerald-300">
+              <span>{isSpanish ? 'Abrir Image Reader' : 'Open Image Reader'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>

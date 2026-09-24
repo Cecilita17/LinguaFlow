@@ -1901,3 +1901,225 @@ export async function handleTranslateText(req, res) {
     res.status(500).json({ error: 'Error interno en el servidor al traducir el texto.' });
   }
 }
+
+// Image Description endpoint (Groq Vision multimodal description adapted to student level)
+export async function handleImageDescription(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Método no permitido. Use POST.' });
+  }
+
+  try {
+    const {
+      imageBase64,
+      mimeType = 'image/jpeg',
+      targetLang,
+      nativeLang = 'es',
+      level = 'B1',
+      apiKey: clientApiKey
+    } = req.body || {};
+
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return res.status(400).json({ error: 'Se requiere la imagen en formato Base64.' });
+    }
+
+    // Safety checks on image payload
+    const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '').trim();
+    if (!cleanBase64) {
+      return res.status(400).json({ error: 'La imagen Base64 está vacía o no es válida.' });
+    }
+
+    // Max 15MB base64 string (~11MB binary)
+    if (cleanBase64.length > 15 * 1024 * 1024) {
+      return res.status(413).json({ error: 'La imagen es demasiado grande. El tamaño máximo permitido es 10 MB.' });
+    }
+
+    const cleanMime = (mimeType || 'image/jpeg').toLowerCase().trim();
+    const ALLOWED_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!ALLOWED_MIMES.includes(cleanMime)) {
+      return res.status(400).json({ error: `Formato de imagen "${cleanMime}" no soportado. Use JPEG, PNG o WebP.` });
+    }
+
+    if (!targetLang || typeof targetLang !== 'string') {
+      return res.status(400).json({ error: 'Se requiere especificar el idioma objetivo (targetLang).' });
+    }
+
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
+
+    if (!effectiveApiKey) {
+      return res.status(400).json({
+        error: 'Para describir la imagen con IA, configura tu GROQ_API_KEY en el servidor o en Ajustes ⚙️.'
+      });
+    }
+
+    const targetLangObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLang) || { name: targetLang, englishName: targetLang };
+    const targetLangName = targetLangObj.englishName || targetLangObj.name || targetLang;
+
+    // CEFR level pedagogical instructions
+    const levelInstructions = {
+      'A1': 'Use very simple, short sentences. Focus on high-frequency basic nouns (objects, animals, colors, people, clothing), simple present tense, and basic locations (here, there, in the room). Avoid complex clauses.',
+      'A2': 'Use clear, accessible sentences with basic connectors (and, but, because). Describe the main actions happening, people and things, and the setting. Use everyday vocabulary.',
+      'B1': 'Write a natural, engaging description with moderate sentence variety. Include spatial relationships, actions, expressions, context, and practical descriptive vocabulary.',
+      'B2': 'Provide a detailed, fluid description capturing atmosphere, subtle visual details, nuances, and natural idiomatic expressions suitable for an upper-intermediate learner.',
+      'C1': 'Provide a sophisticated, rich descriptive text with advanced vocabulary, idiomatic phrasing, stylistic elegance, and cultural or contextual nuance.'
+    };
+    const levelGuidance = levelInstructions[level] || levelInstructions['B1'];
+
+    const promptText = `You are a world-class language pedagogue describing this image for a student learning ${targetLangName} (${targetLang}) at CEFR level ${level}.
+
+INSTRUCTIONS:
+1. Language: Write STRICTLY in ${targetLangName} (${targetLang}). Do NOT write explanations or descriptions in English or any other language.
+2. Pedagogical Adaptation: ${levelGuidance}
+3. Content:
+   - Accurately describe what is clearly visible in the image (people, setting, objects, actions, colors, mood).
+   - Prioritize useful, natural vocabulary that a language learner can immediately apply.
+   - Do NOT hallucinate or invent specific details that cannot be observed.
+   - Organize into 2 to 3 cohesive paragraphs of natural prose. Avoid bulleted lists or dry inventories of items.
+4. Output Format:
+   Respond ONLY with valid JSON with the following exact keys:
+   {
+     "title": "A concise, engaging title in ${targetLangName}",
+     "description": "The pedagogical description in ${targetLangName} (2-3 paragraphs separated by double linebreaks)"
+   }`;
+
+    const PRIMARY_VISION_MODEL = 'llama-3.2-11b-vision-preview';
+    const FALLBACK_VISION_MODEL = 'llama-3.2-90b-vision-preview';
+    const candidateModels = [
+      (process.env.GROQ_VISION_MODEL || '').trim() || PRIMARY_VISION_MODEL,
+      FALLBACK_VISION_MODEL
+    ].filter(Boolean);
+    const uniqueModels = [...new Set(candidateModels)];
+
+    let lastError = null;
+    const startTime = Date.now();
+
+    for (const activeModel of uniqueModels) {
+      try {
+        console.log(`[ImageDescription] requesting vision description via Groq (${activeModel}) for lang=${targetLang}, level=${level}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: promptText },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${cleanMime};base64,${cleanBase64}`
+                    }
+                  }
+                ]
+              }
+            ],
+            temperature: 0.5,
+            max_tokens: 1200,
+            response_format: { type: 'json_object' }
+          })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+
+          logCostAudit({
+            provider: 'groq',
+            feature: 'image_description',
+            model: activeModel,
+            requestId,
+            inputTokens: data?.usage?.prompt_tokens ?? null,
+            outputTokens: data?.usage?.completion_tokens ?? null,
+            totalTokens: data?.usage?.total_tokens ?? null,
+            characters: cleanBase64.length,
+            durationMs: Date.now() - startTime,
+            retry: activeModel !== uniqueModels[0],
+            streaming: false,
+            extra: `targetLang=${targetLang} level=${level}`
+          });
+
+          const rawContent = data?.choices?.[0]?.message?.content || '';
+          const parsed = cleanAndParseJSON(rawContent);
+
+          let title = '';
+          let description = '';
+
+          if (parsed && typeof parsed.description === 'string' && parsed.description.trim()) {
+            title = (parsed.title || '').trim();
+            description = parsed.description.trim();
+          } else if (parsed && typeof parsed.text === 'string' && parsed.text.trim()) {
+            title = (parsed.title || '').trim();
+            description = parsed.text.trim();
+          } else if (rawContent.trim()) {
+            description = rawContent.trim();
+          }
+
+          if (!title) {
+            title = `Descripción en ${targetLangName}`;
+          }
+
+          if (description) {
+            return res.status(200).json({
+              success: true,
+              source: `groq (${activeModel})`,
+              model: activeModel,
+              title,
+              description,
+              targetLang,
+              level
+            });
+          }
+        } else {
+          const errText = await response.text();
+          console.warn(`[ImageDescription] Groq Vision error HTTP ${response.status} (${activeModel}):`, errText);
+          lastError = { status: response.status, message: errText };
+
+          // If model decommissioned or not found, try fallback
+          if (response.status === 404 || errText.includes('model_not_found') || errText.includes('decommissioned')) {
+            continue;
+          }
+
+          const categorized = categorizeGroqError(response.status, errText);
+          return res.status(response.status >= 400 && response.status < 600 ? response.status : 500).json({
+            error: categorized.userMessage,
+            error_type: categorized.type
+          });
+        }
+      } catch (reqErr) {
+        console.warn(`[ImageDescription] Request failed for model ${activeModel}:`, reqErr.message);
+        lastError = reqErr;
+        if (reqErr.name === 'AbortError') {
+          return res.status(408).json({
+            error: 'Tiempo de espera agotado al analizar la imagen con IA. Inténtalo de nuevo.'
+          });
+        }
+      }
+    }
+
+    return res.status(500).json({
+      error: lastError?.message
+        ? `Error al analizar la imagen con Groq Vision: ${lastError.message}`
+        : 'No se pudo generar la descripción de la imagen con la IA.'
+    });
+  } catch (err) {
+    console.error('Server error in /api/image-description:', err);
+    res.status(500).json({ error: 'Error interno en el servidor al procesar la imagen.' });
+  }
+}
