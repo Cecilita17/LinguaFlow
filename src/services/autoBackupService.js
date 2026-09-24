@@ -24,6 +24,7 @@
 
 import { waitForPendingSaves, getTextDocumentById } from './textLibraryStorage.js';
 import { findTranscriptsByVideoId } from './transcriptLibraryStorage.js';
+import { getImageDocumentById } from './imageReaderLibraryStorage.js';
 import { loadActiveDocumentDraft } from './textDocumentService.js';
 import { gatherAllHabitTrackerData } from './habitTrackerService.js';
 import {
@@ -174,6 +175,10 @@ export function getResourceFileName(type, id) {
     const cleanId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
     return `youtube-transcript-${cleanId}.json`;
   }
+  if (type === 'image-document' && id) {
+    const cleanId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `image-document-${cleanId}.json`;
+  }
   return `${type}.json`;
 }
 
@@ -192,7 +197,7 @@ function normalizeResourceRequests(param) {
 
   if (typeof param === 'object') {
     const type = param.type || 'unknown';
-    const id = param.id ? String(param.id).trim() : (type !== 'text-document' && type !== 'youtube-transcript' ? type : null);
+    const id = param.id ? String(param.id).trim() : (type !== 'text-document' && type !== 'youtube-transcript' && type !== 'image-document' ? type : null);
     const reason = param.reason || 'content-exit';
     const deleted = Boolean(param.deleted);
     return [{ type, id, reason, deleted }];
@@ -291,6 +296,10 @@ async function fetchLocalResourceData(type, id) {
     case 'youtube-transcript': {
       if (!id) return [];
       return await findTranscriptsByVideoId(id);
+    }
+    case 'image-document': {
+      if (!id) return null;
+      return await getImageDocumentById(id);
     }
     case 'saved-words': {
       try {

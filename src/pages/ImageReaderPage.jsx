@@ -11,12 +11,18 @@ import {
   CheckCircle2,
   Volume2,
   VolumeX,
+  BookOpen,
   X
 } from 'lucide-react';
 import { ImageUploader } from '../components/image/ImageUploader.jsx';
+import { ImageLibraryView } from '../components/image/ImageLibraryView.jsx';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { describeImageApi } from '../services/imageDescriptionService.js';
+import {
+  saveImageDocument,
+  getImageDocumentById
+} from '../services/imageReaderLibraryStorage.js';
 import {
   tokenizeAndGlossLineOffline,
   glossSingleParagraph,
@@ -47,6 +53,10 @@ export function ImageReaderPage({
 }) {
   const { isSpanish } = useSiteLanguage();
   const { speechRate } = useAudioSettings();
+
+  // View mode state: 'library' (default) | 'uploader' | 'reader'
+  const [viewMode, setViewMode] = useState('library');
+  const [currentDocId, setCurrentDocId] = useState(null);
 
   // Selected image state
   const [selectedImage, setSelectedImage] = useState(null);
@@ -207,6 +217,24 @@ export function ImageReaderPage({
     }
   }, [targetLang, speechRate, clearAudioVisualTimer]);
 
+  // Auto-persist updates (new glosses or translations) to the active document in IndexedDB
+  const persistDocumentChanges = useCallback(async (updatedFields = {}) => {
+    if (!currentDocId) return;
+    try {
+      const existing = await getImageDocumentById(currentDocId);
+      if (existing) {
+        const merged = {
+          ...existing,
+          ...updatedFields,
+          updatedAt: new Date().toISOString()
+        };
+        await saveImageDocument(merged);
+      }
+    } catch (e) {
+      console.warn('[ImageReaderPage] Failed to auto-persist document updates:', e);
+    }
+  }, [currentDocId]);
+
   // Handle single paragraph AI gloss
   const handleGlossParagraph = useCallback(async (paragraph) => {
     if (!paragraph || glossingParagraphIds.has(paragraph.id)) return;
@@ -220,7 +248,11 @@ export function ImageReaderPage({
         apiKey
       });
 
-      setParagraphs(prev => prev.map(p => (p.id === paragraph.id ? updated : p)));
+      setParagraphs(prev => {
+        const next = prev.map(p => (p.id === paragraph.id ? updated : p));
+        persistDocumentChanges({ paragraphs: next });
+        return next;
+      });
     } catch (err) {
       console.warn('Failed to gloss paragraph with AI:', err);
     } finally {
@@ -230,7 +262,7 @@ export function ImageReaderPage({
         return next;
       });
     }
-  }, [glossingParagraphIds, targetLang, nativeLang, apiKey]);
+  }, [glossingParagraphIds, targetLang, nativeLang, apiKey, persistDocumentChanges]);
 
   // Handle on-demand paragraph translation
   const handleTranslateParagraph = useCallback(async (paragraph) => {
@@ -271,15 +303,19 @@ export function ImageReaderPage({
         apiKey
       });
 
-      setParagraphTranslations(prev => ({
-        ...prev,
-        [paraId]: {
-          text: result?.translation || result?.text || '',
-          isTranslating: false,
-          isVisible: true,
-          error: null
-        }
-      }));
+      setParagraphTranslations(prev => {
+        const next = {
+          ...prev,
+          [paraId]: {
+            text: result?.translation || result?.text || '',
+            isTranslating: false,
+            isVisible: true,
+            error: null
+          }
+        };
+        persistDocumentChanges({ paragraphTranslations: next });
+        return next;
+      });
     } catch (err) {
       console.warn('Failed to translate paragraph:', err);
       setParagraphTranslations(prev => ({
@@ -292,7 +328,7 @@ export function ImageReaderPage({
         }
       }));
     }
-  }, [paragraphTranslations, targetLang, nativeLang, apiKey, isSpanish]);
+  }, [paragraphTranslations, targetLang, nativeLang, apiKey, isSpanish, persistDocumentChanges]);
 
   // Batch gloss all paragraphs with AI
   const handleGlossAll = useCallback(() => {
@@ -306,6 +342,7 @@ export function ImageReaderPage({
       apiKey,
       onUpdate: (updatedParas) => {
         setParagraphs([...updatedParas]);
+        persistDocumentChanges({ paragraphs: updatedParas });
       },
       onProgress: (progress) => {
         if (progress.completed >= progress.total) {
@@ -313,7 +350,7 @@ export function ImageReaderPage({
         }
       }
     });
-  }, [isBatchGlossing, paragraphs, targetLang, nativeLang, apiKey]);
+  }, [isBatchGlossing, paragraphs, targetLang, nativeLang, apiKey, persistDocumentChanges]);
 
   // Main generation trigger
   const handleGenerateDescription = async () => {
@@ -333,7 +370,8 @@ export function ImageReaderPage({
         apiKey
       });
 
-      setResultTitle(response.title || '');
+      const finalTitle = response.title || (isSpanish ? 'Descripción de la imagen' : 'Image Description');
+      setResultTitle(finalTitle);
       setUsedModel(response.model || '');
 
       // Split generated description into paragraphs
@@ -352,6 +390,30 @@ export function ImageReaderPage({
 
       setParagraphs(initializedParas);
       setParagraphTranslations({});
+
+      // Auto-save to Library immediately
+      const newDoc = {
+        id: `img_doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        title: finalTitle,
+        description: rawText,
+        targetLang,
+        nativeLang,
+        level,
+        model: response.model || 'qwen/qwen3.8-27b',
+        imageBase64: selectedImage.dataUrl || selectedImage.base64,
+        mimeType: selectedImage.mimeType || 'image/jpeg',
+        paragraphs: initializedParas,
+        paragraphTranslations: {}
+      };
+
+      try {
+        await saveImageDocument(newDoc);
+        setCurrentDocId(newDoc.id);
+      } catch (saveErr) {
+        console.warn('[ImageReaderPage] Error auto-saving generated image document:', saveErr);
+      }
+
+      setViewMode('reader');
     } catch (err) {
       console.warn('Image description error:', err);
       setGenerationError(
@@ -365,9 +427,31 @@ export function ImageReaderPage({
     }
   };
 
+  // Reopen a saved document from Library
+  const handleOpenSavedDocument = useCallback((doc) => {
+    if (!doc) return;
+    handleStopAudio();
+    setCurrentDocId(doc.id);
+    setSelectedImage({
+      dataUrl: doc.imageBase64,
+      base64: doc.imageBase64,
+      mimeType: doc.mimeType || 'image/jpeg'
+    });
+    setResultTitle(doc.title || '');
+    setParagraphs(Array.isArray(doc.paragraphs) ? doc.paragraphs : []);
+    setParagraphTranslations(doc.paragraphTranslations || {});
+    setUsedModel(doc.model || '');
+    if (doc.level) setLevel(doc.level);
+    if (doc.targetLang && doc.targetLang !== targetLang && setTargetLang) {
+      setTargetLang(doc.targetLang);
+    }
+    setViewMode('reader');
+  }, [handleStopAudio, targetLang, setTargetLang]);
+
   const handleReset = () => {
     handleStopAudio();
     setSelectedImage(null);
+    setCurrentDocId(null);
     setResultTitle('');
     setParagraphs([]);
     setGenerationError(null);
@@ -375,6 +459,22 @@ export function ImageReaderPage({
   };
 
   const isRtl = isRtlLanguage(targetLang);
+
+  if (viewMode === 'library') {
+    return (
+      <ImageLibraryView
+        targetLang={targetLang}
+        setTargetLang={setTargetLang}
+        languages={languages}
+        onSelectDocument={handleOpenSavedDocument}
+        onAddNew={() => {
+          handleReset();
+          setViewMode('uploader');
+        }}
+        onBackToHome={() => (setActiveTab ? setActiveTab('home') : null)}
+      />
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto w-full bg-[var(--app-bg)] text-[var(--text-primary)] flex flex-col justify-between">
@@ -384,9 +484,12 @@ export function ImageReaderPage({
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
-            onClick={() => setActiveTab ? setActiveTab('home') : null}
+            onClick={() => {
+              handleStopAudio();
+              setViewMode('library');
+            }}
             className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-all cursor-pointer shrink-0"
-            title={isSpanish ? 'Volver al Inicio' : 'Back to Home'}
+            title={isSpanish ? 'Volver a la biblioteca' : 'Back to Library'}
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -558,10 +661,27 @@ export function ImageReaderPage({
                   <span>{isSpanish ? 'Glosar todo' : 'Gloss all'}</span>
                 </button>
 
+                {/* Library button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleStopAudio();
+                    setViewMode('library');
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer"
+                  title={isSpanish ? 'Volver a la biblioteca' : 'Return to library'}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>{isSpanish ? 'Biblioteca' : 'Library'}</span>
+                </button>
+
                 {/* Reset / New photo button */}
                 <button
                   type="button"
-                  onClick={handleReset}
+                  onClick={() => {
+                    handleReset();
+                    setViewMode('uploader');
+                  }}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer"
                   title={isSpanish ? 'Analizar otra imagen' : 'Analyze another image'}
                 >

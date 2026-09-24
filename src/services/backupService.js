@@ -13,6 +13,7 @@
 
 import { getAllTextDocuments } from './textLibraryStorage.js';
 import { getAllSavedTranscripts } from './transcriptLibraryStorage.js';
+import { getAllImageDocuments } from './imageReaderLibraryStorage.js';
 import { gatherAllHabitTrackerData } from './habitTrackerService.js';
 import {
   requestDriveAccessToken,
@@ -432,9 +433,38 @@ export async function hashSingleYoutubeTranscript(transcripts) {
 }
 
 /**
+ * Computes a deterministic SHA-256 fingerprint for a single image document.
+ * 
+ * @param {object} doc
+ * @returns {Promise<string>}
+ */
+export async function hashSingleImageDocument(doc) {
+  if (!doc || typeof doc !== 'object') return 'empty';
+  const { paragraphs = [], imageBase64, ...otherDocProps } = doc;
+  const metaHash = await hashStringChunk(fastCanonicalJson(otherDocProps));
+  const imageHash = imageBase64 ? await hashStringChunk(imageBase64.slice(0, 100) + ':' + imageBase64.length) : 'no_img';
+  return await hashStringChunk(`${doc.id || 'noid'}|${metaHash}|${imageHash}|${paragraphs.length}`);
+}
+
+async function hashImageLibrary(imageLibrary) {
+  if (!Array.isArray(imageLibrary) || imageLibrary.length === 0) return 'empty';
+  const sortedDocs = [...imageLibrary].sort((a, b) => {
+    const idA = String(a?.id || '');
+    const idB = String(b?.id || '');
+    return idA.localeCompare(idB);
+  });
+  const docHashes = [];
+  for (const doc of sortedDocs) {
+    if (!doc) continue;
+    docHashes.push(await hashSingleImageDocument(doc));
+  }
+  return await hashStringChunk(docHashes.join(';'));
+}
+
+/**
  * Computes a deterministic SHA-256 fingerprint for any individual resource.
  * 
- * @param {string} type - 'text-document' | 'youtube-transcript' | 'saved-words' | 'chat-history' | 'call-history' | 'habit-tracker' | 'settings'
+ * @param {string} type - 'text-document' | 'youtube-transcript' | 'image-document' | 'saved-words' | 'chat-history' | 'call-history' | 'habit-tracker' | 'settings'
  * @param {*} resourceData - Raw data of the resource
  * @returns {Promise<string>} Hex fingerprint
  */
@@ -444,6 +474,8 @@ export async function computeResourceFingerprint(type, resourceData) {
       return await hashSingleTextDocument(resourceData);
     case 'youtube-transcript':
       return await hashSingleYoutubeTranscript(resourceData);
+    case 'image-document':
+      return await hashSingleImageDocument(resourceData);
     case 'saved-words':
       return await hashSavedWords(resourceData);
     case 'chat-history':
@@ -481,7 +513,8 @@ export async function computePayloadFingerprint(payload) {
       activeSessionsHash,
       cachedGlossesHash,
       textLibraryHash,
-      youtubeTranscriptsHash
+      youtubeTranscriptsHash,
+      imageLibraryHash
     ] = await Promise.all([
       hashSettings(data.settings),
       hashSavedWords(data.savedWords),
@@ -491,7 +524,8 @@ export async function computePayloadFingerprint(payload) {
       hashActiveSessions(data.activeSessions),
       hashCachedGlosses(data.cachedGlosses),
       hashTextLibrary(data.textLibrary),
-      hashYoutubeTranscripts(data.youtubeTranscripts)
+      hashYoutubeTranscripts(data.youtubeTranscripts),
+      hashImageLibrary(data.imageLibrary)
     ]);
 
     const masterDescriptor = [
@@ -503,7 +537,8 @@ export async function computePayloadFingerprint(payload) {
       `activeSessions:${activeSessionsHash}`,
       `cachedGlosses:${cachedGlossesHash}`,
       `textLibrary:${textLibraryHash}`,
-      `youtubeTranscripts:${youtubeTranscriptsHash}`
+      `youtubeTranscripts:${youtubeTranscriptsHash}`,
+      `imageLibrary:${imageLibraryHash}`
     ].join('|');
 
     return await hashStringChunk(masterDescriptor);
@@ -645,6 +680,9 @@ export async function createBackupPayload(user = null) {
   // 2. IndexedDB YouTube Transcripts
   const youtubeTranscripts = await getAllSavedTranscripts();
 
+  // 2b. IndexedDB Image Documents
+  const imageLibrary = await getAllImageDocuments();
+
   // 3. Saved Words from localStorage
   let savedWords = [];
   try {
@@ -715,6 +753,7 @@ export async function createBackupPayload(user = null) {
     counts: {
       textDocumentsCount: textLibrary.length,
       youtubeTranscriptsCount: youtubeTranscripts.length,
+      imageDocumentsCount: imageLibrary.length,
       savedWordsCount: savedWords.length,
       chatConversationsCount: Object.keys(chatHistory).length,
       callSessionsCount: callHistory.length,
@@ -732,7 +771,8 @@ export async function createBackupPayload(user = null) {
       },
       cachedGlosses,
       textLibrary,
-      youtubeTranscripts
+      youtubeTranscripts,
+      imageLibrary
     }
   };
 }
@@ -900,6 +940,10 @@ export function createTextDocumentBackupPayload(doc, user = null) {
 
 export function createYoutubeTranscriptBackupPayload(videoId, transcripts, user = null) {
   return createResourcePayload('youtube-transcript', videoId || 'novideo', transcripts, user);
+}
+
+export function createImageDocumentBackupPayload(doc, user = null) {
+  return createResourcePayload('image-document', doc?.id || 'noid', doc, user);
 }
 
 export function createSavedWordsBackupPayload(savedWords, user = null) {

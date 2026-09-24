@@ -14,6 +14,7 @@
 
 import { saveTextDocument } from './textLibraryStorage.js';
 import { saveTranscriptToLibrary } from './transcriptLibraryStorage.js';
+import { saveImageDocument } from './imageReaderLibraryStorage.js';
 import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION } from './backupService.js';
 
 /**
@@ -56,6 +57,7 @@ export async function restoreBackupData(payload) {
   const summary = {
     textDocumentsRestored: 0,
     youtubeTranscriptsRestored: 0,
+    imageDocumentsRestored: 0,
     savedWordsRestored: 0,
     chatConversationsRestored: 0,
     settingsRestored: false
@@ -84,6 +86,20 @@ export async function restoreBackupData(payload) {
           summary.youtubeTranscriptsRestored++;
         } catch (err) {
           console.warn('[RestoreService] Error restoring YouTube transcript:', transcript.id, err);
+        }
+      }
+    }
+  }
+
+  // 2b. Restore IndexedDB Image Documents
+  if (Array.isArray(data.imageLibrary) && data.imageLibrary.length > 0) {
+    for (const doc of data.imageLibrary) {
+      if (doc && doc.id) {
+        try {
+          await saveImageDocument(doc);
+          summary.imageDocumentsRestored++;
+        } catch (err) {
+          console.warn('[RestoreService] Error restoring image document:', doc.id, err);
         }
       }
     }
