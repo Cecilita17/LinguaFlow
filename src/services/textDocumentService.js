@@ -239,6 +239,123 @@ export function splitTextIntoParagraphs(rawText, targetLang = 'zh', nativeLang =
 }
 
 /**
+ * Helper: Normalizes text for deterministic audio segment alignment.
+ * Strips punctuation, whitespace, and symbols across all scripts while preserving Unicode letter/number identity.
+ */
+function normalizeForAudioMatching(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str.toLowerCase().replace(/[\p{P}\p{S}\s]+/gu, '').trim();
+}
+
+/**
+ * Deterministically aligns paragraphs with Groq Whisper audio segments.
+ * Computes exact audioStart and audioEnd timestamps for each paragraph without AI calls.
+ * If a paragraph cannot be safely aligned, sets audioStart: null and audioEnd: null.
+ *
+ * @param {Array<object>} paragraphs
+ * @param {Array<object>} audioSegments - Whisper verbose_json segments [{ start, end, text }, ...]
+ * @returns {Array<object>}
+ */
+export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
+  if (!Array.isArray(paragraphs) || paragraphs.length === 0) return paragraphs || [];
+  if (!Array.isArray(audioSegments) || audioSegments.length === 0) {
+    return paragraphs.map(p => ({
+      ...p,
+      audioStart: typeof p?.audioStart === 'number' ? p.audioStart : null,
+      audioEnd: typeof p?.audioEnd === 'number' ? p.audioEnd : null
+    }));
+  }
+
+  // 1. Build cumulative segment stream with character offsets
+  const segStream = [];
+  let cumChar = 0;
+  for (const seg of audioSegments) {
+    const norm = normalizeForAudioMatching(seg.text);
+    if (!norm) continue;
+    const startChar = cumChar;
+    const endChar = cumChar + norm.length;
+    segStream.push({
+      start: typeof seg.start === 'number' ? seg.start : 0,
+      end: typeof seg.end === 'number' ? seg.end : 0,
+      norm,
+      startChar,
+      endChar
+    });
+    cumChar = endChar;
+  }
+
+  if (segStream.length === 0 || cumChar === 0) {
+    return paragraphs.map(p => ({
+      ...p,
+      audioStart: typeof p?.audioStart === 'number' ? p.audioStart : null,
+      audioEnd: typeof p?.audioEnd === 'number' ? p.audioEnd : null
+    }));
+  }
+
+  const allSegChars = segStream.map(s => s.norm).join('');
+
+  function getTimeAtChar(charIdx, isEnd = false) {
+    const bounded = Math.max(0, Math.min(charIdx, cumChar));
+    for (let i = 0; i < segStream.length; i++) {
+      const s = segStream[i];
+      if (bounded >= s.startChar && bounded <= s.endChar) {
+        if (bounded === s.startChar) return s.start;
+        if (bounded === s.endChar) return s.end;
+        const frac = (bounded - s.startChar) / Math.max(1, s.endChar - s.startChar);
+        return Math.round((s.start + frac * (s.end - s.start)) * 100) / 100;
+      }
+    }
+    return isEnd ? segStream[segStream.length - 1].end : 0;
+  }
+
+  // 2. Align each paragraph deterministically
+  let cursor = 0;
+  return paragraphs.map(para => {
+    const paraNorm = normalizeForAudioMatching(para.text);
+    if (!paraNorm) {
+      return { ...para, audioStart: null, audioEnd: null };
+    }
+
+    // Try finding paragraph starting from cursor
+    let matchIdx = allSegChars.indexOf(paraNorm, cursor);
+    if (matchIdx === -1 && cursor > 0) {
+      // Fallback: search from beginning if text had small reordering
+      matchIdx = allSegChars.indexOf(paraNorm, 0);
+    }
+
+    // Fallback: match by substantial prefix (first 25 characters) if punctuation normalization caused slight trailing delta
+    if (matchIdx === -1 && paraNorm.length > 25) {
+      const prefix = paraNorm.slice(0, 25);
+      const prefixIdx = allSegChars.indexOf(prefix, cursor);
+      if (prefixIdx !== -1) {
+        matchIdx = prefixIdx;
+      }
+    }
+
+    if (matchIdx !== -1) {
+      const charStart = matchIdx;
+      const charEnd = matchIdx + paraNorm.length;
+      const audioStart = getTimeAtChar(charStart, false);
+      const audioEnd = getTimeAtChar(charEnd, true);
+      cursor = Math.min(allSegChars.length, charEnd);
+
+      return {
+        ...para,
+        audioStart,
+        audioEnd: Math.max(audioStart, audioEnd)
+      };
+    }
+
+    // Paragraph could not be reliably mapped: do NOT invent timestamps
+    return {
+      ...para,
+      audioStart: null,
+      audioEnd: null
+    };
+  });
+}
+
+/**
  * Normalizes a document object to guarantee all required properties exist,
  * including id, title, rawText, targetLang, nativeLang, paragraphs, languageStates,
  * createdAt, and updatedAt.
@@ -310,6 +427,15 @@ export function normalizeDocument(rawDoc) {
     : null;
   const audioSegments = Array.isArray(rawDoc.audioSegments) ? rawDoc.audioSegments : (rawDoc.audioMetadata?.segments || []);
   const audioDuration = typeof rawDoc.audioDuration === 'number' ? rawDoc.audioDuration : (rawDoc.audioMetadata?.duration || 0);
+  const audioPathname = rawDoc.audioPathname || rawDoc.audioMetadata?.pathname || null;
+  const audioMimeType = rawDoc.audioMimeType || rawDoc.audioMetadata?.mimeType || null;
+
+  if ((sourceType === 'audio' || format === 'audio') && audioSegments.length > 0 && paragraphs.length > 0) {
+    const needsAlignment = paragraphs.some(p => typeof p?.audioStart !== 'number');
+    if (needsAlignment) {
+      paragraphs = alignParagraphsWithAudioSegments(paragraphs, audioSegments);
+    }
+  }
 
   return {
     id,
@@ -324,6 +450,8 @@ export function normalizeDocument(rawDoc) {
     paragraphs,
     chapters,
     languageStates,
+    audioPathname,
+    audioMimeType,
     audioSegments,
     audioDuration,
     lastAudioPosition: rawDoc.lastAudioPosition || null,
@@ -367,6 +495,8 @@ export function createTextDocument({
   paragraphs = null,
   chapters = null,
   languageStates = null,
+  audioPathname = null,
+  audioMimeType = null,
   audioSegments = null,
   audioDuration = null,
   lastAudioPosition = null,
@@ -374,9 +504,17 @@ export function createTextDocument({
   createdAt = null
 }) {
   const now = new Date().toISOString();
-  const effectiveParagraphs = paragraphs && Array.isArray(paragraphs) && paragraphs.length > 0
+  let effectiveParagraphs = paragraphs && Array.isArray(paragraphs) && paragraphs.length > 0
     ? paragraphs
     : splitTextIntoParagraphs(rawText, targetLang, nativeLang);
+
+  const effectiveSourceType = sourceType || format || 'txt';
+  const effectiveFormat = format || sourceType || 'txt';
+
+  // Deterministically align paragraphs with audio segments if this is an audio document
+  if ((effectiveSourceType === 'audio' || effectiveFormat === 'audio') && Array.isArray(audioSegments) && audioSegments.length > 0) {
+    effectiveParagraphs = alignParagraphsWithAudioSegments(effectiveParagraphs, audioSegments);
+  }
 
   // Derive a fallback title if empty
   let derivedTitle = (title || '').trim();
@@ -409,8 +547,8 @@ export function createTextDocument({
     id: id || `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     title: derivedTitle,
     author: (author || '').trim(),
-    sourceType: sourceType || format || 'txt',
-    format: format || sourceType || 'txt',
+    sourceType: effectiveSourceType,
+    format: effectiveFormat,
     rawText,
     targetLang,
     nativeLang,
@@ -418,6 +556,8 @@ export function createTextDocument({
     paragraphs: effectiveParagraphs,
     chapters: Array.isArray(chapters) ? chapters : [],
     languageStates: initialStates,
+    audioPathname: audioPathname || null,
+    audioMimeType: audioMimeType || null,
     audioSegments: Array.isArray(audioSegments) ? audioSegments : [],
     audioDuration: typeof audioDuration === 'number' ? audioDuration : (Number(audioDuration) || 0),
     lastAudioPosition: lastAudioPosition || null,
@@ -883,7 +1023,8 @@ export async function transcribeAudioFileApi({
         targetLang,
         nativeLang,
         apiKey: effectiveKey,
-        timeoutMs: 120000
+        timeoutMs: 120000,
+        persistBlob: true
       })
     });
 
@@ -905,7 +1046,10 @@ export async function transcribeAudioFileApi({
       transcript: data.transcript.trim(),
       segments: Array.isArray(data.segments) ? data.segments : [],
       duration: typeof data.duration === 'number' ? data.duration : (Number(data.duration) || 0),
-      source: data.source || 'groq (whisper-large-v3)'
+      source: data.source || 'groq (whisper-large-v3)',
+      pathname: data.pathname || blobResult.pathname || null,
+      mimeType: audioFile.type || blobResult.contentType || 'audio/webm',
+      url: blobResult.url || data.url || null
     };
   } catch (err) {
     clearTimeout(timeoutId);

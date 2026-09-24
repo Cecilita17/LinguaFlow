@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleTranscribeTicket, handleSentenceBreakdown, handleBatchGloss, handleGenerateText, handleTranslateText } from './handlers.js';
+import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleTranscribeTicket, handleSentenceBreakdown, handleBatchGloss, handleGenerateText, handleTranslateText, handleAudioStream } from './handlers.js';
 import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
 import { handlePipelineChatStream, handlePipelineTTS, handleListCartesiaVoices } from './pipelineHandlers.js';
 
@@ -44,6 +44,11 @@ app.post('/transcribe-ticket', handleTranscribeTicket);
 
 app.post('/api/transcribe', handleTranscribe);
 app.post('/transcribe', handleTranscribe);
+
+app.get('/api/audio-stream', handleAudioStream);
+app.get('/audio-stream', handleAudioStream);
+app.head('/api/audio-stream', handleAudioStream);
+app.head('/audio-stream', handleAudioStream);
 
 app.post('/api/sentence-breakdown', handleSentenceBreakdown);
 app.post('/sentence-breakdown', handleSentenceBreakdown);

@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { handleUpload } from '@vercel/blob/client';
-import { del } from '@vercel/blob';
+import { del, head } from '@vercel/blob';
+import { Readable } from 'stream';
 import {
   GROQ_MODEL_CONFIG,
   buildSystemInstruction,
@@ -900,7 +901,8 @@ export async function handleTranscribe(req, res) {
       fileName,
       targetLang = 'es',
       nativeLang = 'es',
-      apiKey: clientApiKey
+      apiKey: clientApiKey,
+      persistBlob = false
     } = body;
 
     if (!fileUrl && !audioBase64) {
@@ -1027,14 +1029,25 @@ export async function handleTranscribe(req, res) {
           extra: `status=${httpStatus} mime=${cleanMime} size=${audioBlob.size}`
         });
         if (transcript) {
-          transcript = stripSttTranslationArtifacts(transcript, targetLang);
-          console.log(`✅ Audio transcribed via Groq Whisper (${segments.length} segments, ${duration}s): "${transcript.slice(0, 80)}..."`);
+          if (!fileUrl) {
+            transcript = stripSttTranslationArtifacts(transcript, targetLang);
+          } else {
+            // For imported full audio files, only clean bracketed/parenthetical translation notes without truncating lines
+            transcript = transcript
+              .replace(/\[\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)?\s*:?[^\]]*\]/gi, '')
+              .replace(/\(\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\)]*\)/gi, '')
+              .trim();
+          }
+          const pathname = (fileUrl && parsedUrl) ? parsedUrl.pathname.replace(/^\//, '') : null;
+          console.log(`✅ Audio transcribed via Groq Whisper (${segments.length} segments, ${duration}s, persistBlob=${persistBlob}): "${transcript.slice(0, 80)}..."`);
           return res.status(200).json({
             success: true,
             source: 'groq (whisper-large-v3)',
             transcript,
             segments,
-            duration
+            duration,
+            pathname,
+            url: fileUrl || null
           });
         }
       } else {
@@ -1057,11 +1070,128 @@ export async function handleTranscribe(req, res) {
     console.error('Server error in /api/transcribe:', err);
     res.status(500).json({ error: `Error en el servidor durante la transcripción de audio: ${err.message}` });
   } finally {
-    // Clean up temporary blob from Vercel storage immediately after processing
-    if (storageFileUrl && process.env.BLOB_READ_WRITE_TOKEN) {
+    // Clean up temporary blob from Vercel storage immediately after processing (unless requested to persist for document playback)
+    if (storageFileUrl && !persistBlob && process.env.BLOB_READ_WRITE_TOKEN) {
       del(storageFileUrl, { token: process.env.BLOB_READ_WRITE_TOKEN }).catch(delErr => {
         console.warn('Notice: Failed to delete temporary storage blob:', delErr.message);
       });
+    }
+  }
+}
+
+// Stream audio endpoint with HTTP Range support for document playback
+export async function handleAudioStream(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return res.status(405).json({ error: 'Método no permitido. Use GET o HEAD.' });
+  }
+
+  const queryPathname = req.query?.pathname || (new URL(req.url, 'http://localhost')).searchParams.get('pathname');
+
+  if (!queryPathname || typeof queryPathname !== 'string') {
+    return res.status(400).json({ error: 'Parámetro pathname requerido.' });
+  }
+
+  const cleanPathname = queryPathname.trim();
+
+  // Security check: validate strictly that pathname is a single filename with an allowed audio extension
+  // Disallow directory traversal, slashes, or non-audio formats to prevent open proxy or file system probing
+  const isValidPathname = /^[a-zA-Z0-9_-]+\.(mp3|wav|m4a|webm|ogg|aac|flac|opus|mp4)$/i.test(cleanPathname);
+  if (!isValidPathname) {
+    return res.status(400).json({ error: 'Pathname de archivo de audio inválido o formato no permitido.' });
+  }
+
+  const token = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+  if (!token) {
+    return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN no configurado en el servidor.' });
+  }
+
+  try {
+    // 1. Resolve blob metadata from Vercel Blob store using server token
+    let blobMeta;
+    try {
+      blobMeta = await head(cleanPathname, { token });
+    } catch (headErr) {
+      console.warn(`[AudioStream] head() failed for pathname "${cleanPathname}":`, headErr.message);
+      return res.status(404).json({ error: 'Archivo de audio no encontrado en el almacenamiento.' });
+    }
+
+    if (!blobMeta || !blobMeta.url) {
+      return res.status(404).json({ error: 'Archivo de audio no encontrado.' });
+    }
+
+    // 2. Fetch the audio stream from Vercel Blob, forwarding Range headers
+    const fetchHeaders = {
+      authorization: `Bearer ${token}`
+    };
+    if (req.headers.range) {
+      fetchHeaders.range = req.headers.range;
+    }
+
+    let blobRes = await fetch(blobMeta.url, {
+      method: req.method === 'HEAD' ? 'HEAD' : 'GET',
+      headers: fetchHeaders
+    });
+
+    // Fallback for public blob stores if auth header caused 403
+    if (!blobRes.ok && blobRes.status === 403) {
+      const publicHeaders = {};
+      if (req.headers.range) publicHeaders.range = req.headers.range;
+      blobRes = await fetch(blobMeta.url, {
+        method: req.method === 'HEAD' ? 'HEAD' : 'GET',
+        headers: publicHeaders
+      });
+    }
+
+    if (!blobRes.ok && blobRes.status !== 206) {
+      return res.status(blobRes.status).json({
+        error: `Error al obtener stream de audio (${blobRes.status}): ${blobRes.statusText}`
+      });
+    }
+
+    // 3. Set standard streaming headers
+    res.status(blobRes.status);
+    res.setHeader('Accept-Ranges', 'bytes');
+    const contentType = blobRes.headers.get('content-type') || blobMeta.contentType || 'audio/mpeg';
+    res.setHeader('Content-Type', contentType);
+
+    const contentLength = blobRes.headers.get('content-length');
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+    const contentRange = blobRes.headers.get('content-range');
+    if (contentRange) {
+      res.setHeader('Content-Range', contentRange);
+    }
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+    if (req.method === 'HEAD') {
+      return res.end();
+    }
+
+    // 4. Pipe stream to client
+    if (!blobRes.body) {
+      return res.end();
+    }
+
+    const nodeStream = Readable.fromWeb(blobRes.body);
+    nodeStream.on('error', (streamErr) => {
+      console.warn('[AudioStream] Stream transmission error:', streamErr.message);
+      if (!res.headersSent) {
+        res.status(500).end();
+      }
+    });
+
+    req.on('close', () => {
+      nodeStream.destroy();
+    });
+
+    nodeStream.pipe(res);
+  } catch (err) {
+    console.error('[AudioStream] Server error streaming audio:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: `Error en el servidor al transmitir audio: ${err.message}` });
     }
   }
 }
