@@ -891,6 +891,8 @@ export async function handleTranscribe(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   let storageFileUrl = null;
+  let storagePathname = null;
+  let shouldPersistBlob = false;
 
   try {
     const body = parseRequestBody(req);
@@ -904,6 +906,7 @@ export async function handleTranscribe(req, res) {
       apiKey: clientApiKey,
       persistBlob = false
     } = body;
+    shouldPersistBlob = Boolean(persistBlob);
 
     if (!fileUrl && !audioBase64) {
       return res.status(400).json({ error: 'No se recibió archivo ni enlace de audio.' });
@@ -935,6 +938,8 @@ export async function handleTranscribe(req, res) {
       if (parsedUrl.protocol !== 'https:' || !parsedUrl.hostname.endsWith('.blob.vercel-storage.com')) {
         return res.status(400).json({ error: 'Origen de archivo no autorizado.' });
       }
+
+      storagePathname = parsedUrl.pathname.replace(/^\//, '');
 
       console.log(`Downloading temporary audio from storage for Whisper: ${parsedUrl.pathname}`);
       const downloadHeaders = {};
@@ -1038,8 +1043,8 @@ export async function handleTranscribe(req, res) {
               .replace(/\(\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\)]*\)/gi, '')
               .trim();
           }
-          const pathname = (fileUrl && parsedUrl) ? parsedUrl.pathname.replace(/^\//, '') : null;
-          console.log(`✅ Audio transcribed via Groq Whisper (${segments.length} segments, ${duration}s, persistBlob=${persistBlob}): "${transcript.slice(0, 80)}..."`);
+          const pathname = storagePathname;
+          console.log(`✅ Audio transcribed via Groq Whisper (${segments.length} segments, ${duration}s, persistBlob=${shouldPersistBlob}): "${transcript.slice(0, 80)}..."`);
           return res.status(200).json({
             success: true,
             source: 'groq (whisper-large-v3)',
@@ -1071,7 +1076,7 @@ export async function handleTranscribe(req, res) {
     res.status(500).json({ error: `Error en el servidor durante la transcripción de audio: ${err.message}` });
   } finally {
     // Clean up temporary blob from Vercel storage immediately after processing (unless requested to persist for document playback)
-    if (storageFileUrl && !persistBlob && process.env.BLOB_READ_WRITE_TOKEN) {
+    if (storageFileUrl && !shouldPersistBlob && process.env.BLOB_READ_WRITE_TOKEN) {
       del(storageFileUrl, { token: process.env.BLOB_READ_WRITE_TOKEN }).catch(delErr => {
         console.warn('Notice: Failed to delete temporary storage blob:', delErr.message);
       });
