@@ -810,20 +810,52 @@ export async function transcribeAudioFileApi({
 
   // 1. Direct binary upload to Vercel Blob storage (bypasses 4.5 MB Serverless body limit)
   let blobResult;
+  const isLargeFile = audioFile.size > 5 * 1024 * 1024;
+  const ticketUrl = (typeof window !== 'undefined' && !API_BASE_URL)
+    ? '/api/transcribe-ticket'
+    : `${API_BASE_URL}/api/transcribe-ticket`;
+
+  console.log('[AudioImport] Prepared audio upload:', {
+    pathname: safePathname,
+    mimeType: audioFile.type || 'audio/webm',
+    sizeBytes: audioFile.size,
+    multipart: isLargeFile,
+    access: 'private'
+  });
+
+  const uploadOptions = {
+    access: 'private',
+    handleUploadUrl: ticketUrl,
+    contentType: audioFile.type || 'audio/webm',
+    multipart: isLargeFile
+  };
+
   try {
-    blobResult = await upload(safePathname, audioFile, {
-      access: 'public',
-      handleUploadUrl: `${API_BASE_URL}/api/transcribe-ticket`,
-      contentType: audioFile.type || 'audio/webm'
-    });
+    blobResult = await upload(safePathname, audioFile, uploadOptions);
   } catch (uploadErr) {
-    console.error('Direct audio upload to storage failed:', uploadErr);
-    throw new Error(`Error al subir el archivo de audio al servidor: ${uploadErr.message || 'Fallo de red'}`);
+    const errMsg = (uploadErr?.message || '').toLowerCase();
+    // Fallback for public stores if configured with public access
+    if (errMsg.includes('public access') || errMsg.includes('public store')) {
+      console.warn('[AudioImport] Retrying upload with access: "public"');
+      blobResult = await upload(safePathname, audioFile, {
+        ...uploadOptions,
+        access: 'public'
+      });
+    } else {
+      console.error('[AudioImport] Direct audio upload to storage failed:', uploadErr);
+      throw new Error(`Error al subir el archivo de audio al servidor: ${uploadErr.message || 'Fallo de red'}`);
+    }
   }
 
   if (!blobResult || !blobResult.url) {
     throw new Error('No se recibió la confirmación de almacenamiento del archivo temporal.');
   }
+
+  console.log('[AudioImport] SDK upload response:', {
+    url: blobResult.url,
+    pathname: blobResult.pathname,
+    contentType: blobResult.contentType
+  });
 
   // 2. Request backend transcription from the uploaded storage URL
   if (typeof onProgress === 'function') {

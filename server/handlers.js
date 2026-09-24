@@ -869,10 +869,12 @@ export async function handleTranscribeTicket(req, res) {
           addRandomSuffix: false
         };
       }
-      // Note: onUploadCompleted intentionally omitted — not needed for this flow.
-      // When present, the SDK computes a callbackUrl and embeds it in the client
-      // token; if that URL doesn't resolve correctly through Vercel's rewrite
-      // chain the Blob API gateway rejects the upload with HTTP 400.
+    });
+
+    console.log('[TranscribeTicket] Successfully generated client token for pathname:', body?.payload?.pathname, {
+      storeId: token.split('_')[3] || 'unknown',
+      hasToken: Boolean(token),
+      requestedMultipart: Boolean(body?.payload?.multipart)
     });
 
     return res.status(200).json(jsonResponse);
@@ -933,9 +935,20 @@ export async function handleTranscribe(req, res) {
       }
 
       console.log(`Downloading temporary audio from storage for Whisper: ${parsedUrl.pathname}`);
-      const fetchAudioRes = await fetch(fileUrl, {
+      const downloadHeaders = {};
+      const token = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+      if (token) {
+        downloadHeaders['authorization'] = `Bearer ${token}`;
+      }
+
+      let fetchAudioRes = await fetch(fileUrl, {
+        headers: downloadHeaders,
         redirect: 'error'
       });
+      // Fallback for public blob if auth header was unexpected
+      if (!fetchAudioRes.ok && fetchAudioRes.status === 403 && Object.keys(downloadHeaders).length > 0) {
+        fetchAudioRes = await fetch(fileUrl, { redirect: 'error' });
+      }
       if (!fetchAudioRes.ok) {
         throw new Error(`No se pudo descargar el archivo temporal desde el storage (${fetchAudioRes.status})`);
       }
