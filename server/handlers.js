@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { handleUpload } from '@vercel/blob/client';
-import { del, get } from '@vercel/blob';
+import { del, get, issueSignedToken, presignUrl } from '@vercel/blob';
 import { Readable } from 'stream';
 import {
   GROQ_MODEL_CONFIG,
@@ -1114,6 +1114,30 @@ export async function handleAudioStream(req, res) {
 
   console.log(`[AudioStream] pathname=${cleanPathname}`);
 
+  // 1. Try to generate a signed GET URL with presignUrl for direct CDN access with HTTP Range support
+  try {
+    const { token: signedToken } = await issueSignedToken({
+      pathname: cleanPathname,
+      operations: ['get'],
+      validUntil: Date.now() + 3600 * 1000, // 1 hour
+      token
+    });
+    if (signedToken) {
+      const { presignedUrl } = await presignUrl(signedToken, {
+        pathname: cleanPathname,
+        operation: 'get',
+        access: 'private'
+      });
+      if (presignedUrl) {
+        console.log(`[AudioStream] generated presigned GET URL, redirecting (307)`);
+        return res.redirect(307, presignedUrl);
+      }
+    }
+  } catch (presignErr) {
+    console.log(`[AudioStream] presign not applicable or failed, falling back to direct stream:`, presignErr.message);
+  }
+
+  // 2. Direct streaming fallback using official get() API
   try {
     console.log(`[AudioStream] calling get()`);
     let result;

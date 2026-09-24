@@ -4,115 +4,42 @@ import { API_BASE_URL } from '../../services/chatService.js';
 /**
  * OriginalAudioPlayer
  *
- * Isolated audio player component for imported audio documents.
- * Equivalent to YouTubePlayer.jsx, but dedicated to HTML5 audio.
- * Encapsulates HTMLAudioElement lifecycle, stream loading, segment-bounded playback,
- * and exposes callbacks to TextReaderPage.
+ * Isolated HTML5 audio player component for imported audio documents.
+ * Conceptually equivalent to YouTubePlayer.jsx, but dedicated to native HTML5 audio.
+ * Manages only the HTMLAudioElement lifecycle, source loading, playback controls,
+ * and reports events (currentTime, duration, ready, play, pause, ended, error) to the parent.
+ *
+ * It has NO knowledge of paragraphs, timestamps, auto-play, or persistence.
  */
 export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   audioPathname,
+  onReady = null,
   onTimeUpdate = null,
-  onDurationChange = null,
   onPlay = null,
   onPause = null,
   onEnded = null,
   onError = null,
-  onReady = null,
-  onSegmentEnd = null,
-  initialTime = 0
+  initialTime = 0,
+  playbackRate = 1.0
 }, ref) {
   const audioRef = useRef(null);
-  const segmentEndRef = useRef(null);
-  const monitorIntervalRef = useRef(null);
-  const isPlayingRef = useRef(false);
-  const initialSeekDoneRef = useRef(false);
-
   const [duration, setDuration] = useState(0);
-  const [isReady, setIsReady] = useState(false);
-
-  const clearSegmentMonitor = useCallback(() => {
-    if (monitorIntervalRef.current) {
-      clearInterval(monitorIntervalRef.current);
-      monitorIntervalRef.current = null;
-    }
-  }, []);
+  const initialSeekDoneRef = useRef(false);
 
   // Compute clean stream URL from audioPathname
   const streamUrl = audioPathname
     ? `${API_BASE_URL || ''}/api/audio-stream?pathname=${encodeURIComponent(audioPathname)}`
     : '';
 
-  // Setup segment monitoring loop while playing to detect exact end boundaries
-  const startSegmentMonitor = useCallback(() => {
-    clearSegmentMonitor();
-    monitorIntervalRef.current = setInterval(() => {
-      const audio = audioRef.current;
-      if (!audio) return;
-
-      const current = audio.currentTime;
-      const targetEnd = segmentEndRef.current;
-
-      if (typeof targetEnd === 'number' && current >= targetEnd) {
-        // Reached end of current paragraph segment
-        clearSegmentMonitor();
-        segmentEndRef.current = null;
-        try {
-          audio.pause();
-        } catch (e) {}
-        console.log(`[OriginalAudioPlayer] reached segment end: currentTime=${current.toFixed(2)}, targetEnd=${targetEnd}`);
-        if (onSegmentEnd) {
-          onSegmentEnd({ currentTime: current, targetEnd });
-        }
-      }
-    }, 40); // 40ms interval gives 25fps checking precision without UI overhead
-  }, [clearSegmentMonitor, onSegmentEnd]);
-
-  // Imperative handle exposed to parent via ref
+  // Imperative handle exposed to parent via ref (equivalent to YouTube player methods)
   useImperativeHandle(ref, () => ({
-    playSegment: (start, end) => {
-      const audio = audioRef.current;
-      if (!audio) return;
-
-      const safeStart = Math.max(0, typeof start === 'number' ? start : 0);
-      const safeEnd = typeof end === 'number' && end > safeStart ? end : null;
-
-      segmentEndRef.current = safeEnd;
-
-      try {
-        audio.currentTime = safeStart;
-      } catch (e) {}
-
-      console.log(`[OriginalAudioPlayer] play segment: [${safeStart} - ${safeEnd ?? 'end'}]`);
-
-      const promise = audio.play();
-      if (promise !== undefined) {
-        promise.catch(err => {
-          console.warn('[OriginalAudioPlayer] play() rejected:', err);
-          clearSegmentMonitor();
-          if (onError) onError(err);
-        });
-      }
-    },
-
-    seek: (time) => {
-      const audio = audioRef.current;
-      if (!audio) return;
-      const safeTime = Math.max(0, typeof time === 'number' ? time : 0);
-      try {
-        audio.currentTime = safeTime;
-        console.log(`[OriginalAudioPlayer] seek to ${safeTime}`);
-      } catch (e) {
-        console.warn('[OriginalAudioPlayer] seek error:', e);
-      }
-    },
-
     play: () => {
       const audio = audioRef.current;
       if (!audio) return;
       const promise = audio.play();
       if (promise !== undefined) {
         promise.catch(err => {
-          console.warn('[OriginalAudioPlayer] play() rejected:', err);
+          console.warn('[OriginalAudioPlayer] play() error:', err);
           if (onError) onError(err);
         });
       }
@@ -121,44 +48,39 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     pause: () => {
       const audio = audioRef.current;
       if (!audio) return;
-      segmentEndRef.current = null;
-      clearSegmentMonitor();
       try {
         audio.pause();
       } catch (e) {}
     },
 
-    stop: () => {
+    seek: (time) => {
       const audio = audioRef.current;
       if (!audio) return;
-      segmentEndRef.current = null;
-      clearSegmentMonitor();
+      const safeTime = Math.max(0, typeof time === 'number' && !isNaN(time) ? time : 0);
       try {
-        audio.pause();
-      } catch (e) {}
+        audio.currentTime = safeTime;
+      } catch (e) {
+        console.warn('[OriginalAudioPlayer] seek error:', e);
+      }
     },
 
     getCurrentTime: () => audioRef.current?.currentTime || 0,
     getDuration: () => audioRef.current?.duration || 0,
-    isPlaying: () => isPlayingRef.current
-  }), [clearSegmentMonitor, onError]);
+    isPlaying: () => Boolean(audioRef.current && !audioRef.current.paused && !audioRef.current.ended)
+  }), [onError]);
 
-  // Audio source lifecycle
+  // Handle source changes & cleanup
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !streamUrl) return;
 
     initialSeekDoneRef.current = false;
-    segmentEndRef.current = null;
-    clearSegmentMonitor();
-
-    console.log(`[OriginalAudioPlayer] source=${audioPathname}`);
+    console.log('[OriginalAudioPlayer] source=', streamUrl);
     audio.src = streamUrl;
-    audio.playbackRate = 1.0;
+    audio.playbackRate = typeof playbackRate === 'number' ? playbackRate : 1.0;
     audio.load();
 
     return () => {
-      clearSegmentMonitor();
       if (audio) {
         try {
           audio.pause();
@@ -167,69 +89,61 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
         } catch (e) {}
       }
     };
-  }, [streamUrl, audioPathname, clearSegmentMonitor]);
+  }, [streamUrl]);
+
+  // Handle playbackRate changes
+  useEffect(() => {
+    if (audioRef.current && typeof playbackRate === 'number') {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   // Event handlers for HTMLAudioElement
   const handleLoadedMetadata = useCallback((e) => {
     const audio = e.target;
     const dur = audio.duration || 0;
     setDuration(dur);
-    setIsReady(true);
-    console.log(`[OriginalAudioPlayer] loadedmetadata`);
-    console.log(`[OriginalAudioPlayer] duration=${dur}`);
+    console.log('[OriginalAudioPlayer] loadedmetadata');
+    console.log('[OriginalAudioPlayer] duration=', dur);
 
     // Initial seek to restored lastAudioPosition if specified, but stay paused
     if (!initialSeekDoneRef.current && typeof initialTime === 'number' && initialTime > 0) {
       initialSeekDoneRef.current = true;
       try {
         audio.currentTime = initialTime;
-        console.log(`[OriginalAudioPlayer] restored initial position to ${initialTime}`);
       } catch (err) {}
     }
 
-    if (onDurationChange) onDurationChange(dur);
     if (onReady) onReady({ duration: dur });
-  }, [initialTime, onDurationChange, onReady]);
+  }, [initialTime, onReady]);
 
   const handleTimeUpdate = useCallback((e) => {
-    const audio = e.target;
-    const current = audio.currentTime;
+    const current = e.target.currentTime || 0;
     if (onTimeUpdate) onTimeUpdate(current);
   }, [onTimeUpdate]);
 
   const handlePlay = useCallback(() => {
-    isPlayingRef.current = true;
-    const current = audioRef.current?.currentTime || 0;
-    console.log(`[OriginalAudioPlayer] play`);
-    console.log(`[OriginalAudioPlayer] currentTime=${current.toFixed(2)}`);
-    startSegmentMonitor();
+    console.log('[OriginalAudioPlayer] play');
     if (onPlay) onPlay();
-  }, [onPlay, startSegmentMonitor]);
+  }, [onPlay]);
 
-  const handlePause = useCallback(() => {
-    isPlayingRef.current = false;
-    clearSegmentMonitor();
-    const current = audioRef.current?.currentTime || 0;
-    console.log(`[OriginalAudioPlayer] pause`);
-    console.log(`[OriginalAudioPlayer] currentTime=${current.toFixed(2)}`);
+  const handlePause = useCallback((e) => {
+    const current = e.target.currentTime || 0;
+    console.log('[OriginalAudioPlayer] pause');
+    console.log('[OriginalAudioPlayer] time=', current);
     if (onPause) onPause(current);
-  }, [clearSegmentMonitor, onPause]);
+  }, [onPause]);
 
   const handleEnded = useCallback(() => {
-    isPlayingRef.current = false;
-    clearSegmentMonitor();
-    segmentEndRef.current = null;
-    console.log(`[OriginalAudioPlayer] ended`);
+    console.log('[OriginalAudioPlayer] ended');
     if (onEnded) onEnded();
-  }, [clearSegmentMonitor, onEnded]);
+  }, [onEnded]);
 
   const handleError = useCallback((e) => {
-    isPlayingRef.current = false;
-    clearSegmentMonitor();
     const mediaError = audioRef.current?.error;
-    console.warn(`[OriginalAudioPlayer] error=`, mediaError);
+    console.warn('[OriginalAudioPlayer] error=', mediaError);
     if (onError) onError(mediaError || e);
-  }, [clearSegmentMonitor, onError]);
+  }, [onError]);
 
   if (!streamUrl) {
     return null;

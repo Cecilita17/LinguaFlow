@@ -1018,6 +1018,26 @@ export function TextReaderPage({
       }
     }
 
+    // Check segment boundary of currently playing paragraph
+    const curId = playingParagraphIdRef.current;
+    if (curId) {
+      const allParas = chapterParagraphsRef.current || document?.paragraphs || [];
+      const currentPara = allParas.find(p => p.id === curId);
+      if (currentPara && typeof currentPara.audioEnd === 'number' && newTime >= currentPara.audioEnd) {
+        console.log(`[AudioReader] reached paragraph end: curTime=${newTime.toFixed(2)}, end=${currentPara.audioEnd}`);
+        if (autoPlayTextReaderRef.current) {
+          advanceToNextParagraph(currentPara);
+        } else {
+          if (audioPlayerRef.current) {
+            audioPlayerRef.current.pause();
+          }
+          setPlayingParagraphId(null);
+          playingParagraphIdRef.current = null;
+          flushAudioPlaybackPosition();
+        }
+      }
+    }
+
     // Throttled persistence (every 2 seconds while audio is playing)
     const now = Date.now();
     if (now - audioSaveThrottlerRef.current.lastSavedTime >= 2000) {
@@ -1026,26 +1046,11 @@ export function TextReaderPage({
     } else if (!audioSaveThrottlerRef.current.timer) {
       audioSaveThrottlerRef.current.timer = setTimeout(() => {
         audioSaveThrottlerRef.current.timer = null;
+        audioSaveThrottlerRef.current.lastSavedTime = Date.now();
         flushAudioPlaybackPosition();
       }, 2000);
     }
-  }, [visibleParagraphs, document?.paragraphs, flushAudioPlaybackPosition]);
-
-  const handleAudioSegmentEnd = useCallback(({ currentTime, targetEnd }) => {
-    flushAudioPlaybackPosition();
-
-    const currentId = playingParagraphIdRef.current;
-    const allParas = chapterParagraphsRef.current || document?.paragraphs || [];
-    const currentPara = allParas.find(p => p.id === currentId);
-
-    if (autoPlayTextReaderRef.current && currentPara) {
-      advanceToNextParagraph(currentPara);
-    } else {
-      setPlayingParagraphId(null);
-      playingParagraphIdRef.current = null;
-      setActiveAudioCharIndex(-1);
-    }
-  }, [document?.paragraphs, advanceToNextParagraph, flushAudioPlaybackPosition]);
+  }, [visibleParagraphs, document?.paragraphs, advanceToNextParagraph, flushAudioPlaybackPosition]);
 
   const handleAudioPause = useCallback((pausedTime) => {
     if (typeof pausedTime === 'number') {
@@ -1102,12 +1107,11 @@ export function TextReaderPage({
       setActiveAudioCharIndex(-1); // Full paragraph visual highlight during original audio playback
 
       const startTime = Math.max(0, paragraph.audioStart);
-      const endTime = typeof paragraph.audioEnd === 'number' && paragraph.audioEnd > startTime ? paragraph.audioEnd : null;
-
       latestAudioPositionRef.current.time = startTime;
 
       if (audioPlayerRef.current) {
-        audioPlayerRef.current.playSegment(startTime, endTime);
+        audioPlayerRef.current.seek(startTime);
+        audioPlayerRef.current.play();
       }
       return;
     }
@@ -1948,6 +1952,28 @@ export function TextReaderPage({
     const paras = visibleParagraphs.length > 0 ? visibleParagraphs : (document?.paragraphs || []);
     if (paras.length === 0) return;
 
+    if (isAudioDocument && audioPlayerRef.current) {
+      const resumeTime = typeof latestAudioPositionRef.current.time === 'number'
+        ? latestAudioPositionRef.current.time
+        : (typeof document?.lastAudioPosition === 'number' ? document.lastAudioPosition : 0);
+
+      const targetPara = (lastAudioParagraphId ? paras.find(p => p.id === lastAudioParagraphId) : null)
+        || paras.find(p =>
+          typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
+          resumeTime >= p.audioStart && resumeTime < p.audioEnd
+        )
+        || paras[0];
+
+      if (targetPara) {
+        setPlayingParagraphId(targetPara.id);
+        playingParagraphIdRef.current = targetPara.id;
+        userStoppedRef.current = false;
+        audioPlayerRef.current.seek(resumeTime);
+        audioPlayerRef.current.play();
+        return;
+      }
+    }
+
     let targetPara = null;
     if (lastAudioParagraphId) {
       targetPara = paras.find(p => p.id === lastAudioParagraphId);
@@ -1958,7 +1984,7 @@ export function TextReaderPage({
     if (targetPara) {
       handlePlayParagraph(targetPara);
     }
-  }, [isPlayingAnyAudio, handleStopAudio, visibleParagraphs, document?.paragraphs, lastAudioParagraphId, handlePlayParagraph]);
+  }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, lastAudioParagraphId, handlePlayParagraph]);
 
   // Edit title action from three-dots menu
   const handleEditTitle = useCallback(() => {
@@ -2841,7 +2867,6 @@ export function TextReaderPage({
           onPause={handleAudioPause}
           onEnded={handleAudioEnded}
           onError={handleAudioError}
-          onSegmentEnd={handleAudioSegmentEnd}
         />
       )}
     </div>
