@@ -34,6 +34,7 @@ import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
 import { SavedDocumentsModal } from '../components/text/SavedDocumentsModal.jsx';
 import { CreateWithAiModal } from '../components/text/CreateWithAiModal.jsx';
 import { TextLibraryView } from '../components/text/TextLibraryView.jsx';
+import { OriginalAudioPlayer } from '../components/textReader/OriginalAudioPlayer.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { getLanguageMeta } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
@@ -78,7 +79,7 @@ import { estimateSpeechDurationMs, createAudioWordSynchronizer } from '../utils/
  */
 function resolveChapterIndexForDoc(doc) {
   if (!doc || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
-  const targetId = doc.lastAudioPosition?.paragraphId || doc.lastReadingPosition?.paragraphId;
+  const targetId = doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null) || doc.lastReadingPosition?.paragraphId;
   if (targetId) {
     const chIdx = doc.chapters.findIndex(ch => Array.isArray(ch.paragraphIds) && ch.paragraphIds.includes(targetId));
     if (chIdx !== -1) return chIdx;
@@ -104,7 +105,7 @@ function resolvePageIndexForDoc(doc, chapterIdx = 0) {
   const ch = doc.chapters[chapterIdx] || doc.chapters[0];
   if (!ch) return 0;
   const chapterParas = doc.paragraphs.filter(p => p.chapterId === ch.id);
-  const targetId = doc.lastAudioPosition?.paragraphId || doc.lastReadingPosition?.paragraphId;
+  const targetId = doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null) || doc.lastReadingPosition?.paragraphId;
   if (targetId) {
     const pIdx = chapterParas.findIndex(p => p.id === targetId);
     if (pIdx !== -1) {
@@ -146,40 +147,15 @@ export function TextReaderPage({
 
   // Audio TTS states & visual synchronizer ref
   const [playingParagraphId, setPlayingParagraphId] = useState(null);
+  const playingParagraphIdRef = useRef(null);
   const [activeAudioCharIndex, setActiveAudioCharIndex] = useState(-1);
   const [audioErrorId, setAudioErrorId] = useState(null);
   const audioPlaybackIdRef = useRef(0);
   const audioSynchronizerRef = useRef(null);
-  const nativeAudioPlayerRef = useRef(null);
-  const nativeAudioCheckIntervalRef = useRef(null);
-
-  // Temporary diagnostic event listeners for audio player
-  useEffect(() => {
-    const audio = nativeAudioPlayerRef.current;
-    if (!audio) return;
-    const logEvent = (e) => {
-      console.log(`[OriginalAudio] event=${e.type}`, {
-        src: audio.src,
-        readyState: audio.readyState,
-        networkState: audio.networkState,
-        currentTime: audio.currentTime,
-        duration: audio.duration,
-        error: audio.error ? { code: audio.error.code, message: audio.error.message } : null
-      });
-    };
-    const events = ['loadedmetadata', 'canplay', 'playing', 'pause', 'error', 'stalled'];
-    events.forEach(evt => audio.addEventListener(evt, logEvent));
-    return () => {
-      events.forEach(evt => audio.removeEventListener(evt, logEvent));
-    };
-  }, []);
-
-  const clearNativeAudioMonitor = useCallback(() => {
-    if (nativeAudioCheckIntervalRef.current) {
-      clearInterval(nativeAudioCheckIntervalRef.current);
-      nativeAudioCheckIntervalRef.current = null;
-    }
-  }, []);
+  const audioPlayerRef = useRef(null);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const latestAudioPositionRef = useRef({ time: 0, paragraphId: null });
+  const audioSaveThrottlerRef = useRef({ lastSavedTime: 0, timer: null });
 
   const clearAudioVisualTimer = useCallback(() => {
     if (audioSynchronizerRef.current) {
@@ -242,6 +218,11 @@ export function TextReaderPage({
   const isEpub = Boolean(
     document &&
     (document.format === 'epub' || document.sourceType === 'epub' || (Array.isArray(document.chapters) && document.chapters.length > 0))
+  );
+  const isAudioDocument = Boolean(
+    document &&
+    (document.format === 'audio' || document.sourceType === 'audio') &&
+    document.audioPathname
   );
   const chapters = useMemo(() => {
     return (isEpub && Array.isArray(document?.chapters)) ? document.chapters : [];
@@ -360,9 +341,9 @@ export function TextReaderPage({
 
   useEffect(() => {
     return () => {
-      clearNativeAudioMonitor();
-      if (nativeAudioPlayerRef.current) {
-        try { nativeAudioPlayerRef.current.pause(); } catch (e) {}
+      flushAudioPlaybackPosition();
+      if (audioPlayerRef.current) {
+        try { audioPlayerRef.current.pause(); } catch (e) {}
       }
       if (viewModeRef.current === 'reader') {
         const docId = documentRef.current?.id;
@@ -375,7 +356,7 @@ export function TextReaderPage({
         }
       }
     };
-  }, [clearNativeAudioMonitor]);
+  }, [flushAudioPlaybackPosition]);
 
   const isEditing = viewMode === 'importer';
   const setIsEditing = (val) => navigateToView(val ? 'importer' : 'reader');
@@ -386,9 +367,8 @@ export function TextReaderPage({
   const handleAddNewDocument = useCallback(() => {
     audioPlaybackIdRef.current++;
     clearAudioVisualTimer();
-    clearNativeAudioMonitor();
-    if (nativeAudioPlayerRef.current) {
-      try { nativeAudioPlayerRef.current.pause(); } catch (e) {}
+    if (audioPlayerRef.current) {
+      try { audioPlayerRef.current.pause(); } catch (e) {}
     }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -483,9 +463,9 @@ export function TextReaderPage({
   const [importStatus, setImportStatus] = useState('');
 
 
-  // Last audio position bookmark — persisted in document.lastAudioPosition
+  // Last audio position bookmark — persisted in document.lastAudioPosition / lastAudioParagraphId
   const [lastAudioParagraphId, setLastAudioParagraphId] = useState(
-    () => loadActiveDocumentDraft()?.lastAudioPosition?.paragraphId || null
+    () => loadActiveDocumentDraft()?.lastAudioParagraphId || loadActiveDocumentDraft()?.lastAudioPosition?.paragraphId || null
   );
   // Scheduling a scroll: set to a paragraphId, cleared after scroll fires
   const [pendingScrollParagraphId, setPendingScrollParagraphId] = useState(null);
@@ -963,13 +943,135 @@ export function TextReaderPage({
     }
   }, [isEpub]);
 
+  // Throttled playback position persistence for audio documents (YouTube Pattern)
+  const flushAudioPlaybackPosition = useCallback((explicitDocId = null) => {
+    if (audioSaveThrottlerRef.current.timer) {
+      clearTimeout(audioSaveThrottlerRef.current.timer);
+      audioSaveThrottlerRef.current.timer = null;
+    }
+    const currentDoc = document;
+    const effectiveDocId = explicitDocId || currentDoc?.id;
+    if (!effectiveDocId) return;
+    const isAudioDoc = currentDoc?.sourceType === 'audio' || currentDoc?.format === 'audio';
+    if (!isAudioDoc) return;
+
+    const { time, paragraphId } = latestAudioPositionRef.current;
+    if (typeof time !== 'number' || isNaN(time)) return;
+
+    const cleanTime = Math.round(time * 100) / 100;
+    const effectiveParaId = paragraphId || lastAudioParagraphId;
+
+    setDocument(prev => {
+      if (!prev || prev.id !== effectiveDocId) return prev;
+      const updated = {
+        ...prev,
+        lastAudioPosition: cleanTime,
+        lastAudioParagraphId: effectiveParaId,
+        updatedAt: new Date().toISOString()
+      };
+      try { saveActiveDocumentDraft(updated); } catch (e) {}
+      saveTextDocument(updated).then(() => {
+        refreshLibraryCount();
+      }).catch(err => console.warn('Failed to save lastAudioPosition to library:', err));
+      return updated;
+    });
+    audioSaveThrottlerRef.current.lastSavedTime = Date.now();
+  }, [document, lastAudioParagraphId, refreshLibraryCount]);
+
+  // Flush position on window beforeunload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushAudioPlaybackPosition();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [flushAudioPlaybackPosition]);
+
+  const handleAudioTimeUpdate = useCallback((newTime) => {
+    if (typeof newTime !== 'number' || isNaN(newTime)) return;
+    setAudioCurrentTime(newTime);
+    latestAudioPositionRef.current.time = newTime;
+
+    const paras = visibleParagraphs.length > 0 ? visibleParagraphs : (document?.paragraphs || []);
+    if (Array.isArray(paras) && paras.length > 0) {
+      const activePara = paras.find(p =>
+        typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
+        newTime >= p.audioStart && newTime < p.audioEnd
+      );
+      if (activePara) {
+        latestAudioPositionRef.current.paragraphId = activePara.id;
+        setLastAudioParagraphId(activePara.id);
+        if (playingParagraphIdRef.current !== null && playingParagraphIdRef.current !== activePara.id) {
+          setPlayingParagraphId(activePara.id);
+          playingParagraphIdRef.current = activePara.id;
+        }
+      }
+    }
+
+    // Throttled persistence (every 2 seconds while audio is playing)
+    const now = Date.now();
+    if (now - audioSaveThrottlerRef.current.lastSavedTime >= 2000) {
+      audioSaveThrottlerRef.current.lastSavedTime = now;
+      flushAudioPlaybackPosition();
+    } else if (!audioSaveThrottlerRef.current.timer) {
+      audioSaveThrottlerRef.current.timer = setTimeout(() => {
+        audioSaveThrottlerRef.current.timer = null;
+        flushAudioPlaybackPosition();
+      }, 2000);
+    }
+  }, [visibleParagraphs, document?.paragraphs, flushAudioPlaybackPosition]);
+
+  const handleAudioSegmentEnd = useCallback(({ currentTime, targetEnd }) => {
+    flushAudioPlaybackPosition();
+
+    const currentId = playingParagraphIdRef.current;
+    const allParas = chapterParagraphsRef.current || document?.paragraphs || [];
+    const currentPara = allParas.find(p => p.id === currentId);
+
+    if (autoPlayTextReaderRef.current && currentPara) {
+      advanceToNextParagraph(currentPara);
+    } else {
+      setPlayingParagraphId(null);
+      playingParagraphIdRef.current = null;
+      setActiveAudioCharIndex(-1);
+    }
+  }, [document?.paragraphs, advanceToNextParagraph, flushAudioPlaybackPosition]);
+
+  const handleAudioPause = useCallback((pausedTime) => {
+    if (typeof pausedTime === 'number') {
+      latestAudioPositionRef.current.time = pausedTime;
+    }
+    flushAudioPlaybackPosition();
+    setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
+    setActiveAudioCharIndex(-1);
+  }, [flushAudioPlaybackPosition]);
+
+  const handleAudioEnded = useCallback(() => {
+    flushAudioPlaybackPosition();
+    setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
+    setActiveAudioCharIndex(-1);
+  }, [flushAudioPlaybackPosition]);
+
+  const handleAudioError = useCallback((err) => {
+    console.warn('[TextReader] Original audio playback error:', err);
+    if (playingParagraphIdRef.current) {
+      setAudioErrorId(playingParagraphIdRef.current);
+    }
+    setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
+    setActiveAudioCharIndex(-1);
+  }, []);
+
   // Handle single-paragraph playback (Original Audio if imported, window.speechSynthesis TTS otherwise)
   const handlePlayParagraph = useCallback((paragraph) => {
     if (!paragraph || !paragraph.text) return;
     const playbackId = ++audioPlaybackIdRef.current;
     userStoppedRef.current = false;
     clearAudioVisualTimer();
-    clearNativeAudioMonitor();
 
     // Check if document has original imported audio and valid segment timestamps
     const hasOriginalAudio =
@@ -977,36 +1079,6 @@ export function TextReaderPage({
       typeof paragraph.audioStart === 'number' &&
       typeof paragraph.audioEnd === 'number' &&
       Boolean(document?.audioPathname);
-
-    // Save last audio position safely (persists even if page closes or switches document)
-    try {
-      setLastAudioParagraphId(paragraph.id);
-      setDocument(prev => {
-        if (!prev) return prev;
-        const posData = {
-          paragraphId: paragraph.id,
-          paragraphIndex: (prev.paragraphs || []).findIndex(p => p.id === paragraph.id),
-          updatedAt: Date.now()
-        };
-        const updated = {
-          ...prev,
-          lastAudioPosition: posData
-        };
-        // Persist immediately to active draft in localStorage
-        try {
-          saveActiveDocumentDraft(updated);
-        } catch (draftErr) {}
-        // Persist immediately to IndexedDB
-        if (updated.id) {
-          saveTextDocument(updated).then(() => {
-            refreshLibraryCount();
-          }).catch(err => console.warn('Failed to save lastAudioPosition to library:', err));
-        }
-        return updated;
-      });
-    } catch (posErr) {
-      console.warn('Non-fatal error updating last audio position:', posErr);
-    }
 
     if (hasOriginalAudio) {
       // 1. CANCEL TTS if active
@@ -1016,107 +1088,25 @@ export function TextReaderPage({
 
       setAudioErrorId(null);
       setPlayingParagraphId(paragraph.id);
+      playingParagraphIdRef.current = paragraph.id;
+      setLastAudioParagraphId(paragraph.id);
+      latestAudioPositionRef.current.paragraphId = paragraph.id;
       setActiveAudioCharIndex(-1); // Full paragraph visual highlight during original audio playback
 
-      const audio = nativeAudioPlayerRef.current;
-      if (!audio) {
-        setAudioErrorId(paragraph.id);
-        setPlayingParagraphId(null);
-        return;
-      }
-
-      const streamUrl = `${API_BASE_URL || ''}/api/audio-stream?pathname=${encodeURIComponent(document.audioPathname)}`;
-      if (!audio.src || (!audio.src.endsWith(document.audioPathname) && !audio.src.includes(document.audioPathname))) {
-        audio.src = streamUrl;
-        audio.load();
-      }
-
-      // Explicitly set 1x playback rate for audio original (Requirement 7)
-      audio.playbackRate = 1.0;
-
       const startTime = Math.max(0, paragraph.audioStart);
-      const endTime = Math.max(startTime, paragraph.audioEnd);
+      const endTime = typeof paragraph.audioEnd === 'number' && paragraph.audioEnd > startTime ? paragraph.audioEnd : null;
 
-      const seekAndPlay = () => {
-        if (playbackId !== audioPlaybackIdRef.current) return;
-        try {
-          audio.currentTime = startTime;
-        } catch (e) {}
+      latestAudioPositionRef.current.time = startTime;
 
-        console.log('[OriginalAudio] src=', audio.src);
-        console.log('[OriginalAudio] readyState=', audio.readyState);
-        console.log('[OriginalAudio] networkState=', audio.networkState);
-        console.log('[OriginalAudio] duration=', audio.duration);
-        console.log('[OriginalAudio] start=', startTime);
-        console.log('[OriginalAudio] end=', endTime);
-
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(err => {
-            if (playbackId !== audioPlaybackIdRef.current) return;
-            if (!userStoppedRef.current) {
-              console.warn('Native audio play error:', err);
-              clearNativeAudioMonitor();
-              setAudioErrorId(paragraph.id);
-              setPlayingParagraphId(null);
-            }
-          });
-        }
-      };
-
-      if (audio.readyState >= 1) {
-        seekAndPlay();
-      } else {
-        const handleReady = () => {
-          audio.removeEventListener('loadedmetadata', handleReady);
-          audio.removeEventListener('canplay', handleReady);
-          seekAndPlay();
-        };
-        audio.addEventListener('loadedmetadata', handleReady, { once: true });
-        audio.addEventListener('canplay', handleReady, { once: true });
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.playSegment(startTime, endTime);
       }
-
-      const checkSegmentEnd = () => {
-        if (playbackId !== audioPlaybackIdRef.current) {
-          clearNativeAudioMonitor();
-          return;
-        }
-        if (audio.currentTime >= endTime) {
-          audio.pause();
-          clearNativeAudioMonitor();
-          setPlayingParagraphId(null);
-          advanceToNextParagraph(paragraph);
-        }
-      };
-
-      // Periodic check every 30ms for millisecond precision without overshooting paragraph.audioEnd
-      nativeAudioCheckIntervalRef.current = setInterval(checkSegmentEnd, 30);
-
-      audio.onended = () => {
-        if (playbackId !== audioPlaybackIdRef.current) return;
-        clearNativeAudioMonitor();
-        setPlayingParagraphId(null);
-        advanceToNextParagraph(paragraph);
-      };
-
-      audio.onerror = (e) => {
-        console.log('[OriginalAudio] error=', audio.error);
-        console.log('[OriginalAudio] networkState=', audio.networkState);
-        if (playbackId !== audioPlaybackIdRef.current) return;
-        clearNativeAudioMonitor();
-        setPlayingParagraphId(null);
-        if (!userStoppedRef.current) {
-          console.warn('Native audio playback error:', e);
-          setAudioErrorId(paragraph.id);
-        }
-      };
-
       return;
     }
 
     // 2. Fallback to 100% UNCHANGED SpeechSynthesis TTS for normal documents (TXT, EPUB, AI)
-    if (nativeAudioPlayerRef.current) {
-      try { nativeAudioPlayerRef.current.pause(); } catch (e) {}
+    if (audioPlayerRef.current) {
+      try { audioPlayerRef.current.pause(); } catch (e) {}
     }
 
     if (!window.speechSynthesis) {
@@ -1228,7 +1218,7 @@ export function TextReaderPage({
     } catch (speakErr) {
       console.warn('SpeechSynthesis speak call error:', speakErr);
     }
-  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, clearNativeAudioMonitor, document, refreshLibraryCount, speechRate]);
+  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate]);
 
   handlePlayParagraphRef.current = handlePlayParagraph;
 
@@ -1236,18 +1226,19 @@ export function TextReaderPage({
     userStoppedRef.current = true;
     audioPlaybackIdRef.current++;
     clearAudioVisualTimer();
-    clearNativeAudioMonitor();
-    if (nativeAudioPlayerRef.current) {
+    if (audioPlayerRef.current) {
       try {
-        nativeAudioPlayerRef.current.pause();
+        audioPlayerRef.current.pause();
       } catch (e) {}
     }
+    flushAudioPlaybackPosition();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
     setActiveAudioCharIndex(-1);
-  }, [clearAudioVisualTimer, clearNativeAudioMonitor]);
+  }, [clearAudioVisualTimer, flushAudioPlaybackPosition]);
 
   // Trigger background AI glossing
   const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
@@ -1583,14 +1574,28 @@ export function TextReaderPage({
     saveActiveDocumentDraft(doc);
 
     // Sync last audio position or reading position bookmark from the loaded document (validate existence)
-    const savedAudioPos = doc.lastAudioPosition;
+    const savedAudioParagraphId = doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null);
     const isValidAudioPos = Boolean(
-      savedAudioPos?.paragraphId &&
+      savedAudioParagraphId &&
       Array.isArray(doc.paragraphs) &&
-      doc.paragraphs.some(p => p.id === savedAudioPos.paragraphId)
+      doc.paragraphs.some(p => p.id === savedAudioParagraphId)
     );
-    const validAudioPosId = isValidAudioPos ? savedAudioPos.paragraphId : null;
+    const validAudioPosId = isValidAudioPos ? savedAudioParagraphId : null;
     setLastAudioParagraphId(validAudioPosId);
+
+    // If opening an audio document, prepare latestAudioPositionRef and seek player (staying paused)
+    if ((doc.sourceType === 'audio' || doc.format === 'audio') && doc.audioPathname) {
+      const savedTime = typeof doc.lastAudioPosition === 'number'
+        ? doc.lastAudioPosition
+        : (typeof doc.lastAudioPosition?.time === 'number' ? doc.lastAudioPosition.time : 0);
+      latestAudioPositionRef.current = {
+        time: savedTime,
+        paragraphId: validAudioPosId
+      };
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.seek(savedTime);
+      }
+    }
 
     const savedReadingPos = doc.lastReadingPosition;
     const isValidReadingPos = Boolean(
@@ -2814,13 +2819,23 @@ export function TextReaderPage({
         </div>
       )}
 
-      {/* Hidden controlled HTML5 Audio player for imported audio documents */}
-      <audio
-        ref={nativeAudioPlayerRef}
-        preload="metadata"
-        className="hidden"
-        aria-hidden="true"
-      />
+      {/* Isolated Original Audio Player for imported audio documents */}
+      {isAudioDocument && (
+        <OriginalAudioPlayer
+          ref={audioPlayerRef}
+          audioPathname={document.audioPathname}
+          initialTime={
+            typeof document.lastAudioPosition === 'number'
+              ? document.lastAudioPosition
+              : (typeof document.lastAudioPosition?.time === 'number' ? document.lastAudioPosition.time : 0)
+          }
+          onTimeUpdate={handleAudioTimeUpdate}
+          onPause={handleAudioPause}
+          onEnded={handleAudioEnded}
+          onError={handleAudioError}
+          onSegmentEnd={handleAudioSegmentEnd}
+        />
+      )}
     </div>
   );
 }

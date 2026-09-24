@@ -191,19 +191,24 @@ export async function saveTextDocument(rawDoc) {
     ? rawDoc.chapters
     : (Array.isArray(existing?.chapters) && existing.chapters.length > 0 ? existing.chapters : []);
 
-  // 6. Safe preservation of lastAudioPosition:
+  // 6. Safe preservation of lastAudioPosition & lastAudioParagraphId:
   // If rawDoc explicitly specifies lastAudioPosition, compare with existing to prevent race conditions.
   // If rawDoc.lastAudioPosition is undefined, fall back to existing?.lastAudioPosition.
   let effectiveLastAudioPosition = rawDoc.lastAudioPosition !== undefined
     ? rawDoc.lastAudioPosition
     : (existing?.lastAudioPosition || null);
 
+  let effectiveLastAudioParagraphId = rawDoc.lastAudioParagraphId !== undefined
+    ? rawDoc.lastAudioParagraphId
+    : (existing?.lastAudioParagraphId || (typeof effectiveLastAudioPosition === 'object' ? effectiveLastAudioPosition?.paragraphId : null) || null);
+
   // If both exist, keep the newer one based on updatedAt timestamp
   if (existing?.lastAudioPosition && effectiveLastAudioPosition && effectiveLastAudioPosition !== existing.lastAudioPosition) {
-    const existingTime = existing.lastAudioPosition.updatedAt || 0;
-    const incomingTime = effectiveLastAudioPosition.updatedAt || 0;
+    const existingTime = typeof existing.lastAudioPosition === 'object' ? (existing.lastAudioPosition.updatedAt || 0) : 0;
+    const incomingTime = typeof effectiveLastAudioPosition === 'object' ? (effectiveLastAudioPosition.updatedAt || 0) : Date.now();
     if (existingTime > incomingTime) {
       effectiveLastAudioPosition = existing.lastAudioPosition;
+      effectiveLastAudioParagraphId = existing.lastAudioParagraphId || effectiveLastAudioParagraphId;
     }
   }
 
@@ -234,6 +239,7 @@ export async function saveTextDocument(rawDoc) {
     chapters: effectiveChapters,
     languageStates: existingStates,
     lastAudioPosition: effectiveLastAudioPosition,
+    lastAudioParagraphId: effectiveLastAudioParagraphId,
     lastReadingPosition: effectiveLastReadingPosition,
     createdAt: existing?.createdAt || rawDoc.createdAt || now,
     updatedAt: now

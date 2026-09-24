@@ -454,7 +454,8 @@ export function normalizeDocument(rawDoc) {
     audioMimeType,
     audioSegments,
     audioDuration,
-    lastAudioPosition: rawDoc.lastAudioPosition || null,
+    lastAudioPosition: rawDoc.lastAudioPosition !== undefined ? rawDoc.lastAudioPosition : null,
+    lastAudioParagraphId: rawDoc.lastAudioParagraphId || (typeof rawDoc.lastAudioPosition === 'object' ? rawDoc.lastAudioPosition?.paragraphId : null) || null,
     lastReadingPosition,
     createdAt: rawDoc.createdAt || now,
     updatedAt: rawDoc.updatedAt || now
@@ -500,6 +501,7 @@ export function createTextDocument({
   audioSegments = null,
   audioDuration = null,
   lastAudioPosition = null,
+  lastAudioParagraphId = null,
   lastReadingPosition = null,
   createdAt = null
 }) {
@@ -560,7 +562,8 @@ export function createTextDocument({
     audioMimeType: audioMimeType || null,
     audioSegments: Array.isArray(audioSegments) ? audioSegments : [],
     audioDuration: typeof audioDuration === 'number' ? audioDuration : (Number(audioDuration) || 0),
-    lastAudioPosition: lastAudioPosition || null,
+    lastAudioPosition: lastAudioPosition !== undefined ? lastAudioPosition : null,
+    lastAudioParagraphId: lastAudioParagraphId || (typeof lastAudioPosition === 'object' ? lastAudioPosition?.paragraphId : null) || null,
     lastReadingPosition: lastReadingPosition || null,
     createdAt: createdAt || now,
     updatedAt: now
