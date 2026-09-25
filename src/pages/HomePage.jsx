@@ -67,35 +67,35 @@ export default function HomePage({
           </p>
         </div>
 
-        {/* 2. MAIN 4 BIG ACTION CARDS (Mobile touch-first 4-card grid; Desktop balanced) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-5 w-full mb-6">
+        {/* 2. MAIN ACTION CARDS (Mobile: 2-column big icon grid; Desktop: 2-column detailed cards) */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 sm:gap-5 w-full mb-6">
 
           {/* CARD 1: TUTOR CHAT */}
           <div
             onClick={() => onSelectMode('chat')}
-            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
           >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 group-hover:scale-105 transition-transform">
-                <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
+              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
+                <MessageSquare className="w-7 h-7 sm:w-7 sm:h-7" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-500 dark:group-hover:text-rose-200 transition-colors">
+              <div className="w-full sm:flex-1 sm:min-w-0">
+                <div className="flex items-center justify-center sm:justify-between">
+                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-500 dark:group-hover:text-rose-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
                     Conversations & Voice
                   </h2>
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
+                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
                     IA
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
                   {isSpanish
                     ? 'Conversación interactiva con correcciones inteligentes en tiempo real.'
                     : 'Interactive AI conversation with real-time grammar feedback.'}
                 </p>
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-rose-600 dark:text-rose-300">
+            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-rose-600 dark:text-rose-300">
               <span>{isSpanish ? 'Abrir Chat' : 'Start Chat'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -104,29 +104,29 @@ export default function HomePage({
           {/* CARD 2: YOUTUBE READER (Opens YouTube Library) */}
           <div
             onClick={() => onSelectMode('youtube')}
-            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
           >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-950/40 shrink-0 group-hover:scale-105 transition-transform">
-                <Youtube className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
+              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
+                <Youtube className="w-7 h-7 sm:w-7 sm:h-7" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors">
+              <div className="w-full sm:flex-1 sm:min-w-0">
+                <div className="flex items-center justify-center sm:justify-between">
+                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
                     YouTube Reader
                   </h2>
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
                     {isSpanish ? 'Biblioteca' : 'Library'}
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
                   {isSpanish
                     ? 'Tu biblioteca de vídeos con transcripciones interlineales y glosado.'
                     : 'Your video library with interlinear transcripts and instant glossing.'}
                 </p>
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-300">
+            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-300">
               <span>{isSpanish ? 'Ver Biblioteca de Vídeos' : 'Open Video Library'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -135,29 +135,29 @@ export default function HomePage({
           {/* CARD 3: TEXT READER */}
           <div
             onClick={() => onSelectMode('text')}
-            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-pink-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-pink-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
           >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
-                <FileText className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
+              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
+                <FileText className="w-7 h-7 sm:w-7 sm:h-7" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors">
+              <div className="w-full sm:flex-1 sm:min-w-0">
+                <div className="flex items-center justify-center sm:justify-between">
+                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
                     Text Reader
                   </h2>
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/30">
+                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/30">
                     EPUB / TXT
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
                   {isSpanish
                     ? 'Lee textos y libros con audio por párrafos y definiciones al clic.'
                     : 'Read texts and books with paragraph TTS audio and word lookups.'}
                 </p>
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-pink-600 dark:text-pink-300">
+            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-pink-600 dark:text-pink-300">
               <span>{isSpanish ? 'Abrir Text Reader' : 'Open Text Reader'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -166,91 +166,91 @@ export default function HomePage({
           {/* CARD 4: IMAGE READER */}
           <div
             onClick={() => onSelectMode('image')}
-            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-emerald-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-emerald-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-pink-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
           >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-emerald-950/40 shrink-0 group-hover:scale-105 transition-transform">
-                <Camera className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
+              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-pink-600 via-rose-500 to-pink-400 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
+                <Camera className="w-7 h-7 sm:w-7 sm:h-7" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-emerald-500 dark:group-hover:text-emerald-200 transition-colors">
+              <div className="w-full sm:flex-1 sm:min-w-0">
+                <div className="flex items-center justify-center sm:justify-between">
+                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
                     Image Reader
                   </h2>
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
+                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/30">
                     Vision IA
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
                   {isSpanish
                     ? 'Sube una foto y obtén una descripción pedagógica adaptada a tu nivel con lectura y audio.'
                     : 'Upload a photo to get a level-adapted pedagogical description with reading and audio.'}
                 </p>
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-emerald-600 dark:text-emerald-300">
+            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-pink-600 dark:text-pink-300">
               <span>{isSpanish ? 'Abrir Image Reader' : 'Open Image Reader'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
 
-          {/* CARD 4: HABIT TRACKER (Opens Dedicated Habit Tracker Section) */}
+          {/* CARD 5: HABIT TRACKER (Opens Dedicated Habit Tracker Section) */}
           <div
             onClick={() => onSelectMode('habits')}
-            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
           >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 group-hover:scale-105 transition-transform">
-                <CalendarCheck className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
+              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
+                <CalendarCheck className="w-7 h-7 sm:w-7 sm:h-7" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors">
+              <div className="w-full sm:flex-1 sm:min-w-0">
+                <div className="flex items-center justify-center sm:justify-between">
+                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
                     Habit Tracker
                   </h2>
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
                     📅
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
                   {isSpanish
                     ? 'Lleva un registro diario de tus hábitos de estudio por idioma.'
                     : 'Keep a daily log of your study habits and practice across all languages.'}
                 </p>
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-300">
+            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-300">
               <span>{isSpanish ? 'Abrir Habit Tracker' : 'Open Habit Tracker'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
 
-          {/* CARD 5: SETTINGS (Opens Dedicated Settings Page) */}
+          {/* CARD 6: SETTINGS (Opens Dedicated Settings Page) */}
           <div
             onClick={() => onSelectMode('settings')}
-            className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-stone-400/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-stone-900/50 flex flex-col justify-between cursor-pointer overflow-hidden transform active:scale-98 sm:hover:-translate-y-1"
+            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-stone-400/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-stone-900/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
           >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-stone-600 via-rose-700 to-stone-800 flex items-center justify-center text-white shadow-lg shadow-black/40 shrink-0 group-hover:scale-105 transition-transform">
-                <SettingsIcon className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
+              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-stone-600 via-rose-700 to-stone-800 flex items-center justify-center text-white shadow-lg shadow-black/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
+                <SettingsIcon className="w-7 h-7 sm:w-7 sm:h-7" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-400 transition-colors">
+              <div className="w-full sm:flex-1 sm:min-w-0">
+                <div className="flex items-center justify-center sm:justify-between">
+                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-400 transition-colors line-clamp-2 leading-tight sm:leading-normal">
                     {isSpanish ? 'Ajustes' : 'Settings'}
                   </h2>
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-stone-500/15 text-stone-300 border border-stone-500/30">
+                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-stone-500/15 text-stone-300 border border-stone-500/30">
                     ⚙️
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
+                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
                   {isSpanish
                     ? 'Configura idiomas, tema, velocidad de voz, nivel de IA y opciones.'
                     : 'Configure languages, theme, speech speed, AI level and options.'}
                 </p>
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-xs font-bold text-rose-400">
+            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-rose-400">
               <span>{isSpanish ? 'Configurar LinguaFlow' : 'Open Settings'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
