@@ -437,6 +437,8 @@ export function normalizeDocument(rawDoc) {
     }
   }
 
+  const audioBookmark = resolveAudioBookmark(rawDoc);
+
   return {
     id,
     title,
@@ -454,17 +456,51 @@ export function normalizeDocument(rawDoc) {
     audioMimeType,
     audioSegments,
     audioDuration,
-    lastAudioPosition: rawDoc.lastAudioPosition !== undefined ? rawDoc.lastAudioPosition : null,
-    lastAudioParagraphId: rawDoc.lastAudioParagraphId || (typeof rawDoc.lastAudioPosition === 'object' ? rawDoc.lastAudioPosition?.paragraphId : null) || null,
-    lastAudioPositionUpdatedAt: typeof rawDoc.lastAudioPositionUpdatedAt === 'number'
+    audioBookmark,
+    lastAudioPosition: audioBookmark ? audioBookmark.time : (rawDoc.lastAudioPosition !== undefined ? rawDoc.lastAudioPosition : null),
+    lastAudioParagraphId: audioBookmark ? audioBookmark.paragraphId : (rawDoc.lastAudioParagraphId || (typeof rawDoc.lastAudioPosition === 'object' ? rawDoc.lastAudioPosition?.paragraphId : null) || null),
+    lastAudioPositionUpdatedAt: audioBookmark?.savedAt ? new Date(audioBookmark.savedAt).getTime() : (typeof rawDoc.lastAudioPositionUpdatedAt === 'number'
       ? rawDoc.lastAudioPositionUpdatedAt
       : (typeof rawDoc.lastAudioPosition === 'object' && typeof rawDoc.lastAudioPosition?.updatedAt === 'number'
         ? rawDoc.lastAudioPosition.updatedAt
-        : null),
+        : null)),
     lastReadingPosition,
     createdAt: rawDoc.createdAt || now,
     updatedAt: rawDoc.updatedAt || now
   };
+}
+
+/**
+ * Resolves a unified manual audioBookmark object from a document or legacy fields.
+ *
+ * @param {object|null} doc
+ * @returns {object|null} { paragraphId: string, time: number, savedAt: string } or null
+ */
+export function resolveAudioBookmark(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  if (doc.audioBookmark && typeof doc.audioBookmark === 'object' && doc.audioBookmark.paragraphId) {
+    return {
+      paragraphId: doc.audioBookmark.paragraphId,
+      time: typeof doc.audioBookmark.time === 'number' ? doc.audioBookmark.time : 0,
+      savedAt: typeof doc.audioBookmark.savedAt === 'string' ? doc.audioBookmark.savedAt : new Date().toISOString()
+    };
+  }
+  // Legacy backward compatibility fallback
+  const legacyParaId = doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null);
+  if (legacyParaId) {
+    const legacyTime = typeof doc.lastAudioPosition === 'number'
+      ? doc.lastAudioPosition
+      : (typeof doc.lastAudioPosition?.time === 'number' ? doc.lastAudioPosition.time : 0);
+    const legacySavedAt = doc.lastAudioPositionUpdatedAt
+      ? new Date(doc.lastAudioPositionUpdatedAt).toISOString()
+      : (doc.updatedAt || new Date().toISOString());
+    return {
+      paragraphId: legacyParaId,
+      time: legacyTime,
+      savedAt: legacySavedAt
+    };
+  }
+  return null;
 }
 
 /**
@@ -568,6 +604,7 @@ export function createTextDocument({
     audioMimeType: audioMimeType || null,
     audioSegments: Array.isArray(audioSegments) ? audioSegments : [],
     audioDuration: typeof audioDuration === 'number' ? audioDuration : (Number(audioDuration) || 0),
+    audioBookmark: resolveAudioBookmark({ audioBookmark: null, lastAudioPosition, lastAudioParagraphId, lastAudioPositionUpdatedAt }),
     lastAudioPosition: lastAudioPosition !== undefined ? lastAudioPosition : null,
     lastAudioParagraphId: lastAudioParagraphId || (typeof lastAudioPosition === 'object' ? lastAudioPosition?.paragraphId : null) || null,
     lastAudioPositionUpdatedAt: typeof lastAudioPositionUpdatedAt === 'number'
@@ -656,6 +693,7 @@ export function extractMinimalDraft(doc) {
     audioPathname: doc.audioPathname || null,
     audioMimeType: doc.audioMimeType || null,
     audioDuration: typeof doc.audioDuration === 'number' ? doc.audioDuration : (Number(doc.audioDuration) || 0),
+    audioBookmark: resolveAudioBookmark(doc),
     lastAudioPosition: doc.lastAudioPosition !== undefined ? doc.lastAudioPosition : null,
     lastAudioParagraphId: doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null) || null,
     lastAudioPositionUpdatedAt: typeof doc.lastAudioPositionUpdatedAt === 'number'
@@ -763,11 +801,13 @@ export async function loadActiveDocumentFull() {
     try {
       const fullDoc = await getTextDocumentById(draft.id);
       if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
+        const mergedBookmark = resolveAudioBookmark(draft) || resolveAudioBookmark(fullDoc);
         const merged = {
           ...fullDoc,
-          lastAudioPosition: draft.lastAudioPosition !== undefined ? draft.lastAudioPosition : fullDoc.lastAudioPosition,
-          lastAudioParagraphId: draft.lastAudioParagraphId || fullDoc.lastAudioParagraphId || (typeof (draft.lastAudioPosition || fullDoc.lastAudioPosition) === 'object' ? (draft.lastAudioPosition || fullDoc.lastAudioPosition)?.paragraphId : null) || null,
-          lastAudioPositionUpdatedAt: draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null,
+          audioBookmark: mergedBookmark,
+          lastAudioPosition: mergedBookmark ? mergedBookmark.time : (draft.lastAudioPosition !== undefined ? draft.lastAudioPosition : fullDoc.lastAudioPosition),
+          lastAudioParagraphId: mergedBookmark ? mergedBookmark.paragraphId : (draft.lastAudioParagraphId || fullDoc.lastAudioParagraphId || (typeof (draft.lastAudioPosition || fullDoc.lastAudioPosition) === 'object' ? (draft.lastAudioPosition || fullDoc.lastAudioPosition)?.paragraphId : null) || null),
+          lastAudioPositionUpdatedAt: mergedBookmark?.savedAt ? new Date(mergedBookmark.savedAt).getTime() : (draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null),
           lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
         };
         memoryActiveDraft = merged;

@@ -274,50 +274,27 @@ export async function saveTextDocument(rawDoc) {
     ? rawDoc.chapters
     : (Array.isArray(existing?.chapters) && existing.chapters.length > 0 ? existing.chapters : []);
 
-  // 6. Safe preservation of lastAudioPosition & lastAudioParagraphId & lastAudioPositionUpdatedAt:
-  let effectiveLastAudioPosition = null;
-  let effectiveLastAudioParagraphId = null;
-  let effectiveLastAudioPositionUpdatedAt = null;
-
+  // 6. Safe preservation of manual audioBookmark & legacy fields:
+  let effectiveAudioBookmark = null;
   if (isExplicitAudioRemoval) {
-    effectiveLastAudioPosition = null;
-    effectiveLastAudioParagraphId = null;
-    effectiveLastAudioPositionUpdatedAt = null;
-  } else {
-    const hasIncomingAudioPos = rawDoc.lastAudioPosition !== undefined && rawDoc.lastAudioPosition !== null;
-    const hasIncomingAudioPara = rawDoc.lastAudioParagraphId !== undefined && rawDoc.lastAudioParagraphId !== null;
-
-    const incomingAudioPos = hasIncomingAudioPos ? rawDoc.lastAudioPosition : (existing?.lastAudioPosition ?? null);
-    const incomingAudioPara = hasIncomingAudioPara
-      ? rawDoc.lastAudioParagraphId
-      : (existing?.lastAudioParagraphId ?? (typeof incomingAudioPos === 'object' ? incomingAudioPos?.paragraphId : null) ?? null);
-
-    const incomingUpdatedAt = typeof rawDoc.lastAudioPositionUpdatedAt === 'number'
-      ? rawDoc.lastAudioPositionUpdatedAt
-      : (typeof rawDoc.lastAudioPosition === 'object' && typeof rawDoc.lastAudioPosition?.updatedAt === 'number'
-        ? rawDoc.lastAudioPosition.updatedAt
-        : (hasIncomingAudioPos || hasIncomingAudioPara
-          ? (rawDoc.updatedAt ? new Date(rawDoc.updatedAt).getTime() : Date.now())
-          : 0));
-
-    const existingUpdatedAt = typeof existing?.lastAudioPositionUpdatedAt === 'number'
-      ? existing.lastAudioPositionUpdatedAt
-      : (typeof existing?.lastAudioPosition === 'object' && typeof existing.lastAudioPosition?.updatedAt === 'number'
-        ? existing.lastAudioPosition.updatedAt
-        : (existing?.lastAudioPosition !== undefined && existing?.lastAudioPosition !== null
-          ? (existing?.updatedAt ? new Date(existing.updatedAt).getTime() : 0)
-          : 0));
-
-    // If existing record has a newer audio bookmark timestamp than incoming, keep existing to prevent stale overwrites
-    if (existing && existingUpdatedAt > incomingUpdatedAt && (existing.lastAudioPosition !== null || existing.lastAudioParagraphId !== null)) {
-      effectiveLastAudioPosition = existing.lastAudioPosition;
-      effectiveLastAudioParagraphId = existing.lastAudioParagraphId;
-      effectiveLastAudioPositionUpdatedAt = existingUpdatedAt;
-    } else {
-      effectiveLastAudioPosition = incomingAudioPos;
-      effectiveLastAudioParagraphId = incomingAudioPara;
-      effectiveLastAudioPositionUpdatedAt = incomingUpdatedAt > 0 ? incomingUpdatedAt : (existingUpdatedAt || null);
-    }
+    effectiveAudioBookmark = null;
+  } else if (rawDoc.audioBookmark !== undefined) {
+    effectiveAudioBookmark = rawDoc.audioBookmark;
+  } else if (existing?.audioBookmark !== undefined) {
+    effectiveAudioBookmark = existing.audioBookmark;
+  } else if (rawDoc.lastAudioParagraphId || (typeof rawDoc.lastAudioPosition === 'object' && rawDoc.lastAudioPosition?.paragraphId)) {
+    // Legacy recovery
+    effectiveAudioBookmark = {
+      paragraphId: rawDoc.lastAudioParagraphId || rawDoc.lastAudioPosition?.paragraphId,
+      time: typeof rawDoc.lastAudioPosition === 'number' ? rawDoc.lastAudioPosition : (rawDoc.lastAudioPosition?.time || 0),
+      savedAt: rawDoc.lastAudioPositionUpdatedAt ? new Date(rawDoc.lastAudioPositionUpdatedAt).toISOString() : new Date().toISOString()
+    };
+  } else if (existing?.lastAudioParagraphId || (typeof existing?.lastAudioPosition === 'object' && existing?.lastAudioPosition?.paragraphId)) {
+    effectiveAudioBookmark = {
+      paragraphId: existing.lastAudioParagraphId || existing.lastAudioPosition?.paragraphId,
+      time: typeof existing.lastAudioPosition === 'number' ? existing.lastAudioPosition : (existing.lastAudioPosition?.time || 0),
+      savedAt: existing.lastAudioPositionUpdatedAt ? new Date(existing.lastAudioPositionUpdatedAt).toISOString() : new Date().toISOString()
+    };
   }
 
   // 7. Safe preservation of lastReadingPosition:
@@ -350,9 +327,10 @@ export async function saveTextDocument(rawDoc) {
     audioMimeType: effectiveAudioMimeType,
     audioSegments: effectiveAudioSegments,
     audioDuration: effectiveAudioDuration,
-    lastAudioPosition: effectiveLastAudioPosition,
-    lastAudioParagraphId: effectiveLastAudioParagraphId,
-    lastAudioPositionUpdatedAt: effectiveLastAudioPositionUpdatedAt,
+    audioBookmark: effectiveAudioBookmark,
+    lastAudioPosition: effectiveAudioBookmark ? effectiveAudioBookmark.time : (rawDoc.lastAudioPosition !== undefined ? rawDoc.lastAudioPosition : (existing?.lastAudioPosition ?? null)),
+    lastAudioParagraphId: effectiveAudioBookmark ? effectiveAudioBookmark.paragraphId : (rawDoc.lastAudioParagraphId || existing?.lastAudioParagraphId || null),
+    lastAudioPositionUpdatedAt: effectiveAudioBookmark?.savedAt ? new Date(effectiveAudioBookmark.savedAt).getTime() : (rawDoc.lastAudioPositionUpdatedAt || existing?.lastAudioPositionUpdatedAt || null),
     lastReadingPosition: effectiveLastReadingPosition,
     createdAt: existing?.createdAt || rawDoc.createdAt || now,
     updatedAt: now

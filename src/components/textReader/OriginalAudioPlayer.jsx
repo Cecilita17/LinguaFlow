@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef, useCallback } from 'react';
-import { Play, Pause, Volume2, AlertCircle, Loader2 } from 'lucide-react';
+import { Play, Pause, Volume2, AlertCircle, Loader2, Bookmark } from 'lucide-react';
 import { API_BASE_URL } from '../../services/chatService.js';
 
 function formatTime(seconds) {
@@ -31,7 +31,9 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   initialTime = 0,
   playbackRate = 1.0,
   isPlaying = false,
-  onTogglePlay = null
+  onTogglePlay = null,
+  onSaveBookmark = null,
+  isBookmarked = false
 }, ref) {
   const audioRef = useRef(null);
   const [duration, setDuration] = useState(0);
@@ -302,6 +304,26 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
           <span className="opacity-60"> / </span>
           <span>{duration > 0 ? formatTime(duration) : '--:--'}</span>
         </div>
+
+        {/* Manual Bookmark Button */}
+        {onSaveBookmark && (
+          <button
+            type="button"
+            onClick={onSaveBookmark}
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-medium transition-all cursor-pointer active:scale-95 shrink-0 ${
+              isBookmarked
+                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-primary)]'
+            }`}
+            title={isBookmarked ? 'Posición guardada (haz clic para actualizar)' : 'Guardar posición actual'}
+            aria-label={isBookmarked ? 'Posición guardada' : 'Guardar posición'}
+          >
+            <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-rose-500 text-rose-500' : 'text-rose-500'}`} />
+            <span className="hidden sm:inline">
+              {isBookmarked ? 'Posición guardada' : 'Guardar posición'}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Error banner if audio failed to load */}

@@ -28,6 +28,7 @@ import {
   Plus,
   Headphones,
   AlertCircle,
+  Bookmark,
   X
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
@@ -49,7 +50,8 @@ import {
   loadActiveDocumentFull,
   clearActiveDocumentDraft,
   translateParagraphTextApi,
-  transcribeAudioFileApi
+  transcribeAudioFileApi,
+  resolveAudioBookmark
 } from '../services/textDocumentService.js';
 import { API_BASE_URL } from '../services/chatService.js';
 import {
@@ -73,14 +75,15 @@ import { estimateSpeechDurationMs, createAudioWordSynchronizer } from '../utils/
 /**
  * Resolves the initial chapter index for a document based on its saved reading/audio bookmarks.
  * Fallback order:
- * 1. lastAudioPosition.paragraphId
+ * 1. audioBookmark.paragraphId
  * 2. lastReadingPosition.paragraphId
  * 3. lastReadingPosition.chapterIndex
  * 4. 0 (default first chapter)
  */
 function resolveChapterIndexForDoc(doc) {
   if (!doc || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
-  const targetId = doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null) || doc.lastReadingPosition?.paragraphId;
+  const bookmark = resolveAudioBookmark(doc);
+  const targetId = bookmark?.paragraphId || doc.lastReadingPosition?.paragraphId;
   if (targetId) {
     const chIdx = doc.chapters.findIndex(ch => Array.isArray(ch.paragraphIds) && ch.paragraphIds.includes(targetId));
     if (chIdx !== -1) return chIdx;
@@ -95,7 +98,7 @@ const PARAGRAPHS_PER_PAGE = 15;
 
 /**
  * Resolves the initial 0-based paragraph page for an EPUB chapter based on
- * lastAudioPosition or lastReadingPosition paragraphId.
+ * audioBookmark or lastReadingPosition paragraphId.
  */
 function resolvePageIndexForDoc(doc, chapterIdx = 0) {
   if (!doc || !Array.isArray(doc.paragraphs) || doc.paragraphs.length === 0) return 0;
@@ -106,7 +109,8 @@ function resolvePageIndexForDoc(doc, chapterIdx = 0) {
   const ch = doc.chapters[chapterIdx] || doc.chapters[0];
   if (!ch) return 0;
   const chapterParas = doc.paragraphs.filter(p => p.chapterId === ch.id);
-  const targetId = doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null) || doc.lastReadingPosition?.paragraphId;
+  const bookmark = resolveAudioBookmark(doc);
+  const targetId = bookmark?.paragraphId || doc.lastReadingPosition?.paragraphId;
   if (targetId) {
     const pIdx = chapterParas.findIndex(p => p.id === targetId);
     if (pIdx !== -1) {
@@ -259,15 +263,9 @@ export function TextReaderPage({
       loadActiveDocumentFull().then(fullDoc => {
         if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
           setDocument(fullDoc);
-          const savedAudioParagraphId = fullDoc.lastAudioParagraphId || (typeof fullDoc.lastAudioPosition === 'object' ? fullDoc.lastAudioPosition?.paragraphId : null);
-          const isValidAudioPos = Boolean(
-            savedAudioParagraphId &&
-            Array.isArray(fullDoc.paragraphs) &&
-            fullDoc.paragraphs.some(p => p.id === savedAudioParagraphId)
-          );
-          const validAudioPosId = isValidAudioPos ? savedAudioParagraphId : null;
-          if (validAudioPosId) {
-            setLastAudioParagraphId(validAudioPosId);
+          const bookmark = resolveAudioBookmark(fullDoc);
+          if (bookmark && fullDoc.paragraphs.some(p => p.id === bookmark.paragraphId)) {
+            setAudioBookmark(bookmark);
           }
         }
       }).catch(err => console.warn('Failed to hydrate full document from IndexedDB:', err));
@@ -490,9 +488,9 @@ export function TextReaderPage({
   const [importStatus, setImportStatus] = useState('');
 
 
-  // Last audio position bookmark — persisted in document.lastAudioPosition / lastAudioParagraphId
-  const [lastAudioParagraphId, setLastAudioParagraphId] = useState(
-    () => loadActiveDocumentDraft()?.lastAudioParagraphId || loadActiveDocumentDraft()?.lastAudioPosition?.paragraphId || null
+  // Manual audio bookmark — persisted explicitly in document.audioBookmark { paragraphId, time, savedAt }
+  const [audioBookmark, setAudioBookmark] = useState(
+    () => resolveAudioBookmark(loadActiveDocumentDraft())
   );
   // Scheduling a scroll: set to a paragraphId, cleared after scroll fires
   const [pendingScrollParagraphId, setPendingScrollParagraphId] = useState(null);
@@ -722,40 +720,22 @@ export function TextReaderPage({
         try {
           const fullDoc = await getTextDocumentById(draft.id);
           if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
+            const mergedBookmark = resolveAudioBookmark(draft) || resolveAudioBookmark(fullDoc);
             const merged = {
               ...fullDoc,
-              lastAudioPosition: draft.lastAudioPosition !== undefined ? draft.lastAudioPosition : fullDoc.lastAudioPosition,
-              lastAudioParagraphId: draft.lastAudioParagraphId || fullDoc.lastAudioParagraphId || (typeof (draft.lastAudioPosition || fullDoc.lastAudioPosition) === 'object' ? (draft.lastAudioPosition || fullDoc.lastAudioPosition)?.paragraphId : null) || null,
-              lastAudioPositionUpdatedAt: draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null,
+              audioBookmark: mergedBookmark,
+              lastAudioPosition: mergedBookmark ? mergedBookmark.time : (draft.lastAudioPosition !== undefined ? draft.lastAudioPosition : fullDoc.lastAudioPosition),
+              lastAudioParagraphId: mergedBookmark ? mergedBookmark.paragraphId : (draft.lastAudioParagraphId || fullDoc.lastAudioParagraphId || (typeof (draft.lastAudioPosition || fullDoc.lastAudioPosition) === 'object' ? (draft.lastAudioPosition || fullDoc.lastAudioPosition)?.paragraphId : null) || null),
+              lastAudioPositionUpdatedAt: mergedBookmark?.savedAt ? new Date(mergedBookmark.savedAt).getTime() : (draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null),
               lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
             };
             setDocument(merged);
 
-            const savedAudioParagraphId = merged.lastAudioParagraphId || (typeof merged.lastAudioPosition === 'object' ? merged.lastAudioPosition?.paragraphId : null);
-            const isValidAudioPos = Boolean(
-              savedAudioParagraphId &&
-              Array.isArray(merged.paragraphs) &&
-              merged.paragraphs.some(p => p.id === savedAudioParagraphId)
-            );
-            const validAudioPosId = isValidAudioPos ? savedAudioParagraphId : null;
-            if (validAudioPosId) {
-              setLastAudioParagraphId(validAudioPosId);
+            if (mergedBookmark && merged.paragraphs.some(p => p.id === mergedBookmark.paragraphId)) {
+              setAudioBookmark(mergedBookmark);
             }
 
-            if ((merged.sourceType === 'audio' || merged.format === 'audio') && merged.audioPathname) {
-              const savedTime = typeof merged.lastAudioPosition === 'number'
-                ? merged.lastAudioPosition
-                : (typeof merged.lastAudioPosition?.time === 'number' ? merged.lastAudioPosition.time : 0);
-              latestAudioPositionRef.current = {
-                time: savedTime,
-                paragraphId: validAudioPosId
-              };
-              if (audioPlayerRef.current) {
-                audioPlayerRef.current.seek(savedTime);
-              }
-            }
-
-            const targetPosId = validAudioPosId || merged.lastReadingPosition?.paragraphId;
+            const targetPosId = mergedBookmark?.paragraphId || merged.lastReadingPosition?.paragraphId;
             if (targetPosId) {
               setPendingScrollParagraphId(targetPosId);
             }
@@ -764,18 +744,12 @@ export function TextReaderPage({
           console.warn('Failed to hydrate active document from IndexedDB:', err);
         }
       } else if (draft && Array.isArray(draft.paragraphs) && draft.paragraphs.length > 0) {
-        const savedAudioParagraphId = draft.lastAudioParagraphId || (typeof draft.lastAudioPosition === 'object' ? draft.lastAudioPosition?.paragraphId : null);
-        const isValidAudioPos = Boolean(
-          savedAudioParagraphId &&
-          Array.isArray(draft.paragraphs) &&
-          draft.paragraphs.some(p => p.id === savedAudioParagraphId)
-        );
-        const validAudioPosId = isValidAudioPos ? savedAudioParagraphId : null;
-        if (validAudioPosId) {
-          setLastAudioParagraphId(validAudioPosId);
+        const bookmark = resolveAudioBookmark(draft);
+        if (bookmark && draft.paragraphs.some(p => p.id === bookmark.paragraphId)) {
+          setAudioBookmark(bookmark);
         }
 
-        const targetPosId = validAudioPosId || draft.lastReadingPosition?.paragraphId;
+        const targetPosId = bookmark?.paragraphId || draft.lastReadingPosition?.paragraphId;
         if (targetPosId) {
           setPendingScrollParagraphId(targetPosId);
         }
@@ -1008,58 +982,89 @@ export function TextReaderPage({
     }
   }, [isEpub]);
 
-  // Throttled playback position persistence for audio and TTS documents (YouTube Pattern)
-  const flushAudioPlaybackPosition = useCallback((explicitDocId = null) => {
-    if (audioSaveThrottlerRef.current.timer) {
-      clearTimeout(audioSaveThrottlerRef.current.timer);
-      audioSaveThrottlerRef.current.timer = null;
-    }
+  // Manual Audio Bookmark Persistence — ONLY saved upon explicit user action
+  const handleSaveAudioBookmark = useCallback((explicitParagraphId = null) => {
     const currentDoc = documentRef.current || document;
-    const effectiveDocId = explicitDocId || currentDoc?.id;
-    if (!effectiveDocId) return;
+    if (!currentDoc) return;
+    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (currentDoc.paragraphs || []);
+    if (allParas.length === 0) return;
 
-    const { time, paragraphId } = latestAudioPositionRef.current;
-    const effectiveParaId = paragraphId || lastAudioParagraphId;
-    if (!effectiveParaId && (typeof time !== 'number' || isNaN(time))) return;
+    let targetParaId = explicitParagraphId;
+    let targetTime = 0;
 
-    const isAudioDoc = currentDoc?.sourceType === 'audio' || currentDoc?.format === 'audio' || Boolean(currentDoc?.audioPathname);
-    const cleanTime = (typeof time === 'number' && !isNaN(time))
-      ? Math.round(time * 100) / 100
-      : (typeof currentDoc?.lastAudioPosition === 'number' ? currentDoc.lastAudioPosition : null);
-    const now = Date.now();
+    if (!targetParaId) {
+      if (playingParagraphIdRef.current) {
+        targetParaId = playingParagraphIdRef.current;
+      } else if (audioBookmark?.paragraphId) {
+        targetParaId = audioBookmark.paragraphId;
+      } else {
+        const firstVis = visibleParagraphs[0] || allParas[0];
+        targetParaId = firstVis?.id;
+      }
+    }
+
+    const targetPara = allParas.find(p => p.id === targetParaId) || allParas[0];
+    if (!targetPara) return;
+
+    if (isAudioDocument) {
+      if (typeof audioCurrentTime === 'number' && !isNaN(audioCurrentTime) && audioCurrentTime > 0) {
+        targetTime = audioCurrentTime;
+      } else if (typeof targetPara.audioStart === 'number') {
+        targetTime = targetPara.audioStart;
+      }
+    }
+
+    const newBookmark = {
+      paragraphId: targetPara.id,
+      time: Math.round(targetTime * 100) / 100,
+      savedAt: new Date().toISOString()
+    };
+
+    setAudioBookmark(newBookmark);
 
     const updated = {
       ...currentDoc,
-      lastAudioPosition: isAudioDoc ? cleanTime : (currentDoc?.lastAudioPosition ?? null),
-      lastAudioParagraphId: effectiveParaId || currentDoc?.lastAudioParagraphId || null,
-      lastAudioPositionUpdatedAt: now,
+      audioBookmark: newBookmark,
       updatedAt: new Date().toISOString()
     };
     try { saveActiveDocumentDraft(updated); } catch (e) {}
     saveTextDocument(updated).then(() => {
       refreshLibraryCount();
-    }).catch(err => console.warn('Failed to save lastAudioPosition to library:', err));
+    }).catch(err => console.warn('Failed to save audio bookmark to library:', err));
 
     setDocument(prev => {
-      if (!prev || prev.id !== effectiveDocId) return prev;
+      if (!prev || prev.id !== currentDoc.id) return prev;
       return updated;
     });
-    audioSaveThrottlerRef.current.lastSavedTime = now;
-  }, [document, lastAudioParagraphId, refreshLibraryCount]);
+  }, [document, isAudioDocument, audioCurrentTime, visibleParagraphs, audioBookmark, refreshLibraryCount]);
 
-  flushAudioPlaybackPositionRef.current = flushAudioPlaybackPosition;
+  // Resume playback from manual audio bookmark
+  const handleResumeAudioBookmark = useCallback(() => {
+    if (!audioBookmark?.paragraphId) return;
+    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
+    const targetPara = allParas.find(p => p.id === audioBookmark.paragraphId);
+    if (!targetPara) return;
 
-  // Flush position on window beforeunload
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      flushAudioPlaybackPosition();
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [flushAudioPlaybackPosition]);
+    if (isAudioDocument && audioPlayerRef.current) {
+      const seekTime = typeof audioBookmark.time === 'number' && audioBookmark.time >= 0
+        ? audioBookmark.time
+        : (typeof targetPara.audioStart === 'number' ? targetPara.audioStart : 0);
+      userStoppedRef.current = false;
+      setPlayingParagraphId(targetPara.id);
+      playingParagraphIdRef.current = targetPara.id;
+      audioPlayerRef.current.seek(seekTime);
+      audioPlayerRef.current.play();
+    } else {
+      handlePlayParagraph(targetPara);
+    }
 
+    try {
+      const el = window.document.querySelector(`[data-paragraph-id="${targetPara.id}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (e) {}
+  }, [audioBookmark, isAudioDocument, document?.paragraphs, handlePlayParagraph]);
+
+  // Playback time update handler — 100% decoupled from bookmarks
   const handleAudioTimeUpdate = useCallback((newTime) => {
     if (typeof newTime !== 'number' || isNaN(newTime)) return;
     setAudioCurrentTime(newTime);
@@ -1073,13 +1078,12 @@ export function TextReaderPage({
       );
       if (activePara) {
         latestAudioPositionRef.current.paragraphId = activePara.id;
-        setLastAudioParagraphId(activePara.id);
         if (playingParagraphIdRef.current !== activePara.id) {
           setPlayingParagraphId(activePara.id);
           playingParagraphIdRef.current = activePara.id;
         }
 
-        // Calculate proportional character index for word-level sync during playback
+        // Calculate proportional character index for real-time word sync during playback
         if (activePara.text && typeof activePara.audioStart === 'number' && typeof activePara.audioEnd === 'number' && activePara.audioEnd > activePara.audioStart) {
           const duration = activePara.audioEnd - activePara.audioStart;
           const progress = Math.max(0, Math.min(1, (newTime - activePara.audioStart) / duration));
@@ -1094,7 +1098,6 @@ export function TextReaderPage({
     if (curId) {
       const currentPara = allParas.find(p => p.id === curId);
       if (currentPara && typeof currentPara.audioEnd === 'number' && newTime >= currentPara.audioEnd) {
-        console.log(`[AudioReader] reached paragraph end: curTime=${newTime.toFixed(2)}, end=${currentPara.audioEnd}`);
         if (autoPlayTextReaderRef.current) {
           advanceToNextParagraph(currentPara);
         } else {
@@ -1104,41 +1107,25 @@ export function TextReaderPage({
           setPlayingParagraphId(null);
           playingParagraphIdRef.current = null;
           setActiveAudioCharIndex(-1);
-          flushAudioPlaybackPosition();
         }
       }
     }
-
-    // Throttled persistence (every 2 seconds while audio is playing)
-    const now = Date.now();
-    if (now - audioSaveThrottlerRef.current.lastSavedTime >= 2000) {
-      audioSaveThrottlerRef.current.lastSavedTime = now;
-      flushAudioPlaybackPosition();
-    } else if (!audioSaveThrottlerRef.current.timer) {
-      audioSaveThrottlerRef.current.timer = setTimeout(() => {
-        audioSaveThrottlerRef.current.timer = null;
-        audioSaveThrottlerRef.current.lastSavedTime = Date.now();
-        flushAudioPlaybackPosition();
-      }, 2000);
-    }
-  }, [document?.paragraphs, advanceToNextParagraph, flushAudioPlaybackPosition]);
+  }, [document?.paragraphs, advanceToNextParagraph]);
 
   const handleAudioPause = useCallback((pausedTime) => {
     if (typeof pausedTime === 'number') {
       latestAudioPositionRef.current.time = pausedTime;
     }
-    flushAudioPlaybackPosition();
     setPlayingParagraphId(null);
     playingParagraphIdRef.current = null;
     setActiveAudioCharIndex(-1);
-  }, [flushAudioPlaybackPosition]);
+  }, []);
 
   const handleAudioEnded = useCallback(() => {
-    flushAudioPlaybackPosition();
     setPlayingParagraphId(null);
     playingParagraphIdRef.current = null;
     setActiveAudioCharIndex(-1);
-  }, [flushAudioPlaybackPosition]);
+  }, []);
 
   const handleAudioError = useCallback((err) => {
     console.warn('[TextReader] Original audio playback error:', err);
@@ -1173,7 +1160,6 @@ export function TextReaderPage({
       setAudioErrorId(null);
       setPlayingParagraphId(paragraph.id);
       playingParagraphIdRef.current = paragraph.id;
-      setLastAudioParagraphId(paragraph.id);
       latestAudioPositionRef.current.paragraphId = paragraph.id;
 
       const startTime = Math.max(0, paragraph.audioStart);
@@ -1194,7 +1180,7 @@ export function TextReaderPage({
 
     if (!window.speechSynthesis) {
       setAudioErrorId(paragraph.id);
-      return; // No position saved — TTS not available
+      return;
     }
 
     // Cancel any current utterance
@@ -1205,7 +1191,6 @@ export function TextReaderPage({
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
     playingParagraphIdRef.current = paragraph.id;
-    setLastAudioParagraphId(paragraph.id);
     latestAudioPositionRef.current.paragraphId = paragraph.id;
     setActiveAudioCharIndex(0);
 
@@ -1243,14 +1228,10 @@ export function TextReaderPage({
         if (playbackId !== audioPlaybackIdRef.current) return;
         if (isAndroid && charIndex >= 0) {
           const matchedTok = synchronizer.wordTokens.find(wt => wt.startChar === charIndex);
-          console.log(`[TextReaderSync:activeChar] [playback #${playbackId}] charIndex=${charIndex} word="${matchedTok?.word || ''}"`);
           if (prevActiveCharIndex >= 0 && charIndex > prevActiveCharIndex) {
             const prevTok = synchronizer.wordTokens.find(wt => wt.startChar === prevActiveCharIndex);
             const prevPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === prevActiveCharIndex);
             const currPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === charIndex);
-            if (prevPos >= 0 && currPos >= 0 && currPos - prevPos > 1) {
-              console.warn(`[TextReaderSync:CHAR_GAP] [playback #${playbackId}] previousChar=${prevActiveCharIndex} (word="${prevTok?.word || ''}") currentChar=${charIndex} (word="${matchedTok?.word || ''}") gapTokens=${currPos - prevPos}`);
-            }
           }
           prevActiveCharIndex = charIndex;
         }
@@ -1286,7 +1267,6 @@ export function TextReaderPage({
       setPlayingParagraphId(null);
       playingParagraphIdRef.current = null;
       setActiveAudioCharIndex(-1);
-      flushAudioPlaybackPosition();
       advanceToNextParagraph(paragraph);
     };
 
@@ -1296,7 +1276,6 @@ export function TextReaderPage({
       setPlayingParagraphId(null);
       playingParagraphIdRef.current = null;
       setActiveAudioCharIndex(-1);
-      flushAudioPlaybackPosition();
       if (!userStoppedRef.current) {
         console.warn('TTS playback error for paragraph:', paragraph.id, e);
         setAudioErrorId(paragraph.id);
@@ -1308,7 +1287,7 @@ export function TextReaderPage({
     } catch (speakErr) {
       console.warn('SpeechSynthesis speak call error:', speakErr);
     }
-  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, flushAudioPlaybackPosition, speechRate]);
+  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate]);
 
   handlePlayParagraphRef.current = handlePlayParagraph;
 
@@ -1321,14 +1300,13 @@ export function TextReaderPage({
         audioPlayerRef.current.pause();
       } catch (e) {}
     }
-    flushAudioPlaybackPosition();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setPlayingParagraphId(null);
     playingParagraphIdRef.current = null;
     setActiveAudioCharIndex(-1);
-  }, [clearAudioVisualTimer, flushAudioPlaybackPosition]);
+  }, [clearAudioVisualTimer]);
 
   // Trigger background AI glossing
   const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
@@ -1582,16 +1560,11 @@ export function TextReaderPage({
       : splitTextIntoParagraphs(raw, targetLang, nativeLang);
 
     // Validate if audio bookmark still points to an existing paragraph after edit
-    let preservedAudioParagraphId = null;
-    let preservedAudioPosition = null;
-    let preservedAudioPositionUpdatedAt = null;
-
+    let preservedAudioBookmark = null;
     if (isExistingDoc) {
-      const existingParaId = document.lastAudioParagraphId || (typeof document.lastAudioPosition === 'object' ? document.lastAudioPosition?.paragraphId : null);
-      if (existingParaId && effectiveParagraphs.some(p => p.id === existingParaId)) {
-        preservedAudioParagraphId = existingParaId;
-        preservedAudioPosition = document.lastAudioPosition !== undefined ? document.lastAudioPosition : null;
-        preservedAudioPositionUpdatedAt = document.lastAudioPositionUpdatedAt || null;
+      const existingBookmark = resolveAudioBookmark(document);
+      if (existingBookmark?.paragraphId && effectiveParagraphs.some(p => p.id === existingBookmark.paragraphId)) {
+        preservedAudioBookmark = existingBookmark;
       }
     }
 
@@ -1621,22 +1594,20 @@ export function TextReaderPage({
       audioMimeType: isExistingAudioDoc ? document.audioMimeType : null,
       audioSegments: isExistingAudioDoc ? document.audioSegments : null,
       audioDuration: isExistingAudioDoc ? document.audioDuration : null,
-      lastAudioPosition: preservedAudioPosition,
-      lastAudioParagraphId: preservedAudioParagraphId,
-      lastAudioPositionUpdatedAt: preservedAudioPositionUpdatedAt,
+      audioBookmark: preservedAudioBookmark,
       lastReadingPosition: isExistingDoc ? document.lastReadingPosition : null,
       createdAt: isExistingDoc ? document.createdAt : null
     });
 
     const saved = await saveDocument(docToSave);
     setDocument(saved);
-    const savedAudioParagraphId = saved.lastAudioParagraphId || (typeof saved.lastAudioPosition === 'object' ? saved.lastAudioPosition?.paragraphId : null);
-    const isValidAudioPos = Boolean(
-      savedAudioParagraphId &&
+    const savedBookmark = resolveAudioBookmark(saved);
+    const isValidBookmark = Boolean(
+      savedBookmark?.paragraphId &&
       Array.isArray(saved.paragraphs) &&
-      saved.paragraphs.some(p => p.id === savedAudioParagraphId)
+      saved.paragraphs.some(p => p.id === savedBookmark.paragraphId)
     );
-    setLastAudioParagraphId(isValidAudioPos ? savedAudioParagraphId : null);
+    setAudioBookmark(isValidBookmark ? savedBookmark : null);
     setIsEditing(false);
     setIsHeaderHidden(false);
     previousScrollTopRef.current = 0;
@@ -1691,24 +1662,24 @@ export function TextReaderPage({
     previousScrollTopRef.current = 0;
     saveActiveDocumentDraft(doc);
 
-    // Sync last audio position or reading position bookmark from the loaded document (validate existence)
-    const savedAudioParagraphId = doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null);
-    const isValidAudioPos = Boolean(
-      savedAudioParagraphId &&
+    // Sync manual audio bookmark from loaded document (validate existence)
+    const savedBookmark = resolveAudioBookmark(doc);
+    const isValidBookmark = Boolean(
+      savedBookmark?.paragraphId &&
       Array.isArray(doc.paragraphs) &&
-      doc.paragraphs.some(p => p.id === savedAudioParagraphId)
+      doc.paragraphs.some(p => p.id === savedBookmark.paragraphId)
     );
-    const validAudioPosId = isValidAudioPos ? savedAudioParagraphId : null;
-    setLastAudioParagraphId(validAudioPosId);
+    const validBookmark = isValidBookmark ? savedBookmark : null;
+    setAudioBookmark(validBookmark);
 
-    // If opening an audio document, prepare latestAudioPositionRef and seek player (staying paused)
+    // If opening an audio document, prepare latestAudioPositionRef (staying paused)
     if ((doc.sourceType === 'audio' || doc.format === 'audio') && doc.audioPathname) {
-      const savedTime = typeof doc.lastAudioPosition === 'number'
-        ? doc.lastAudioPosition
-        : (typeof doc.lastAudioPosition?.time === 'number' ? doc.lastAudioPosition.time : 0);
+      const savedTime = typeof validBookmark?.time === 'number'
+        ? validBookmark.time
+        : (typeof doc.lastAudioPosition === 'number' ? doc.lastAudioPosition : 0);
       latestAudioPositionRef.current = {
         time: savedTime,
-        paragraphId: validAudioPosId
+        paragraphId: validBookmark?.paragraphId || null
       };
       if (audioPlayerRef.current) {
         audioPlayerRef.current.seek(savedTime);
@@ -1723,8 +1694,8 @@ export function TextReaderPage({
     );
     const validReadingPosId = isValidReadingPos ? savedReadingPos.paragraphId : null;
 
-    // Prioritize audio position bookmark; fallback to last reading position
-    const targetScrollId = validAudioPosId || validReadingPosId;
+    // Prioritize manual audio bookmark; fallback to last reading position
+    const targetScrollId = validBookmark?.paragraphId || validReadingPosId;
     if (targetScrollId) {
       setPendingScrollParagraphId(targetScrollId);
     } else {
@@ -1766,7 +1737,7 @@ export function TextReaderPage({
       }
       setIsAutoGlossing(false);
       setLoadingParagraphIds(new Set());
-      setLastAudioParagraphId(null);
+      setAudioBookmark(null);
       setPendingScrollParagraphId(null);
       clearActiveDocumentDraft();
       setDocument(null);
@@ -2063,8 +2034,7 @@ export function TextReaderPage({
         ? latestAudioPositionRef.current.time
         : (typeof document?.lastAudioPosition === 'number' ? document.lastAudioPosition : 0);
 
-      const targetPara = (lastAudioParagraphId ? paras.find(p => p.id === lastAudioParagraphId) : null)
-        || paras.find(p =>
+      const targetPara = paras.find(p =>
           typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
           resumeTime >= p.audioStart && resumeTime < p.audioEnd
         )
@@ -2073,7 +2043,6 @@ export function TextReaderPage({
       if (targetPara) {
         setPlayingParagraphId(targetPara.id);
         playingParagraphIdRef.current = targetPara.id;
-        setLastAudioParagraphId(targetPara.id);
         latestAudioPositionRef.current.paragraphId = targetPara.id;
         latestAudioPositionRef.current.time = resumeTime;
         userStoppedRef.current = false;
@@ -2083,17 +2052,11 @@ export function TextReaderPage({
       }
     }
 
-    let targetPara = null;
-    if (lastAudioParagraphId) {
-      targetPara = paras.find(p => p.id === lastAudioParagraphId);
-    }
-    if (!targetPara) {
-      targetPara = paras[0];
-    }
+    const targetPara = paras[0];
     if (targetPara) {
       handlePlayParagraph(targetPara);
     }
-  }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, lastAudioParagraphId, handlePlayParagraph]);
+  }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, handlePlayParagraph]);
 
   // Edit title action from three-dots menu
   const handleEditTitle = useCallback(() => {
@@ -2443,6 +2406,34 @@ export function TextReaderPage({
                     <span>Editar título</span>
                   </button>
 
+                  {/* Guardar marcador manual */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsActionsMenuOpen(false);
+                      handleSaveAudioBookmark();
+                    }}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
+                  >
+                    <Bookmark className={`w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0 ${audioBookmark ? 'fill-rose-500' : ''}`} />
+                    <span>{audioBookmark ? 'Actualizar marcador' : 'Guardar marcador'}</span>
+                  </button>
+
+                  {/* Continuar desde marcador */}
+                  {audioBookmark && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsActionsMenuOpen(false);
+                        handleResumeAudioBookmark();
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-rose-600 dark:text-rose-400 font-semibold"
+                    >
+                      <Play className="w-4 h-4 text-rose-500 fill-rose-500 shrink-0 ml-0.5" />
+                      <span>Continuar desde marcador</span>
+                    </button>
+                  )}
+
                   {/* ⚙️ Configuraciones — UI-only submenu, reuses the same state/handlers as the bottom bar */}
                   <button
                     type="button"
@@ -2746,7 +2737,8 @@ export function TextReaderPage({
                       isAudioError={audioErrorId === paragraph.id}
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
-                      isLastAudioPosition={lastAudioParagraphId === paragraph.id}
+                      isAudioBookmark={audioBookmark?.paragraphId === paragraph.id}
+                      isLastAudioPosition={audioBookmark?.paragraphId === paragraph.id}
                       translation={paragraphTranslations[paragraph.id]?.text || null}
                       isTranslating={Boolean(paragraphTranslations[paragraph.id]?.isTranslating)}
                       isTranslationVisible={Boolean(paragraphTranslations[paragraph.id]?.isVisible)}
@@ -2820,9 +2812,9 @@ export function TextReaderPage({
           ref={audioPlayerRef}
           audioPathname={document.audioPathname}
           initialTime={
-            typeof document.lastAudioPosition === 'number'
-              ? document.lastAudioPosition
-              : (typeof document.lastAudioPosition?.time === 'number' ? document.lastAudioPosition.time : 0)
+            typeof audioBookmark?.time === 'number'
+              ? audioBookmark.time
+              : (typeof document.lastAudioPosition === 'number' ? document.lastAudioPosition : 0)
           }
           isPlaying={Boolean(playingParagraphId)}
           onTogglePlay={handleToggleAudio}
@@ -2830,6 +2822,8 @@ export function TextReaderPage({
           onPause={handleAudioPause}
           onEnded={handleAudioEnded}
           onError={handleAudioError}
+          onSaveBookmark={handleSaveAudioBookmark}
+          isBookmarked={Boolean(audioBookmark)}
           playbackRate={speechRate}
         />
       )}
