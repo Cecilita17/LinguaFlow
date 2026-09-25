@@ -456,6 +456,11 @@ export function normalizeDocument(rawDoc) {
     audioDuration,
     lastAudioPosition: rawDoc.lastAudioPosition !== undefined ? rawDoc.lastAudioPosition : null,
     lastAudioParagraphId: rawDoc.lastAudioParagraphId || (typeof rawDoc.lastAudioPosition === 'object' ? rawDoc.lastAudioPosition?.paragraphId : null) || null,
+    lastAudioPositionUpdatedAt: typeof rawDoc.lastAudioPositionUpdatedAt === 'number'
+      ? rawDoc.lastAudioPositionUpdatedAt
+      : (typeof rawDoc.lastAudioPosition === 'object' && typeof rawDoc.lastAudioPosition?.updatedAt === 'number'
+        ? rawDoc.lastAudioPosition.updatedAt
+        : null),
     lastReadingPosition,
     createdAt: rawDoc.createdAt || now,
     updatedAt: rawDoc.updatedAt || now
@@ -502,6 +507,7 @@ export function createTextDocument({
   audioDuration = null,
   lastAudioPosition = null,
   lastAudioParagraphId = null,
+  lastAudioPositionUpdatedAt = null,
   lastReadingPosition = null,
   createdAt = null
 }) {
@@ -564,6 +570,11 @@ export function createTextDocument({
     audioDuration: typeof audioDuration === 'number' ? audioDuration : (Number(audioDuration) || 0),
     lastAudioPosition: lastAudioPosition !== undefined ? lastAudioPosition : null,
     lastAudioParagraphId: lastAudioParagraphId || (typeof lastAudioPosition === 'object' ? lastAudioPosition?.paragraphId : null) || null,
+    lastAudioPositionUpdatedAt: typeof lastAudioPositionUpdatedAt === 'number'
+      ? lastAudioPositionUpdatedAt
+      : (typeof lastAudioPosition === 'object' && typeof lastAudioPosition?.updatedAt === 'number'
+        ? lastAudioPosition.updatedAt
+        : null),
     lastReadingPosition: lastReadingPosition || null,
     createdAt: createdAt || now,
     updatedAt: now
@@ -645,7 +656,13 @@ export function extractMinimalDraft(doc) {
     audioPathname: doc.audioPathname || null,
     audioMimeType: doc.audioMimeType || null,
     audioDuration: typeof doc.audioDuration === 'number' ? doc.audioDuration : (Number(doc.audioDuration) || 0),
-    lastAudioPosition: doc.lastAudioPosition || null,
+    lastAudioPosition: doc.lastAudioPosition !== undefined ? doc.lastAudioPosition : null,
+    lastAudioParagraphId: doc.lastAudioParagraphId || (typeof doc.lastAudioPosition === 'object' ? doc.lastAudioPosition?.paragraphId : null) || null,
+    lastAudioPositionUpdatedAt: typeof doc.lastAudioPositionUpdatedAt === 'number'
+      ? doc.lastAudioPositionUpdatedAt
+      : (typeof doc.lastAudioPosition === 'object' && typeof doc.lastAudioPosition?.updatedAt === 'number'
+        ? doc.lastAudioPosition.updatedAt
+        : null),
     lastReadingPosition: doc.lastReadingPosition || null,
     createdAt: doc.createdAt || null,
     updatedAt: doc.updatedAt || null,
@@ -748,7 +765,9 @@ export async function loadActiveDocumentFull() {
       if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
         const merged = {
           ...fullDoc,
-          lastAudioPosition: draft.lastAudioPosition || fullDoc.lastAudioPosition,
+          lastAudioPosition: draft.lastAudioPosition !== undefined ? draft.lastAudioPosition : fullDoc.lastAudioPosition,
+          lastAudioParagraphId: draft.lastAudioParagraphId || fullDoc.lastAudioParagraphId || (typeof (draft.lastAudioPosition || fullDoc.lastAudioPosition) === 'object' ? (draft.lastAudioPosition || fullDoc.lastAudioPosition)?.paragraphId : null) || null,
+          lastAudioPositionUpdatedAt: draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null,
           lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
         };
         memoryActiveDraft = merged;

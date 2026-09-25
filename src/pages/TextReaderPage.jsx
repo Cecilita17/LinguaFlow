@@ -259,6 +259,16 @@ export function TextReaderPage({
       loadActiveDocumentFull().then(fullDoc => {
         if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
           setDocument(fullDoc);
+          const savedAudioParagraphId = fullDoc.lastAudioParagraphId || (typeof fullDoc.lastAudioPosition === 'object' ? fullDoc.lastAudioPosition?.paragraphId : null);
+          const isValidAudioPos = Boolean(
+            savedAudioParagraphId &&
+            Array.isArray(fullDoc.paragraphs) &&
+            fullDoc.paragraphs.some(p => p.id === savedAudioParagraphId)
+          );
+          const validAudioPosId = isValidAudioPos ? savedAudioParagraphId : null;
+          if (validAudioPosId) {
+            setLastAudioParagraphId(validAudioPosId);
+          }
         }
       }).catch(err => console.warn('Failed to hydrate full document from IndexedDB:', err));
     }
@@ -714,11 +724,38 @@ export function TextReaderPage({
           if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
             const merged = {
               ...fullDoc,
-              lastAudioPosition: draft.lastAudioPosition || fullDoc.lastAudioPosition,
+              lastAudioPosition: draft.lastAudioPosition !== undefined ? draft.lastAudioPosition : fullDoc.lastAudioPosition,
+              lastAudioParagraphId: draft.lastAudioParagraphId || fullDoc.lastAudioParagraphId || (typeof (draft.lastAudioPosition || fullDoc.lastAudioPosition) === 'object' ? (draft.lastAudioPosition || fullDoc.lastAudioPosition)?.paragraphId : null) || null,
+              lastAudioPositionUpdatedAt: draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null,
               lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
             };
             setDocument(merged);
-            const targetPosId = merged.lastAudioPosition?.paragraphId || merged.lastReadingPosition?.paragraphId;
+
+            const savedAudioParagraphId = merged.lastAudioParagraphId || (typeof merged.lastAudioPosition === 'object' ? merged.lastAudioPosition?.paragraphId : null);
+            const isValidAudioPos = Boolean(
+              savedAudioParagraphId &&
+              Array.isArray(merged.paragraphs) &&
+              merged.paragraphs.some(p => p.id === savedAudioParagraphId)
+            );
+            const validAudioPosId = isValidAudioPos ? savedAudioParagraphId : null;
+            if (validAudioPosId) {
+              setLastAudioParagraphId(validAudioPosId);
+            }
+
+            if ((merged.sourceType === 'audio' || merged.format === 'audio') && merged.audioPathname) {
+              const savedTime = typeof merged.lastAudioPosition === 'number'
+                ? merged.lastAudioPosition
+                : (typeof merged.lastAudioPosition?.time === 'number' ? merged.lastAudioPosition.time : 0);
+              latestAudioPositionRef.current = {
+                time: savedTime,
+                paragraphId: validAudioPosId
+              };
+              if (audioPlayerRef.current) {
+                audioPlayerRef.current.seek(savedTime);
+              }
+            }
+
+            const targetPosId = validAudioPosId || merged.lastReadingPosition?.paragraphId;
             if (targetPosId) {
               setPendingScrollParagraphId(targetPosId);
             }
@@ -727,7 +764,18 @@ export function TextReaderPage({
           console.warn('Failed to hydrate active document from IndexedDB:', err);
         }
       } else if (draft && Array.isArray(draft.paragraphs) && draft.paragraphs.length > 0) {
-        const targetPosId = draft.lastAudioPosition?.paragraphId || draft.lastReadingPosition?.paragraphId;
+        const savedAudioParagraphId = draft.lastAudioParagraphId || (typeof draft.lastAudioPosition === 'object' ? draft.lastAudioPosition?.paragraphId : null);
+        const isValidAudioPos = Boolean(
+          savedAudioParagraphId &&
+          Array.isArray(draft.paragraphs) &&
+          draft.paragraphs.some(p => p.id === savedAudioParagraphId)
+        );
+        const validAudioPosId = isValidAudioPos ? savedAudioParagraphId : null;
+        if (validAudioPosId) {
+          setLastAudioParagraphId(validAudioPosId);
+        }
+
+        const targetPosId = validAudioPosId || draft.lastReadingPosition?.paragraphId;
         if (targetPosId) {
           setPendingScrollParagraphId(targetPosId);
         }
@@ -977,11 +1025,13 @@ export function TextReaderPage({
 
     const cleanTime = Math.round(time * 100) / 100;
     const effectiveParaId = paragraphId || lastAudioParagraphId;
+    const now = Date.now();
 
     const updated = {
       ...currentDoc,
       lastAudioPosition: cleanTime,
       lastAudioParagraphId: effectiveParaId,
+      lastAudioPositionUpdatedAt: now,
       updatedAt: new Date().toISOString()
     };
     try { saveActiveDocumentDraft(updated); } catch (e) {}
@@ -993,7 +1043,7 @@ export function TextReaderPage({
       if (!prev || prev.id !== effectiveDocId) return prev;
       return updated;
     });
-    audioSaveThrottlerRef.current.lastSavedTime = Date.now();
+    audioSaveThrottlerRef.current.lastSavedTime = now;
   }, [document, lastAudioParagraphId, refreshLibraryCount]);
 
   flushAudioPlaybackPositionRef.current = flushAudioPlaybackPosition;
@@ -1554,15 +1604,22 @@ export function TextReaderPage({
       audioMimeType: isExistingAudioDoc ? document.audioMimeType : null,
       audioSegments: isExistingAudioDoc ? document.audioSegments : null,
       audioDuration: isExistingAudioDoc ? document.audioDuration : null,
-      lastAudioPosition: preservedLastAudioPosition,
-      lastAudioParagraphId: isExistingAudioDoc ? (document.lastAudioParagraphId || preservedLastAudioPosition?.paragraphId || null) : null,
+      lastAudioPosition: isExistingAudioDoc ? (document.lastAudioPosition !== undefined ? document.lastAudioPosition : preservedLastAudioPosition) : preservedLastAudioPosition,
+      lastAudioParagraphId: isExistingAudioDoc ? (document.lastAudioParagraphId || preservedLastAudioPosition?.paragraphId || null) : (preservedLastAudioPosition?.paragraphId || null),
+      lastAudioPositionUpdatedAt: isExistingAudioDoc ? (document.lastAudioPositionUpdatedAt || null) : null,
       lastReadingPosition: isExistingDoc ? document.lastReadingPosition : null,
       createdAt: isExistingDoc ? document.createdAt : null
     });
 
     const saved = await saveDocument(docToSave);
     setDocument(saved);
-    setLastAudioParagraphId(preservedLastAudioPosition ? preservedLastAudioPosition.paragraphId : null);
+    const savedAudioParagraphId = saved.lastAudioParagraphId || (typeof saved.lastAudioPosition === 'object' ? saved.lastAudioPosition?.paragraphId : null);
+    const isValidAudioPos = Boolean(
+      savedAudioParagraphId &&
+      Array.isArray(saved.paragraphs) &&
+      saved.paragraphs.some(p => p.id === savedAudioParagraphId)
+    );
+    setLastAudioParagraphId(isValidAudioPos ? savedAudioParagraphId : null);
     setIsEditing(false);
     setIsHeaderHidden(false);
     previousScrollTopRef.current = 0;

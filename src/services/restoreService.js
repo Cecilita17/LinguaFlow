@@ -147,7 +147,13 @@ export async function restoreBackupData(payload) {
               targetLang: rawDraft.targetLang || 'zh',
               nativeLang: rawDraft.nativeLang || 'es',
               paragraphsCount: rawDraft.paragraphs.length,
-              lastAudioPosition: rawDraft.lastAudioPosition || null,
+              lastAudioPosition: rawDraft.lastAudioPosition !== undefined ? rawDraft.lastAudioPosition : null,
+              lastAudioParagraphId: rawDraft.lastAudioParagraphId || (typeof rawDraft.lastAudioPosition === 'object' ? rawDraft.lastAudioPosition?.paragraphId : null) || null,
+              lastAudioPositionUpdatedAt: typeof rawDraft.lastAudioPositionUpdatedAt === 'number'
+                ? rawDraft.lastAudioPositionUpdatedAt
+                : (typeof rawDraft.lastAudioPosition === 'object' && typeof rawDraft.lastAudioPosition?.updatedAt === 'number'
+                  ? rawDraft.lastAudioPosition.updatedAt
+                  : null),
               lastReadingPosition: rawDraft.lastReadingPosition || null,
               createdAt: rawDraft.createdAt || null,
               updatedAt: rawDraft.updatedAt || null,
