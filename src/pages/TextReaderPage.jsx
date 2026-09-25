@@ -1008,7 +1008,7 @@ export function TextReaderPage({
     }
   }, [isEpub]);
 
-  // Throttled playback position persistence for audio documents (YouTube Pattern)
+  // Throttled playback position persistence for audio and TTS documents (YouTube Pattern)
   const flushAudioPlaybackPosition = useCallback((explicitDocId = null) => {
     if (audioSaveThrottlerRef.current.timer) {
       clearTimeout(audioSaveThrottlerRef.current.timer);
@@ -1017,20 +1017,21 @@ export function TextReaderPage({
     const currentDoc = documentRef.current || document;
     const effectiveDocId = explicitDocId || currentDoc?.id;
     if (!effectiveDocId) return;
-    const isAudioDoc = currentDoc?.sourceType === 'audio' || currentDoc?.format === 'audio' || Boolean(currentDoc?.audioPathname);
-    if (!isAudioDoc) return;
 
     const { time, paragraphId } = latestAudioPositionRef.current;
-    if (typeof time !== 'number' || isNaN(time)) return;
-
-    const cleanTime = Math.round(time * 100) / 100;
     const effectiveParaId = paragraphId || lastAudioParagraphId;
+    if (!effectiveParaId && (typeof time !== 'number' || isNaN(time))) return;
+
+    const isAudioDoc = currentDoc?.sourceType === 'audio' || currentDoc?.format === 'audio' || Boolean(currentDoc?.audioPathname);
+    const cleanTime = (typeof time === 'number' && !isNaN(time))
+      ? Math.round(time * 100) / 100
+      : (typeof currentDoc?.lastAudioPosition === 'number' ? currentDoc.lastAudioPosition : null);
     const now = Date.now();
 
     const updated = {
       ...currentDoc,
-      lastAudioPosition: cleanTime,
-      lastAudioParagraphId: effectiveParaId,
+      lastAudioPosition: isAudioDoc ? cleanTime : (currentDoc?.lastAudioPosition ?? null),
+      lastAudioParagraphId: effectiveParaId || currentDoc?.lastAudioParagraphId || null,
       lastAudioPositionUpdatedAt: now,
       updatedAt: new Date().toISOString()
     };
@@ -1064,18 +1065,26 @@ export function TextReaderPage({
     setAudioCurrentTime(newTime);
     latestAudioPositionRef.current.time = newTime;
 
-    const paras = visibleParagraphs.length > 0 ? visibleParagraphs : (document?.paragraphs || []);
-    if (Array.isArray(paras) && paras.length > 0) {
-      const activePara = paras.find(p =>
+    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
+    if (Array.isArray(allParas) && allParas.length > 0) {
+      const activePara = allParas.find(p =>
         typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
         newTime >= p.audioStart && newTime < p.audioEnd
       );
       if (activePara) {
         latestAudioPositionRef.current.paragraphId = activePara.id;
         setLastAudioParagraphId(activePara.id);
-        if (playingParagraphIdRef.current !== null && playingParagraphIdRef.current !== activePara.id) {
+        if (playingParagraphIdRef.current !== activePara.id) {
           setPlayingParagraphId(activePara.id);
           playingParagraphIdRef.current = activePara.id;
+        }
+
+        // Calculate proportional character index for word-level sync during playback
+        if (activePara.text && typeof activePara.audioStart === 'number' && typeof activePara.audioEnd === 'number' && activePara.audioEnd > activePara.audioStart) {
+          const duration = activePara.audioEnd - activePara.audioStart;
+          const progress = Math.max(0, Math.min(1, (newTime - activePara.audioStart) / duration));
+          const charIndex = Math.min(activePara.text.length - 1, Math.floor(progress * activePara.text.length));
+          setActiveAudioCharIndex(charIndex);
         }
       }
     }
@@ -1083,7 +1092,6 @@ export function TextReaderPage({
     // Check segment boundary of currently playing paragraph
     const curId = playingParagraphIdRef.current;
     if (curId) {
-      const allParas = chapterParagraphsRef.current || document?.paragraphs || [];
       const currentPara = allParas.find(p => p.id === curId);
       if (currentPara && typeof currentPara.audioEnd === 'number' && newTime >= currentPara.audioEnd) {
         console.log(`[AudioReader] reached paragraph end: curTime=${newTime.toFixed(2)}, end=${currentPara.audioEnd}`);
@@ -1095,6 +1103,7 @@ export function TextReaderPage({
           }
           setPlayingParagraphId(null);
           playingParagraphIdRef.current = null;
+          setActiveAudioCharIndex(-1);
           flushAudioPlaybackPosition();
         }
       }
@@ -1112,7 +1121,7 @@ export function TextReaderPage({
         flushAudioPlaybackPosition();
       }, 2000);
     }
-  }, [visibleParagraphs, document?.paragraphs, advanceToNextParagraph, flushAudioPlaybackPosition]);
+  }, [document?.paragraphs, advanceToNextParagraph, flushAudioPlaybackPosition]);
 
   const handleAudioPause = useCallback((pausedTime) => {
     if (typeof pausedTime === 'number') {
@@ -1166,10 +1175,10 @@ export function TextReaderPage({
       playingParagraphIdRef.current = paragraph.id;
       setLastAudioParagraphId(paragraph.id);
       latestAudioPositionRef.current.paragraphId = paragraph.id;
-      setActiveAudioCharIndex(-1); // Full paragraph visual highlight during original audio playback
 
       const startTime = Math.max(0, paragraph.audioStart);
       latestAudioPositionRef.current.time = startTime;
+      setActiveAudioCharIndex(0);
 
       if (audioPlayerRef.current) {
         audioPlayerRef.current.seek(startTime);
@@ -1195,6 +1204,9 @@ export function TextReaderPage({
 
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
+    playingParagraphIdRef.current = paragraph.id;
+    setLastAudioParagraphId(paragraph.id);
+    latestAudioPositionRef.current.paragraphId = paragraph.id;
     setActiveAudioCharIndex(0);
 
     const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
@@ -1272,7 +1284,9 @@ export function TextReaderPage({
       if (playbackId !== audioPlaybackIdRef.current) return;
       synchronizer.handleEnd(event);
       setPlayingParagraphId(null);
+      playingParagraphIdRef.current = null;
       setActiveAudioCharIndex(-1);
+      flushAudioPlaybackPosition();
       advanceToNextParagraph(paragraph);
     };
 
@@ -1280,7 +1294,9 @@ export function TextReaderPage({
       if (playbackId !== audioPlaybackIdRef.current) return;
       synchronizer.stop();
       setPlayingParagraphId(null);
+      playingParagraphIdRef.current = null;
       setActiveAudioCharIndex(-1);
+      flushAudioPlaybackPosition();
       if (!userStoppedRef.current) {
         console.warn('TTS playback error for paragraph:', paragraph.id, e);
         setAudioErrorId(paragraph.id);
@@ -1292,7 +1308,7 @@ export function TextReaderPage({
     } catch (speakErr) {
       console.warn('SpeechSynthesis speak call error:', speakErr);
     }
-  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate]);
+  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, flushAudioPlaybackPosition, speechRate]);
 
   handlePlayParagraphRef.current = handlePlayParagraph;
 
