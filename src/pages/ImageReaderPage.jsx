@@ -45,6 +45,142 @@ const CEFR_LEVELS = [
   { value: 'C1', es: 'Avanzado (C1)', en: 'Advanced (C1)' }
 ];
 
+/**
+ * Segments an image description into natural pedagogical paragraphs.
+ * For Chinese / CJK: splits at natural terminal punctuation (。！？；) and clause boundaries if long,
+ * grouping sentences into balanced paragraphs of ~40-80 characters.
+ * For alphabetic / other languages: splits at sentence punctuation and groups into ~120-220 characters.
+ * Guarantees zero text loss and preserves complete character integrity.
+ */
+export function segmentImageDescriptionIntoParagraphs(rawText, targetLang = 'zh') {
+  if (!rawText || typeof rawText !== 'string') return [];
+  const normalized = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!normalized) return [];
+
+  const isCjk = typeof targetLang === 'string' && (targetLang.startsWith('zh') || targetLang.startsWith('ja'));
+  const rawBlocks = normalized.split(/\n+/).map(b => b.trim()).filter(Boolean);
+  const resultParagraphs = [];
+
+  for (const block of rawBlocks) {
+    const terminalRegex = /([.。!！?؟;；]['"”’»\)\]｝』」]*)/g;
+    const sentences = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = terminalRegex.exec(block)) !== null) {
+      const punctEnd = match.index + match[0].length;
+      const punct = match[1];
+
+      if (punct.startsWith('.')) {
+        const prevChar = match.index > 0 ? block[match.index - 1] : '';
+        const nextChar = punctEnd < block.length ? block[punctEnd] : '';
+        if (/\d/.test(prevChar) && /\d/.test(nextChar)) continue;
+        const precedingWord = block.slice(Math.max(0, match.index - 4), match.index).toLowerCase();
+        if (/^(dr|mr|ms|vs|eg|ie)$/i.test(precedingWord)) continue;
+      }
+
+      const sentence = block.slice(lastIndex, punctEnd).trim();
+      if (sentence) {
+        sentences.push(sentence);
+        lastIndex = punctEnd;
+      }
+    }
+
+    const remainder = block.slice(lastIndex).trim();
+    if (remainder) {
+      sentences.push(remainder);
+    }
+
+    if (sentences.length === 0) {
+      sentences.push(block);
+    }
+
+    const units = [];
+    for (const sent of sentences) {
+      if (isCjk && sent.length > 85) {
+        const clauseRegex = /([，、：—–…][\s]*)/g;
+        let cLastIdx = 0;
+        let cMatch;
+        let clauseAcc = '';
+        while ((cMatch = clauseRegex.exec(sent)) !== null) {
+          const cEnd = cMatch.index + cMatch[0].length;
+          const clause = sent.slice(cLastIdx, cEnd);
+          if ((clauseAcc + clause).length > 70 && clauseAcc.length >= 30) {
+            units.push(clauseAcc.trim());
+            clauseAcc = clause;
+          } else {
+            clauseAcc += clause;
+          }
+          cLastIdx = cEnd;
+        }
+        const cRemainder = sent.slice(cLastIdx);
+        if (cRemainder) clauseAcc += cRemainder;
+        if (clauseAcc.trim()) units.push(clauseAcc.trim());
+      } else if (!isCjk && sent.length > 200) {
+        const parts = sent.split(/(?<=[,;])\s+/);
+        let pAcc = '';
+        for (const p of parts) {
+          if (pAcc && (pAcc.length + p.length > 180)) {
+            units.push(pAcc.trim());
+            pAcc = p;
+          } else {
+            pAcc = pAcc ? (pAcc + ' ' + p) : p;
+          }
+        }
+        if (pAcc.trim()) units.push(pAcc.trim());
+      } else {
+        units.push(sent);
+      }
+    }
+
+    if (isCjk) {
+      let acc = '';
+      for (const unit of units) {
+        if (!acc) {
+          acc = unit;
+        } else if (acc.length + unit.length <= 75) {
+          acc += unit;
+        } else if (acc.length < 35 && acc.length + unit.length <= 85) {
+          acc += unit;
+        } else {
+          resultParagraphs.push(acc);
+          acc = unit;
+        }
+      }
+      if (acc) {
+        if (resultParagraphs.length > 0 && acc.length < 25 && resultParagraphs[resultParagraphs.length - 1].length + acc.length <= 90) {
+          resultParagraphs[resultParagraphs.length - 1] += acc;
+        } else {
+          resultParagraphs.push(acc);
+        }
+      }
+    } else {
+      let acc = '';
+      for (const unit of units) {
+        if (!acc) {
+          acc = unit;
+        } else if (acc.length + 1 + unit.length <= 180) {
+          acc += ' ' + unit;
+        } else if (acc.length < 90 && acc.length + 1 + unit.length <= 220) {
+          acc += ' ' + unit;
+        } else {
+          resultParagraphs.push(acc);
+          acc = unit;
+        }
+      }
+      if (acc) {
+        if (resultParagraphs.length > 0 && acc.length < 50 && resultParagraphs[resultParagraphs.length - 1].length + 1 + acc.length <= 240) {
+          resultParagraphs[resultParagraphs.length - 1] += ' ' + acc;
+        } else {
+          resultParagraphs.push(acc);
+        }
+      }
+    }
+  }
+
+  return resultParagraphs;
+}
+
 export function ImageReaderPage({
   targetLang = 'zh',
   setTargetLang,
@@ -403,9 +539,9 @@ export function ImageReaderPage({
       setResultTitle(finalTitle);
       setUsedModel(response.model || '');
 
-      // Split generated description into paragraphs
+      // Split generated description into balanced natural paragraphs
       const rawText = (response.description || '').trim();
-      const rawBlocks = rawText.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+      const rawBlocks = segmentImageDescriptionIntoParagraphs(rawText, targetLang);
 
       // Process each block immediately through the offline linguistic tokenizer (0ms Pinyin / tokens)
       const initializedParas = rawBlocks.map((blockText, idx) => {
