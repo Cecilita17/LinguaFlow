@@ -1017,7 +1017,7 @@ export function TextReaderPage({
     const currentDoc = documentRef.current || document;
     const effectiveDocId = explicitDocId || currentDoc?.id;
     if (!effectiveDocId) return;
-    const isAudioDoc = currentDoc?.sourceType === 'audio' || currentDoc?.format === 'audio';
+    const isAudioDoc = currentDoc?.sourceType === 'audio' || currentDoc?.format === 'audio' || Boolean(currentDoc?.audioPathname);
     if (!isAudioDoc) return;
 
     const { time, paragraphId } = latestAudioPositionRef.current;
@@ -1565,16 +1565,17 @@ export function TextReaderPage({
       ? document.paragraphs
       : splitTextIntoParagraphs(raw, targetLang, nativeLang);
 
-    // Validate if lastAudioPosition still points to an existing paragraph after edit
-    let preservedLastAudioPosition = null;
-    if (isExistingDoc && document?.lastAudioPosition?.paragraphId) {
-      const targetId = document.lastAudioPosition.paragraphId;
-      const targetIdx = effectiveParagraphs.findIndex(p => p.id === targetId);
-      if (targetIdx !== -1) {
-        preservedLastAudioPosition = {
-          ...document.lastAudioPosition,
-          paragraphIndex: targetIdx
-        };
+    // Validate if audio bookmark still points to an existing paragraph after edit
+    let preservedAudioParagraphId = null;
+    let preservedAudioPosition = null;
+    let preservedAudioPositionUpdatedAt = null;
+
+    if (isExistingDoc) {
+      const existingParaId = document.lastAudioParagraphId || (typeof document.lastAudioPosition === 'object' ? document.lastAudioPosition?.paragraphId : null);
+      if (existingParaId && effectiveParagraphs.some(p => p.id === existingParaId)) {
+        preservedAudioParagraphId = existingParaId;
+        preservedAudioPosition = document.lastAudioPosition !== undefined ? document.lastAudioPosition : null;
+        preservedAudioPositionUpdatedAt = document.lastAudioPositionUpdatedAt || null;
       }
     }
 
@@ -1604,9 +1605,9 @@ export function TextReaderPage({
       audioMimeType: isExistingAudioDoc ? document.audioMimeType : null,
       audioSegments: isExistingAudioDoc ? document.audioSegments : null,
       audioDuration: isExistingAudioDoc ? document.audioDuration : null,
-      lastAudioPosition: isExistingAudioDoc ? (document.lastAudioPosition !== undefined ? document.lastAudioPosition : preservedLastAudioPosition) : preservedLastAudioPosition,
-      lastAudioParagraphId: isExistingAudioDoc ? (document.lastAudioParagraphId || preservedLastAudioPosition?.paragraphId || null) : (preservedLastAudioPosition?.paragraphId || null),
-      lastAudioPositionUpdatedAt: isExistingAudioDoc ? (document.lastAudioPositionUpdatedAt || null) : null,
+      lastAudioPosition: preservedAudioPosition,
+      lastAudioParagraphId: preservedAudioParagraphId,
+      lastAudioPositionUpdatedAt: preservedAudioPositionUpdatedAt,
       lastReadingPosition: isExistingDoc ? document.lastReadingPosition : null,
       createdAt: isExistingDoc ? document.createdAt : null
     });
@@ -2056,6 +2057,9 @@ export function TextReaderPage({
       if (targetPara) {
         setPlayingParagraphId(targetPara.id);
         playingParagraphIdRef.current = targetPara.id;
+        setLastAudioParagraphId(targetPara.id);
+        latestAudioPositionRef.current.paragraphId = targetPara.id;
+        latestAudioPositionRef.current.time = resumeTime;
         userStoppedRef.current = false;
         audioPlayerRef.current.seek(resumeTime);
         audioPlayerRef.current.play();
@@ -2114,17 +2118,19 @@ export function TextReaderPage({
 
   // Open library action from three-dots menu
   const handleOpenLibrary = useCallback(() => {
+    handleStopAudio();
     setIsActionsMenuOpen(false);
     navigateToView('library');
-  }, [navigateToView]);
+  }, [handleStopAudio, navigateToView]);
 
   // Go back to Home — reuses the existing setActiveTab from App.jsx
   const handleGoHome = useCallback(() => {
+    handleStopAudio();
     setIsActionsMenuOpen(false);
     if (typeof setActiveTab === 'function') {
       setActiveTab('home');
     }
-  }, [setActiveTab]);
+  }, [handleStopAudio, setActiveTab]);
 
 
   const currentLangMeta = getLanguageMeta(targetLang);
