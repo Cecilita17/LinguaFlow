@@ -6,6 +6,7 @@ import {
   Plus,
   ArrowLeft,
   Calendar,
+  Clock,
   AlertCircle,
   Loader2,
   Edit2,
@@ -178,7 +179,7 @@ export function ImageLibraryView({
       </header>
 
       {/* Main Container */}
-      <main className="max-w-4xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex-1 flex flex-col">
+      <main className="max-w-5xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex-1 flex flex-col">
         {/* Section Title and Search Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <div>
@@ -246,7 +247,7 @@ export function ImageLibraryView({
           </div>
         ) : (
           /* Cards Grid */
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 animate-fade-in">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4.5 animate-fade-in">
             {filtered.map((doc) => {
               const langMeta = getLanguageMeta(doc.targetLang);
               const isDeleting = deleteConfirmId === doc.id;
@@ -256,54 +257,53 @@ export function ImageLibraryView({
                 <div
                   key={doc.id}
                   onClick={() => !isEditing && onSelectDocument(doc)}
-                  className="group relative flex flex-col justify-between rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/60 transition-all duration-200 shadow-xs hover:shadow-md overflow-hidden cursor-pointer transform active:scale-98"
+                  className="group relative flex flex-col justify-between rounded-2xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/50 transition-all duration-200 shadow-xs hover:shadow-sm overflow-hidden cursor-pointer active:scale-[0.99]"
                 >
-                  {/* Thumbnail Image Container */}
-                  <div className="relative w-full aspect-16/10 bg-slate-900/10 dark:bg-black/40 overflow-hidden">
+                  {/* Compact Thumbnail Container */}
+                  <div className="relative w-full aspect-[16/8] bg-[var(--surface-secondary)] overflow-hidden">
                     {doc.imageBase64 ? (
                       <img
                         src={doc.imageBase64}
                         alt={doc.title}
-                        className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                         loading="lazy"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">
-                        <Camera className="w-8 h-8 opacity-40" />
+                        <Camera className="w-6 h-6 opacity-30" />
                       </div>
                     )}
 
-                    {/* Gradient overlay on image bottom */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-80" />
-
-                    {/* Language & Level Badge */}
-                    <div className="absolute bottom-2 left-2.5 flex items-center gap-1.5">
-                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20">
-                        {langMeta?.flag || '🌐'} {doc.level || 'B1'}
-                      </span>
-                    </div>
-
-                    {/* Delete action button */}
+                    {/* Delete action button - sleek floating button in top-right corner */}
                     <button
                       type="button"
                       onClick={(e) => handleDelete(doc.id, e)}
                       title={isDeleting ? (isSpanish ? 'Confirmar eliminación' : 'Confirm delete') : (isSpanish ? 'Eliminar imagen' : 'Delete image')}
-                      className={`absolute top-2 right-2 p-1.5 rounded-xl backdrop-blur-md transition-all cursor-pointer ${
+                      className={`absolute top-2 right-2 rounded-lg backdrop-blur-xs transition-all cursor-pointer flex items-center gap-1 ${
                         isDeleting
-                          ? 'bg-rose-600 text-white shadow-lg animate-pulse ring-2 ring-white/50'
-                          : 'bg-black/50 text-white/80 hover:text-white hover:bg-rose-600/80 opacity-80 sm:opacity-0 group-hover:opacity-100'
+                          ? 'bg-rose-600 text-white shadow-md animate-pulse ring-2 ring-white/50 text-[10px] font-bold px-2 py-1'
+                          : 'bg-black/40 text-white/80 hover:text-white hover:bg-rose-600/90 opacity-70 sm:opacity-0 group-hover:opacity-100 p-1.5'
                       }`}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3 h-3" />
+                      {isDeleting && <span>{isSpanish ? 'Confirmar' : 'Confirm'}</span>}
                     </button>
                   </div>
 
                   {/* Card Content Body */}
-                  <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
+                  <div className="p-3 sm:p-3.5 flex-1 flex flex-col justify-between">
                     <div>
+                      {/* Language & Level Tag - Clean & integrated */}
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded-md bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)]">
+                          <span>{langMeta?.flag || '🌐'}</span>
+                          <span>{doc.level || 'B1'}</span>
+                        </span>
+                      </div>
+
                       {/* Title or Inline Edit */}
                       {isEditing ? (
-                        <div className="flex items-center gap-1 mb-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 my-1" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="text"
                             value={editingTitleText}
@@ -313,49 +313,51 @@ export function ImageLibraryView({
                               if (e.key === 'Escape') handleCancelRename(e);
                             }}
                             autoFocus
-                            className="flex-1 px-2 py-1 rounded-lg bg-[var(--surface-tertiary)] border border-rose-500 text-xs text-[var(--text-primary)] font-bold focus:outline-hidden"
+                            className="flex-1 px-2 py-1 rounded-lg bg-[var(--input-bg)] border border-rose-500 text-xs text-[var(--text-primary)] font-bold focus:outline-hidden"
                           />
                           <button
                             type="button"
                             onClick={(e) => handleSaveRename(doc.id, e)}
-                            className="p-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+                            className="p-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors cursor-pointer"
+                            title={isSpanish ? 'Guardar' : 'Save'}
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Check className="w-3 h-3" />
                           </button>
                           <button
                             type="button"
                             onClick={handleCancelRename}
-                            className="p-1 rounded-lg bg-[var(--surface-secondary)] text-[var(--text-secondary)] hover:text-white transition-colors"
+                            className="p-1 rounded-lg bg-[var(--surface-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                            title={isSpanish ? 'Cancelar' : 'Cancel'}
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-3 h-3" />
                           </button>
                         </div>
                       ) : (
                         <div className="flex items-start justify-between gap-1 group/title">
-                          <h3 className="font-bold text-xs sm:text-sm text-[var(--text-primary)] line-clamp-1 group-hover:text-rose-500 transition-colors">
+                          <h3 className="font-bold text-xs sm:text-sm text-[var(--text-primary)] line-clamp-1 group-hover:text-rose-500 transition-colors leading-snug">
                             {doc.title || (isSpanish ? 'Imagen sin título' : 'Untitled Image')}
                           </h3>
                           <button
                             type="button"
                             onClick={(e) => handleStartRename(doc, e)}
                             title={isSpanish ? 'Editar título' : 'Edit title'}
-                            className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0"
+                            className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0"
                           >
-                            <Edit2 className="w-3 h-3" />
+                            <Edit2 className="w-2.5 h-2.5" />
                           </button>
                         </div>
                       )}
 
                       {/* Snippet / Description Preview */}
-                      <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2 mt-1 leading-snug">
+                      <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2 mt-1 leading-relaxed">
                         {doc.description || ''}
                       </p>
                     </div>
 
                     {/* Card Footer: Date and Paragraphs count */}
-                    <div className="mt-3 pt-2.5 border-t border-[var(--border-primary)]/50 flex items-center justify-between text-[10px] text-[var(--text-muted)] font-medium">
+                    <div className="mt-3 pt-2 border-t border-[var(--border-primary)]/40 flex items-center justify-between text-[10px] text-[var(--text-muted)] font-medium">
                       <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3 opacity-70" />
+                        <Clock className="w-3 h-3 opacity-60" />
                         <span>{formatDate(doc.updatedAt || doc.createdAt)}</span>
                       </span>
                       <span>
