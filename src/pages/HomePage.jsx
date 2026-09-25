@@ -52,10 +52,10 @@ export default function HomePage({
       <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-amber-400/10 dark:bg-amber-500/15 rounded-full blur-3xl pointer-events-none -z-10" />
 
       {/* Main Content Area */}
-      <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col justify-center pb-20 sm:pb-8">
+      <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col justify-evenly sm:justify-center py-2 pb-24 sm:py-0 sm:pb-8">
 
         {/* 1. DYNAMIC GREETING */}
-        <div className="w-full flex flex-col items-center justify-center text-center mx-auto mb-5 sm:mb-7 animate-fade-in pt-1">
+        <div className="w-full flex flex-col items-center justify-center text-center mx-auto mb-2 sm:mb-7 animate-fade-in pt-1">
           <h1
             className="w-full flex items-center justify-center text-center text-5xl sm:text-7xl font-black tracking-tight leading-tight transition-all drop-shadow-[0_0_35px_rgba(244,63,94,0.35)]"
             dir={greeting.rtl ? 'rtl' : 'ltr'}
@@ -79,7 +79,7 @@ export default function HomePage({
         {/* 2. FEATURED HERO CARD (Conversations & Voice) */}
         <div
           onClick={() => onSelectMode('chat')}
-          className="group relative w-full p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/50 transition-all duration-300 shadow-lg hover:shadow-2xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 cursor-pointer overflow-hidden transform active:scale-[0.98] sm:hover:-translate-y-0.5 mb-4 sm:mb-5 backdrop-blur-xl"
+          className="group relative w-full p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/50 transition-all duration-300 shadow-lg hover:shadow-2xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 cursor-pointer overflow-hidden transform active:scale-[0.98] sm:hover:-translate-y-0.5 mb-2 sm:mb-5 backdrop-blur-xl"
         >
           <div className="flex items-center justify-between gap-3 sm:gap-4">
             {/* Left: Icon */}
@@ -118,7 +118,7 @@ export default function HomePage({
         </div>
 
         {/* 3. 2x2 GRID OF 4 CARDS */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full">
+        <div className="grid grid-cols-2 gap-x-3.5 gap-y-4 sm:gap-4 w-full">
 
           {/* CARD 1: YOUTUBE READER */}
           <div
