@@ -324,17 +324,17 @@ export function HabitTrackerPage({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#180905] dark:via-[#210d07] dark:to-[#140603] dark:text-stone-100 flex flex-col justify-start px-3 sm:px-6 py-4 sm:py-8 home-gradient-bg">
+    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#180905] dark:via-[#210d07] dark:to-[#140603] dark:text-stone-100 flex flex-col justify-start px-3 sm:px-6 py-4 sm:py-8 pb-28 sm:pb-32 home-gradient-bg">
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-rose-500/5 dark:bg-rose-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
       <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-amber-400/5 dark:bg-amber-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
       <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col">
         {/* Top Navigation */}
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-[var(--border-primary)]/70">
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-black/5 dark:border-white/10">
           <button
             type="button"
             onClick={onBack}
-            className="px-3.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold shadow-xs active:scale-95"
+            className="px-3.5 py-1.5 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold active:scale-95"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>{isSpanish ? 'Volver a Inicio' : 'Back to Home'}</span>
@@ -366,11 +366,11 @@ export function HabitTrackerPage({
             </div>
 
             {/* Quick Month Selector */}
-            <div className="flex items-center space-x-2 self-start sm:self-auto bg-[var(--surface-primary)] dark:bg-[#241009]/95 border border-[var(--border-primary)] dark:border-[#4a2216] p-1.5 rounded-2xl shadow-sm">
+            <div className="flex items-center space-x-2 self-start sm:self-auto bg-white/70 dark:bg-[#241009]/80 backdrop-blur-md border border-black/5 dark:border-white/10 p-1.5 rounded-2xl shadow-sm">
               <button
                 type="button"
                 onClick={handlePrevMonth}
-                className="p-1.5 rounded-xl hover:bg-[var(--surface-secondary)] dark:hover:bg-[#2e150d] text-[var(--text-primary)] transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-primary)] transition-colors cursor-pointer active:scale-95"
                 title={isSpanish ? 'Mes anterior' : 'Previous month'}
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -383,7 +383,7 @@ export function HabitTrackerPage({
               <button
                 type="button"
                 onClick={handleNextMonth}
-                className="p-1.5 rounded-xl hover:bg-[var(--surface-secondary)] dark:hover:bg-[#2e150d] text-[var(--text-primary)] transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-primary)] transition-colors cursor-pointer active:scale-95"
                 title={isSpanish ? 'Mes siguiente' : 'Next month'}
               >
                 <ChevronRight className="w-4 h-4" />
@@ -392,7 +392,7 @@ export function HabitTrackerPage({
               <button
                 type="button"
                 onClick={handleGoToCurrentMonth}
-                className="px-2.5 py-1 text-[11px] font-bold rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-300 border border-rose-500/30 transition-colors ml-1 cursor-pointer"
+                className="px-2.5 py-1 text-[11px] font-bold rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-300 border border-rose-500/30 transition-colors ml-1 cursor-pointer active:scale-95"
               >
                 {isSpanish ? 'Hoy' : 'Today'}
               </button>
@@ -401,7 +401,7 @@ export function HabitTrackerPage({
         </div>
 
         {/* 2. CONFIGURACIÓN DE IDIOMAS SECTION */}
-        <div className="mb-6 p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md dark:bg-[#241009]/95 dark:border-[#4a2216] dark:shadow-xl transition-all">
+        <div className="mb-6 p-5 sm:p-6 rounded-3xl bg-white/70 dark:bg-[#241009]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm transition-all">
           <div className="flex items-center justify-between mb-2">
             <div>
               <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white">

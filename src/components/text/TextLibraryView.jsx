@@ -179,13 +179,13 @@ export function TextLibraryView({
   return (
     <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-hidden text-[var(--text-primary)]">
       {/* Top Header Bar: [ ← ]  Text Reader  [ + Add ] */}
-      <div className="flex-shrink-0 flex items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-[var(--border-primary)]">
+      <div className="flex-shrink-0 flex items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-black/5 dark:border-white/10">
         {onBackToHome ? (
           <button
             type="button"
             onClick={onBackToHome}
             title={isSpanish ? 'Volver a Inicio' : 'Back to Home'}
-            className="p-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs active:scale-95 shrink-0"
+            className="p-2 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold active:scale-95 shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="hidden sm:inline">{isSpanish ? 'Inicio' : 'Home'}</span>
@@ -201,7 +201,7 @@ export function TextLibraryView({
         <button
           type="button"
           onClick={onAddNew}
-          className="px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-rose-950/40 active:scale-95 transition-all cursor-pointer shrink-0"
+          className="px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-md shadow-rose-950/30 active:scale-95 transition-all cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
           <span>Add</span>
@@ -270,7 +270,7 @@ export function TextLibraryView({
                 ? 'Buscar por título, autor, contenido o idioma...'
                 : 'Search by title, author, text or language...'
             }
-            className="w-full bg-[var(--input-bg)] text-[var(--text-primary)] text-xs sm:text-sm pl-9 pr-8 py-2.5 rounded-xl border border-[var(--input-border)] placeholder-[var(--text-muted)] focus:outline-hidden focus:ring-1 focus:ring-rose-500 transition-all shadow-xs"
+            className="w-full bg-black/5 dark:bg-white/5 text-[var(--text-primary)] text-xs sm:text-sm pl-9 pr-8 py-2.5 rounded-xl border border-black/10 dark:border-white/15 placeholder-[var(--text-muted)] focus:outline-hidden focus:ring-1 focus:ring-rose-500/50 transition-all shadow-xs backdrop-blur-xs"
           />
           {searchQuery && (
             <button

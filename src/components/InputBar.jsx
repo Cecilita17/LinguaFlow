@@ -137,7 +137,7 @@ export function InputBar({
   };
 
   return (
-    <div className="sticky bottom-0 bg-[#2b160f]/95 backdrop-blur-md border-t border-[#482519] px-4 py-3.5 z-20 transition-colors shadow-2xl shadow-black/60">
+    <div className="sticky bottom-0 bg-white/85 dark:bg-[#201511]/90 backdrop-blur-xl border-t border-black/5 dark:border-white/10 px-4 py-3 z-20 transition-colors shadow-lg shadow-black/10 dark:shadow-black/40">
       <div className="max-w-4xl mx-auto">
         {/* Live Audio Recording Overlay Banner */}
         {isRecording && (
@@ -242,7 +242,7 @@ export function InputBar({
                   ? 'bg-gradient-to-tr from-rose-600 to-pink-500 text-white scale-110 ring-4 ring-rose-500/40 shadow-rose-900/70 animate-pulse'
                   : isTranscribingAudio
                   ? 'bg-amber-900/80 text-amber-200 border border-amber-600/50 cursor-wait'
-                  : 'bg-[#3b1e15] hover:bg-[#4d281c] text-rose-200 hover:text-white border border-[#5d3022] hover:border-rose-500/40 hover:shadow-lg'
+                  : 'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] hover:text-rose-500 dark:hover:text-rose-300 border border-black/5 dark:border-white/10'
               }`}
             >
               {isRecording ? (
@@ -297,7 +297,7 @@ export function InputBar({
                   ? "Escribe o mantén presionado el micrófono para hablar..."
                   : "Type or press and hold the mic to speak..."
               }
-              className={`w-full bg-white border border-stone-200 rounded-2xl px-4 py-3 text-stone-900 placeholder-stone-400 text-sm sm:text-base outline-none focus:ring-2 focus:ring-rose-500 shadow-sm transition-all ${
+              className={`w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/15 rounded-2xl px-4 py-3 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm sm:text-base outline-none focus:ring-2 focus:ring-rose-500/50 backdrop-blur-xs transition-all ${
                 isArabic ? 'font-arabic text-right text-lg' : 'text-left'
               }`}
             />
@@ -310,8 +310,8 @@ export function InputBar({
             title={isRecording ? (isSpanish ? "Detener y enviar mensaje de voz" : "Stop and send voice message") : (isSpanish ? "Enviar mensaje" : "Send message")}
             className={`p-3 rounded-2xl transition-all shadow-md flex items-center justify-center flex-shrink-0 ${
               (text.trim() || isRecording) && !isProcessing && !isTranscribingAudio
-                ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/50 transform active:scale-95 cursor-pointer'
-                : 'bg-[#3b1e15] text-rose-300/40 border border-[#4a261a] cursor-not-allowed'
+                ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/40 transform active:scale-95 cursor-pointer'
+                : 'bg-black/5 dark:bg-white/5 text-[var(--text-muted)] border border-black/5 dark:border-white/10 cursor-not-allowed'
             }`}
           >
             <Send className="w-5 h-5" />

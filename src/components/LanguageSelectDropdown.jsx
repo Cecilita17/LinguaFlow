@@ -159,12 +159,12 @@ export function LanguageSelectDropdown({
         aria-label={label ? `${label}: ${currentName}` : currentName}
         className={`group flex items-center transition-all duration-200 outline-none select-none cursor-pointer dropdown-trigger-btn ${
           variant === 'header'
-            ? 'space-x-2 bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-rose-500/60 shadow-xs active:scale-[0.98]'
+            ? 'space-x-2 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] px-2.5 py-1.5 rounded-xl border border-black/5 dark:border-white/10 hover:border-rose-500/40 shadow-xs active:scale-95'
             : variant === 'card'
-            ? 'w-full justify-between bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] p-3 rounded-2xl border border-[var(--border-primary)] hover:border-rose-500/60 shadow-xs active:scale-[0.99]'
+            ? 'w-full justify-between bg-white/70 dark:bg-[#2e150d]/80 backdrop-blur-md hover:bg-white/90 dark:hover:bg-[#341b12] text-[var(--text-primary)] p-3 rounded-2xl border border-black/5 dark:border-white/10 hover:border-rose-500/50 shadow-sm active:scale-[0.99]'
             : variant === 'pill'
-            ? 'space-x-2 bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-rose-500/60 shadow-xs'
-            : 'space-x-2 bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] px-2.5 py-1 rounded-lg border border-[var(--border-primary)]'
+            ? 'space-x-2 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] px-3 py-1.5 rounded-xl border border-black/5 dark:border-white/10 hover:border-rose-500/40 shadow-xs active:scale-95'
+            : 'space-x-2 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] px-2.5 py-1 rounded-lg border border-black/5 dark:border-white/10'
         }`}
       >
         {variant === 'card' ? (
@@ -239,10 +239,10 @@ export function LanguageSelectDropdown({
             zIndex: 9999,
             scrollbarWidth: 'thin'
           }}
-          className="py-1.5 overflow-y-auto rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl animate-fade-in dropdown-popover text-[var(--text-primary)]"
+          className="py-1.5 overflow-y-auto rounded-2xl bg-white/95 dark:bg-[#241712]/95 backdrop-blur-xl border border-black/10 dark:border-white/15 shadow-2xl animate-fade-in dropdown-popover text-[var(--text-primary)]"
         >
           {/* Header in Popover */}
-          <div className="px-3 py-1.5 mb-1 border-b border-[var(--border-primary)] flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-[var(--text-muted)] dropdown-popover-header">
+          <div className="px-3 py-1.5 mb-1 border-b border-black/5 dark:border-white/10 flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-[var(--text-muted)] dropdown-popover-header">
             <span>{label ? `Elegir ${label}` : 'Seleccionar idioma'}</span>
           </div>
 
@@ -263,8 +263,8 @@ export function LanguageSelectDropdown({
                   onClick={() => handleSelect(opt.code)}
                   className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all duration-150 group cursor-pointer border dropdown-option-btn ${
                     isSelected
-                      ? 'bg-rose-500/15 border-rose-500/70 text-rose-600 dark:text-rose-300 font-bold shadow-xs dropdown-option-selected'
-                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] hover:border-rose-500/50 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-600 dark:text-rose-300 font-bold shadow-xs dropdown-option-selected'
+                      : 'bg-transparent hover:bg-black/5 dark:hover:bg-white/10 border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   <div className="flex items-center space-x-2.5 truncate">

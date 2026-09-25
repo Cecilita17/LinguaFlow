@@ -1,26 +1,18 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   MessageSquare,
   Youtube,
-  Sparkles,
-  ArrowRight,
-  CheckCircle2,
   FileText,
   Camera,
-  CalendarCheck,
-  Settings as SettingsIcon,
-  Zap,
-  Server,
-  Info
+  Flame,
+  ArrowRight,
+  ChevronRight,
+  Sparkles
 } from 'lucide-react';
-import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
-import {
-  LANGUAGE_FLAGS,
-  NATIVE_LANG_OPTIONS,
-  getLanguageMeta
-} from '../constants/languages.js';
+import { getLanguageMeta } from '../constants/languages.js';
 import { getStudyGreeting } from '../constants/greetings.js';
+import { loadHabitTrackerData } from '../services/habitTrackerService.js';
 
 export default function HomePage({
   onSelectMode,
@@ -33,31 +25,48 @@ export default function HomePage({
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
-  const currentNativeMeta = getLanguageMeta(nativeLang);
   const greeting = getStudyGreeting(targetLang);
 
+  // Compute daily habit progress
+  const habitStats = useMemo(() => {
+    try {
+      const data = loadHabitTrackerData();
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const langEntries = data?.manualEntries?.[dateStr]?.[targetLang] || {};
+      const completed = ['conversation', 'youtube', 'reading'].filter(k => langEntries[k]).length;
+      const pct = Math.round((completed / 3) * 100);
+      return { completed, total: 3, pct: pct > 0 ? pct : 0 };
+    } catch {
+      return { completed: 0, total: 3, pct: 0 };
+    }
+  }, [targetLang]);
+
   return (
-    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#180905] dark:via-[#210d07] dark:to-[#140603] dark:text-stone-100 flex flex-col justify-between px-3 sm:px-6 py-4 sm:py-8 home-gradient-bg">
+    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#180905] dark:via-[#210d07] dark:to-[#140603] dark:text-stone-100 flex flex-col justify-between px-3.5 sm:px-6 py-4 sm:py-6 home-gradient-bg min-h-0">
       {/* Background ambient lighting effects */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-rose-500/5 dark:bg-rose-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-amber-400/5 dark:bg-amber-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-rose-500/10 dark:bg-rose-600/15 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-amber-400/10 dark:bg-amber-500/15 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      {/* Main Container */}
-      <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col justify-center">
+      {/* Main Content Area */}
+      <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col justify-center pb-20 sm:pb-8">
 
-        {/* 1. DYNAMIC GREETING (prominent on mobile & desktop, immediately updates when targetLang changes) */}
-        <div className="w-full flex flex-col items-center justify-center text-center mx-auto mb-4 sm:mb-6 animate-fade-in pt-1">
+        {/* 1. DYNAMIC GREETING */}
+        <div className="w-full flex flex-col items-center justify-center text-center mx-auto mb-5 sm:mb-7 animate-fade-in pt-1">
           <h1
-            className="w-full flex items-center justify-center text-center text-4xl sm:text-6xl font-black tracking-tight text-[var(--text-primary)] dark:text-white leading-tight transition-all"
+            className="w-full flex items-center justify-center text-center text-5xl sm:text-7xl font-black tracking-tight leading-tight transition-all drop-shadow-[0_0_35px_rgba(244,63,94,0.35)]"
             dir={greeting.rtl ? 'rtl' : 'ltr'}
           >
-            <span className="inline-block text-center bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 dark:from-rose-400 dark:via-pink-400 dark:to-amber-300 bg-clip-text text-transparent">
+            <span className="inline-block text-center bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 dark:from-rose-400 dark:via-pink-400 dark:to-amber-300 bg-clip-text text-transparent">
               {greeting.text}
             </span>
           </h1>
 
           {greeting.translit && (
-            <p className="text-xs sm:text-sm font-medium text-rose-500/80 dark:text-rose-300/80 mt-1 font-mono tracking-wide text-center">
+            <p className="text-sm sm:text-base font-medium text-rose-500/90 dark:text-rose-300/90 mt-1 font-mono tracking-wide text-center">
               {greeting.translit}
             </p>
           )}
@@ -67,236 +76,169 @@ export default function HomePage({
           </p>
         </div>
 
-        {/* 2. MAIN ACTION CARDS (Mobile: 2-column big icon grid; Desktop: 2-column detailed cards) */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 sm:gap-5 w-full mb-6">
-
-          {/* CARD 1: TUTOR CHAT */}
-          <div
-            onClick={() => onSelectMode('chat')}
-            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
-          >
-            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
-              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
-                <MessageSquare className="w-7 h-7 sm:w-7 sm:h-7" />
-              </div>
-              <div className="w-full sm:flex-1 sm:min-w-0">
-                <div className="flex items-center justify-center sm:justify-between">
-                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-500 dark:group-hover:text-rose-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
-                    Conversations & Voice
-                  </h2>
-                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
-                    IA
-                  </span>
-                </div>
-                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
-                  {isSpanish
-                    ? 'Conversación interactiva con correcciones inteligentes en tiempo real.'
-                    : 'Interactive AI conversation with real-time grammar feedback.'}
-                </p>
-              </div>
+        {/* 2. FEATURED HERO CARD (Conversations & Voice) */}
+        <div
+          onClick={() => onSelectMode('chat')}
+          className="group relative w-full p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/50 transition-all duration-300 shadow-lg hover:shadow-2xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 cursor-pointer overflow-hidden transform active:scale-[0.98] sm:hover:-translate-y-0.5 mb-4 sm:mb-5 backdrop-blur-xl"
+        >
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
+            {/* Left: Icon */}
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-rose-500 via-pink-500 to-amber-400 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 group-hover:scale-105 transition-transform duration-300">
+              <MessageSquare className="w-7 h-7 sm:w-8 sm:h-8" />
             </div>
-            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-rose-600 dark:text-rose-300">
-              <span>{isSpanish ? 'Abrir Chat' : 'Start Chat'}</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+
+            {/* Middle: Title & Subtitle */}
+            <div className="flex-1 min-w-0 pr-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-500 dark:group-hover:text-rose-300 transition-colors truncate">
+                  Conversations & Voice
+                </h2>
+                <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
+                  AI
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-[var(--text-secondary)] dark:text-rose-200/70 mt-0.5 leading-snug line-clamp-1 sm:line-clamp-2">
+                {isSpanish
+                  ? 'Practica conversación e interacción oral con correcciones.'
+                  : 'Interactive AI conversation with real-time feedback.'}
+              </p>
+            </div>
+
+            {/* Right: Continue Action Pill */}
+            <div className="shrink-0">
+              <button
+                type="button"
+                className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-600 hover:to-amber-600 text-white text-xs sm:text-sm font-semibold shadow-md shadow-rose-950/30 flex items-center space-x-1 group-hover:shadow-rose-500/30 transition-all pointer-events-none"
+              >
+                <span>{isSpanish ? 'Continuar' : 'Continue'}</span>
+                <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-0.5 transition-transform" />
+              </button>
             </div>
           </div>
-
-          {/* CARD 2: YOUTUBE READER (Opens YouTube Library) */}
-          <div
-            onClick={() => onSelectMode('youtube')}
-            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
-          >
-            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
-              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
-                <Youtube className="w-7 h-7 sm:w-7 sm:h-7" />
-              </div>
-              <div className="w-full sm:flex-1 sm:min-w-0">
-                <div className="flex items-center justify-center sm:justify-between">
-                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
-                    YouTube Reader
-                  </h2>
-                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
-                    {isSpanish ? 'Biblioteca' : 'Library'}
-                  </span>
-                </div>
-                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
-                  {isSpanish
-                    ? 'Tu biblioteca de vídeos con transcripciones interlineales y glosado.'
-                    : 'Your video library with interlinear transcripts and instant glossing.'}
-                </p>
-              </div>
-            </div>
-            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-300">
-              <span>{isSpanish ? 'Ver Biblioteca de Vídeos' : 'Open Video Library'}</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* CARD 3: TEXT READER */}
-          <div
-            onClick={() => onSelectMode('text')}
-            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-pink-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
-          >
-            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
-              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
-                <FileText className="w-7 h-7 sm:w-7 sm:h-7" />
-              </div>
-              <div className="w-full sm:flex-1 sm:min-w-0">
-                <div className="flex items-center justify-center sm:justify-between">
-                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
-                    Text Reader
-                  </h2>
-                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/30">
-                    EPUB / TXT
-                  </span>
-                </div>
-                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
-                  {isSpanish
-                    ? 'Lee textos y libros con audio por párrafos y definiciones al clic.'
-                    : 'Read texts and books with paragraph TTS audio and word lookups.'}
-                </p>
-              </div>
-            </div>
-            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-pink-600 dark:text-pink-300">
-              <span>{isSpanish ? 'Abrir Text Reader' : 'Open Text Reader'}</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* CARD 4: IMAGE READER */}
-          <div
-            onClick={() => onSelectMode('image')}
-            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-pink-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
-          >
-            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
-              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-pink-600 via-rose-500 to-pink-400 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
-                <Camera className="w-7 h-7 sm:w-7 sm:h-7" />
-              </div>
-              <div className="w-full sm:flex-1 sm:min-w-0">
-                <div className="flex items-center justify-center sm:justify-between">
-                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
-                    Image Reader
-                  </h2>
-                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/30">
-                    Vision IA
-                  </span>
-                </div>
-                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
-                  {isSpanish
-                    ? 'Sube una foto y obtén una descripción pedagógica adaptada a tu nivel con lectura y audio.'
-                    : 'Upload a photo to get a level-adapted pedagogical description with reading and audio.'}
-                </p>
-              </div>
-            </div>
-            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-pink-600 dark:text-pink-300">
-              <span>{isSpanish ? 'Abrir Image Reader' : 'Open Image Reader'}</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* CARD 5: HABIT TRACKER (Opens Dedicated Habit Tracker Section) */}
-          <div
-            onClick={() => onSelectMode('habits')}
-            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-amber-950/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
-          >
-            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
-              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
-                <CalendarCheck className="w-7 h-7 sm:w-7 sm:h-7" />
-              </div>
-              <div className="w-full sm:flex-1 sm:min-w-0">
-                <div className="flex items-center justify-center sm:justify-between">
-                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors line-clamp-2 leading-tight sm:leading-normal">
-                    Habit Tracker
-                  </h2>
-                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
-                    📅
-                  </span>
-                </div>
-                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
-                  {isSpanish
-                    ? 'Lleva un registro diario de tus hábitos de estudio por idioma.'
-                    : 'Keep a daily log of your study habits and practice across all languages.'}
-                </p>
-              </div>
-            </div>
-            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-300">
-              <span>{isSpanish ? 'Abrir Habit Tracker' : 'Open Habit Tracker'}</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* CARD 6: SETTINGS (Opens Dedicated Settings Page) */}
-          <div
-            onClick={() => onSelectMode('settings')}
-            className="group relative p-4 py-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-stone-400/80 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-[#4a2216] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-stone-900/50 flex flex-col items-center sm:items-stretch justify-center sm:justify-between text-center sm:text-left cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-98 sm:hover:-translate-y-1 min-h-[135px] sm:min-h-0"
-          >
-            <div className="flex flex-col sm:flex-row items-center sm:space-x-4">
-              <div className="w-14 h-14 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-stone-600 via-rose-700 to-stone-800 flex items-center justify-center text-white shadow-lg shadow-black/40 shrink-0 mb-2.5 sm:mb-0 group-hover:scale-105 transition-transform">
-                <SettingsIcon className="w-7 h-7 sm:w-7 sm:h-7" />
-              </div>
-              <div className="w-full sm:flex-1 sm:min-w-0">
-                <div className="flex items-center justify-center sm:justify-between">
-                  <h2 className="text-sm sm:text-lg font-bold text-[var(--text-primary)] dark:text-white group-hover:text-rose-400 transition-colors line-clamp-2 leading-tight sm:leading-normal">
-                    {isSpanish ? 'Ajustes' : 'Settings'}
-                  </h2>
-                  <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-stone-500/15 text-stone-300 border border-stone-500/30">
-                    ⚙️
-                  </span>
-                </div>
-                <p className="hidden sm:block text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 leading-snug line-clamp-2">
-                  {isSpanish
-                    ? 'Configura idiomas, tema, velocidad de voz, nivel de IA y opciones.'
-                    : 'Configure languages, theme, speech speed, AI level and options.'}
-                </p>
-              </div>
-            </div>
-            <div className="hidden sm:flex mt-4 pt-3 border-t border-[var(--border-primary)]/50 items-center justify-between text-xs font-bold text-rose-400">
-              <span>{isSpanish ? 'Configurar LinguaFlow' : 'Open Settings'}</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
         </div>
 
-        {/* 3. GROQ AI / BACKEND STATUS INFORMATION (Solely at the bottom of the Home page per Requirement 6 & 7) */}
-        <div className="w-full pt-2">
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-xs dark:bg-[#1e0d08]/80 dark:border-[#3b170e] flex items-center justify-between gap-3">
-            <div className="flex items-center space-x-3">
-              <div
-                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                  apiWarning ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'
-                }`}
-              >
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[var(--text-primary)]">
-                    {apiWarning ? (isSpanish ? 'Aviso Groq AI' : 'Groq AI Warning') : (isSpanish ? 'Motor Groq AI Activo' : 'Groq AI Engine Active')}
-                  </span>
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      apiWarning ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'
-                    }`}
-                  />
-                </div>
-                <div className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">
-                  openai/gpt-oss-120b • Whisper V3
-                </div>
-              </div>
-            </div>
+        {/* 3. 2x2 GRID OF 4 CARDS */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full">
 
-            <button
-              type="button"
-              onClick={() => onSelectMode('settings')}
-              className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline shrink-0 cursor-pointer"
-            >
-              {isSpanish ? 'Ver estado' : 'View status'}
-            </button>
+          {/* CARD 1: YOUTUBE READER */}
+          <div
+            onClick={() => onSelectMode('youtube')}
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[140px] sm:min-h-[155px] backdrop-blur-xl"
+          >
+            <div className="flex items-start justify-between">
+              <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-red-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <Youtube className="w-6 h-6 sm:w-6 sm:h-6" />
+              </div>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
+                {isSpanish ? 'Vídeos' : 'Videos'}
+              </span>
+            </div>
+            <div className="mt-3">
+              <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors leading-tight">
+                YouTube Reader
+              </h3>
+              <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 line-clamp-1">
+                {isSpanish ? 'Biblioteca de vídeos' : 'Video library & audio'}
+              </p>
+            </div>
           </div>
+
+          {/* CARD 2: TEXT READER */}
+          <div
+            onClick={() => onSelectMode('text')}
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[140px] sm:min-h-[155px] backdrop-blur-xl"
+          >
+            <div className="flex items-start justify-between">
+              <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-md shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <FileText className="w-6 h-6 sm:w-6 sm:h-6" />
+              </div>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/25">
+                EPUB / TXT
+              </span>
+            </div>
+            <div className="mt-3">
+              <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors leading-tight">
+                Text Reader
+              </h3>
+              <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 line-clamp-1">
+                {isSpanish ? 'Libros y textos con TTS' : 'Books & TTS audio'}
+              </p>
+            </div>
+          </div>
+
+          {/* CARD 3: IMAGE READER */}
+          <div
+            onClick={() => onSelectMode('image')}
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[140px] sm:min-h-[155px] backdrop-blur-xl"
+          >
+            <div className="flex items-start justify-between">
+              <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-pink-600 via-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <Camera className="w-6 h-6 sm:w-6 sm:h-6" />
+              </div>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/25">
+                Vision IA
+              </span>
+            </div>
+            <div className="mt-3">
+              <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors leading-tight">
+                Image Reader
+              </h3>
+              <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 line-clamp-1">
+                {isSpanish ? 'Fotos pedagógicas con audio' : 'Pedagogical photo reading'}
+              </p>
+            </div>
+          </div>
+
+          {/* CARD 4: DAILY PROGRESS */}
+          <div
+            onClick={() => onSelectMode('habits')}
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[140px] sm:min-h-[155px] backdrop-blur-xl"
+          >
+            <div className="flex items-start justify-between">
+              {/* Circular Progress Ring */}
+              <div className="relative w-12 h-12 sm:w-13 sm:h-13 flex items-center justify-center shrink-0">
+                <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 36 36">
+                  <path
+                    className="text-stone-300/40 dark:text-[#38160e]"
+                    strokeWidth="3.5"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)] transition-all duration-700 ease-out"
+                    strokeDasharray={`${habitStats.pct > 0 ? habitStats.pct : 15}, 100`}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 fill-amber-500/80 animate-pulse" />
+                </div>
+              </div>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
+                {habitStats.pct > 0 ? `${habitStats.pct}%` : (isSpanish ? 'Racha' : 'Streak')}
+              </span>
+            </div>
+            <div className="mt-3">
+              <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors leading-tight">
+                {isSpanish ? 'Progreso Diario' : 'Daily Progress'}
+              </h3>
+              <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] dark:text-rose-200/70 mt-1 line-clamp-1">
+                {habitStats.completed > 0
+                  ? (isSpanish ? `${habitStats.completed}/3 completados hoy` : `${habitStats.completed}/3 completed today`)
+                  : (isSpanish ? 'Tus hábitos de práctica' : 'Track your study habits')}
+              </p>
+            </div>
+          </div>
+
         </div>
 
       </div>
+
     </div>
   );
 }

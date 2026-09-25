@@ -663,7 +663,7 @@ export function ImageReaderPage({
   return (
     <div className="flex-1 overflow-y-auto w-full bg-[var(--app-bg)] text-[var(--text-primary)] flex flex-col justify-between">
       {/* Top sticky navigation bar */}
-      <header className="sticky top-0 z-20 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--border-primary)] px-3 sm:px-6 py-3 flex items-center justify-between gap-3 shadow-xs">
+      <header className="sticky top-0 z-20 bg-white/80 dark:bg-[#201511]/85 backdrop-blur-xl border-b border-black/5 dark:border-white/10 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-3 shadow-sm">
         {/* Left: Back button & Title */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
@@ -672,7 +672,7 @@ export function ImageReaderPage({
               handleStopAudio();
               setViewMode('library');
             }}
-            className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-all cursor-pointer shrink-0"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] hover:text-rose-500 dark:hover:text-rose-300 shrink-0"
             title={isSpanish ? 'Volver a la biblioteca' : 'Back to Library'}
           >
             <ArrowLeft className="w-5 h-5" />
@@ -694,7 +694,7 @@ export function ImageReaderPage({
             value={level}
             onChange={(e) => handleLevelChange(e.target.value)}
             disabled={isGenerating}
-            className="px-2.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] text-xs font-bold focus:border-rose-500 focus:outline-hidden transition-all cursor-pointer"
+            className="px-2.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/10 border border-black/5 dark:border-white/10 text-[var(--text-primary)] text-xs font-bold focus:border-rose-500 focus:outline-hidden transition-all cursor-pointer active:scale-95"
             title={isSpanish ? 'Nivel de aprendizaje' : 'Proficiency level'}
           >
             {CEFR_LEVELS.map(lvl => (
@@ -781,13 +781,13 @@ export function ImageReaderPage({
           /* State B: Results Display (Image + Description + Linguistics) */
           <div className="w-full flex flex-col gap-5 animate-fade-in pb-10">
             {/* Top Toolbar: Image Thumbnail, Title, and Action Controls */}
-            <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="p-4 sm:p-5 rounded-3xl bg-white/80 dark:bg-[#241009]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3.5 min-w-0">
                 {selectedImage?.dataUrl && (
                   <img
                     src={selectedImage.dataUrl}
                     alt="Thumbnail"
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-[var(--border-primary)] shadow-xs shrink-0"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-black/10 dark:border-white/10 shadow-xs shrink-0"
                   />
                 )}
                 <div className="min-w-0">
@@ -808,15 +808,15 @@ export function ImageReaderPage({
               </div>
 
               {/* Action buttons */}
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[var(--border-primary)]">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-black/5 dark:border-white/10">
                 {/* Interlinear Mode Toggle */}
                 <button
                   type="button"
                   onClick={() => setInterlinearMode(!interlinearMode)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                     interlinearMode
-                      ? 'bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-500/30'
-                      : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-tertiary)]'
+                      ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 font-extrabold'
+                      : 'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                   title={interlinearMode ? 'Ocultar glosas' : 'Mostrar glosas'}
                 >
@@ -830,10 +830,10 @@ export function ImageReaderPage({
                   type="button"
                   onClick={handleGlossAll}
                   disabled={isBatchGlossing}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-[var(--border-primary)] ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 ${
                     isBatchGlossing
                       ? 'bg-rose-500/20 text-rose-400 cursor-not-allowed'
-                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] text-[var(--text-primary)] cursor-pointer'
+                      : 'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] cursor-pointer'
                   }`}
                   title={isSpanish ? 'Enriquecer todas las palabras con IA' : 'Gloss all with AI'}
                 >
@@ -852,7 +852,7 @@ export function ImageReaderPage({
                     handleStopAudio();
                     setViewMode('library');
                   }}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                   title={isSpanish ? 'Volver a la biblioteca' : 'Return to library'}
                 >
                   <BookOpen className="w-3.5 h-3.5" />
@@ -866,7 +866,7 @@ export function ImageReaderPage({
                     handleReset();
                     setViewMode('uploader');
                   }}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                   title={isSpanish ? 'Analizar otra imagen' : 'Analyze another image'}
                 >
                   <RotateCcw className="w-3.5 h-3.5" />

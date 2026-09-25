@@ -140,11 +140,11 @@ export function SettingsPage({
   return (
     <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)]">
       {/* Top Header with Back to Home Button */}
-      <div className="flex items-center justify-between pb-4 border-b border-[var(--border-primary)] mb-6">
+      <div className="flex items-center justify-between pb-4 border-b border-black/5 dark:border-white/10 mb-6">
         <button
           type="button"
           onClick={onBack}
-          className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
+          className="px-3.5 py-2 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold active:scale-95"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{isSpanish ? 'Inicio' : 'Home'}</span>
@@ -170,9 +170,9 @@ export function SettingsPage({
         </div>
       </div>
 
-      <div className="space-y-6 pb-8">
+      <div className="space-y-6 pb-28 sm:pb-32">
         {/* SECTION 0: CUENTA / ACCOUNT */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
+        <div className="p-4 sm:p-5 rounded-3xl bg-white/70 dark:bg-[#241009]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm">
           <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-3 flex items-center gap-2">
             <User className="w-4 h-4 text-rose-500" />
             <span>{t('account_title')}</span>
@@ -181,7 +181,7 @@ export function SettingsPage({
           <button
             type="button"
             onClick={() => setActiveSubView('account')}
-            className="w-full bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] rounded-2xl p-4 flex items-center justify-between text-left transition-all cursor-pointer active:scale-[0.99] group shadow-xs"
+            className="w-full bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 border border-black/5 dark:border-white/10 rounded-2xl p-4 flex items-center justify-between text-left transition-all cursor-pointer active:scale-[0.99] group shadow-xs"
           >
             <div className="flex items-center space-x-3.5 min-w-0">
               {isAuthenticated && user?.photoURL ? (

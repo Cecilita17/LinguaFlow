@@ -51,7 +51,7 @@ export function SiteLanguageToggle({
         type="button"
         onClick={toggleSiteLang}
         title={isSpanish ? 'Switch site language to English' : 'Cambiar idioma del sitio a Español'}
-        className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] hover:border-rose-500/60 text-xs font-semibold text-[var(--text-primary)] dark:bg-[#2d140d] dark:hover:bg-[#3d1a10] dark:border-[#482015] dark:text-stone-200 dark:hover:text-white transition-all shadow-xs cursor-pointer active:scale-95 ${className}`}
+        className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 text-xs font-semibold text-[var(--text-primary)] transition-all shadow-xs cursor-pointer active:scale-95 ${className}`}
       >
         <span className="text-sm leading-none">{isSpanish ? '🇪🇸' : '🇺🇸'}</span>
         <span className="tracking-wider uppercase text-[11px] font-bold text-rose-600 dark:text-rose-200">
@@ -64,7 +64,7 @@ export function SiteLanguageToggle({
   // Default 'header' variant: Sleek sliding toggle pill
   return (
     <div
-      className={`inline-flex items-center bg-[var(--surface-tertiary)] dark:bg-[#180904] p-0.5 rounded-xl border border-[var(--border-primary)] dark:border-[#482519] shadow-xs site-lang-toggle-header ${className}`}
+      className={`inline-flex items-center bg-black/5 dark:bg-white/5 p-0.5 rounded-xl border border-black/5 dark:border-white/10 shadow-xs backdrop-blur-md site-lang-toggle-header ${className}`}
       title={isSpanish ? 'Idioma del sitio: Español (clic para English)' : 'Site language: English (click for Spanish)'}
     >
       <button
@@ -72,8 +72,8 @@ export function SiteLanguageToggle({
         onClick={() => setSiteLang('es')}
         className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
           isSpanish
-            ? 'bg-[var(--surface-primary)] text-rose-700 border border-rose-300 shadow-xs dark:bg-gradient-to-r dark:from-rose-900/80 dark:to-[#3b170e] dark:text-white dark:border-rose-500/40'
-            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-[#2a130c]'
+            ? 'bg-white/90 text-rose-600 shadow-sm dark:bg-rose-500/25 dark:text-rose-200 dark:border dark:border-rose-500/30'
+            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
         }`}
       >
         <span className="text-xs leading-none">🇪🇸</span>
@@ -85,8 +85,8 @@ export function SiteLanguageToggle({
         onClick={() => setSiteLang('en')}
         className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
           isEnglish
-            ? 'bg-[var(--surface-primary)] text-rose-700 border border-rose-300 shadow-xs dark:bg-gradient-to-r dark:from-rose-900/80 dark:to-[#3b170e] dark:text-white dark:border-rose-500/40'
-            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-[#2a130c]'
+            ? 'bg-white/90 text-rose-600 shadow-sm dark:bg-rose-500/25 dark:text-rose-200 dark:border dark:border-rose-500/30'
+            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
         }`}
       >
         <span className="text-xs leading-none">🇺🇸</span>

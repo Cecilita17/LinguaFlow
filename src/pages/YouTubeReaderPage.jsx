@@ -1302,15 +1302,15 @@ export function YouTubeReaderPage({
         /* =================== VIEW 3: READER & TRANSCRIPT SCREEN =================== */
         <div className="h-full flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)] min-h-0">
           {/* TOP HEADER: [ ← ]     [TÍTULO]     [Idioma ▼]     [☰] */}
-          <header className="relative z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] shadow-md text-[var(--text-primary)] shrink-0 transition-colors overflow-visible">
-            <div className="px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 min-w-0 max-w-4xl mx-auto">
+          <header className="relative z-30 bg-white/80 dark:bg-[#201511]/85 backdrop-blur-xl border-b border-black/5 dark:border-white/10 shadow-sm text-[var(--text-primary)] shrink-0 transition-colors overflow-visible">
+            <div className="px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-3 min-w-0 max-w-4xl mx-auto">
               {/* [ ← ] Back button to library */}
               <button
                 type="button"
                 onClick={() => navigateToView('library')}
                 title={isSpanish ? 'Volver a la Biblioteca' : 'Back to Library'}
                 aria-label={isSpanish ? 'Volver a la Biblioteca' : 'Back to Library'}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shrink-0"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] hover:text-rose-500 dark:hover:text-rose-300 shrink-0"
               >
                 <ArrowLeft className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
               </button>
@@ -1348,10 +1348,10 @@ export function YouTubeReaderPage({
                   title={isSpanish ? 'Menú de opciones' : 'Menu options'}
                   aria-label={isSpanish ? 'Menú de opciones' : 'Menu options'}
                   aria-expanded={isActionsMenuOpen}
-                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 text-[var(--text-primary)] hover:text-rose-500 dark:hover:text-rose-300 ${
                     isActionsMenuOpen
-                      ? 'bg-[var(--surface-hover)] text-[var(--text-primary)] border border-rose-500/50'
-                      : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                      ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 ring-1 ring-rose-500/30'
+                      : 'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15'
                   }`}
                 >
                   <Menu className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
@@ -1359,7 +1359,7 @@ export function YouTubeReaderPage({
 
                 {/* Dropdown Menu */}
                 {isActionsMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 z-[100] w-64 bg-[var(--surface-primary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)] max-h-[80vh] overflow-y-auto">
+                  <div className="absolute right-0 top-full mt-2 z-[100] w-64 bg-white/95 dark:bg-[#241712]/95 backdrop-blur-xl border border-black/10 dark:border-white/15 rounded-2xl shadow-2xl p-1 text-xs font-medium text-[var(--text-primary)] max-h-[80vh] overflow-y-auto">
                     {/* 1. Inicio */}
                     <button
                       type="button"
@@ -1713,8 +1713,8 @@ export function YouTubeReaderPage({
 
           {/* BOTTOM CONTROL BAR — compact icon controls matching TextReaderPage */}
           {subtitles.length > 0 && (
-            <div className="shrink-0 z-30 bg-[var(--header-bg)] backdrop-blur-md border-t border-[var(--header-border)] shadow-md">
-              <div className="px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-around gap-1 sm:gap-2 max-w-4xl mx-auto">
+            <div className="sticky bottom-2 z-30 pointer-events-none px-3 pb-1 flex justify-center w-full">
+              <div className="pointer-events-auto w-full max-w-md mx-auto py-2 px-3 sm:px-5 rounded-2xl sm:rounded-full bg-white/80 dark:bg-[#2b1710]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-xl shadow-black/10 dark:shadow-black/40 flex items-center justify-around gap-1 sm:gap-3 transition-all">
                 {/* 1. Transliterations — A文 */}
                 <button
                   type="button"
@@ -1724,13 +1724,13 @@ export function YouTubeReaderPage({
                     : (isSpanish ? 'Activar transliteración / glosado interlineal' : 'Enable transliteration / interlinear gloss')}
                   aria-label="Transliterations"
                   aria-pressed={interlinearMode}
-                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                  className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none ${
                     interlinearMode
-                      ? 'bg-rose-600 text-white border border-rose-500 ring-1 ring-rose-400/30 shadow-rose-900/40'
-                      : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                      ? 'text-rose-600 dark:text-rose-400 font-extrabold bg-rose-500/15'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold'
                   }`}
                 >
-                  <span className="font-bold text-[11px] sm:text-xs leading-none select-none tracking-tighter">A文</span>
+                  <span className="text-[12px] sm:text-sm leading-none tracking-tight">A文</span>
                 </button>
 
                 {/* 2. Auto glossing — Sparkles */}
@@ -1742,13 +1742,13 @@ export function YouTubeReaderPage({
                     : (isSpanish ? 'Activar glosado automático' : 'Enable auto-glossing')}
                   aria-label="Auto glossing"
                   aria-pressed={isAutoGlossing}
-                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 ${
+                  className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                     isAutoGlossing
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 shadow-emerald-950/40'
-                      : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border-primary)]'
+                      ? 'text-emerald-500 dark:text-emerald-400 bg-emerald-500/15'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
                   }`}
                 >
-                  <Sparkles className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isAutoGlossing ? 'text-white fill-white' : 'text-rose-500 dark:text-rose-400'}`} />
+                  <Sparkles className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500/30' : ''}`} />
                 </button>
 
                 {/* 3. Text size — A± */}
@@ -1757,9 +1757,9 @@ export function YouTubeReaderPage({
                   onClick={cycleFontSize}
                   title={isSpanish ? `Tamaño de texto: ${fontSize.toUpperCase()} — clic para cambiar` : `Text size: ${fontSize.toUpperCase()} — click to change`}
                   aria-label="Tamaño de texto"
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                  className="py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold"
                 >
-                  <span className="font-bold text-[11px] sm:text-xs leading-none select-none tracking-tight">A±</span>
+                  <span className="text-[12px] sm:text-sm leading-none tracking-tight">A±</span>
                 </button>
 
                 {/* 4. Playback speed — Gauge */}
@@ -1770,10 +1770,10 @@ export function YouTubeReaderPage({
                     ? `Velocidad del vídeo (${playbackRate}×) — clic para cambiar`
                     : `Video playback speed (${playbackRate}×) — click to change`}
                   aria-label="Playback speed"
-                  className="min-w-9 h-9 sm:min-w-10 sm:h-10 px-1.5 rounded-lg sm:rounded-xl flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                  className="relative inline-flex items-center justify-center py-1.5 px-3 rounded-xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group"
                 >
-                  <Gauge className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-500 dark:text-rose-400" />
-                  <span className="text-[10px] sm:text-[11px] font-mono font-bold leading-none">
+                  <Gauge className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors shrink-0" />
+                  <span className="ml-1 text-[11px] sm:text-xs font-mono font-bold text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
                     {playbackRate}×
                   </span>
                 </button>

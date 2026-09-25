@@ -58,7 +58,7 @@ export function Header({
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--header-border)] px-4 py-2.5 md:py-3 shadow-lg shadow-black/10 dark:shadow-black/25 text-[var(--text-primary)] transition-colors">
+      <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#201511]/85 backdrop-blur-xl border-b border-black/5 dark:border-white/10 px-4 py-2.5 md:py-3 shadow-sm text-[var(--text-primary)] transition-colors">
         {/* MOBILE TOP BAR (< md) */}
         <div className="flex md:hidden items-center justify-between w-full">
           {/* Left: Brand Logo & Titles */}
@@ -163,14 +163,14 @@ export function Header({
             </div>
 
             {/* Navigation Tabs (Inicio vs Chat vs YouTube Reader) */}
-            <div className="flex items-center p-1 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border-primary)] text-xs font-bold">
+            <div className="flex items-center p-1 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/10 text-xs font-bold backdrop-blur-md">
               <button
                 type="button"
                 onClick={() => setActiveTab && setActiveTab('home')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                   activeTab === 'home'
-                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
               >
                 <span>🏠</span>
@@ -179,10 +179,10 @@ export function Header({
               <button
                 type="button"
                 onClick={() => setActiveTab && setActiveTab('chat')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                   activeTab === 'chat'
-                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
               >
                 <span>💬</span>
@@ -191,10 +191,10 @@ export function Header({
               <button
                 type="button"
                 onClick={() => setActiveTab && setActiveTab('youtube')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                   activeTab === 'youtube'
-                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
               >
                 <span>🎥</span>
@@ -203,10 +203,10 @@ export function Header({
               <button
                 type="button"
                 onClick={() => setActiveTab && setActiveTab('text')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                   activeTab === 'text'
-                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
               >
                 <span>📖</span>
@@ -215,10 +215,10 @@ export function Header({
               <button
                 type="button"
                 onClick={() => setActiveTab && setActiveTab('image')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                   activeTab === 'image'
-                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
               >
                 <span>📷</span>
@@ -228,7 +228,7 @@ export function Header({
 
             {/* Aesthetic Language Selectors */}
             <div
-              className="flex items-center space-x-1.5 p-1 rounded-2xl border border-[var(--border-primary)] shadow-md text-xs bg-[var(--surface-tertiary)]"
+              className="flex items-center space-x-1.5 p-1 rounded-2xl border border-black/5 dark:border-white/10 shadow-xs text-xs bg-black/5 dark:bg-white/5 backdrop-blur-md"
             >
               <LanguageSelectDropdown
                 value={targetLang}
@@ -259,15 +259,15 @@ export function Header({
                 type="button"
                 onClick={() => setShowTransliteration(!showTransliteration)}
                 title={showTransliteration ? "Desactivar transliteración" : "Activar transliteración sobre palabras"}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-xs border ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                   showTransliteration
-                    ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500 shadow-rose-900/40'
-                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-hover)]'
+                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 ring-1 ring-rose-500/30'
+                    : 'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 <Type className="w-3.5 h-3.5" />
                 <span className="hidden md:inline">Transliteración</span>
-                <span className={`text-[10px] px-1 rounded ${showTransliteration ? 'bg-rose-800 text-rose-100' : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)]'}`}>
+                <span className={`text-[10px] px-1 rounded ${showTransliteration ? 'bg-rose-600 text-white' : 'bg-black/10 dark:bg-white/10 text-[var(--text-muted)]'}`}>
                   {showTransliteration ? 'ON' : 'OFF'}
                 </span>
               </button>
@@ -277,10 +277,10 @@ export function Header({
                 type="button"
                 onClick={() => setHandsFree(!handsFree)}
                 title={handsFree ? "Desactivar modo manos libres" : "Activar modo manos libres"}
-                className={`relative flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-xs border ${
+                className={`relative flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                   handsFree
-                    ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white border-rose-400 shadow-rose-900/50'
-                    : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--surface-hover)]'
+                    ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-sm'
+                    : 'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 {handsFree ? (
@@ -306,7 +306,7 @@ export function Header({
                   type="button"
                   onClick={onOpenSettings}
                   title="Aviso de Groq AI: Clic para revisar el backend"
-                  className="hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-semibold shadow-xs hover:bg-amber-900/90 transition-all animate-pulse"
+                  className="hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/60 text-amber-200 text-xs font-semibold shadow-xs hover:bg-amber-900/80 transition-all animate-pulse active:scale-95 cursor-pointer"
                 >
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                   <span>⚠️ Aviso Groq AI</span>
@@ -316,7 +316,7 @@ export function Header({
                   type="button"
                   onClick={onOpenSettings}
                   title="Groq AI Activa (openai/gpt-oss-120b)"
-                  className="hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-950/85 border border-emerald-600/70 text-emerald-200 text-xs font-semibold shadow-xs hover:bg-emerald-900/80 transition-all"
+                  className="hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-600/60 text-emerald-200 text-xs font-semibold shadow-xs hover:bg-emerald-900/80 transition-all active:scale-95 cursor-pointer"
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   <span>⚡ Groq IA Activa</span>
@@ -329,7 +329,7 @@ export function Header({
                   type="button"
                   onClick={onResetChat}
                   title="Reiniciar chat en este idioma"
-                  className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shadow-xs transition-colors"
+                  className="p-2 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer active:scale-95 transition-all"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
@@ -340,7 +340,7 @@ export function Header({
                 type="button"
                 onClick={onOpenSettings}
                 title="Ajustes de API y Voz"
-                className="p-2 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] shadow-xs transition-colors"
+                className="p-2 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer active:scale-95 transition-all"
               >
                 <Settings className="w-4 h-4" />
               </button>

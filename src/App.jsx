@@ -11,6 +11,7 @@ import { ImageReaderPage } from './pages/ImageReaderPage.jsx';
 import { SettingsPage } from './pages/SettingsPage';
 import { HabitTrackerPage } from './pages/HabitTrackerPage.jsx';
 import HomePage from './pages/HomePage';
+import BottomNavBar from './components/BottomNavBar.jsx';
 import { useSpeech } from './hooks/useSpeech';
 import { usePipelineCall } from './hooks/usePipelineCall.js';
 import { Sparkles, RotateCcw, ArrowLeft, ArrowUp } from 'lucide-react';
@@ -1360,6 +1361,14 @@ export default function App() {
 
       {/* Global Background Auto-Backup Toast */}
       <AutoBackupToast />
+
+      {/* Persistent Bottom Navigation Bar for Home, Habits (Progress), and Settings */}
+      {['home', 'habits', 'settings'].includes(activeTab) && (
+        <BottomNavBar
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+        />
+      )}
     </div>
   );
 }
