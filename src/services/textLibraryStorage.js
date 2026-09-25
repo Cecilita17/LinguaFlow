@@ -186,6 +186,20 @@ export async function saveTextDocument(rawDoc) {
   const effectiveSourceType = rawDoc.sourceType || existing?.sourceType || rawDoc.format || existing?.format || 'txt';
   const effectiveFormat = rawDoc.format || existing?.format || effectiveSourceType;
 
+  // Audio document metadata preservation
+  const effectiveAudioPathname = rawDoc.audioPathname !== undefined
+    ? rawDoc.audioPathname
+    : (existing?.audioPathname || null);
+  const effectiveAudioMimeType = rawDoc.audioMimeType !== undefined
+    ? rawDoc.audioMimeType
+    : (existing?.audioMimeType || null);
+  const effectiveAudioSegments = (Array.isArray(rawDoc.audioSegments) && rawDoc.audioSegments.length > 0)
+    ? rawDoc.audioSegments
+    : (Array.isArray(existing?.audioSegments) ? existing.audioSegments : []);
+  const effectiveAudioDuration = typeof rawDoc.audioDuration === 'number'
+    ? rawDoc.audioDuration
+    : (typeof existing?.audioDuration === 'number' ? existing.audioDuration : 0);
+
   // 5. Resolve Chapters
   const effectiveChapters = (Array.isArray(rawDoc.chapters) && rawDoc.chapters.length > 0)
     ? rawDoc.chapters
@@ -238,6 +252,10 @@ export async function saveTextDocument(rawDoc) {
     paragraphs: effectiveParagraphs,
     chapters: effectiveChapters,
     languageStates: existingStates,
+    audioPathname: effectiveAudioPathname,
+    audioMimeType: effectiveAudioMimeType,
+    audioSegments: effectiveAudioSegments,
+    audioDuration: effectiveAudioDuration,
     lastAudioPosition: effectiveLastAudioPosition,
     lastAudioParagraphId: effectiveLastAudioParagraphId,
     lastReadingPosition: effectiveLastReadingPosition,
@@ -553,6 +571,9 @@ export async function migrateFromLocalStorage() {
             targetLang: parsedActive.targetLang || 'zh',
             nativeLang: parsedActive.nativeLang || 'es',
             paragraphsCount: parsedActive.paragraphs.length,
+            audioPathname: parsedActive.audioPathname || null,
+            audioMimeType: parsedActive.audioMimeType || null,
+            audioDuration: typeof parsedActive.audioDuration === 'number' ? parsedActive.audioDuration : (Number(parsedActive.audioDuration) || 0),
             lastAudioPosition: parsedActive.lastAudioPosition || null,
             lastReadingPosition: parsedActive.lastReadingPosition || null,
             createdAt: parsedActive.createdAt || null,

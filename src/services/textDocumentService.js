@@ -642,6 +642,9 @@ export function extractMinimalDraft(doc) {
     paragraphsCount: typeof doc.paragraphsCount === 'number'
       ? doc.paragraphsCount
       : (Array.isArray(doc.paragraphs) ? doc.paragraphs.length : 0),
+    audioPathname: doc.audioPathname || null,
+    audioMimeType: doc.audioMimeType || null,
+    audioDuration: typeof doc.audioDuration === 'number' ? doc.audioDuration : (Number(doc.audioDuration) || 0),
     lastAudioPosition: doc.lastAudioPosition || null,
     lastReadingPosition: doc.lastReadingPosition || null,
     createdAt: doc.createdAt || null,

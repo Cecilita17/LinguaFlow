@@ -46,6 +46,7 @@ import {
   saveDocument,
   saveActiveDocumentDraft,
   loadActiveDocumentDraft,
+  loadActiveDocumentFull,
   clearActiveDocumentDraft,
   translateParagraphTextApi,
   transcribeAudioFileApi
@@ -251,6 +252,17 @@ export function TextReaderPage({
       setCurrentParagraphPage(0);
     }
   }, [document?.id, isEpub, chapters.length]);
+
+  // If initialized from minimal localStorage draft, hydrate full paragraphs and audio metadata from IndexedDB
+  useEffect(() => {
+    if (document?.isMinimalDraft && document?.id) {
+      loadActiveDocumentFull().then(fullDoc => {
+        if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
+          setDocument(fullDoc);
+        }
+      }).catch(err => console.warn('Failed to hydrate full document from IndexedDB:', err));
+    }
+  }, [document?.id, document?.isMinimalDraft]);
 
   const currentChapter = isEpub && chapters[currentChapterIndex] ? chapters[currentChapterIndex] : null;
 
