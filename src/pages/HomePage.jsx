@@ -84,7 +84,7 @@ export default function HomePage({
           <div className="flex items-center justify-between gap-3 sm:gap-4">
             {/* Left: Icon */}
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-rose-500 via-pink-500 to-amber-400 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 group-hover:scale-105 transition-transform duration-300">
-              <MessageSquare className="w-7 h-7 sm:w-8 sm:h-8" />
+              <MessageSquare className="w-9.5 h-9.5 sm:w-10.5 sm:h-10.5" />
             </div>
 
             {/* Middle: Title & Subtitle */}
@@ -127,7 +127,7 @@ export default function HomePage({
           >
             <div className="flex items-start justify-between">
               <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-red-950/40 shrink-0 group-hover:scale-105 transition-transform">
-                <Youtube className="w-6 h-6 sm:w-6 sm:h-6" />
+                <Youtube className="w-8.5 h-8.5 sm:w-9 sm:h-9" />
               </div>
               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
                 {isSpanish ? 'Vídeos' : 'Videos'}
@@ -150,7 +150,7 @@ export default function HomePage({
           >
             <div className="flex items-start justify-between">
               <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-md shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
-                <FileText className="w-6 h-6 sm:w-6 sm:h-6" />
+                <FileText className="w-8 h-8 sm:w-8.5 sm:h-8.5" />
               </div>
               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/25">
                 EPUB / TXT
@@ -173,7 +173,7 @@ export default function HomePage({
           >
             <div className="flex items-start justify-between">
               <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-pink-600 via-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
-                <Camera className="w-6 h-6 sm:w-6 sm:h-6" />
+                <Camera className="w-8.5 h-8.5 sm:w-9 sm:h-9" />
               </div>
               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/25">
                 Vision IA
@@ -216,7 +216,7 @@ export default function HomePage({
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 fill-amber-500/80 animate-pulse" />
+                  <Flame className="w-6 h-6 sm:w-7 sm:h-7 text-amber-500 fill-amber-500/80 animate-pulse" />
                 </div>
               </div>
               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
