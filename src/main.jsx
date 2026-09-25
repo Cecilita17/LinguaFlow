@@ -6,6 +6,7 @@ import { SiteLanguageProvider } from './context/SiteLanguageContext.jsx';
 import { AudioSettingsProvider } from './context/AudioSettingsContext.jsx';
 import { SavedWordsProvider } from './context/SavedWordsContext.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
+import { LocalAudioImportProvider } from './context/LocalAudioImportContext.jsx';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -15,7 +16,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <SiteLanguageProvider>
           <AudioSettingsProvider>
             <SavedWordsProvider>
-              <App />
+              <LocalAudioImportProvider>
+                <App />
+              </LocalAudioImportProvider>
             </SavedWordsProvider>
           </AudioSettingsProvider>
         </SiteLanguageProvider>

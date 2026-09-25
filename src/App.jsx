@@ -27,8 +27,9 @@ import { ChatHubView } from './components/chat/ChatHubView.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
 import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
+import { GlobalAudioImportWidget } from './components/audio/GlobalAudioImportWidget.jsx';
 import { recordHabitActivityForToday } from './services/habitTrackerService.js';
-import { loadActiveDocumentDraft } from './services/textDocumentService.js';
+import { loadActiveDocumentDraft, saveActiveDocumentDraft } from './services/textDocumentService.js';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -1001,6 +1002,19 @@ export default function App() {
     setChatViewMode('call');
   };
 
+  const handleOpenAudioDocument = (doc) => {
+    if (doc) {
+      saveActiveDocumentDraft(doc);
+      if (doc.targetLang && doc.targetLang !== targetLang) {
+        handleTargetLangChange(doc.targetLang);
+      }
+      try {
+        window.location.hash = '#reader';
+      } catch (e) {}
+      setActiveTab('text');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
       {/* Global Header — hidden in Text Reader, YouTube Reader, Image Reader & Live Call because they own their dedicated full-screen headers */}
@@ -1358,6 +1372,9 @@ export default function App() {
         config={config}
         onSaveConfig={handleSaveConfig}
       />
+
+      {/* Global Background Audio Import Widget (Expanded & Minimized) */}
+      <GlobalAudioImportWidget onOpenDocument={handleOpenAudioDocument} />
 
       {/* Global Background Auto-Backup Toast */}
       <AutoBackupToast />

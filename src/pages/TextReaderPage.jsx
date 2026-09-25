@@ -59,6 +59,7 @@ import {
   transcribeAudioFileLocal,
   isLocalWhisperSupported
 } from '../services/localWhisperService.js';
+import { useLocalAudioImport } from '../context/LocalAudioImportContext.jsx';
 import { API_BASE_URL } from '../services/chatService.js';
 import {
   saveTextDocument,
@@ -488,7 +489,14 @@ export function TextReaderPage({
     }
   }, [targetLang, nativeLang, isSpanish, clearAudioVisualTimer, refreshLibraryCount, navigateToView]);
 
-  // EPUB and Audio Import state
+  // Global Background Audio Import Manager
+  const localAudioImport = useLocalAudioImport();
+
+  // EPUB Import state
+  const [isEpubImporting, setIsEpubImporting] = useState(false);
+  const [epubImportStatus, setEpubImportStatus] = useState('');
+
+  // Groq Audio Import state
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState('');
   const [audioEngine, setAudioEngine] = useState(() => {
@@ -509,13 +517,17 @@ export function TextReaderPage({
   const audioImportAbortControllerRef = useRef(null);
 
   const handleCancelAudioImport = useCallback(() => {
-    if (audioImportAbortControllerRef.current) {
-      audioImportAbortControllerRef.current.abort();
-      audioImportAbortControllerRef.current = null;
+    if (audioEngine === 'local') {
+      localAudioImport.cancelImport();
+    } else {
+      if (audioImportAbortControllerRef.current) {
+        audioImportAbortControllerRef.current.abort();
+        audioImportAbortControllerRef.current = null;
+      }
+      setIsImporting(false);
+      setImportStatus('');
     }
-    setIsImporting(false);
-    setImportStatus('');
-  }, []);
+  }, [audioEngine, localAudioImport]);
 
   // Auto-hide entire reader header on scroll down
   const [isHeaderHidden, setIsHeaderHidden] = useState(false);
@@ -1798,14 +1810,14 @@ export function TextReaderPage({
     const isEpub = file.name.toLowerCase().endsWith('.epub') || file.type.includes('epub');
 
     if (isEpub) {
-      setIsImporting(true);
-      setImportStatus('Leyendo archivo EPUB...');
+      setIsEpubImporting(true);
+      setEpubImportStatus('Leyendo libro EPUB...');
       try {
         const parsed = await parseEpubFile(file, {
           targetLang,
           nativeLang,
           onProgress: (prog) => {
-            setImportStatus(`Extrayendo capítulos... (${prog.current} de ${prog.total})`);
+            setEpubImportStatus(`Extrayendo capítulos... (${prog.current} de ${prog.total})`);
           }
         });
 
@@ -1856,8 +1868,8 @@ export function TextReaderPage({
         console.error('Error al importar archivo EPUB:', err);
         alert(`Error al importar el archivo EPUB: ${err.message || err}`);
       } finally {
-        setIsImporting(false);
-        setImportStatus('');
+        setIsEpubImporting(false);
+        setEpubImportStatus('');
       }
       return;
     }
@@ -1885,35 +1897,52 @@ export function TextReaderPage({
     // Reset file input value so selecting same file again re-triggers
     e.target.value = '';
 
+    if (audioEngine === 'local') {
+      try {
+        const importPromise = localAudioImport.startImport({
+          audioFile: file,
+          targetLang,
+          nativeLang
+        });
+
+        // If user stays in Text Reader view when finished, load it into view
+        importPromise
+          .then((saved) => {
+            if (saved) {
+              setDocument(saved);
+              setInputText(saved.rawText || '');
+              setInputTitle(saved.title || '');
+              setIsEditing(false);
+              setIsHeaderHidden(false);
+              setPendingScrollParagraphId(null);
+              previousScrollTopRef.current = 0;
+              refreshLibraryCount();
+              navigateToView('reader');
+            }
+          })
+          .catch((err) => {
+            console.error('[TextReaderPage] Background audio import error:', err);
+          });
+      } catch (err) {
+        alert(isSpanish ? `Error al iniciar importación de audio: ${err.message || err}` : `Error starting audio import: ${err.message || err}`);
+      }
+      return;
+    }
+
+    // Fallback engine: Groq Whisper Cloud
     const abortCtrl = new AbortController();
     audioImportAbortControllerRef.current = abortCtrl;
 
     setIsImporting(true);
-    setImportStatus(isSpanish ? 'Iniciando transcripción...' : 'Starting transcription...');
+    setImportStatus(isSpanish ? 'Importando archivo de audio...' : 'Importing audio file...');
     try {
-      let result;
-      if (audioEngine === 'local') {
-        if (!isLocalWhisperSupported()) {
-          throw new Error(isSpanish
-            ? 'Tu navegador no cuenta con soporte para WebAssembly/Web Workers necesario para la transcripción local. Por favor selecciona Groq Whisper.'
-            : 'Your browser does not support WebAssembly/Web Workers required for local transcription. Please select Groq Whisper.');
-        }
-
-        result = await transcribeAudioFileLocal({
-          audioFile: file,
-          targetLang,
-          onProgress: (msg) => setImportStatus(msg),
-          abortSignal: abortCtrl.signal
-        });
-      } else {
-        result = await transcribeAudioFileApi({
-          audioFile: file,
-          targetLang,
-          nativeLang,
-          apiKey,
-          onProgress: (msg) => setImportStatus(msg)
-        });
-      }
+      const result = await transcribeAudioFileApi({
+        audioFile: file,
+        targetLang,
+        nativeLang,
+        apiKey,
+        onProgress: (msg) => setImportStatus(msg.startsWith('Importando') ? msg : `Importando archivo de audio: ${msg}`)
+      });
 
       const transcriptText = result.transcript;
       if (!transcriptText) {
@@ -1931,7 +1960,7 @@ export function TextReaderPage({
         nativeLang,
         audioPathname: result.pathname || null,
         audioUrl: result.url || null,
-        audioBlob: result.audioBlob || (audioEngine === 'local' ? file : null),
+        audioBlob: null,
         audioMimeType: result.mimeType || file.type || 'audio/webm',
         audioSegments: Array.isArray(result.segments) ? result.segments : [],
         audioDuration: typeof result.duration === 'number' ? result.duration : 0,
@@ -1939,17 +1968,14 @@ export function TextReaderPage({
       });
 
       const saved = await saveDocument(docToSave);
-      console.log('[AudioImport] Document verification:', {
+      console.log('[AudioImport] Groq document verification:', {
         sourceType: saved.sourceType,
         format: saved.format,
         audioPathname: saved.audioPathname,
         audioUrl: saved.audioUrl,
-        hasAudioBlob: Boolean(saved.audioBlob),
         audioMimeType: saved.audioMimeType,
         audioDuration: saved.audioDuration,
-        audioSegmentsLength: saved.audioSegments?.length,
-        firstParagraphAudioStart: saved.paragraphs?.[0]?.audioStart,
-        firstParagraphAudioEnd: saved.paragraphs?.[0]?.audioEnd
+        audioSegmentsLength: saved.audioSegments?.length
       });
       setDocument(saved);
       setInputText(saved.rawText || '');
@@ -1975,9 +2001,9 @@ export function TextReaderPage({
       setIsAutoGlossing(false);
       navigateToView('reader');
     } catch (err) {
-      console.error('Error al importar audio:', err);
+      console.error('Error al importar audio con Groq:', err);
       if (err.message && (err.message.includes('cancelada') || err.message.includes('abort'))) {
-        // User cancelled, do not alert
+        // Cancelled
       } else {
         alert(isSpanish ? `Error al importar el audio: ${err.message || err}` : `Error importing audio: ${err.message || err}`);
       }
@@ -3032,7 +3058,7 @@ export function TextReaderPage({
       )}
 
       {/* Loading Overlay during EPUB import */}
-      {isImporting && (
+      {isEpubImporting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
           <div className="p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl text-[var(--text-primary)] max-w-sm w-full flex flex-col items-center text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/60">
@@ -3043,7 +3069,7 @@ export function TextReaderPage({
                 Importando libro EPUB
               </h4>
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                {importStatus || 'Procesando capítulos y texto...'}
+                {epubImportStatus || 'Procesando capítulos y texto...'}
               </p>
             </div>
           </div>
