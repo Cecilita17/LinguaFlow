@@ -766,7 +766,7 @@ export function stripSttTranslationArtifacts(text, targetLang = 'es') {
   // 1. Remove bracketed / parenthetical translation or subtitle notes:
   // e.g. [Translation: ...], (English: ...), [Translated from Russian: ...]
   cleaned = cleaned
-    .replace(/\[\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)?\s*:?[^\]]*\]/gi, '')
+    .replace(/\[\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\]]*\]/gi, '')
     .replace(/\(\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\)]*\)/gi, '')
     .trim();
 
@@ -1039,7 +1039,7 @@ export async function handleTranscribe(req, res) {
           } else {
             // For imported full audio files, only clean bracketed/parenthetical translation notes without truncating lines
             transcript = transcript
-              .replace(/\[\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)?\s*:?[^\]]*\]/gi, '')
+              .replace(/\[\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\]]*\]/gi, '')
               .replace(/\(\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\)]*\)/gi, '')
               .trim();
           }
