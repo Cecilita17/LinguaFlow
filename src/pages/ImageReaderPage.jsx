@@ -26,7 +26,8 @@ import {
 import {
   tokenizeAndGlossLineOffline,
   glossSingleParagraph,
-  enrichParagraphsWithGlosses
+  enrichParagraphsWithGlosses,
+  isGlossComplete
 } from '../services/textGlossService.js';
 import { translateParagraphTextApi } from '../services/textDocumentService.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
@@ -57,6 +58,10 @@ export function ImageReaderPage({
   // View mode state: 'library' (default) | 'uploader' | 'reader'
   const [viewMode, setViewMode] = useState('library');
   const [currentDocId, setCurrentDocId] = useState(null);
+  const currentDocIdRef = useRef(currentDocId);
+  useEffect(() => {
+    currentDocIdRef.current = currentDocId;
+  }, [currentDocId]);
 
   // Selected image state
   const [selectedImage, setSelectedImage] = useState(null);
@@ -104,6 +109,7 @@ export function ImageReaderPage({
   // Glossing state
   const [glossingParagraphIds, setGlossingParagraphIds] = useState(new Set());
   const [isBatchGlossing, setIsBatchGlossing] = useState(false);
+  const glossAbortControllerRef = useRef(null);
 
   // Clean audio playback helper
   const clearAudioVisualTimer = useCallback(() => {
@@ -126,10 +132,13 @@ export function ImageReaderPage({
     setActiveAudioCharIndex(-1);
   }, [clearAudioVisualTimer]);
 
-  // Clean up audio on unmount
+  // Clean up audio and async tasks on unmount
   useEffect(() => {
     return () => {
       handleStopAudio();
+      if (glossAbortControllerRef.current) {
+        glossAbortControllerRef.current.abort();
+      }
     };
   }, [handleStopAudio]);
 
@@ -219,9 +228,10 @@ export function ImageReaderPage({
 
   // Auto-persist updates (new glosses or translations) to the active document in IndexedDB
   const persistDocumentChanges = useCallback(async (updatedFields = {}) => {
-    if (!currentDocId) return;
+    const docId = currentDocIdRef.current;
+    if (!docId) return;
     try {
-      const existing = await getImageDocumentById(currentDocId);
+      const existing = await getImageDocumentById(docId);
       if (existing) {
         const merged = {
           ...existing,
@@ -233,11 +243,12 @@ export function ImageReaderPage({
     } catch (e) {
       console.warn('[ImageReaderPage] Failed to auto-persist document updates:', e);
     }
-  }, [currentDocId]);
+  }, []);
 
   // Handle single paragraph AI gloss
   const handleGlossParagraph = useCallback(async (paragraph) => {
-    if (!paragraph || glossingParagraphIds.has(paragraph.id)) return;
+    if (!paragraph || !paragraph.id || glossingParagraphIds.has(paragraph.id)) return;
+    if (isGlossComplete(paragraph, targetLang, nativeLang)) return;
 
     setGlossingParagraphIds(prev => new Set(prev).add(paragraph.id));
     try {
@@ -249,7 +260,7 @@ export function ImageReaderPage({
       });
 
       setParagraphs(prev => {
-        const next = prev.map(p => (p.id === paragraph.id ? updated : p));
+        const next = prev.map(p => (p.id === paragraph.id ? { ...p, ...updated, id: p.id } : p));
         persistDocumentChanges({ paragraphs: next });
         return next;
       });
@@ -333,23 +344,38 @@ export function ImageReaderPage({
   // Batch gloss all paragraphs with AI
   const handleGlossAll = useCallback(() => {
     if (isBatchGlossing || paragraphs.length === 0) return;
+    const allComplete = paragraphs.every(p => isGlossComplete(p, targetLang, nativeLang));
+    if (allComplete) return;
+
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    glossAbortControllerRef.current = controller;
+
     setIsBatchGlossing(true);
 
-    enrichParagraphsWithGlosses({
-      paragraphs,
-      targetLang,
-      nativeLang,
-      apiKey,
-      onUpdate: (updatedParas) => {
-        setParagraphs([...updatedParas]);
-        persistDocumentChanges({ paragraphs: updatedParas });
-      },
-      onProgress: (progress) => {
-        if (progress.completed >= progress.total) {
-          setIsBatchGlossing(false);
+    try {
+      enrichParagraphsWithGlosses({
+        paragraphs,
+        targetLang,
+        nativeLang,
+        apiKey,
+        abortSignal: controller.signal,
+        onUpdate: (updatedParas) => {
+          setParagraphs([...updatedParas]);
+          persistDocumentChanges({ paragraphs: updatedParas });
+        },
+        onProgress: (progress) => {
+          if (!progress || progress.isGlossing === false || progress.isComplete === true) {
+            setIsBatchGlossing(false);
+          }
         }
-      }
-    });
+      });
+    } catch (err) {
+      console.warn('Batch glossing error:', err);
+      setIsBatchGlossing(false);
+    }
   }, [isBatchGlossing, paragraphs, targetLang, nativeLang, apiKey, persistDocumentChanges]);
 
   // Main generation trigger
@@ -431,6 +457,10 @@ export function ImageReaderPage({
   const handleOpenSavedDocument = useCallback((doc) => {
     if (!doc) return;
     handleStopAudio();
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+    }
+    setIsBatchGlossing(false);
     setCurrentDocId(doc.id);
     setSelectedImage({
       dataUrl: doc.imageBase64,
@@ -450,6 +480,10 @@ export function ImageReaderPage({
 
   const handleReset = () => {
     handleStopAudio();
+    if (glossAbortControllerRef.current) {
+      glossAbortControllerRef.current.abort();
+    }
+    setIsBatchGlossing(false);
     setSelectedImage(null);
     setCurrentDocId(null);
     setResultTitle('');
@@ -708,7 +742,7 @@ export function ImageReaderPage({
                     activeAudioCharIndex={playingParagraphId === para.id ? activeAudioCharIndex : -1}
                     isAudioError={audioErrorId === para.id}
                     isGlossing={glossingParagraphIds.has(para.id)}
-                    hasGloss={Array.isArray(para.tokens) && para.tokens.some(t => Boolean(t && (t.gloss || t.translation)))}
+                    hasGloss={isGlossComplete(para, targetLang, nativeLang)}
                     translation={paragraphTranslations[para.id]?.text}
                     isTranslating={Boolean(paragraphTranslations[para.id]?.isTranslating)}
                     isTranslationVisible={Boolean(paragraphTranslations[para.id]?.isVisible)}
@@ -716,7 +750,9 @@ export function ImageReaderPage({
                     onPlay={handlePlayParagraph}
                     onStop={handleStopAudio}
                     onWordClick={onWordClick}
+                    onGloss={handleGlossParagraph}
                     onGlossParagraph={handleGlossParagraph}
+                    onTranslate={handleTranslateParagraph}
                     onTranslateParagraph={handleTranslateParagraph}
                   />
                 </div>
