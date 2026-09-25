@@ -1,30 +1,40 @@
 /**
  * Local Whisper Service
- * Orchestrates client-side in-browser transcription using WebAssembly / Web Worker,
- * Web Audio API decoding, audio chunking, and timestamp deduplication.
+ * Orchestrates client-side in-browser transcription using WebAssembly/WebGPU,
+ * Web Audio API decoding, unified single-pass windowing, and timestamp alignment.
  */
 
 import {
   decodeAudioFile,
-  extractAudioSliceFloat32,
-  planAudioChunks,
-  mergeChunkSegments,
-  LONG_AUDIO_THRESHOLD_SECONDS,
-  CHUNK_DURATION_SECONDS,
-  CHUNK_OVERLAP_SECONDS
+  extractAudioSliceFloat32
 } from './audioChunkingService.js';
 
 let workerInstance = null;
 let currentRequestId = 0;
 
 /**
- * Checks whether the current browser environment supports in-browser WebAssembly transcription.
+ * Checks whether the current browser environment supports in-browser WebAssembly/WebGPU transcription.
  */
 export function isLocalWhisperSupported() {
   const hasWorker = typeof window !== 'undefined' && typeof window.Worker !== 'undefined';
   const hasAudioContext = typeof window !== 'undefined' && (Boolean(window.AudioContext) || Boolean(window.webkitAudioContext));
   const hasOfflineAudioContext = typeof window !== 'undefined' && (Boolean(window.OfflineAudioContext) || Boolean(window.webkitOfflineAudioContext));
   return hasWorker && hasAudioContext && hasOfflineAudioContext;
+}
+
+/**
+ * Detects whether the local environment supports WebGPU.
+ */
+export async function detectLocalBackend() {
+  if (typeof navigator !== 'undefined' && 'gpu' in navigator && Boolean(navigator.gpu)) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) {
+        return 'WebGPU';
+      }
+    } catch (e) {}
+  }
+  return 'CPU';
 }
 
 /**
@@ -44,21 +54,21 @@ function getOrCreateWorker() {
  * Preloads the local Whisper model in the background.
  */
 export function preloadLocalWhisperModel(modelId = 'Xenova/whisper-base', onProgress = null) {
-  if (!isLocalWhisperSupported()) return Promise.reject(new Error('WebAssembly Whisper no es compatible con este navegador.'));
+  if (!isLocalWhisperSupported()) return Promise.reject(new Error('Whisper local no es compatible con este navegador.'));
 
   const worker = getOrCreateWorker();
   const reqId = ++currentRequestId;
 
   return new Promise((resolve, reject) => {
     const handler = (event) => {
-      const { type, id, status, progress, error, message } = event.data || {};
+      const { type, id, status, progress, error, message, backend, loadTimeMs } = event.data || {};
       if (id !== reqId) return;
 
       if (type === 'MODEL_PROGRESS' && typeof onProgress === 'function') {
         onProgress(progress);
       } else if (type === 'MODEL_STATUS' && status === 'ready') {
         worker.removeEventListener('message', handler);
-        resolve({ success: true, message });
+        resolve({ success: true, message, backend, loadTimeMs });
       } else if (type === 'MODEL_ERROR') {
         worker.removeEventListener('message', handler);
         reject(new Error(error || 'Error al pre-cargar el modelo local.'));
@@ -84,7 +94,7 @@ export function preloadLocalWhisperModel(modelId = 'Xenova/whisper-base', onProg
  * @param {function} [params.onProgress]
  * @param {function} [params.onModelProgress]
  * @param {AbortSignal} [params.abortSignal]
- * @returns {Promise<{ success: boolean, transcript: string, segments: Array, duration: number, source: string, audioBlob: Blob, mimeType: string }>}
+ * @returns {Promise<{ success: boolean, transcript: string, segments: Array, duration: number, source: string, backend: string, metrics: object, audioBlob: Blob, mimeType: string }>}
  */
 export async function transcribeAudioFileLocal({
   audioFile,
@@ -95,19 +105,22 @@ export async function transcribeAudioFileLocal({
   abortSignal = null
 }) {
   if (!isLocalWhisperSupported()) {
-    throw new Error('Tu navegador no cuenta con soporte completo para Web Audio API o Web Workers requeridos para la transcripción local.');
+    throw new Error('Tu navegador no cuenta con soporte para Web Audio API o Web Workers requeridos para la transcripción local.');
   }
 
   if (abortSignal?.aborted) {
     throw new Error('Transcripción cancelada por el usuario.');
   }
 
-  console.log('[LocalWhisper] Starting local in-browser transcription for file:', {
+  const detectedBackend = await detectLocalBackend();
+
+  console.log('[LocalWhisper] Starting unified local in-browser transcription:', {
     name: audioFile.name,
     size: audioFile.size,
     type: audioFile.type,
     targetLang,
-    modelId
+    modelId,
+    detectedBackend
   });
 
   if (typeof onProgress === 'function') {
@@ -124,148 +137,137 @@ export async function transcribeAudioFileLocal({
   }
 
   const totalDuration = decodedBuffer.duration;
-  console.log(`[LocalWhisper] Audio decoded successfully. Duration: ${totalDuration.toFixed(2)}s, SampleRate: ${decodedBuffer.sampleRate}Hz`);
+  console.log(`[LocalWhisper] Audio decoded: ${totalDuration.toFixed(2)}s, SampleRate: ${decodedBuffer.sampleRate}Hz, Backend: ${detectedBackend}`);
 
   if (abortSignal?.aborted) {
     throw new Error('Transcripción cancelada por el usuario.');
   }
 
-  // 2. Plan audio chunks (if > 180s, chunk into 210s with 12s overlap)
-  const chunkPlan = planAudioChunks(decodedBuffer, {
-    chunkDurationSec: CHUNK_DURATION_SECONDS,
-    overlapSec: CHUNK_OVERLAP_SECONDS,
-    minDurationForChunking: LONG_AUDIO_THRESHOLD_SECONDS
-  });
+  if (typeof onProgress === 'function') {
+    onProgress('Preparando tensores de audio a 16 kHz...');
+  }
+
+  // 2. Extract 16kHz mono Float32Array for full audio duration
+  const float32Data = await extractAudioSliceFloat32(
+    decodedBuffer,
+    0,
+    totalDuration,
+    16000
+  );
+
+  if (abortSignal?.aborted) {
+    throw new Error('Transcripción cancelada por el usuario.');
+  }
 
   const worker = getOrCreateWorker();
-  const chunksToProcess = chunkPlan.shouldChunk && chunkPlan.chunks.length > 0
-    ? chunkPlan.chunks
-    : [{ index: 0, startSec: 0, endSec: totalDuration, offsetSec: 0, duration: totalDuration }];
+  const reqId = ++currentRequestId;
 
-  const totalChunks = chunksToProcess.length;
-  console.log(`[LocalWhisper] Processing plan: ${totalChunks} chunk(s), shouldChunk: ${chunkPlan.shouldChunk}`);
+  // 3. Execute single-pass transcription in Web Worker
+  const result = await new Promise((resolve, reject) => {
+    let aborted = false;
 
-  const chunkResults = [];
+    const abortHandler = () => {
+      aborted = true;
+      worker.removeEventListener('message', messageHandler);
+      reject(new Error('Transcripción cancelada por el usuario.'));
+    };
 
-  for (let i = 0; i < totalChunks; i++) {
-    if (abortSignal?.aborted) {
-      throw new Error('Transcripción cancelada por el usuario.');
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', abortHandler, { once: true });
     }
 
-    const chunk = chunksToProcess[i];
-    const chunkPercent = Math.round((i / totalChunks) * 100);
+    const messageHandler = (event) => {
+      if (aborted) return;
+      const { type, id, transcript, segments, progress, error, backend, metrics, message, progressPercent, chunkIndex, totalChunks } = event.data || {};
+      if (id !== reqId) return;
 
-    if (typeof onProgress === 'function') {
-      if (totalChunks > 1) {
-        onProgress(`Transcribiendo localmente: fragmento ${i + 1} de ${totalChunks} (${chunkPercent}%)...`);
-      } else {
-        onProgress('Transcribiendo localmente con Whisper...');
-      }
-    }
-
-    // Extract 16kHz mono Float32Array slice
-    const float32Data = await extractAudioSliceFloat32(
-      decodedBuffer,
-      chunk.startSec,
-      chunk.endSec,
-      16000
-    );
-
-    const reqId = ++currentRequestId;
-
-    const chunkPromise = new Promise((resolve, reject) => {
-      let aborted = false;
-
-      const abortHandler = () => {
-        aborted = true;
-        worker.removeEventListener('message', messageHandler);
-        reject(new Error('Transcripción cancelada por el usuario.'));
-      };
-
-      if (abortSignal) {
-        abortSignal.addEventListener('abort', abortHandler, { once: true });
-      }
-
-      const messageHandler = (event) => {
-        if (aborted) return;
-        const { type, id, chunkIndex, transcript, segments, progress, error } = event.data || {};
-        if (id !== reqId) return;
-
-        if (type === 'MODEL_PROGRESS') {
-          if (typeof onModelProgress === 'function') {
-            onModelProgress(progress);
-          }
-          if (typeof onProgress === 'function' && progress?.status === 'progress') {
-            const pct = Math.round((progress.loaded / progress.total) * 100) || 0;
-            onProgress(`Descargando modelo Whisper local (${pct}%)...`);
-          }
-        } else if (type === 'CHUNK_PROGRESS') {
-          if (typeof onProgress === 'function' && totalChunks > 1) {
-            onProgress(`Transcribiendo localmente: fragmento ${i + 1} de ${totalChunks}...`);
-          }
-        } else if (type === 'CHUNK_SUCCESS') {
-          if (abortSignal) {
-            abortSignal.removeEventListener('abort', abortHandler);
-          }
-          worker.removeEventListener('message', messageHandler);
-          resolve({
-            chunk,
-            transcript: transcript || '',
-            segments: segments || []
+      if (type === 'MODEL_PROGRESS') {
+        if (typeof onModelProgress === 'function') {
+          onModelProgress(progress);
+        }
+        if (typeof onProgress === 'function' && progress?.status === 'progress' && progress?.total) {
+          const pct = Math.round((progress.loaded / progress.total) * 100) || 0;
+          onProgress(`Descargando modelo Whisper (${pct}%)...`);
+        }
+      } else if (type === 'CHUNK_PROGRESS') {
+        if (typeof onProgress === 'function') {
+          onProgress(message || `Transcribiendo audio (${progressPercent || 0}%)...`, {
+            chunkIndex,
+            totalChunks,
+            progressPercent,
+            backend
           });
-        } else if (type === 'CHUNK_ERROR' || type === 'MODEL_ERROR') {
-          if (abortSignal) {
-            abortSignal.removeEventListener('abort', abortHandler);
-          }
-          worker.removeEventListener('message', messageHandler);
-          reject(new Error(error || `Error en el fragmento ${chunkIndex + 1}`));
         }
-      };
-
-      worker.addEventListener('message', messageHandler);
-
-      worker.postMessage({
-        type: 'TRANSCRIBE_CHUNK',
-        id: reqId,
-        payload: {
-          audioData: float32Data,
-          language: targetLang,
-          modelId,
-          chunkIndex: i,
-          totalChunks,
-          offsetSec: chunk.offsetSec
+      } else if (type === 'CHUNK_SUCCESS') {
+        if (abortSignal) {
+          abortSignal.removeEventListener('abort', abortHandler);
         }
-      });
-    });
+        worker.removeEventListener('message', messageHandler);
+        resolve({
+          transcript: transcript || '',
+          segments: segments || [],
+          backend: backend || detectedBackend,
+          metrics: metrics || null
+        });
+      } else if (type === 'CHUNK_ERROR' || type === 'MODEL_ERROR') {
+        if (abortSignal) {
+          abortSignal.removeEventListener('abort', abortHandler);
+        }
+        worker.removeEventListener('message', messageHandler);
+        reject(new Error(error || 'Error durante la transcripción de audio.'));
+      }
+    };
 
-    const chunkResult = await chunkPromise;
-    chunkResults.push(chunkResult);
-  }
+    worker.addEventListener('message', messageHandler);
 
-  if (typeof onProgress === 'function') {
-    onProgress('Sincronizando segmentos y deduplicando texto...');
-  }
+    // Post to worker (transfer Float32Array buffer for 0-copy efficiency)
+    worker.postMessage({
+      type: 'TRANSCRIBE_AUDIO',
+      id: reqId,
+      payload: {
+        audioData: float32Data,
+        language: targetLang,
+        modelId,
+        audioDuration: totalDuration,
+        chunkIndex: 0,
+        totalChunks: 1,
+        offsetSec: 0
+      }
+    }, [float32Data.buffer]);
+  });
 
-  // 3. Merge segments across overlapping chunks with timestamp deduplication
-  const { combinedSegments, combinedTranscript } = mergeChunkSegments(chunkResults, CHUNK_OVERLAP_SECONDS);
-
-  if (!combinedTranscript) {
+  const finalTranscript = (result.transcript || '').trim();
+  if (!finalTranscript) {
     throw new Error('No se detectó contenido de voz en el archivo de audio.');
   }
 
-  console.log('[LocalWhisper] Local transcription completed successfully:', {
-    totalSegments: combinedSegments.length,
-    firstSegment: combinedSegments[0],
-    lastSegment: combinedSegments[combinedSegments.length - 1],
-    transcriptLength: combinedTranscript.length
-  });
+  const finalBackend = result.backend || detectedBackend;
+  const metrics = result.metrics || {};
+
+  // Log official benchmark telemetry
+  console.log(
+    `%c================ [LinguaFlow Whisper Local Benchmark] ================\n` +
+    `Audio:              ${(metrics.audioDuration || totalDuration).toFixed(2)} s (${((metrics.audioDuration || totalDuration) / 60).toFixed(1)} min)\n` +
+    `Backend:            ${finalBackend}\n` +
+    `Modelo:             ${metrics.modelId || modelId}\n` +
+    `Carga modelo:       ${(metrics.modelLoadTimeSec || 0).toFixed(2)} s\n` +
+    `Inferencia total:   ${(metrics.inferenceTimeSec || 0).toFixed(2)} s\n` +
+    `RTF:                ${(metrics.rtf || 0).toFixed(3)} (${metrics.rtf > 0 ? (1 / metrics.rtf).toFixed(1) : 'N/A'}x)\n` +
+    `Chunks (ventanas):  ${metrics.totalChunks || 1}\n` +
+    `Tiempo medio/chunk: ${(metrics.avgChunkTimeSec || 0).toFixed(2)} s\n` +
+    `Segmentos finales:  ${result.segments.length}\n` +
+    `======================================================================`,
+    'color: #10b981; font-weight: bold;'
+  );
 
   return {
     success: true,
-    transcript: combinedTranscript,
-    segments: combinedSegments,
+    transcript: finalTranscript,
+    segments: result.segments,
     duration: Math.round(totalDuration * 100) / 100,
-    source: `local (Whisper WASM)`,
+    source: `local (Whisper ${finalBackend})`,
+    backend: finalBackend,
+    metrics,
     audioBlob: audioFile,
     mimeType: audioFile.type || 'audio/webm'
   };

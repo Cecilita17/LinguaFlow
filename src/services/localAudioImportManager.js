@@ -4,7 +4,7 @@
  * and persistence across application page navigations.
  */
 
-import { transcribeAudioFileLocal, isLocalWhisperSupported } from './localWhisperService.js';
+import { transcribeAudioFileLocal, isLocalWhisperSupported, detectLocalBackend } from './localWhisperService.js';
 import { createTextDocument, saveDocument } from './textDocumentService.js';
 
 class LocalAudioImportManager {
@@ -18,6 +18,7 @@ class LocalAudioImportManager {
       progressPercent: 0,
       currentChunk: 0,
       totalChunks: 0,
+      backend: 'CPU', // 'WebGPU' | 'CPU'
       statusMessage: '',
       isMinimized: false,
       resultDoc: null,
@@ -28,6 +29,12 @@ class LocalAudioImportManager {
     this.listeners = new Set();
     this.abortController = null;
     this.activeTaskPromise = null;
+
+    // Detect local backend on init
+    detectLocalBackend().then(backend => {
+      this.state.backend = backend;
+      this.notify();
+    }).catch(() => {});
   }
 
   getState() {
@@ -113,7 +120,7 @@ class LocalAudioImportManager {
     }
 
     if (!isLocalWhisperSupported()) {
-      const errMsg = 'Tu navegador no soporta WebAssembly/Web Workers necesario para la transcripción local.';
+      const errMsg = 'Tu navegador no soporta Web Audio / Web Workers necesario para la transcripción local.';
       this.updateState({
         status: 'error',
         error: errMsg,
@@ -127,6 +134,7 @@ class LocalAudioImportManager {
 
     const fileName = audioFile.name || 'audio';
     const fileSize = audioFile.size || 0;
+    const initialBackend = await detectLocalBackend();
 
     this.updateState({
       status: 'transcribing',
@@ -134,10 +142,11 @@ class LocalAudioImportManager {
       fileSize,
       targetLang,
       nativeLang,
+      backend: initialBackend,
       progressPercent: 0,
       currentChunk: 1,
       totalChunks: 1,
-      statusMessage: 'Importando archivo de audio: decodificando audio en el navegador...',
+      statusMessage: `Importando audio: decodificando en el navegador (${initialBackend})...`,
       isMinimized: false,
       resultDoc: null,
       error: null,
@@ -157,18 +166,20 @@ class LocalAudioImportManager {
               this.updateState({
                 status: 'loading-model',
                 progressPercent: pct,
-                statusMessage: `Descargando modelo Whisper local (${pct}%)...`
+                statusMessage: `Descargando modelo Whisper (${pct}%)...`
               });
             }
           },
-          onProgress: (msg) => {
+          onProgress: (msg, meta) => {
             if (abortSignal.aborted) return;
-            let currentChunk = this.state.currentChunk;
-            let totalChunks = this.state.totalChunks;
-            let pct = this.state.progressPercent;
+            let currentChunk = meta?.chunkIndex ?? this.state.currentChunk;
+            let totalChunks = meta?.totalChunks ?? this.state.totalChunks;
+            let pct = meta?.progressPercent ?? this.state.progressPercent;
+            let backend = meta?.backend || this.state.backend;
 
-            // Extract chunk information from progress message if present
-            const match = msg.match(/fragmento\s+(\d+)\s+de\s+(\d+)\s+\((\d+)%\)/i);
+            // Extract window information from progress message if present
+            const match = msg.match(/ventana\s+(\d+)\s+de\s+(\d+)\s+\((\d+)%\)/i) ||
+                          msg.match(/fragmento\s+(\d+)\s+de\s+(\d+)\s+\((\d+)%\)/i);
             if (match) {
               currentChunk = parseInt(match[1], 10);
               totalChunks = parseInt(match[2], 10);
@@ -177,7 +188,8 @@ class LocalAudioImportManager {
 
             this.updateState({
               status: 'transcribing',
-              statusMessage: msg.startsWith('Importando') ? msg : `Importando archivo de audio: ${msg}`,
+              statusMessage: msg.startsWith('Importando') ? msg : `Importando audio: ${msg}`,
+              backend,
               currentChunk,
               totalChunks,
               progressPercent: pct
@@ -195,7 +207,8 @@ class LocalAudioImportManager {
         }
 
         this.updateState({
-          statusMessage: 'Importando archivo de audio: guardando documento sincronizado...',
+          statusMessage: 'Importando audio: guardando documento sincronizado...',
+          backend: result.backend || initialBackend,
           progressPercent: 100
         });
 
@@ -223,12 +236,14 @@ class LocalAudioImportManager {
           id: saved.id,
           title: saved.title,
           paragraphsCount: saved.paragraphs?.length,
-          audioDuration: saved.audioDuration
+          audioDuration: saved.audioDuration,
+          backend: result.backend
         });
 
         this.updateState({
           status: 'completed',
           progressPercent: 100,
+          backend: result.backend || initialBackend,
           statusMessage: '¡Importación de archivo de audio completada!',
           resultDoc: saved,
           error: null

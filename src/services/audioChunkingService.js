@@ -1,12 +1,12 @@
 /**
  * Audio Chunking Service
  * Provides client-side Web Audio API decoding, slicing, 16kHz mono WAV encoding,
- * and intelligent timestamp-anchored deduplication for robust long audio transcription.
+ * robust 60s/8s chunking for Groq Whisper, and non-destructive timestamp merge.
  */
 
 export const LONG_AUDIO_THRESHOLD_SECONDS = 180; // Audios > 3 minutes use chunking
-export const CHUNK_DURATION_SECONDS = 210;       // 3.5 minutes per chunk
-export const CHUNK_OVERLAP_SECONDS = 12;         // 12 seconds overlap between chunks
+export const CHUNK_DURATION_SECONDS = 60;        // 60 seconds per chunk for high completeness
+export const CHUNK_OVERLAP_SECONDS = 8;          // 8 seconds overlap between chunks
 
 function writeString(view, offset, string) {
   for (let i = 0; i < string.length; i++) {
@@ -190,7 +190,7 @@ export function planAudioChunks(audioBuffer, {
     };
   }
 
-  const step = Math.max(30, chunkDurationSec - overlapSec);
+  const step = Math.max(10, chunkDurationSec - overlapSec);
   const chunks = [];
   let start = 0;
   let chunkIdx = 0;
@@ -217,180 +217,249 @@ export function planAudioChunks(audioBuffer, {
 }
 
 /**
- * Merges and deduplicates segments across overlapping audio chunks with absolute timestamps.
- * Implements multi-tier comparison:
- * 1. Absolute timestamp realignment per chunk.
- * 2. Overlap window boundary analysis.
- * 3. Temporal overlap + text similarity deduplication (keeps complete sentence and spans timestamps).
+ * Validates temporal coverage of merged segments and reports significant gaps or trailing omissions.
  *
- * @param {Array<{ chunk: object, segments: Array }>} chunkResults
- * @param {number} [overlapSec=CHUNK_OVERLAP_SECONDS]
- * @returns {{ combinedSegments: Array, combinedTranscript: string }}
+ * @param {Array<object>} segments
+ * @param {number|null} [audioDuration=null]
+ * @returns {object} Diagnostic coverage report
  */
-export function mergeChunkSegments(chunkResults, overlapSec = CHUNK_OVERLAP_SECONDS) {
-  if (!Array.isArray(chunkResults) || chunkResults.length === 0) {
-    return { combinedSegments: [], combinedTranscript: '' };
-  }
-
-  if (chunkResults.length === 1) {
-    const single = chunkResults[0];
-    const offset = single.chunk?.offsetSec || 0;
-    const aligned = (single.segments || []).map((s, idx) => ({
-      id: s.id !== undefined ? s.id : idx,
-      start: Math.round(((typeof s.start === 'number' ? s.start : 0) + offset) * 100) / 100,
-      end: Math.round(((typeof s.end === 'number' ? s.end : 0) + offset) * 100) / 100,
-      text: (s.text || '').trim()
-    })).filter(s => Boolean(s.text));
-
+export function validateTemporalCoverage(segments, audioDuration = null) {
+  if (!Array.isArray(segments) || segments.length === 0) {
     return {
-      combinedSegments: aligned,
-      combinedTranscript: aligned.map(s => s.text).join(' ').trim()
+      firstStart: 0,
+      lastEnd: 0,
+      audioDuration: audioDuration || 0,
+      coveragePercent: 0,
+      gapsCount: 0,
+      gaps: []
     };
   }
 
-  // 1. Convert all segments in every chunk to absolute timestamps
-  const chunkAbsSegments = chunkResults.map(cr => {
-    const offset = cr.chunk?.offsetSec || 0;
-    return (cr.segments || []).map((s, idx) => ({
-      id: s.id !== undefined ? s.id : idx,
-      start: Math.round(((typeof s.start === 'number' ? s.start : 0) + offset) * 100) / 100,
-      end: Math.round(((typeof s.end === 'number' ? s.end : 0) + offset) * 100) / 100,
-      text: (s.text || '').trim(),
-      chunkIndex: cr.chunk?.index || 0
-    })).filter(s => Boolean(s.text));
-  });
+  const gaps = [];
+  const GAP_THRESHOLD_SECONDS = 10.0; // Gaps >= 10s logged as warning
 
-  // 2. Progressively merge chunk k into accumulated result
-  let merged = [...chunkAbsSegments[0]];
+  for (let i = 1; i < segments.length; i++) {
+    const prev = segments[i - 1];
+    const curr = segments[i];
+    const gapDuration = curr.start - prev.end;
 
-  for (let k = 1; k < chunkAbsSegments.length; k++) {
-    const currentChunk = chunkResults[k].chunk;
-    const currentSegments = chunkAbsSegments[k];
-    if (currentSegments.length === 0) continue;
-    if (merged.length === 0) {
-      merged = [...currentSegments];
-      continue;
+    if (gapDuration >= GAP_THRESHOLD_SECONDS) {
+      gaps.push({
+        fromIndex: i - 1,
+        toIndex: i,
+        prevEnd: prev.end,
+        currStart: curr.start,
+        gapSeconds: Math.round(gapDuration * 100) / 100,
+        prevSnippet: prev.text.slice(-25),
+        currSnippet: curr.text.slice(0, 25)
+      });
     }
-
-    const overlapStart = currentChunk.offsetSec; // Where this chunk started physically
-    const overlapMargin = overlapSec;            // Length of overlap window
-
-    const nextMerged = [];
-
-    // Keep all previous segments that clearly end before the overlap zone starts
-    const previousOverlapCandidates = [];
-    for (const seg of merged) {
-      if (seg.end <= overlapStart + 1.0) {
-        nextMerged.push(seg);
-      } else {
-        previousOverlapCandidates.push(seg);
-      }
-    }
-
-    // Examine candidates in the overlap zone between previous and current chunk
-    const currentOverlapCandidates = [];
-    const futureCurrentSegments = [];
-
-    for (const seg of currentSegments) {
-      if (seg.start < overlapStart + overlapMargin + 2.0) {
-        currentOverlapCandidates.push(seg);
-      } else {
-        futureCurrentSegments.push(seg);
-      }
-    }
-
-    // Match and deduplicate overlapping candidate pairs
-    const usedCurrentIndices = new Set();
-
-    for (const prevSeg of previousOverlapCandidates) {
-      let matchedCurrentIdx = -1;
-      let bestSimilarity = 0;
-
-      for (let cIdx = 0; cIdx < currentOverlapCandidates.length; cIdx++) {
-        if (usedCurrentIndices.has(cIdx)) continue;
-        const currSeg = currentOverlapCandidates[cIdx];
-
-        // Check temporal overlap
-        const overlapDuration = Math.max(0, Math.min(prevSeg.end, currSeg.end) - Math.max(prevSeg.start, currSeg.start));
-        const minDuration = Math.max(0.2, Math.min(prevSeg.end - prevSeg.start, currSeg.end - currSeg.start));
-        const temporalOverlapRatio = overlapDuration / minDuration;
-
-        // Check text similarity
-        const sim = calculateTextSimilarity(prevSeg.text, currSeg.text);
-
-        if ((temporalOverlapRatio > 0.4 && sim > 0.5) || sim > 0.85 || (temporalOverlapRatio > 0.7 && sim > 0.3)) {
-          if (sim > bestSimilarity) {
-            bestSimilarity = sim;
-            matchedCurrentIdx = cIdx;
-          }
-        }
-      }
-
-      if (matchedCurrentIdx !== -1) {
-        // Duplicate found in overlap: pick the most complete text and span timestamps
-        usedCurrentIndices.add(matchedCurrentIdx);
-        const currSeg = currentOverlapCandidates[matchedCurrentIdx];
-
-        const chosenText = currSeg.text.length >= prevSeg.text.length ? currSeg.text : prevSeg.text;
-        const unifiedStart = Math.min(prevSeg.start, currSeg.start);
-        const unifiedEnd = Math.max(prevSeg.end, currSeg.end);
-
-        nextMerged.push({
-          ...currSeg,
-          start: unifiedStart,
-          end: unifiedEnd,
-          text: chosenText
-        });
-      } else {
-        // No match in current chunk: preserve previous segment if its midpoint is before boundary split
-        const splitBoundary = overlapStart + (overlapMargin / 2);
-        const mid = (prevSeg.start + prevSeg.end) / 2;
-        if (mid < splitBoundary || prevSeg.start < splitBoundary) {
-          nextMerged.push(prevSeg);
-        }
-      }
-    }
-
-    // Add remaining unmatched current chunk candidates that start around or after boundary split
-    const splitBoundary = overlapStart + (overlapMargin / 2);
-    for (let cIdx = 0; cIdx < currentOverlapCandidates.length; cIdx++) {
-      if (usedCurrentIndices.has(cIdx)) continue;
-      const currSeg = currentOverlapCandidates[cIdx];
-      const mid = (currSeg.start + currSeg.end) / 2;
-      if (mid >= splitBoundary || currSeg.end > splitBoundary) {
-        nextMerged.push(currSeg);
-      }
-    }
-
-    // Add all future segments from current chunk
-    for (const seg of futureCurrentSegments) {
-      nextMerged.push(seg);
-    }
-
-    merged = nextMerged;
   }
 
-  // 3. Final cleanup: sort by start timestamp and deduplicate identical consecutive segments
-  merged.sort((a, b) => a.start - b.start || a.end - b.end);
+  const firstStart = segments[0]?.start ?? 0;
+  const lastEnd = segments[segments.length - 1]?.end ?? 0;
+  const effectiveDuration = (typeof audioDuration === 'number' && audioDuration > 0) ? audioDuration : lastEnd;
+  const coveragePercent = effectiveDuration > 0
+    ? Math.min(100, Math.round((lastEnd / effectiveDuration) * 100))
+    : 100;
 
-  const deduplicated = [];
-  for (let i = 0; i < merged.length; i++) {
-    const curr = merged[i];
-    if (deduplicated.length > 0) {
-      const prev = deduplicated[deduplicated.length - 1];
-      // Check if exact duplicate in time and text
-      if (Math.abs(prev.start - curr.start) < 0.5 && calculateTextSimilarity(prev.text, curr.text) > 0.9) {
+  if (gaps.length > 0) {
+    console.warn(`[AudioDiagnostics] ⚠️ Detected ${gaps.length} suspicious temporal gap(s) > ${GAP_THRESHOLD_SECONDS}s:`, gaps);
+  }
+
+  if (typeof audioDuration === 'number' && audioDuration > 30) {
+    const trailingGap = audioDuration - lastEnd;
+    if (trailingGap > 15.0) {
+      console.warn(`[AudioDiagnostics] ⚠️ Trailing omission warning: Audio is ${audioDuration.toFixed(2)}s, but last segment ends at ${lastEnd.toFixed(2)}s (trailing gap: ${trailingGap.toFixed(2)}s).`);
+    }
+  }
+
+  const diagnostics = {
+    firstStart,
+    lastEnd,
+    audioDuration: effectiveDuration,
+    coveragePercent,
+    gapsCount: gaps.length,
+    gaps
+  };
+
+  console.log('[AudioDiagnostics] Coverage validation report:', diagnostics);
+  return diagnostics;
+}
+
+/**
+ * Merges and deduplicates segments across overlapping audio chunks with absolute timestamps.
+ * 
+ * CORE PRINCIPLES:
+ * 1. Convert all segments in every chunk to ABSOLUTE timestamps (start + offsetSec, end + offsetSec).
+ * 2. NUNCA eliminar un segmento simplemente porque no encontró un match.
+ * 3. Sólo unificar/deduplicar cuando haya evidencia clara de solapamiento temporal y similitud textual.
+ * 4. Si no hay match claro, CONSERVAR AMBOS SEGMENTOS.
+ * 5. Ordenar todos los segmentos resultantes cronológicamente por start.
+ * 6. Validar cobertura temporal para detectar gaps.
+ *
+ * @param {Array<{ chunk: object, segments: Array }>} chunkResults
+ * @param {number} [overlapSec=CHUNK_OVERLAP_SECONDS]
+ * @param {number|null} [totalAudioDuration=null]
+ * @returns {{ combinedSegments: Array, combinedTranscript: string, diagnostics: object }}
+ */
+export function mergeChunkSegments(chunkResults, overlapSec = CHUNK_OVERLAP_SECONDS, totalAudioDuration = null) {
+  if (!Array.isArray(chunkResults) || chunkResults.length === 0) {
+    return { combinedSegments: [], combinedTranscript: '', diagnostics: null };
+  }
+
+  let totalRawSegmentsCount = 0;
+  let fallbackSegmentsCount = 0;
+
+  // 1. Convert all segments from all chunks to absolute timestamps
+  const allAbsoluteSegments = [];
+
+  for (let cIdx = 0; cIdx < chunkResults.length; cIdx++) {
+    const cr = chunkResults[cIdx];
+    const offset = cr.chunk?.offsetSec || 0;
+    const rawSegs = Array.isArray(cr.segments) ? cr.segments : [];
+    totalRawSegmentsCount += rawSegs.length;
+
+    console.log(`[AudioDiagnostics] Chunk ${cIdx + 1}/${chunkResults.length} raw input:`, {
+      chunkIndex: cr.chunk?.index ?? cIdx,
+      offsetSec: offset,
+      durationSec: cr.chunk?.duration,
+      segmentsCount: rawSegs.length,
+      hasFallbackSegment: rawSegs.some(s => s?.isFallback),
+      firstSegment: rawSegs[0] ? { start: rawSegs[0].start, end: rawSegs[0].end, absStart: rawSegs[0].start + offset, text: rawSegs[0].text } : null,
+      lastSegment: rawSegs[rawSegs.length - 1] ? { start: rawSegs[rawSegs.length - 1].start, end: rawSegs[rawSegs.length - 1].end, absEnd: rawSegs[rawSegs.length - 1].end + offset, text: rawSegs[rawSegs.length - 1].text } : null
+    });
+
+    for (let sIdx = 0; sIdx < rawSegs.length; sIdx++) {
+      const s = rawSegs[sIdx];
+      const text = (s.text || '').trim();
+      if (!text) continue;
+
+      if (s.isFallback) {
+        fallbackSegmentsCount++;
+      }
+
+      const relStart = typeof s.start === 'number' ? s.start : 0;
+      const relEnd = typeof s.end === 'number' ? s.end : (relStart + 2.0);
+
+      allAbsoluteSegments.push({
+        start: Math.round((relStart + offset) * 100) / 100,
+        end: Math.round((relEnd + offset) * 100) / 100,
+        text,
+        chunkIndex: cr.chunk?.index ?? cIdx,
+        isFallback: Boolean(s.isFallback)
+      });
+    }
+  }
+
+  if (allAbsoluteSegments.length === 0) {
+    return { combinedSegments: [], combinedTranscript: '', diagnostics: null };
+  }
+
+  // 2. Initial sort by absolute start time
+  allAbsoluteSegments.sort((a, b) => a.start - b.start || a.end - b.end);
+
+  // 3. Conservative non-destructive merge: Pairwise deduplication ONLY on ultra-safe criteria
+  const consolidated = [];
+  let duplicatesMergedCount = 0;
+
+  for (const candidate of allAbsoluteSegments) {
+    let mergedWithExisting = false;
+
+    // Compare only with recently added segments that are within the overlap window
+    for (let i = consolidated.length - 1; i >= 0; i--) {
+      const existing = consolidated[i];
+
+      // If existing segment ended well before candidate started, stop search
+      if (candidate.start - existing.end > (overlapSec + 2.0)) {
+        break;
+      }
+
+      // Compute temporal overlap between existing and candidate
+      const overlapStart = Math.max(existing.start, candidate.start);
+      const overlapEnd = Math.min(existing.end, candidate.end);
+      const overlapDuration = Math.max(0, overlapEnd - overlapStart);
+      const minDuration = Math.max(0.1, Math.min(existing.end - existing.start, candidate.end - candidate.start));
+      const temporalOverlapRatio = overlapDuration / minDuration;
+
+      // Compute text similarity
+      const textSim = calculateTextSimilarity(existing.text, candidate.text);
+      const isExactText = normalizeTextForDeduplication(existing.text) === normalizeTextForDeduplication(candidate.text);
+      const isCloseInTime = Math.abs(existing.start - candidate.start) <= 1.5 && Math.abs(existing.end - candidate.end) <= 2.0;
+
+      // Ultra-safe criteria: ONLY eliminate if practically identical text or >= 0.90 similarity + coincident timestamps
+      const isDuplicate =
+        (isExactText && (temporalOverlapRatio > 0.2 || isCloseInTime)) ||
+        (textSim >= 0.90 && isCloseInTime);
+
+      if (isDuplicate) {
+        // Genuine duplicate: unify timestamps and choose the longer / more complete text
+        existing.start = Math.min(existing.start, candidate.start);
+        existing.end = Math.max(existing.end, candidate.end);
+        if (candidate.text.length > existing.text.length) {
+          existing.text = candidate.text;
+        }
+        mergedWithExisting = true;
+        duplicatesMergedCount++;
+        break;
+      }
+    }
+
+    // If NO duplicate criteria met, ALWAYS keep the segment!
+    if (!mergedWithExisting) {
+      consolidated.push({ ...candidate });
+    }
+  }
+
+  // 4. Final chronological sort and index assignment
+  consolidated.sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const finalSegments = [];
+  for (let idx = 0; idx < consolidated.length; idx++) {
+    const curr = consolidated[idx];
+
+    // Check for exact immediate duplicate (identical normalized text starting within 0.5s)
+    if (finalSegments.length > 0) {
+      const prev = finalSegments[finalSegments.length - 1];
+      const isConsecutiveExact = normalizeTextForDeduplication(prev.text) === normalizeTextForDeduplication(curr.text);
+      if (isConsecutiveExact && Math.abs(prev.start - curr.start) <= 0.5) {
+        prev.end = Math.max(prev.end, curr.end);
+        if (curr.text.length > prev.text.length) {
+          prev.text = curr.text;
+        }
         continue;
       }
     }
-    deduplicated.push(curr);
+
+    finalSegments.push({
+      id: finalSegments.length,
+      start: curr.start,
+      end: curr.end,
+      text: curr.text
+    });
   }
 
-  const combinedTranscript = deduplicated.map(s => s.text).join(' ').trim();
+  const combinedTranscript = finalSegments.map(s => s.text).join(' ').trim();
+
+  // 5. Validate temporal coverage
+  const diagnostics = validateTemporalCoverage(finalSegments, totalAudioDuration);
+
+  console.log('[AudioDiagnostics] Merge results summary:', {
+    chunksCount: chunkResults.length,
+    rawSegmentsTotal: totalRawSegmentsCount,
+    fallbackSegmentsCount,
+    duplicatesMergedCount,
+    finalSegmentsCount: finalSegments.length,
+    transcriptLengthChars: combinedTranscript.length,
+    firstSegmentStart: finalSegments[0]?.start,
+    lastSegmentEnd: finalSegments[finalSegments.length - 1]?.end,
+    coveragePercent: diagnostics.coveragePercent
+  });
 
   return {
-    combinedSegments: deduplicated,
-    combinedTranscript
+    combinedSegments: finalSegments,
+    combinedTranscript,
+    diagnostics
   };
 }
 
@@ -439,4 +508,3 @@ export async function extractAudioSliceFloat32(audioBuffer, startSec = 0, endSec
   const renderedBuffer = await offlineCtx.startRendering();
   return renderedBuffer.getChannelData(0);
 }
-

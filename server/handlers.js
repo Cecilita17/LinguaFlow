@@ -997,6 +997,10 @@ export async function handleTranscribe(req, res) {
       formData.append('temperature', '0');
       formData.append('response_format', 'verbose_json');
 
+      // Explicitly provide ISO-639-1 language code to Groq Whisper to prevent language drift
+      const normalizedTargetLang = (targetLang || 'es').split('-')[0].toLowerCase();
+      formData.append('language', normalizedTargetLang);
+
       const whisperPrompt = getWhisperPromptForLanguage(targetLang);
       formData.append('prompt', whisperPrompt);
 

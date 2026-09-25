@@ -1165,10 +1165,49 @@ export async function transcribeAudioFileApi({
           throw new Error(chunkData?.error || `Error del servidor al transcribir fragmento ${i + 1} (${chunkRes.status})`);
         }
 
-        const segments = Array.isArray(chunkData.segments) ? chunkData.segments : [];
+        const rawSegments = Array.isArray(chunkData.segments)
+          ? chunkData.segments.filter(s => s && typeof s.text === 'string' && s.text.trim())
+          : [];
+        const rawTranscript = (chunkData.transcript || '').trim();
+
+        let effectiveSegments = rawSegments;
+
+        // Fallback: If Groq returned a valid transcript but 0 usable segments for this chunk,
+        // preserve the transcript as a fallback segment spanning the chunk to guarantee NO text is lost.
+        if (effectiveSegments.length === 0 && rawTranscript) {
+          console.warn(`[AudioDiagnostics] ⚠️ Chunk ${i + 1}/${totalChunks} returned transcript but no usable segments; preserving transcript as fallback segment.`, {
+            chunkIndex: i,
+            offsetSec: chunk.offsetSec,
+            duration: chunk.duration,
+            transcriptLength: rawTranscript.length,
+            transcriptSnippet: rawTranscript.slice(0, 80)
+          });
+          effectiveSegments = [{
+            id: 0,
+            start: 0,
+            end: chunk.duration,
+            text: rawTranscript,
+            isFallback: true
+          }];
+        }
+
+        console.log(`[AudioImport] Groq chunk response ${i + 1}/${totalChunks}:`, {
+          chunkIndex: i,
+          startSec: chunk.startSec,
+          endSec: chunk.endSec,
+          duration: chunk.duration,
+          segmentsCount: effectiveSegments.length,
+          isFallbackSegment: Boolean(effectiveSegments[0]?.isFallback),
+          firstTimestamp: effectiveSegments[0] ? { start: effectiveSegments[0].start, end: effectiveSegments[0].end, absStart: effectiveSegments[0].start + chunk.offsetSec } : null,
+          lastTimestamp: effectiveSegments[effectiveSegments.length - 1] ? { start: effectiveSegments[effectiveSegments.length - 1].start, end: effectiveSegments[effectiveSegments.length - 1].end, absEnd: effectiveSegments[effectiveSegments.length - 1].end + chunk.offsetSec } : null,
+          transcriptLength: rawTranscript.length,
+          transcriptSnippet: rawTranscript.slice(0, 60)
+        });
+
         chunkResults.push({
           chunk,
-          segments
+          segments: effectiveSegments,
+          transcript: rawTranscript
         });
       } catch (chunkErr) {
         clearTimeout(chunkTimeoutId);
@@ -1180,7 +1219,11 @@ export async function transcribeAudioFileApi({
       onProgress('Reconstruyendo transcripción sincronizada...');
     }
 
-    const { combinedSegments, combinedTranscript } = mergeChunkSegments(chunkResults, CHUNK_OVERLAP_SECONDS);
+    const { combinedSegments, combinedTranscript } = mergeChunkSegments(
+      chunkResults,
+      CHUNK_OVERLAP_SECONDS,
+      chunkPlan.totalDuration
+    );
 
     if (!combinedTranscript) {
       throw new Error('No se detectó contenido de voz en los fragmentos del audio.');

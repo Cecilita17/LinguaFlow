@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
-  Play
+  Play,
+  Zap,
+  Cpu
 } from 'lucide-react';
 
 export function GlobalAudioImportWidget({ onOpenDocument = null }) {
@@ -20,6 +22,7 @@ export function GlobalAudioImportWidget({ onOpenDocument = null }) {
     progressPercent,
     currentChunk,
     totalChunks,
+    backend,
     statusMessage,
     isMinimized,
     resultDoc,
@@ -40,6 +43,7 @@ export function GlobalAudioImportWidget({ onOpenDocument = null }) {
   const isCompleted = status === 'completed';
   const isError = status === 'error';
   const isCancelled = status === 'cancelled';
+  const backendLabel = backend === 'WebGPU' ? 'WebGPU' : 'CPU';
 
   const handleOpenDoc = () => {
     if (resultDoc && typeof onOpenDocument === 'function') {
@@ -73,13 +77,18 @@ export function GlobalAudioImportWidget({ onOpenDocument = null }) {
           </div>
 
           <div className="text-left flex flex-col min-w-0 pr-1">
-            <span className="text-xs font-bold truncate max-w-[130px] sm:max-w-[180px]">
-              {isWorking
-                ? (isSpanish ? 'Importando archivo de audio' : 'Importing audio file')
-                : isCompleted
-                  ? (isSpanish ? 'Audio listo' : 'Audio ready')
-                  : (isSpanish ? 'Error en audio' : 'Audio error')}
-            </span>
+            <div className="flex items-center space-x-1.5">
+              <span className="text-xs font-bold truncate max-w-[130px] sm:max-w-[180px]">
+                {isWorking
+                  ? (isSpanish ? 'Whisper local' : 'Local Whisper')
+                  : isCompleted
+                    ? (isSpanish ? 'Audio listo' : 'Audio ready')
+                    : (isSpanish ? 'Error en audio' : 'Audio error')}
+              </span>
+              <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                {backendLabel}
+              </span>
+            </div>
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
               {isWorking ? `${progressPercent}%` : isCompleted ? (isSpanish ? 'Completado' : 'Completed') : (isSpanish ? 'Detenido' : 'Stopped')}
             </span>
@@ -118,15 +127,20 @@ export function GlobalAudioImportWidget({ onOpenDocument = null }) {
             </div>
 
             <div className="min-w-0">
-              <h4 className="text-xs sm:text-sm font-bold truncate text-[var(--text-primary)]">
-                {isCompleted
-                  ? (isSpanish ? '¡Importación de archivo de audio completada!' : 'Audio file import completed!')
-                  : isError
-                    ? (isSpanish ? 'Error al importar archivo de audio' : 'Error importing audio file')
-                    : isCancelled
-                      ? (isSpanish ? 'Importación cancelada' : 'Import cancelled')
-                      : (isSpanish ? 'Importando archivo de audio' : 'Importing audio file')}
-              </h4>
+              <div className="flex items-center space-x-1.5">
+                <h4 className="text-xs sm:text-sm font-bold truncate text-[var(--text-primary)]">
+                  {isCompleted
+                    ? (isSpanish ? '¡Importación completada!' : 'Import completed!')
+                    : isError
+                      ? (isSpanish ? 'Error al importar audio' : 'Error importing audio')
+                      : isCancelled
+                        ? (isSpanish ? 'Importación cancelada' : 'Import cancelled')
+                        : (isSpanish ? 'Importando con Whisper local' : 'Importing with Local Whisper')}
+                </h4>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
+                  {backendLabel}
+                </span>
+              </div>
               <p className="text-[11px] text-[var(--text-muted)] truncate max-w-[200px] sm:max-w-[240px]">
                 {fileName || (isSpanish ? 'Audio en proceso' : 'Audio in progress')}
               </p>
@@ -159,7 +173,7 @@ export function GlobalAudioImportWidget({ onOpenDocument = null }) {
             <div className="flex items-center justify-between text-xs">
               <span className="text-[var(--text-secondary)] font-medium truncate max-w-[220px]">
                 {totalChunks > 1
-                  ? (isSpanish ? `Fragmento ${currentChunk} de ${totalChunks}` : `Chunk ${currentChunk} of ${totalChunks}`)
+                  ? (isSpanish ? `Ventana ${currentChunk} de ${totalChunks}` : `Window ${currentChunk} of ${totalChunks}`)
                   : (statusMessage || (isSpanish ? 'Transcribiendo audio...' : 'Transcribing audio...'))}
               </span>
               <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold shrink-0">

@@ -2349,14 +2349,16 @@ export function TextReaderPage({
                     <div className="min-w-0">
                       <div className="flex items-center space-x-1.5">
                         <span className="text-xs font-bold text-[var(--text-primary)]">
-                          {isSpanish ? 'Whisper Local' : 'Local Whisper'}
+                          {`Whisper local · ${localAudioImport?.backend || 'CPU'}`}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold">
                           {isSpanish ? 'Gratis & Privado' : 'Free & Private'}
                         </span>
                       </div>
                       <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
-                        {isSpanish ? 'En el navegador con WebAssembly. Sin subir a la nube ni consumir saldo.' : 'In-browser with WebAssembly. No server uploads or API quota.'}
+                        {isSpanish
+                          ? `En el navegador con ${localAudioImport?.backend === 'WebGPU' ? 'aceleración WebGPU' : 'WebAssembly CPU'}. Sin enviar audio al servidor.`
+                          : `In-browser using ${localAudioImport?.backend === 'WebGPU' ? 'WebGPU acceleration' : 'WebAssembly CPU'}. No server uploads.`}
                       </p>
                     </div>
                   </button>
