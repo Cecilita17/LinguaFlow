@@ -2703,6 +2703,26 @@ export function TextReaderPage({
           </div>
           </main>
 
+      {/* VISIBLE ORIGINAL AUDIO PLAYER BAR (When document has imported audio) */}
+      {isAudioDocument && !isEditing && (
+        <OriginalAudioPlayer
+          ref={audioPlayerRef}
+          audioPathname={document.audioPathname}
+          initialTime={
+            typeof document.lastAudioPosition === 'number'
+              ? document.lastAudioPosition
+              : (typeof document.lastAudioPosition?.time === 'number' ? document.lastAudioPosition.time : 0)
+          }
+          isPlaying={Boolean(playingParagraphId)}
+          onTogglePlay={handleToggleAudio}
+          onTimeUpdate={handleAudioTimeUpdate}
+          onPause={handleAudioPause}
+          onEnded={handleAudioEnded}
+          onError={handleAudioError}
+          playbackRate={speechRate}
+        />
+      )}
+
       {/* BOTTOM CONTROL BAR — compact icon controls; each button binds to the exact
           same state/handler used by the Configuraciones submenu. Single source of truth. */}
       {document && !isEditing && (
@@ -2851,23 +2871,6 @@ export function TextReaderPage({
             <X className="w-4 h-4" />
           </button>
         </div>
-      )}
-
-      {/* Isolated Original Audio Player for imported audio documents */}
-      {isAudioDocument && (
-        <OriginalAudioPlayer
-          ref={audioPlayerRef}
-          audioPathname={document.audioPathname}
-          initialTime={
-            typeof document.lastAudioPosition === 'number'
-              ? document.lastAudioPosition
-              : (typeof document.lastAudioPosition?.time === 'number' ? document.lastAudioPosition.time : 0)
-          }
-          onTimeUpdate={handleAudioTimeUpdate}
-          onPause={handleAudioPause}
-          onEnded={handleAudioEnded}
-          onError={handleAudioError}
-        />
       )}
     </div>
   );
