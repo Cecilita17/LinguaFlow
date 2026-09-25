@@ -393,3 +393,50 @@ export function mergeChunkSegments(chunkResults, overlapSec = CHUNK_OVERLAP_SECO
     combinedTranscript
   };
 }
+
+/**
+ * Extracts an audio slice from an AudioBuffer as a 16kHz mono Float32Array (suitable for Whisper models).
+ *
+ * @param {AudioBuffer} audioBuffer
+ * @param {number} [startSec=0]
+ * @param {number} [endSec=null]
+ * @param {number} [targetSampleRate=16000]
+ * @returns {Promise<Float32Array>}
+ */
+export async function extractAudioSliceFloat32(audioBuffer, startSec = 0, endSec = null, targetSampleRate = 16000) {
+  const safeStartSec = Math.max(0, startSec);
+  const safeEndSec = Math.min(audioBuffer.duration, endSec !== null ? endSec : audioBuffer.duration);
+  const sliceDuration = Math.max(0.1, safeEndSec - safeStartSec);
+
+  const startSample = Math.max(0, Math.floor(safeStartSec * audioBuffer.sampleRate));
+  const endSample = Math.min(audioBuffer.length, Math.floor(safeEndSec * audioBuffer.sampleRate));
+  const numSliceSamples = Math.max(1, endSample - startSample);
+
+  const targetLength = Math.max(1, Math.floor(sliceDuration * targetSampleRate));
+
+  const OfflineContextClass = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!OfflineContextClass) {
+    throw new Error('OfflineAudioContext no está disponible en este navegador.');
+  }
+
+  const offlineCtx = new OfflineContextClass(1, targetLength, targetSampleRate);
+  const tempBuffer = offlineCtx.createBuffer(
+    audioBuffer.numberOfChannels,
+    numSliceSamples,
+    audioBuffer.sampleRate
+  );
+
+  for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+    const chData = audioBuffer.getChannelData(ch).subarray(startSample, endSample);
+    tempBuffer.copyToChannel(chData, ch);
+  }
+
+  const source = offlineCtx.createBufferSource();
+  source.buffer = tempBuffer;
+  source.connect(offlineCtx.destination);
+  source.start(0);
+
+  const renderedBuffer = await offlineCtx.startRendering();
+  return renderedBuffer.getChannelData(0);
+}
+

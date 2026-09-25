@@ -22,6 +22,8 @@ function formatTime(seconds) {
  */
 export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   audioPathname,
+  audioUrl = null,
+  audioBlob = null,
   onReady = null,
   onTimeUpdate = null,
   onPlay = null,
@@ -44,13 +46,29 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   const [errorMessage, setErrorMessage] = useState(null);
   const isSeekingRef = useRef(false);
   const initialSeekDoneRef = useRef(false);
+  const [generatedBlobUrl, setGeneratedBlobUrl] = useState(null);
 
   const activeIsPlaying = typeof isPlaying === 'boolean' ? isPlaying : isPlayingInternal;
 
-  // Compute clean stream URL from audioPathname
-  const streamUrl = audioPathname
-    ? `${API_BASE_URL || ''}/api/audio-stream?pathname=${encodeURIComponent(audioPathname)}`
-    : '';
+  // Manage object URL lifecycle if an audioBlob instance is provided
+  useEffect(() => {
+    if (audioBlob instanceof Blob) {
+      const url = URL.createObjectURL(audioBlob);
+      setGeneratedBlobUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setGeneratedBlobUrl(null);
+    }
+  }, [audioBlob]);
+
+  // Compute clean stream URL from generatedBlobUrl, audioUrl, or audioPathname
+  const streamUrl = generatedBlobUrl || audioUrl || (audioPathname
+    ? (audioPathname.startsWith('blob:') || audioPathname.startsWith('http:') || audioPathname.startsWith('https:') || audioPathname.startsWith('data:')
+        ? audioPathname
+        : `${API_BASE_URL || ''}/api/audio-stream?pathname=${encodeURIComponent(audioPathname)}`)
+    : '');
 
   // Imperative handle exposed to parent via ref (equivalent to YouTube player methods)
   useImperativeHandle(ref, () => ({

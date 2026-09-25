@@ -437,6 +437,8 @@ export function normalizeDocument(rawDoc) {
   const audioSegments = Array.isArray(rawDoc.audioSegments) ? rawDoc.audioSegments : (rawDoc.audioMetadata?.segments || []);
   const audioDuration = typeof rawDoc.audioDuration === 'number' ? rawDoc.audioDuration : (rawDoc.audioMetadata?.duration || 0);
   const audioPathname = rawDoc.audioPathname || rawDoc.audioMetadata?.pathname || null;
+  const audioUrl = rawDoc.audioUrl || rawDoc.audioMetadata?.url || null;
+  const audioBlob = rawDoc.audioBlob || null;
   const audioMimeType = rawDoc.audioMimeType || rawDoc.audioMetadata?.mimeType || null;
 
   if ((sourceType === 'audio' || format === 'audio') && audioSegments.length > 0 && paragraphs.length > 0) {
@@ -462,6 +464,8 @@ export function normalizeDocument(rawDoc) {
     chapters,
     languageStates,
     audioPathname,
+    audioUrl,
+    audioBlob,
     audioMimeType,
     audioSegments,
     audioDuration,
@@ -547,6 +551,8 @@ export function createTextDocument({
   chapters = null,
   languageStates = null,
   audioPathname = null,
+  audioUrl = null,
+  audioBlob = null,
   audioMimeType = null,
   audioSegments = null,
   audioDuration = null,
@@ -610,6 +616,8 @@ export function createTextDocument({
     chapters: Array.isArray(chapters) ? chapters : [],
     languageStates: initialStates,
     audioPathname: audioPathname || null,
+    audioUrl: audioUrl || null,
+    audioBlob: audioBlob || null,
     audioMimeType: audioMimeType || null,
     audioSegments: Array.isArray(audioSegments) ? audioSegments : [],
     audioDuration: typeof audioDuration === 'number' ? audioDuration : (Number(audioDuration) || 0),

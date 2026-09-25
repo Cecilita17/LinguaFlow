@@ -29,6 +29,8 @@ import {
   Headphones,
   AlertCircle,
   Bookmark,
+  Cpu,
+  Cloud,
   X
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
@@ -53,6 +55,10 @@ import {
   transcribeAudioFileApi,
   resolveAudioBookmark
 } from '../services/textDocumentService.js';
+import {
+  transcribeAudioFileLocal,
+  isLocalWhisperSupported
+} from '../services/localWhisperService.js';
 import { API_BASE_URL } from '../services/chatService.js';
 import {
   saveTextDocument,
@@ -234,7 +240,7 @@ export function TextReaderPage({
   const isAudioDocument = Boolean(
     document &&
     (document.format === 'audio' || document.sourceType === 'audio') &&
-    document.audioPathname
+    (document.audioPathname || document.audioUrl || document.audioBlob)
   );
   const chapters = useMemo(() => {
     return (isEpub && Array.isArray(document?.chapters)) ? document.chapters : [];
@@ -482,9 +488,34 @@ export function TextReaderPage({
     }
   }, [targetLang, nativeLang, isSpanish, clearAudioVisualTimer, refreshLibraryCount, navigateToView]);
 
-  // EPUB Import state
+  // EPUB and Audio Import state
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState('');
+  const [audioEngine, setAudioEngine] = useState(() => {
+    try {
+      return localStorage.getItem('linguaflow_audio_transcription_engine') || 'local';
+    } catch (e) {
+      return 'local';
+    }
+  });
+
+  const handleAudioEngineChange = (engine) => {
+    setAudioEngine(engine);
+    try {
+      localStorage.setItem('linguaflow_audio_transcription_engine', engine);
+    } catch (e) {}
+  };
+
+  const audioImportAbortControllerRef = useRef(null);
+
+  const handleCancelAudioImport = useCallback(() => {
+    if (audioImportAbortControllerRef.current) {
+      audioImportAbortControllerRef.current.abort();
+      audioImportAbortControllerRef.current = null;
+    }
+    setIsImporting(false);
+    setImportStatus('');
+  }, []);
 
   // Auto-hide entire reader header on scroll down
   const [isHeaderHidden, setIsHeaderHidden] = useState(false);
@@ -1058,7 +1089,7 @@ export function TextReaderPage({
       (document?.sourceType === 'audio' || document?.format === 'audio') &&
       typeof paragraph.audioStart === 'number' &&
       typeof paragraph.audioEnd === 'number' &&
-      Boolean(document?.audioPathname);
+      Boolean(document?.audioPathname || document?.audioUrl || document?.audioBlob);
 
     if (hasOriginalAudio) {
       // 1. CANCEL TTS if active
@@ -1562,7 +1593,7 @@ export function TextReaderPage({
     const isExistingAudioDoc = isExistingDoc && (
       document.sourceType === 'audio' ||
       document.format === 'audio' ||
-      Boolean(document.audioPathname)
+      Boolean(document.audioPathname || document.audioUrl || document.audioBlob)
     );
 
     const docToSave = createTextDocument({
@@ -1582,6 +1613,8 @@ export function TextReaderPage({
       chapters: isExistingDoc ? (document.chapters || null) : null,
       languageStates: isExistingDoc ? document.languageStates : null,
       audioPathname: isExistingAudioDoc ? document.audioPathname : null,
+      audioUrl: isExistingAudioDoc ? document.audioUrl : null,
+      audioBlob: isExistingAudioDoc ? document.audioBlob : null,
       audioMimeType: isExistingAudioDoc ? document.audioMimeType : null,
       audioSegments: isExistingAudioDoc ? document.audioSegments : null,
       audioDuration: isExistingAudioDoc ? document.audioDuration : null,
@@ -1664,7 +1697,7 @@ export function TextReaderPage({
     setAudioBookmark(validBookmark);
 
     // If opening an audio document, prepare latestAudioPositionRef (staying paused)
-    if ((doc.sourceType === 'audio' || doc.format === 'audio') && doc.audioPathname) {
+    if ((doc.sourceType === 'audio' || doc.format === 'audio') && (doc.audioPathname || doc.audioUrl || doc.audioBlob)) {
       const savedTime = typeof validBookmark?.time === 'number'
         ? validBookmark.time
         : (typeof doc.lastAudioPosition === 'number' ? doc.lastAudioPosition : 0);
@@ -1852,16 +1885,35 @@ export function TextReaderPage({
     // Reset file input value so selecting same file again re-triggers
     e.target.value = '';
 
+    const abortCtrl = new AbortController();
+    audioImportAbortControllerRef.current = abortCtrl;
+
     setIsImporting(true);
-    setImportStatus(isSpanish ? 'Leyendo archivo de audio...' : 'Reading audio file...');
+    setImportStatus(isSpanish ? 'Iniciando transcripción...' : 'Starting transcription...');
     try {
-      const result = await transcribeAudioFileApi({
-        audioFile: file,
-        targetLang,
-        nativeLang,
-        apiKey,
-        onProgress: (msg) => setImportStatus(msg)
-      });
+      let result;
+      if (audioEngine === 'local') {
+        if (!isLocalWhisperSupported()) {
+          throw new Error(isSpanish
+            ? 'Tu navegador no cuenta con soporte para WebAssembly/Web Workers necesario para la transcripción local. Por favor selecciona Groq Whisper.'
+            : 'Your browser does not support WebAssembly/Web Workers required for local transcription. Please select Groq Whisper.');
+        }
+
+        result = await transcribeAudioFileLocal({
+          audioFile: file,
+          targetLang,
+          onProgress: (msg) => setImportStatus(msg),
+          abortSignal: abortCtrl.signal
+        });
+      } else {
+        result = await transcribeAudioFileApi({
+          audioFile: file,
+          targetLang,
+          nativeLang,
+          apiKey,
+          onProgress: (msg) => setImportStatus(msg)
+        });
+      }
 
       const transcriptText = result.transcript;
       if (!transcriptText) {
@@ -1877,7 +1929,9 @@ export function TextReaderPage({
         rawText: transcriptText,
         targetLang,
         nativeLang,
-        audioPathname: result.pathname,
+        audioPathname: result.pathname || null,
+        audioUrl: result.url || null,
+        audioBlob: result.audioBlob || (audioEngine === 'local' ? file : null),
         audioMimeType: result.mimeType || file.type || 'audio/webm',
         audioSegments: Array.isArray(result.segments) ? result.segments : [],
         audioDuration: typeof result.duration === 'number' ? result.duration : 0,
@@ -1889,6 +1943,8 @@ export function TextReaderPage({
         sourceType: saved.sourceType,
         format: saved.format,
         audioPathname: saved.audioPathname,
+        audioUrl: saved.audioUrl,
+        hasAudioBlob: Boolean(saved.audioBlob),
         audioMimeType: saved.audioMimeType,
         audioDuration: saved.audioDuration,
         audioSegmentsLength: saved.audioSegments?.length,
@@ -1920,10 +1976,15 @@ export function TextReaderPage({
       navigateToView('reader');
     } catch (err) {
       console.error('Error al importar audio:', err);
-      alert(isSpanish ? `Error al importar el audio: ${err.message || err}` : `Error importing audio: ${err.message || err}`);
+      if (err.message && (err.message.includes('cancelada') || err.message.includes('abort'))) {
+        // User cancelled, do not alert
+      } else {
+        alert(isSpanish ? `Error al importar el audio: ${err.message || err}` : `Error importing audio: ${err.message || err}`);
+      }
     } finally {
       setIsImporting(false);
       setImportStatus('');
+      audioImportAbortControllerRef.current = null;
     }
   };
 
@@ -2187,11 +2248,20 @@ export function TextReaderPage({
 
               {/* Import status indicator banner */}
               {isImporting && (
-                <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-amber-700 dark:text-amber-300 animate-pulse">
-                  <Loader2 className="w-5 h-5 animate-spin shrink-0 text-amber-500" />
-                  <span className="text-xs sm:text-sm font-semibold">
-                    {importStatus || (isSpanish ? 'Procesando archivo...' : 'Processing file...')}
-                  </span>
+                <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-amber-700 dark:text-amber-300 animate-pulse">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Loader2 className="w-5 h-5 animate-spin shrink-0 text-amber-500" />
+                    <span className="text-xs sm:text-sm font-semibold truncate">
+                      {importStatus || (isSpanish ? 'Procesando archivo...' : 'Processing file...')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCancelAudioImport}
+                    className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400 text-xs font-bold cursor-pointer transition-colors shrink-0 active:scale-95"
+                  >
+                    {isSpanish ? 'Cancelar' : 'Cancel'}
+                  </button>
                 </div>
               )}
 
@@ -2226,6 +2296,73 @@ export function TextReaderPage({
                   align="left"
                   className="w-full"
                 />
+              </div>
+
+              {/* Motor de Transcripción de Audio */}
+              <div className="mb-4 p-3 sm:p-3.5 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                    <Headphones className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>{isSpanish ? 'Motor para importar audio' : 'Audio import engine'}</span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* Local Engine */}
+                  <button
+                    type="button"
+                    onClick={() => handleAudioEngineChange('local')}
+                    className={`p-2.5 rounded-xl border text-left flex items-start space-x-2.5 transition-all cursor-pointer ${
+                      audioEngine === 'local'
+                        ? 'bg-emerald-500/10 border-emerald-500/40 text-[var(--text-primary)] shadow-xs ring-1 ring-emerald-500/30'
+                        : 'bg-[var(--surface-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                    }`}
+                  >
+                    <div className={`p-1.5 rounded-lg shrink-0 ${audioEngine === 'local' ? 'bg-emerald-500 text-white shadow-xs' : 'bg-[var(--surface-secondary)] text-[var(--text-muted)]'}`}>
+                      <Cpu className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-xs font-bold text-[var(--text-primary)]">
+                          {isSpanish ? 'Whisper Local' : 'Local Whisper'}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold">
+                          {isSpanish ? 'Gratis & Privado' : 'Free & Private'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
+                        {isSpanish ? 'En el navegador con WebAssembly. Sin subir a la nube ni consumir saldo.' : 'In-browser with WebAssembly. No server uploads or API quota.'}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Cloud Groq Engine */}
+                  <button
+                    type="button"
+                    onClick={() => handleAudioEngineChange('groq')}
+                    className={`p-2.5 rounded-xl border text-left flex items-start space-x-2.5 transition-all cursor-pointer ${
+                      audioEngine === 'groq'
+                        ? 'bg-rose-500/10 border-rose-500/40 text-[var(--text-primary)] shadow-xs ring-1 ring-rose-500/30'
+                        : 'bg-[var(--surface-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                    }`}
+                  >
+                    <div className={`p-1.5 rounded-lg shrink-0 ${audioEngine === 'groq' ? 'bg-rose-500 text-white shadow-xs' : 'bg-[var(--surface-secondary)] text-[var(--text-muted)]'}`}>
+                      <Cloud className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-xs font-bold text-[var(--text-primary)]">
+                          Groq Whisper Cloud
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold">
+                          {isSpanish ? 'Rápido' : 'Fast'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
+                        {isSpanish ? 'Transcribe en la nube mediante API (whisper-large-v3).' : 'Transcribes in cloud via Groq API (whisper-large-v3).'}
+                      </p>
+                    </div>
+                  </button>
+                </div>
               </div>
 
               {/* Textarea for raw text */}
@@ -2799,6 +2936,8 @@ export function TextReaderPage({
         <OriginalAudioPlayer
           ref={audioPlayerRef}
           audioPathname={document.audioPathname}
+          audioUrl={document.audioUrl}
+          audioBlob={document.audioBlob}
           initialTime={
             typeof audioBookmark?.time === 'number'
               ? audioBookmark.time
