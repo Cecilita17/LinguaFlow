@@ -161,7 +161,13 @@ export function TextReaderPage({
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const latestAudioPositionRef = useRef({ time: 0, paragraphId: null });
   const audioSaveThrottlerRef = useRef({ lastSavedTime: 0, timer: null });
-  const flushAudioPlaybackPositionRef = useRef(null);
+
+  // Manual audio bookmark — persisted explicitly in document.audioBookmark { paragraphId, time, savedAt }
+  const [audioBookmark, setAudioBookmark] = useState(
+    () => resolveAudioBookmark(loadActiveDocumentDraft())
+  );
+  // Scheduling a scroll: set to a paragraphId, cleared after scroll fires
+  const [pendingScrollParagraphId, setPendingScrollParagraphId] = useState(null);
 
   const clearAudioVisualTimer = useCallback(() => {
     if (audioSynchronizerRef.current) {
@@ -362,11 +368,6 @@ export function TextReaderPage({
 
   useEffect(() => {
     return () => {
-      if (flushAudioPlaybackPositionRef.current) {
-        try {
-          flushAudioPlaybackPositionRef.current();
-        } catch (e) {}
-      }
       if (audioPlayerRef.current) {
         try { audioPlayerRef.current.pause(); } catch (e) {}
       }
@@ -404,7 +405,6 @@ export function TextReaderPage({
     setIsAutoGlossing(false);
     setPlayingParagraphId(null);
     setActiveAudioCharIndex(-1);
-    setLastAudioParagraphId(null);
     setPendingScrollParagraphId(null);
     setDocument(null);
     setInputText('');
@@ -437,7 +437,6 @@ export function TextReaderPage({
       setIsAutoGlossing(false);
       setPlayingParagraphId(null);
       setActiveAudioCharIndex(-1);
-      setLastAudioParagraphId(null);
       setPendingScrollParagraphId(null);
       previousScrollTopRef.current = 0;
       setIsHeaderHidden(false);
@@ -486,14 +485,6 @@ export function TextReaderPage({
   // EPUB Import state
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState('');
-
-
-  // Manual audio bookmark — persisted explicitly in document.audioBookmark { paragraphId, time, savedAt }
-  const [audioBookmark, setAudioBookmark] = useState(
-    () => resolveAudioBookmark(loadActiveDocumentDraft())
-  );
-  // Scheduling a scroll: set to a paragraphId, cleared after scroll fires
-  const [pendingScrollParagraphId, setPendingScrollParagraphId] = useState(null);
 
   // Auto-hide entire reader header on scroll down
   const [isHeaderHidden, setIsHeaderHidden] = useState(false);
@@ -982,88 +973,6 @@ export function TextReaderPage({
     }
   }, [isEpub]);
 
-  // Manual Audio Bookmark Persistence — ONLY saved upon explicit user action
-  const handleSaveAudioBookmark = useCallback((explicitParagraphId = null) => {
-    const currentDoc = documentRef.current || document;
-    if (!currentDoc) return;
-    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (currentDoc.paragraphs || []);
-    if (allParas.length === 0) return;
-
-    let targetParaId = explicitParagraphId;
-    let targetTime = 0;
-
-    if (!targetParaId) {
-      if (playingParagraphIdRef.current) {
-        targetParaId = playingParagraphIdRef.current;
-      } else if (audioBookmark?.paragraphId) {
-        targetParaId = audioBookmark.paragraphId;
-      } else {
-        const firstVis = visibleParagraphs[0] || allParas[0];
-        targetParaId = firstVis?.id;
-      }
-    }
-
-    const targetPara = allParas.find(p => p.id === targetParaId) || allParas[0];
-    if (!targetPara) return;
-
-    if (isAudioDocument) {
-      if (typeof audioCurrentTime === 'number' && !isNaN(audioCurrentTime) && audioCurrentTime > 0) {
-        targetTime = audioCurrentTime;
-      } else if (typeof targetPara.audioStart === 'number') {
-        targetTime = targetPara.audioStart;
-      }
-    }
-
-    const newBookmark = {
-      paragraphId: targetPara.id,
-      time: Math.round(targetTime * 100) / 100,
-      savedAt: new Date().toISOString()
-    };
-
-    setAudioBookmark(newBookmark);
-
-    const updated = {
-      ...currentDoc,
-      audioBookmark: newBookmark,
-      updatedAt: new Date().toISOString()
-    };
-    try { saveActiveDocumentDraft(updated); } catch (e) {}
-    saveTextDocument(updated).then(() => {
-      refreshLibraryCount();
-    }).catch(err => console.warn('Failed to save audio bookmark to library:', err));
-
-    setDocument(prev => {
-      if (!prev || prev.id !== currentDoc.id) return prev;
-      return updated;
-    });
-  }, [document, isAudioDocument, audioCurrentTime, visibleParagraphs, audioBookmark, refreshLibraryCount]);
-
-  // Resume playback from manual audio bookmark
-  const handleResumeAudioBookmark = useCallback(() => {
-    if (!audioBookmark?.paragraphId) return;
-    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
-    const targetPara = allParas.find(p => p.id === audioBookmark.paragraphId);
-    if (!targetPara) return;
-
-    if (isAudioDocument && audioPlayerRef.current) {
-      const seekTime = typeof audioBookmark.time === 'number' && audioBookmark.time >= 0
-        ? audioBookmark.time
-        : (typeof targetPara.audioStart === 'number' ? targetPara.audioStart : 0);
-      userStoppedRef.current = false;
-      setPlayingParagraphId(targetPara.id);
-      playingParagraphIdRef.current = targetPara.id;
-      audioPlayerRef.current.seek(seekTime);
-      audioPlayerRef.current.play();
-    } else {
-      handlePlayParagraph(targetPara);
-    }
-
-    try {
-      const el = window.document.querySelector(`[data-paragraph-id="${targetPara.id}"]`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } catch (e) {}
-  }, [audioBookmark, isAudioDocument, document?.paragraphs, handlePlayParagraph]);
-
   // Playback time update handler — 100% decoupled from bookmarks
   const handleAudioTimeUpdate = useCallback((newTime) => {
     if (typeof newTime !== 'number' || isNaN(newTime)) return;
@@ -1307,6 +1216,88 @@ export function TextReaderPage({
     playingParagraphIdRef.current = null;
     setActiveAudioCharIndex(-1);
   }, [clearAudioVisualTimer]);
+
+  // Manual Audio Bookmark Persistence — ONLY saved upon explicit user action
+  const handleSaveAudioBookmark = useCallback((explicitParagraphId = null) => {
+    const currentDoc = documentRef.current || document;
+    if (!currentDoc) return;
+    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (currentDoc.paragraphs || []);
+    if (allParas.length === 0) return;
+
+    let targetParaId = explicitParagraphId;
+    let targetTime = 0;
+
+    if (!targetParaId) {
+      if (playingParagraphIdRef.current) {
+        targetParaId = playingParagraphIdRef.current;
+      } else if (audioBookmark?.paragraphId) {
+        targetParaId = audioBookmark.paragraphId;
+      } else {
+        const firstVis = visibleParagraphs[0] || allParas[0];
+        targetParaId = firstVis?.id;
+      }
+    }
+
+    const targetPara = allParas.find(p => p.id === targetParaId) || allParas[0];
+    if (!targetPara) return;
+
+    if (isAudioDocument) {
+      if (typeof audioCurrentTime === 'number' && !isNaN(audioCurrentTime) && audioCurrentTime > 0) {
+        targetTime = audioCurrentTime;
+      } else if (typeof targetPara.audioStart === 'number') {
+        targetTime = targetPara.audioStart;
+      }
+    }
+
+    const newBookmark = {
+      paragraphId: targetPara.id,
+      time: Math.round(targetTime * 100) / 100,
+      savedAt: new Date().toISOString()
+    };
+
+    setAudioBookmark(newBookmark);
+
+    const updated = {
+      ...currentDoc,
+      audioBookmark: newBookmark,
+      updatedAt: new Date().toISOString()
+    };
+    try { saveActiveDocumentDraft(updated); } catch (e) {}
+    saveTextDocument(updated).then(() => {
+      refreshLibraryCount();
+    }).catch(err => console.warn('Failed to save audio bookmark to library:', err));
+
+    setDocument(prev => {
+      if (!prev || prev.id !== currentDoc.id) return prev;
+      return updated;
+    });
+  }, [document, isAudioDocument, audioCurrentTime, visibleParagraphs, audioBookmark, refreshLibraryCount]);
+
+  // Resume playback from manual audio bookmark
+  const handleResumeAudioBookmark = useCallback(() => {
+    if (!audioBookmark?.paragraphId) return;
+    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
+    const targetPara = allParas.find(p => p.id === audioBookmark.paragraphId);
+    if (!targetPara) return;
+
+    if (isAudioDocument && audioPlayerRef.current) {
+      const seekTime = typeof audioBookmark.time === 'number' && audioBookmark.time >= 0
+        ? audioBookmark.time
+        : (typeof targetPara.audioStart === 'number' ? targetPara.audioStart : 0);
+      userStoppedRef.current = false;
+      setPlayingParagraphId(targetPara.id);
+      playingParagraphIdRef.current = targetPara.id;
+      audioPlayerRef.current.seek(seekTime);
+      audioPlayerRef.current.play();
+    } else {
+      handlePlayParagraph(targetPara);
+    }
+
+    try {
+      const el = window.document.querySelector(`[data-paragraph-id="${targetPara.id}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (e) {}
+  }, [audioBookmark, isAudioDocument, document?.paragraphs, handlePlayParagraph]);
 
   // Trigger background AI glossing
   const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
@@ -1810,7 +1801,6 @@ export function TextReaderPage({
         setInputTitle(saved.title || '');
         setIsEditing(false);
         setIsHeaderHidden(false);
-        setLastAudioParagraphId(null);
         setPendingScrollParagraphId(null);
         previousScrollTopRef.current = 0;
         await refreshLibraryCount();
@@ -1910,7 +1900,6 @@ export function TextReaderPage({
       setInputTitle(saved.title || '');
       setIsEditing(false);
       setIsHeaderHidden(false);
-      setLastAudioParagraphId(null);
       setPendingScrollParagraphId(null);
       previousScrollTopRef.current = 0;
       await refreshLibraryCount();
@@ -1964,7 +1953,6 @@ export function TextReaderPage({
     setLoadingParagraphIds(new Set());
     setPlayingParagraphId(null);
     setAudioErrorId(null);
-    setLastAudioParagraphId(null);
     setPendingScrollParagraphId(null);
     clearActiveDocumentDraft();
     setDocument(null);
