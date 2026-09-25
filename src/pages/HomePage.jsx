@@ -123,15 +123,17 @@ export default function HomePage({
           {/* CARD 1: YOUTUBE READER */}
           <div
             onClick={() => onSelectMode('youtube')}
-            className="group relative p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col items-center justify-center text-center min-h-[165px] sm:min-h-[180px] backdrop-blur-xl"
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
           >
-            <span className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
-              {isSpanish ? 'Vídeos' : 'Videos'}
-            </span>
-            <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-3xl bg-gradient-to-br from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-950/40 shrink-0 group-hover:scale-105 transition-transform mb-2.5">
-              <Youtube className="w-12 h-12 sm:w-14 sm:h-14" />
+            <div className="flex items-start justify-between">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-red-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <Youtube className="w-9.5 h-9.5 sm:w-10.5 sm:h-10.5" />
+              </div>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
+                {isSpanish ? 'Vídeos' : 'Videos'}
+              </span>
             </div>
-            <div className="w-full text-center">
+            <div className="mt-3">
               <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors leading-tight">
                 YouTube Reader
               </h3>
@@ -144,15 +146,17 @@ export default function HomePage({
           {/* CARD 2: TEXT READER */}
           <div
             onClick={() => onSelectMode('text')}
-            className="group relative p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col items-center justify-center text-center min-h-[165px] sm:min-h-[180px] backdrop-blur-xl"
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
           >
-            <span className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/25">
-              EPUB / TXT
-            </span>
-            <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-3xl bg-gradient-to-br from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform mb-2.5">
-              <FileText className="w-11 h-11 sm:w-13 sm:h-13" />
+            <div className="flex items-start justify-between">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-md shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <FileText className="w-9 h-9 sm:w-10 sm:h-10" />
+              </div>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/25">
+                EPUB / TXT
+              </span>
             </div>
-            <div className="w-full text-center">
+            <div className="mt-3">
               <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors leading-tight">
                 Text Reader
               </h3>
@@ -165,15 +169,17 @@ export default function HomePage({
           {/* CARD 3: IMAGE READER */}
           <div
             onClick={() => onSelectMode('image')}
-            className="group relative p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col items-center justify-center text-center min-h-[165px] sm:min-h-[180px] backdrop-blur-xl"
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
           >
-            <span className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/25">
-              Vision IA
-            </span>
-            <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-3xl bg-gradient-to-br from-pink-600 via-rose-500 to-pink-400 flex items-center justify-center text-white shadow-lg shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform mb-2.5">
-              <Camera className="w-11 h-11 sm:w-13 sm:h-13" />
+            <div className="flex items-start justify-between">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-pink-600 via-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
+                <Camera className="w-9.5 h-9.5 sm:w-10.5 sm:h-10.5" />
+              </div>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-600 dark:text-pink-300 border border-pink-500/25">
+                Vision IA
+              </span>
             </div>
-            <div className="w-full text-center">
+            <div className="mt-3">
               <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] dark:text-white group-hover:text-pink-500 dark:group-hover:text-pink-200 transition-colors leading-tight">
                 Image Reader
               </h3>
@@ -186,35 +192,38 @@ export default function HomePage({
           {/* CARD 4: DAILY PROGRESS */}
           <div
             onClick={() => onSelectMode('habits')}
-            className="group relative p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col items-center justify-center text-center min-h-[165px] sm:min-h-[180px] backdrop-blur-xl"
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
           >
-            <span className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
-              {habitStats.pct > 0 ? `${habitStats.pct}%` : (isSpanish ? 'Racha' : 'Streak')}
-            </span>
-            <div className="relative w-20 h-20 sm:w-22 sm:h-22 flex items-center justify-center shrink-0 mb-2.5">
-              <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 36 36">
-                <path
-                  className="text-stone-300/40 dark:text-[#38160e]"
-                  strokeWidth="3.5"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path
-                  className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)] transition-all duration-700 ease-out"
-                  strokeDasharray={`${habitStats.pct > 0 ? habitStats.pct : 15}, 100`}
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Flame className="w-9 h-9 sm:w-11 sm:h-11 text-amber-500 fill-amber-500/80 animate-pulse" />
+            <div className="flex items-start justify-between">
+              {/* Circular Progress Ring */}
+              <div className="relative w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center shrink-0">
+                <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 36 36">
+                  <path
+                    className="text-stone-300/40 dark:text-[#38160e]"
+                    strokeWidth="3.5"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)] transition-all duration-700 ease-out"
+                    strokeDasharray={`${habitStats.pct > 0 ? habitStats.pct : 15}, 100`}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Flame className="w-7 h-7 sm:w-8 sm:h-8 text-amber-500 fill-amber-500/80 animate-pulse" />
+                </div>
               </div>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
+                {habitStats.pct > 0 ? `${habitStats.pct}%` : (isSpanish ? 'Racha' : 'Streak')}
+              </span>
             </div>
-            <div className="w-full text-center">
+            <div className="mt-3">
               <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] dark:text-white group-hover:text-amber-500 dark:group-hover:text-amber-200 transition-colors leading-tight">
                 {isSpanish ? 'Progreso Diario' : 'Daily Progress'}
               </h3>
