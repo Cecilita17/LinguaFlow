@@ -1439,7 +1439,7 @@ export async function handleBatchGloss(req, res) {
       (req.headers['x-api-key'] || '')
     ).trim().replace(/^["']|["']$/g, '');
 
-    const GLOSS_GROQ_MODEL = 'openai/gpt-oss-20b';
+    const GLOSS_GROQ_MODEL = getSanitizedGroqModel();
 
     if (effectiveApiKey) {
       const hasSpecificUnknowns = lines.some(l => Array.isArray(l.unknownTokens) && l.unknownTokens.length > 0);
