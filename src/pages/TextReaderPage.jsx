@@ -1528,15 +1528,35 @@ export function TextReaderPage({
       }
     }
 
+    const isExistingAudioDoc = isExistingDoc && (
+      document.sourceType === 'audio' ||
+      document.format === 'audio' ||
+      Boolean(document.audioPathname)
+    );
+
     const docToSave = createTextDocument({
       id: isExistingDoc ? document.id : null,
       title: inputTitle.trim(),
+      author: isExistingDoc ? (document.author || '') : '',
+      sourceType: isExistingAudioDoc
+        ? (document.sourceType || 'audio')
+        : (isExistingDoc ? (document.sourceType || 'txt') : 'txt'),
+      format: isExistingAudioDoc
+        ? (document.format || 'audio')
+        : (isExistingDoc ? (document.format || 'txt') : 'txt'),
       rawText: raw,
       targetLang,
       nativeLang,
       paragraphs: effectiveParagraphs,
+      chapters: isExistingDoc ? (document.chapters || null) : null,
       languageStates: isExistingDoc ? document.languageStates : null,
+      audioPathname: isExistingAudioDoc ? document.audioPathname : null,
+      audioMimeType: isExistingAudioDoc ? document.audioMimeType : null,
+      audioSegments: isExistingAudioDoc ? document.audioSegments : null,
+      audioDuration: isExistingAudioDoc ? document.audioDuration : null,
       lastAudioPosition: preservedLastAudioPosition,
+      lastAudioParagraphId: isExistingAudioDoc ? (document.lastAudioParagraphId || preservedLastAudioPosition?.paragraphId || null) : null,
+      lastReadingPosition: isExistingDoc ? document.lastReadingPosition : null,
       createdAt: isExistingDoc ? document.createdAt : null
     });
 

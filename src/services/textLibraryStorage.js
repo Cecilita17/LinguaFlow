@@ -183,22 +183,91 @@ export async function saveTextDocument(rawDoc) {
   }
 
   const effectiveAuthor = rawDoc.author !== undefined ? rawDoc.author : (existing?.author || '');
-  const effectiveSourceType = rawDoc.sourceType || existing?.sourceType || rawDoc.format || existing?.format || 'txt';
-  const effectiveFormat = rawDoc.format || existing?.format || effectiveSourceType;
 
-  // Audio document metadata preservation
-  const effectiveAudioPathname = rawDoc.audioPathname !== undefined
-    ? rawDoc.audioPathname
-    : (existing?.audioPathname || null);
-  const effectiveAudioMimeType = rawDoc.audioMimeType !== undefined
-    ? rawDoc.audioMimeType
-    : (existing?.audioMimeType || null);
-  const effectiveAudioSegments = (Array.isArray(rawDoc.audioSegments) && rawDoc.audioSegments.length > 0)
-    ? rawDoc.audioSegments
-    : (Array.isArray(existing?.audioSegments) ? existing.audioSegments : []);
-  const effectiveAudioDuration = typeof rawDoc.audioDuration === 'number'
-    ? rawDoc.audioDuration
-    : (typeof existing?.audioDuration === 'number' ? existing.audioDuration : 0);
+  // Determine if the existing document or incoming document is an audio document
+  const existingHasAudio = Boolean(
+    existing &&
+    (existing.sourceType === 'audio' || existing.format === 'audio' || existing.audioPathname)
+  );
+
+  // Check if caller is explicitly requesting audio removal
+  const isExplicitAudioRemoval = Boolean(
+    rawDoc.removeAudio === true ||
+    rawDoc.clearAudio === true ||
+    rawDoc.deleteAudio === true
+  );
+
+  let effectiveSourceType = 'txt';
+  let effectiveFormat = 'txt';
+  let effectiveAudioPathname = null;
+  let effectiveAudioMimeType = null;
+  let effectiveAudioSegments = [];
+  let effectiveAudioDuration = 0;
+
+  if (isExplicitAudioRemoval) {
+    // Deliberate audio removal
+    effectiveSourceType = (rawDoc.sourceType && rawDoc.sourceType !== 'audio') ? rawDoc.sourceType : 'txt';
+    effectiveFormat = (rawDoc.format && rawDoc.format !== 'audio') ? rawDoc.format : 'txt';
+    effectiveAudioPathname = null;
+    effectiveAudioMimeType = null;
+    effectiveAudioSegments = [];
+    effectiveAudioDuration = 0;
+  } else if (existingHasAudio) {
+    // Preserve existing audio document identity and metadata across partial updates/reconstructions
+    if (rawDoc.sourceType === 'audio' || rawDoc.format === 'audio') {
+      effectiveSourceType = 'audio';
+      effectiveFormat = 'audio';
+    } else if (rawDoc.sourceType && rawDoc.sourceType !== 'txt') {
+      effectiveSourceType = rawDoc.sourceType;
+      effectiveFormat = rawDoc.format || effectiveSourceType;
+    } else {
+      effectiveSourceType = existing.sourceType || 'audio';
+      effectiveFormat = existing.format || 'audio';
+    }
+
+    // audioPathname: retain non-empty string if provided, otherwise preserve existing
+    if (typeof rawDoc.audioPathname === 'string' && rawDoc.audioPathname.trim().length > 0) {
+      effectiveAudioPathname = rawDoc.audioPathname.trim();
+    } else {
+      effectiveAudioPathname = existing.audioPathname || null;
+    }
+
+    // audioMimeType: retain non-empty string if provided, otherwise preserve existing
+    if (typeof rawDoc.audioMimeType === 'string' && rawDoc.audioMimeType.trim().length > 0) {
+      effectiveAudioMimeType = rawDoc.audioMimeType;
+    } else {
+      effectiveAudioMimeType = existing.audioMimeType || null;
+    }
+
+    // audioSegments: retain non-empty array if provided, otherwise preserve existing
+    if (Array.isArray(rawDoc.audioSegments) && rawDoc.audioSegments.length > 0) {
+      effectiveAudioSegments = rawDoc.audioSegments;
+    } else {
+      effectiveAudioSegments = Array.isArray(existing.audioSegments) ? existing.audioSegments : [];
+    }
+
+    // audioDuration: retain valid number > 0 if provided, otherwise preserve existing
+    if (typeof rawDoc.audioDuration === 'number' && rawDoc.audioDuration > 0) {
+      effectiveAudioDuration = rawDoc.audioDuration;
+    } else if (typeof existing.audioDuration === 'number' && existing.audioDuration > 0) {
+      effectiveAudioDuration = existing.audioDuration;
+    } else {
+      effectiveAudioDuration = 0;
+    }
+  } else {
+    // Non-audio document or brand new document
+    effectiveSourceType = rawDoc.sourceType || existing?.sourceType || rawDoc.format || existing?.format || 'txt';
+    effectiveFormat = rawDoc.format || existing?.format || effectiveSourceType;
+
+    effectiveAudioPathname = (typeof rawDoc.audioPathname === 'string' && rawDoc.audioPathname.trim().length > 0)
+      ? rawDoc.audioPathname.trim()
+      : null;
+    effectiveAudioMimeType = (typeof rawDoc.audioMimeType === 'string' && rawDoc.audioMimeType.trim().length > 0)
+      ? rawDoc.audioMimeType
+      : null;
+    effectiveAudioSegments = Array.isArray(rawDoc.audioSegments) ? rawDoc.audioSegments : [];
+    effectiveAudioDuration = typeof rawDoc.audioDuration === 'number' ? rawDoc.audioDuration : (Number(rawDoc.audioDuration) || 0);
+  }
 
   // 5. Resolve Chapters
   const effectiveChapters = (Array.isArray(rawDoc.chapters) && rawDoc.chapters.length > 0)
@@ -206,15 +275,23 @@ export async function saveTextDocument(rawDoc) {
     : (Array.isArray(existing?.chapters) && existing.chapters.length > 0 ? existing.chapters : []);
 
   // 6. Safe preservation of lastAudioPosition & lastAudioParagraphId:
-  // If rawDoc explicitly specifies lastAudioPosition, compare with existing to prevent race conditions.
-  // If rawDoc.lastAudioPosition is undefined, fall back to existing?.lastAudioPosition.
-  let effectiveLastAudioPosition = rawDoc.lastAudioPosition !== undefined
-    ? rawDoc.lastAudioPosition
-    : (existing?.lastAudioPosition || null);
+  let effectiveLastAudioPosition = null;
+  if (isExplicitAudioRemoval) {
+    effectiveLastAudioPosition = null;
+  } else if (rawDoc.lastAudioPosition !== undefined && rawDoc.lastAudioPosition !== null) {
+    effectiveLastAudioPosition = rawDoc.lastAudioPosition;
+  } else {
+    effectiveLastAudioPosition = existing?.lastAudioPosition || null;
+  }
 
-  let effectiveLastAudioParagraphId = rawDoc.lastAudioParagraphId !== undefined
-    ? rawDoc.lastAudioParagraphId
-    : (existing?.lastAudioParagraphId || (typeof effectiveLastAudioPosition === 'object' ? effectiveLastAudioPosition?.paragraphId : null) || null);
+  let effectiveLastAudioParagraphId = null;
+  if (isExplicitAudioRemoval) {
+    effectiveLastAudioParagraphId = null;
+  } else if (rawDoc.lastAudioParagraphId !== undefined && rawDoc.lastAudioParagraphId !== null) {
+    effectiveLastAudioParagraphId = rawDoc.lastAudioParagraphId;
+  } else {
+    effectiveLastAudioParagraphId = existing?.lastAudioParagraphId || (typeof effectiveLastAudioPosition === 'object' ? effectiveLastAudioPosition?.paragraphId : null) || null;
+  }
 
   // If both exist, keep the newer one based on updatedAt timestamp
   if (existing?.lastAudioPosition && effectiveLastAudioPosition && effectiveLastAudioPosition !== existing.lastAudioPosition) {
