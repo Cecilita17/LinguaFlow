@@ -31,7 +31,9 @@ import {
 } from '../services/textGlossService.js';
 import { translateParagraphTextApi } from '../services/textDocumentService.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
+import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
 import { getLanguageMeta, isRtlLanguage, getTextDirection } from '../constants/languages.js';
 import { createAudioWordSynchronizer } from '../utils/audioWordSync.js';
 
@@ -52,6 +54,7 @@ export function ImageReaderPage({
   onWordClick,
   setActiveTab
 }) {
+  const { user } = useAuth();
   const { isSpanish } = useSiteLanguage();
   const { speechRate } = useAudioSettings();
 
@@ -439,6 +442,12 @@ export function ImageReaderPage({
         console.warn('[ImageReaderPage] Error auto-saving generated image document:', saveErr);
       }
 
+      recordHabitActivityForToday({
+        user,
+        langCode: targetLang,
+        activityKey: 'reading'
+      });
+
       setViewMode('reader');
     } catch (err) {
       console.warn('Image description error:', err);
@@ -456,6 +465,11 @@ export function ImageReaderPage({
   // Reopen a saved document from Library
   const handleOpenSavedDocument = useCallback((doc) => {
     if (!doc) return;
+    recordHabitActivityForToday({
+      user,
+      langCode: doc.targetLang || targetLang,
+      activityKey: 'reading'
+    });
     handleStopAudio();
     if (glossAbortControllerRef.current) {
       glossAbortControllerRef.current.abort();
@@ -476,7 +490,7 @@ export function ImageReaderPage({
       setTargetLang(doc.targetLang);
     }
     setViewMode('reader');
-  }, [handleStopAudio, targetLang, setTargetLang]);
+  }, [handleStopAudio, targetLang, setTargetLang, user]);
 
   const handleReset = () => {
     handleStopAudio();
