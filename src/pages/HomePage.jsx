@@ -46,7 +46,7 @@ export default function HomePage({
   }, [targetLang]);
 
   return (
-    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#180905] dark:via-[#210d07] dark:to-[#140603] dark:text-stone-100 flex flex-col justify-between px-3.5 sm:px-6 py-4 sm:py-6 home-gradient-bg min-h-0">
+    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#230f08] dark:via-[#2b140c] dark:to-[#1f0b06] dark:text-stone-100 flex flex-col justify-between px-3.5 sm:px-6 py-4 sm:py-6 home-gradient-bg min-h-0">
       {/* Background ambient lighting effects */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-rose-500/10 dark:bg-rose-600/15 rounded-full blur-3xl pointer-events-none -z-10" />
       <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-amber-400/10 dark:bg-amber-500/15 rounded-full blur-3xl pointer-events-none -z-10" />
@@ -79,7 +79,7 @@ export default function HomePage({
         {/* 2. FEATURED HERO CARD (Conversations & Voice) */}
         <div
           onClick={() => onSelectMode('chat')}
-          className="group relative w-full p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/50 transition-all duration-300 shadow-lg hover:shadow-2xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 cursor-pointer overflow-hidden transform active:scale-[0.98] sm:hover:-translate-y-0.5 mb-2 sm:mb-5 backdrop-blur-xl"
+          className="group relative w-full p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/50 transition-all duration-300 shadow-lg hover:shadow-2xl dark:bg-[#2d160e]/90 dark:hover:bg-[#361c12] dark:border-[#522519] dark:shadow-xl dark:shadow-black/40 dark:hover:shadow-2xl dark:hover:shadow-rose-950/50 cursor-pointer overflow-hidden transform active:scale-[0.98] sm:hover:-translate-y-0.5 mb-2 sm:mb-5 backdrop-blur-xl"
         >
           <div className="flex items-center justify-between gap-3 sm:gap-4">
             {/* Left: Icon */}
@@ -123,7 +123,7 @@ export default function HomePage({
           {/* CARD 1: YOUTUBE READER */}
           <div
             onClick={() => onSelectMode('youtube')}
-            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#2d160e]/90 dark:hover:bg-[#361c12] dark:border-[#522519] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
           >
             <div className="flex items-start justify-between">
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-red-950/40 shrink-0 group-hover:scale-105 transition-transform">
@@ -146,7 +146,7 @@ export default function HomePage({
           {/* CARD 2: TEXT READER */}
           <div
             onClick={() => onSelectMode('text')}
-            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#2d160e]/90 dark:hover:bg-[#361c12] dark:border-[#522519] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
           >
             <div className="flex items-start justify-between">
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-pink-600 via-rose-500 to-amber-500 flex items-center justify-center text-white shadow-md shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
@@ -169,7 +169,7 @@ export default function HomePage({
           {/* CARD 3: IMAGE READER */}
           <div
             onClick={() => onSelectMode('image')}
-            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-pink-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#2d160e]/90 dark:hover:bg-[#361c12] dark:border-[#522519] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-pink-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
           >
             <div className="flex items-start justify-between">
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-pink-600 via-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-pink-950/40 shrink-0 group-hover:scale-105 transition-transform">
@@ -192,14 +192,14 @@ export default function HomePage({
           {/* CARD 4: DAILY PROGRESS */}
           <div
             onClick={() => onSelectMode('habits')}
-            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#200d08]/90 dark:hover:bg-[#29110b] dark:border-[#421b12] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
+            className="group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-amber-500/50 transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#2d160e]/90 dark:hover:bg-[#361c12] dark:border-[#522519] dark:shadow-xl dark:shadow-black/30 dark:hover:shadow-amber-950/40 cursor-pointer overflow-hidden transform active:scale-95 sm:active:scale-[0.98] sm:hover:-translate-y-0.5 flex flex-col justify-between min-h-[145px] sm:min-h-[160px] backdrop-blur-xl"
           >
             <div className="flex items-start justify-between">
               {/* Circular Progress Ring */}
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center shrink-0">
                 <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 36 36">
                   <path
-                    className="text-stone-300/40 dark:text-[#38160e]"
+                    className="text-stone-300/40 dark:text-[#4a2216]"
                     strokeWidth="3.5"
                     stroke="currentColor"
                     fill="none"

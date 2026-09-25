@@ -86,7 +86,7 @@ function MonthlyHabitCard({
   }, [daysInCurrentMonth, trackerData, lang.code]);
 
   return (
-    <div className="p-4 sm:p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md dark:bg-[#241009]/95 dark:border-[#4a2216] dark:shadow-xl transition-all">
+    <div className="p-4 sm:p-6 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md dark:bg-[#2d160e]/95 dark:border-[#562a1d] dark:shadow-xl transition-all">
       {/* Header of Language Card */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-3">
@@ -114,11 +114,11 @@ function MonthlyHabitCard({
       </div>
 
       {/* Grid Container */}
-      <div className="flex w-full items-stretch border rounded-2xl border-[var(--border-primary)] dark:border-[#3b170e] bg-[var(--surface-secondary)]/30 dark:bg-[#1a0b06]/40 overflow-hidden shadow-inner">
+      <div className="flex w-full items-stretch border rounded-2xl border-[var(--border-primary)] dark:border-[#4a2216] bg-[var(--surface-secondary)]/30 dark:bg-[#24120b]/40 overflow-hidden shadow-inner">
         {/* Left Fixed Column: Day / Activity labels */}
-        <div className="w-32 sm:w-36 shrink-0 border-r border-[var(--border-primary)] dark:border-[#3b170e] bg-[var(--surface-primary)] dark:bg-[#241009] flex flex-col z-10 shadow-xs">
+        <div className="w-32 sm:w-36 shrink-0 border-r border-[var(--border-primary)] dark:border-[#4a2216] bg-[var(--surface-primary)] dark:bg-[#2d160e] flex flex-col z-10 shadow-xs">
           {/* Header Row */}
-          <div className="h-10 px-3 flex items-center border-b border-[var(--border-primary)] dark:border-[#3b170e] text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+          <div className="h-10 px-3 flex items-center border-b border-[var(--border-primary)] dark:border-[#4a2216] text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
             {isSpanish ? 'DÍA / ACTIVIDAD' : 'DAY / ACTIVITY'}
           </div>
 
@@ -126,7 +126,7 @@ function MonthlyHabitCard({
           {HABIT_ACTIVITIES.map((act) => (
             <div
               key={act.key}
-              className="h-9 px-3 flex items-center gap-2 border-b last:border-b-0 border-[var(--border-primary)]/50 dark:border-[#3b170e]/50 text-xs font-semibold truncate text-[var(--text-primary)] dark:text-rose-100"
+              className="h-9 px-3 flex items-center gap-2 border-b last:border-b-0 border-[var(--border-primary)]/50 dark:border-[#4a2216]/50 text-xs font-semibold truncate text-[var(--text-primary)] dark:text-rose-100"
             >
               {getActivityIcon(act.key)}
               <span className="truncate">{getActivityLabel(act.key)}</span>
@@ -324,7 +324,7 @@ export function HabitTrackerPage({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#180905] dark:via-[#210d07] dark:to-[#140603] dark:text-stone-100 flex flex-col justify-start px-3 sm:px-6 py-4 sm:py-8 pb-28 sm:pb-32 home-gradient-bg">
+    <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#230f08] dark:via-[#2b140c] dark:to-[#1f0b06] dark:text-stone-100 flex flex-col justify-start px-3 sm:px-6 py-4 sm:py-8 pb-28 sm:pb-32 home-gradient-bg">
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-rose-500/5 dark:bg-rose-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
       <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-amber-400/5 dark:bg-amber-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
@@ -366,7 +366,7 @@ export function HabitTrackerPage({
             </div>
 
             {/* Quick Month Selector */}
-            <div className="flex items-center space-x-2 self-start sm:self-auto bg-white/70 dark:bg-[#241009]/80 backdrop-blur-md border border-black/5 dark:border-white/10 p-1.5 rounded-2xl shadow-sm">
+            <div className="flex items-center space-x-2 self-start sm:self-auto bg-white/70 dark:bg-[#2d160e]/80 backdrop-blur-md border border-black/5 dark:border-white/10 p-1.5 rounded-2xl shadow-sm">
               <button
                 type="button"
                 onClick={handlePrevMonth}
@@ -401,7 +401,7 @@ export function HabitTrackerPage({
         </div>
 
         {/* 2. CONFIGURACIÓN DE IDIOMAS SECTION */}
-        <div className="mb-6 p-5 sm:p-6 rounded-3xl bg-white/70 dark:bg-[#241009]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm transition-all">
+        <div className="mb-6 p-5 sm:p-6 rounded-3xl bg-white/70 dark:bg-[#2d160e]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm transition-all">
           <div className="flex items-center justify-between mb-2">
             <div>
               <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] dark:text-white">
@@ -419,7 +419,7 @@ export function HabitTrackerPage({
             <button
               type="button"
               onClick={() => setIsConfigOpen(prev => !prev)}
-              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] dark:bg-[#2e150d] text-[var(--text-secondary)] dark:text-rose-300 border border-[var(--border-primary)] dark:border-[#52271a] transition-all cursor-pointer"
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] dark:bg-[#361c12] text-[var(--text-secondary)] dark:text-rose-300 border border-[var(--border-primary)] dark:border-[#5d2f21] transition-all cursor-pointer"
             >
               {isConfigOpen
                 ? (isSpanish ? 'Ocultar ajustes ▲' : 'Collapse ▲')
@@ -428,7 +428,7 @@ export function HabitTrackerPage({
           </div>
 
           {isConfigOpen && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3 mt-4 pt-4 border-t border-[var(--border-primary)]/60 dark:border-[#3b170e]">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3 mt-4 pt-4 border-t border-[var(--border-primary)]/60 dark:border-[#4a2216]">
               {allLanguages.map((lang) => {
                 const isTracked = trackedLanguageCodes.includes(lang.code);
                 const isCurrentContext = lang.code === targetLang;
@@ -440,7 +440,7 @@ export function HabitTrackerPage({
                     className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2 select-none ${
                       isTracked
                         ? 'bg-rose-500/10 border-rose-500/60 text-rose-900 dark:bg-rose-950/40 dark:border-rose-500/60 dark:text-rose-100 shadow-xs'
-                        : 'bg-[var(--surface-secondary)]/50 border-[var(--border-primary)] text-[var(--text-secondary)] opacity-65 hover:opacity-100 dark:bg-[#1a0b06]/60 dark:border-[#3b170e]'
+                        : 'bg-[var(--surface-secondary)]/50 border-[var(--border-primary)] text-[var(--text-secondary)] opacity-65 hover:opacity-100 dark:bg-[#24120b]/60 dark:border-[#4a2216]'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5 min-w-0">
@@ -499,7 +499,7 @@ export function HabitTrackerPage({
 
         {/* 4. TRACKED LANGUAGES HABIT CARDS */}
         {trackedLanguages.length === 0 ? (
-          <div className="p-10 rounded-3xl bg-[var(--surface-primary)] border border-dashed border-[var(--border-primary)] text-center text-[var(--text-secondary)] dark:bg-[#241009]/60 dark:border-[#4a2216]">
+          <div className="p-10 rounded-3xl bg-[var(--surface-primary)] border border-dashed border-[var(--border-primary)] text-center text-[var(--text-secondary)] dark:bg-[#2d160e]/60 dark:border-[#562a1d]">
             <Calendar className="w-10 h-10 mx-auto mb-3 text-rose-400 opacity-60" />
             <p className="text-base font-bold text-[var(--text-primary)] dark:text-white">
               {isSpanish ? 'No hay idiomas seleccionados para trackear' : 'No languages selected to track'}

@@ -172,7 +172,7 @@ export function SettingsPage({
 
       <div className="space-y-6 pb-28 sm:pb-32">
         {/* SECTION 0: CUENTA / ACCOUNT */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-white/70 dark:bg-[#241009]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm">
+        <div className="p-4 sm:p-5 rounded-3xl bg-white/70 dark:bg-[#2d160e]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm">
           <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-3 flex items-center gap-2">
             <User className="w-4 h-4 text-rose-500" />
             <span>{t('account_title')}</span>

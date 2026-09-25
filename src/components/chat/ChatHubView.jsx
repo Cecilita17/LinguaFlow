@@ -208,7 +208,7 @@ export function ChatHubView({
         <button
           type="button"
           onClick={onStartChat}
-          className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border-2 border-rose-500/40 hover:border-rose-500 text-left transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-rose-500/50 flex flex-col justify-between cursor-pointer active:scale-98"
+          className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border-2 border-rose-500/40 hover:border-rose-500 text-left transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#2d160e]/95 dark:hover:bg-[#361c12] dark:border-rose-500/50 flex flex-col justify-between cursor-pointer active:scale-98"
         >
           <div className="flex items-start space-x-4">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-rose-600 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 shrink-0 group-hover:scale-105 transition-transform">
@@ -240,7 +240,7 @@ export function ChatHubView({
         <button
           type="button"
           onClick={onStartCall}
-          className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border-2 border-emerald-500/40 hover:border-emerald-500 text-left transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#241009]/95 dark:hover:bg-[#2e150d] dark:border-emerald-500/50 flex flex-col justify-between cursor-pointer active:scale-98"
+          className="group relative p-5 sm:p-6 rounded-3xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border-2 border-emerald-500/40 hover:border-emerald-500 text-left transition-all duration-300 shadow-md hover:shadow-xl dark:bg-[#2d160e]/95 dark:hover:bg-[#361c12] dark:border-emerald-500/50 flex flex-col justify-between cursor-pointer active:scale-98"
         >
           <div className="flex items-start space-x-4">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-950/40 shrink-0 group-hover:scale-105 transition-transform">

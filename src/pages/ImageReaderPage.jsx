@@ -781,7 +781,7 @@ export function ImageReaderPage({
           /* State B: Results Display (Image + Description + Linguistics) */
           <div className="w-full flex flex-col gap-5 animate-fade-in pb-10">
             {/* Top Toolbar: Image Thumbnail, Title, and Action Controls */}
-            <div className="p-4 sm:p-5 rounded-3xl bg-white/80 dark:bg-[#241009]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="p-4 sm:p-5 rounded-3xl bg-white/80 dark:bg-[#2d160e]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3.5 min-w-0">
                 {selectedImage?.dataUrl && (
                   <img

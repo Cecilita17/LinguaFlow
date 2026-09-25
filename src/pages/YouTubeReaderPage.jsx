@@ -1605,7 +1605,7 @@ export function YouTubeReaderPage({
 
             {/* YouTube Video Player */}
             {videoId && (
-              <div className="w-full max-w-2xl mx-auto rounded-2xl overflow-hidden shadow-xl shadow-black/40 border border-[#3d190f] mb-2 shrink-0">
+              <div className="w-full max-w-2xl mx-auto rounded-2xl overflow-hidden shadow-xl shadow-black/40 border border-[#4d2419] mb-2 shrink-0">
                 <YouTubePlayer
                   videoId={videoId}
                   onTimeUpdate={handleTimeUpdate}

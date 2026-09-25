@@ -9,7 +9,7 @@ export default function BottomNavBar({ activeTab, onSelectTab }) {
     <div className="fixed bottom-3 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
       <nav
         aria-label="Bottom Navigation"
-        className="pointer-events-auto flex items-center justify-around gap-2 px-5 py-2 rounded-full bg-white/80 dark:bg-[#1a0904]/85 backdrop-blur-2xl border border-stone-200/70 dark:border-[#421b12]/80 shadow-2xl shadow-black/20 dark:shadow-black/60 max-w-xs w-full transition-all"
+        className="pointer-events-auto flex items-center justify-around gap-2 px-5 py-2 rounded-full bg-white/80 dark:bg-[#261209]/85 backdrop-blur-2xl border border-stone-200/70 dark:border-[#4d2216]/80 shadow-2xl shadow-black/20 dark:shadow-black/60 max-w-xs w-full transition-all"
       >
         {/* Item 1: Inicio */}
         <button

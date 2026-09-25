@@ -9,29 +9,29 @@
 :root,
 [data-theme="dark"],
 .dark {
-  /* Rich Warm Chocolate Palette (Preserves 100% current design) */
-  --app-bg: #24120c;
-  --app-bg-dot: #381c13;
+  /* Rich Warm Chocolate Palette - Soft and slightly lighter */
+  --app-bg: #2c1710;
+  --app-bg-dot: #422319;
   --text-primary: #f5f5f4; /* stone-100 */
   --text-secondary: #e7d8d2;
   --text-muted: rgba(254, 205, 211, 0.7); /* rose-200/70 */
-  --header-bg: rgba(35, 18, 11, 0.95);
-  --header-border: #3d190f;
-  --surface-primary: #241009;
-  --surface-secondary: #2b160e;
-  --surface-tertiary: #1a0c07;
-  --surface-hover: #2e150d;
-  --border-primary: #4a2216;
-  --border-secondary: #3f1b11;
-  --border-subtle: #38160d;
-  --input-bg: #180803;
-  --input-border: #3e1b10;
+  --header-bg: rgba(46, 24, 17, 0.95);
+  --header-border: #4d2419;
+  --surface-primary: #2d160e;
+  --surface-secondary: #361c12;
+  --surface-tertiary: #23120b;
+  --surface-hover: #3d2015;
+  --border-primary: #562a1d;
+  --border-secondary: #4a2216;
+  --border-subtle: #421d13;
+  --input-bg: #220e06;
+  --input-border: #4c2217;
   --ruby-rt: #0284c7; /* vibrant sky-600 */
-  --scrollbar-track: #1e0f0a;
-  --scrollbar-thumb: #4a281d;
-  --scrollbar-thumb-hover: #6b3a2a;
-  --custom-scrollbar-track: #180c07;
-  --custom-scrollbar-thumb: #5d2a1b;
+  --scrollbar-track: #24120b;
+  --scrollbar-thumb: #572f23;
+  --scrollbar-thumb-hover: #784030;
+  --custom-scrollbar-track: #200f08;
+  --custom-scrollbar-thumb: #6a3222;
   --custom-scrollbar-thumb-hover: #e11d48;
 }
 
@@ -236,7 +236,9 @@ rt {
 [data-theme="light"] .home-gradient-bg,
 .light .home-gradient-bg,
 [data-theme="light"] .bg-gradient-to-b.from-\[\#180905\],
-.light .bg-gradient-to-b.from-\[\#180905\] {
+.light .bg-gradient-to-b.from-\[\#180905\],
+[data-theme="light"] .bg-gradient-to-b.from-\[\#230f08\],
+.light .bg-gradient-to-b.from-\[\#230f08\] {
   background: linear-gradient(to bottom, #faf5f0 0%, #f4ede6 50%, #eee4d9 100%) !important;
   color: var(--text-primary) !important;
 }
