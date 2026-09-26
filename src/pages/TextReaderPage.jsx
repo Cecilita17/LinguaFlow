@@ -1202,13 +1202,16 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       playingParagraphIdRef.current = paragraph.id;
       latestAudioPositionRef.current.paragraphId = paragraph.id;
 
-      const startTime = Math.max(0, paragraph.audioStart);
+      const startTime = typeof paragraph.audioStart === 'number' ? Math.max(0, paragraph.audioStart) : 0;
       latestAudioPositionRef.current.time = startTime;
       setActiveAudioCharIndex(0);
 
       if (audioPlayerRef.current) {
-        audioPlayerRef.current.seek(startTime);
-        audioPlayerRef.current.play();
+        if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
+          audioPlayerRef.current.seekAndPlay(startTime);
+        } else if (typeof audioPlayerRef.current.seek === 'function') {
+          audioPlayerRef.current.seek(startTime, true);
+        }
       }
       return;
     }

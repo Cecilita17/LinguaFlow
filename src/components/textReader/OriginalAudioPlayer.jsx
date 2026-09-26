@@ -70,6 +70,52 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
         : `${API_BASE_URL || ''}/api/audio-stream?pathname=${encodeURIComponent(audioPathname)}`)
     : '');
 
+  const pendingSeekCallbackRef = useRef(null);
+  const isProgrammaticSeekingRef = useRef(false);
+
+  const seek = useCallback((time, autoPlay = false) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const safeTime = Math.max(0, typeof time === 'number' && !isNaN(time) ? time : 0);
+
+    // Cancel any previous pending seek callback (ensures latest click wins)
+    pendingSeekCallbackRef.current = null;
+    isProgrammaticSeekingRef.current = true;
+    setLocalCurrentTime(safeTime);
+
+    const onSeekComplete = () => {
+      isProgrammaticSeekingRef.current = false;
+      pendingSeekCallbackRef.current = null;
+      if (onTimeUpdate) {
+        onTimeUpdate(audio.currentTime);
+      }
+      if (autoPlay) {
+        const promise = audio.play();
+        if (promise !== undefined) {
+          promise.catch(err => {
+            console.warn('[OriginalAudioPlayer] play() error:', err);
+            if (onError) onError(err);
+          });
+        }
+      }
+    };
+
+    pendingSeekCallbackRef.current = onSeekComplete;
+
+    // If audio is already at the target position and not currently seeking, complete immediately
+    if (Math.abs(audio.currentTime - safeTime) < 0.05 && !audio.seeking) {
+      onSeekComplete();
+      return;
+    }
+
+    try {
+      audio.currentTime = safeTime;
+    } catch (e) {
+      console.warn('[OriginalAudioPlayer] seek error:', e);
+      onSeekComplete();
+    }
+  }, [onError, onTimeUpdate]);
+
   // Imperative handle exposed to parent via ref (equivalent to YouTube player methods)
   useImperativeHandle(ref, () => ({
     play: () => {
@@ -92,22 +138,18 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
       } catch (e) {}
     },
 
-    seek: (time) => {
-      const audio = audioRef.current;
-      if (!audio) return;
-      const safeTime = Math.max(0, typeof time === 'number' && !isNaN(time) ? time : 0);
-      try {
-        audio.currentTime = safeTime;
-        setLocalCurrentTime(safeTime);
-      } catch (e) {
-        console.warn('[OriginalAudioPlayer] seek error:', e);
-      }
+    seek: (time, autoPlay = false) => {
+      seek(time, autoPlay);
+    },
+
+    seekAndPlay: (time) => {
+      seek(time, true);
     },
 
     getCurrentTime: () => audioRef.current?.currentTime || 0,
     getDuration: () => audioRef.current?.duration || 0,
     isPlaying: () => Boolean(audioRef.current && !audioRef.current.paused && !audioRef.current.ended)
-  }), [onError]);
+  }), [seek, onError]);
 
   // Handle source changes & cleanup
   useEffect(() => {
@@ -161,8 +203,29 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     if (onReady) onReady({ duration: dur });
   }, [initialTime, onReady]);
 
+  const handleSeeked = useCallback((e) => {
+    const audio = e.target;
+    const current = audio.currentTime || 0;
+    setLocalCurrentTime(current);
+
+    if (pendingSeekCallbackRef.current) {
+      const cb = pendingSeekCallbackRef.current;
+      pendingSeekCallbackRef.current = null;
+      cb();
+    } else {
+      isProgrammaticSeekingRef.current = false;
+      if (onTimeUpdate) {
+        onTimeUpdate(current);
+      }
+    }
+  }, [onTimeUpdate]);
+
   const handleTimeUpdate = useCallback((e) => {
     const current = e.target.currentTime || 0;
+    // Suppress stale pre-seek time updates while a programmatic seek is in progress
+    if (isProgrammaticSeekingRef.current) {
+      return;
+    }
     if (!isSeekingRef.current && seekValue === null) {
       setLocalCurrentTime(current);
     }
@@ -263,6 +326,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
         className="hidden"
         aria-hidden="true"
         onLoadedMetadata={handleLoadedMetadata}
+        onSeeked={handleSeeked}
         onTimeUpdate={handleTimeUpdate}
         onPlay={handlePlay}
         onPause={handlePause}
