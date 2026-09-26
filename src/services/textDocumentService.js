@@ -248,10 +248,51 @@ function normalizeForAudioMatching(str) {
 }
 
 /**
+ * Helper: Computes textual match score between normalized paragraph and candidate Whisper segment(s).
+ * Returns a score between 0 (no match) and 100 (exact match).
+ */
+function computeSegmentGroupScore(paraNorm, candNorm) {
+  if (!paraNorm || !candNorm) return 0;
+  if (paraNorm === candNorm) return 100;
+  if (candNorm.startsWith(paraNorm)) return 95;
+  if (paraNorm.startsWith(candNorm)) return 90;
+  if (candNorm.includes(paraNorm)) return 85;
+  if (paraNorm.includes(candNorm)) return 80;
+
+  // Prefix match (at least 6 chars)
+  const minLen = Math.min(paraNorm.length, candNorm.length);
+  const checkLen = Math.min(20, minLen);
+  if (checkLen >= 6) {
+    if (paraNorm.slice(0, checkLen) === candNorm.slice(0, checkLen)) {
+      const lenRatio = Math.min(paraNorm.length, candNorm.length) / Math.max(paraNorm.length, candNorm.length);
+      return Math.round(70 + (lenRatio * 20));
+    }
+  }
+
+  // Common substring / overlap calculation
+  let matchCount = 0;
+  const chunkLen = 6;
+  if (paraNorm.length >= chunkLen && candNorm.length >= chunkLen) {
+    for (let i = 0; i <= paraNorm.length - chunkLen; i += chunkLen) {
+      const chunk = paraNorm.slice(i, i + chunkLen);
+      if (candNorm.includes(chunk)) {
+        matchCount += chunkLen;
+      }
+    }
+    const overlapRatio = matchCount / paraNorm.length;
+    if (overlapRatio >= 0.5) {
+      return Math.round(overlapRatio * 80);
+    }
+  }
+
+  return 0;
+}
+
+/**
  * Deterministically aligns paragraphs with Groq Whisper audio segments.
  * Computes exact audioStart and audioEnd timestamps for each paragraph directly
  * from real Whisper segments, ensuring strictly monotonic forward progress and
- * preserving real segment boundaries.
+ * requiring strong textual evidence rather than naive length accumulation.
  *
  * @param {Array<object>} paragraphs
  * @param {Array<object>} audioSegments - Whisper verbose_json segments [{ start, end, text }, ...]
@@ -294,7 +335,7 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
     }));
   }
 
-  // 2. Align paragraphs strictly forward (monotonic)
+  // 2. Align paragraphs strictly forward (monotonic) using textual evidence
   let currentSegIdx = 0;
 
   return paragraphs.map((para, pIdx) => {
@@ -318,58 +359,48 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
       };
     }
 
-    // Look ahead from currentSegIdx up to a reasonable window (e.g. 5 segments) to find the best start segment
-    let startSegIdx = currentSegIdx;
-    let foundMatch = false;
-
-    // Check if the current segment or upcoming segment matches start of paragraph
+    // Search for best matching candidate group [startIdx ... endIdx] starting from currentSegIdx
     const maxLookahead = Math.min(segs.length, currentSegIdx + 5);
-    for (let k = currentSegIdx; k < maxLookahead; k++) {
-      const candNorm = segs[k].norm;
-      const prefixLen = Math.min(15, Math.min(paraNorm.length, candNorm.length));
-      const pPrefix = paraNorm.slice(0, prefixLen);
-      const cPrefix = candNorm.slice(0, prefixLen);
+    let bestMatch = null;
+    let bestScore = 0;
 
-      if (
-        candNorm === paraNorm ||
-        candNorm.startsWith(pPrefix) ||
-        paraNorm.startsWith(cPrefix) ||
-        candNorm.includes(pPrefix) ||
-        paraNorm.includes(cPrefix)
-      ) {
-        startSegIdx = k;
-        foundMatch = true;
+    for (let startIdx = currentSegIdx; startIdx < maxLookahead; startIdx++) {
+      let candNorm = '';
+      const maxEnd = Math.min(segs.length, startIdx + 8);
+
+      for (let endIdx = startIdx; endIdx < maxEnd; endIdx++) {
+        candNorm += segs[endIdx].norm;
+        const score = computeSegmentGroupScore(paraNorm, candNorm);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = { startIdx, endIdx };
+        }
+
+        // Early break if we got an exact or near-exact match
+        if (score >= 90) {
+          break;
+        }
+
+        // Don't accumulate excessively past paragraph length
+        if (candNorm.length > paraNorm.length * 1.5 + 30) {
+          break;
+        }
+      }
+
+      if (bestScore >= 90) {
         break;
       }
     }
 
-    // Accumulate segments from startSegIdx until the paragraph text is covered
-    const matchedSegs = [];
-    let accumulatedNorm = '';
-    let scanIdx = startSegIdx;
-
-    while (scanIdx < segs.length) {
-      const seg = segs[scanIdx];
-      matchedSegs.push(seg);
-      accumulatedNorm += seg.norm;
-      scanIdx++;
-
-      // If we matched or exceeded the normalized paragraph length, or exact match found
-      if (
-        accumulatedNorm === paraNorm ||
-        accumulatedNorm.includes(paraNorm) ||
-        (paraNorm.includes(accumulatedNorm) && accumulatedNorm.length >= paraNorm.length * 0.85) ||
-        accumulatedNorm.length >= paraNorm.length
-      ) {
-        break;
-      }
-    }
-
-    if (matchedSegs.length > 0) {
+    // Accept match only with positive textual evidence (score >= 60)
+    if (bestMatch && bestScore >= 60) {
+      const matchedSegs = segs.slice(bestMatch.startIdx, bestMatch.endIdx + 1);
       const firstSeg = matchedSegs[0];
       const lastSeg = matchedSegs[matchedSegs.length - 1];
-      // Advance currentSegIdx monotonically past the consumed segments
-      currentSegIdx = scanIdx;
+
+      // Advance currentSegIdx strictly past the matched segments
+      currentSegIdx = bestMatch.endIdx + 1;
 
       return {
         ...para,
@@ -384,8 +415,8 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
       };
     }
 
-    // If no match was possible, do not invent timestamps
-    console.warn(`[alignParagraphs] Could not securely align paragraph ${para.id || pIdx + 1}`);
+    // No confident textual match found: do NOT invent timestamps
+    console.warn(`[alignParagraphs] No confident textual match for paragraph ${para.id || pIdx + 1}`);
     return {
       ...para,
       audioStart: null,

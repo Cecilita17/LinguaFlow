@@ -1113,6 +1113,12 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         if (playingParagraphIdRef.current !== activePara.id) {
           setPlayingParagraphId(activePara.id);
           playingParagraphIdRef.current = activePara.id;
+          try {
+            const el = window.document.querySelector(`[data-paragraph-id="${activePara.id}"]`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          } catch (e) {}
         }
 
         // Calculate segment-aware character index without absorbing silence gaps
@@ -1131,14 +1137,19 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       }
     }
 
-    // Check segment boundary of currently playing paragraph
+    // Check segment boundary of currently playing paragraph when autoPlay is disabled
     const curId = playingParagraphIdRef.current;
     if (curId) {
       const currentPara = allParas.find(p => p.id === curId);
-      if (currentPara && typeof currentPara.audioEnd === 'number' && newTime >= currentPara.audioEnd) {
-        if (autoPlayTextReaderRef.current) {
-          advanceToNextParagraph(currentPara);
-        } else {
+      if (
+        currentPara &&
+        typeof currentPara.audioStart === 'number' &&
+        typeof currentPara.audioEnd === 'number' &&
+        currentPara.audioEnd > currentPara.audioStart &&
+        newTime >= currentPara.audioEnd &&
+        newTime >= currentPara.audioStart
+      ) {
+        if (!autoPlayTextReaderRef.current) {
           if (audioPlayerRef.current) {
             audioPlayerRef.current.pause();
           }
@@ -1148,7 +1159,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         }
       }
     }
-  }, [document?.paragraphs, document?.audioSegments, advanceToNextParagraph]);
+  }, [document?.paragraphs, document?.audioSegments]);
 
   const handleAudioPause = useCallback((pausedTime) => {
     if (typeof pausedTime === 'number') {
@@ -1419,8 +1430,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       userStoppedRef.current = false;
       setPlayingParagraphId(targetPara.id);
       playingParagraphIdRef.current = targetPara.id;
-      audioPlayerRef.current.seek(seekTime);
-      audioPlayerRef.current.play();
+      if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
+        audioPlayerRef.current.seekAndPlay(seekTime);
+      } else if (typeof audioPlayerRef.current.seek === 'function') {
+        audioPlayerRef.current.seek(seekTime, true);
+      }
     } else {
       handlePlayParagraph(targetPara);
     }
@@ -2211,8 +2225,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         latestAudioPositionRef.current.paragraphId = targetPara.id;
         latestAudioPositionRef.current.time = resumeTime;
         userStoppedRef.current = false;
-        audioPlayerRef.current.seek(resumeTime);
-        audioPlayerRef.current.play();
+        if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
+          audioPlayerRef.current.seekAndPlay(resumeTime);
+        } else if (typeof audioPlayerRef.current.seek === 'function') {
+          audioPlayerRef.current.seek(resumeTime, true);
+        }
         return;
       }
     }
