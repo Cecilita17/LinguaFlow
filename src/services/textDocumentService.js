@@ -250,7 +250,8 @@ function normalizeForAudioMatching(str) {
 /**
  * Deterministically aligns paragraphs with Groq Whisper audio segments.
  * Computes exact audioStart and audioEnd timestamps for each paragraph directly
- * from real Whisper segments without linear character-interpolation or artificial speech speed assumptions.
+ * from real Whisper segments, ensuring strictly monotonic forward progress and
+ * preserving real segment boundaries.
  *
  * @param {Array<object>} paragraphs
  * @param {Array<object>} audioSegments - Whisper verbose_json segments [{ start, end, text }, ...]
@@ -267,29 +268,24 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
     }));
   }
 
-  // 1. Build cumulative segment stream with character offsets
-  const segStream = [];
-  let cumChar = 0;
+  // 1. Build cleaned and normalized list of Whisper segments
+  const segs = [];
   for (let idx = 0; idx < audioSegments.length; idx++) {
-    const seg = audioSegments[idx];
-    const norm = normalizeForAudioMatching(seg.text);
+    const s = audioSegments[idx];
+    if (!s || typeof s !== 'object') continue;
+    const norm = normalizeForAudioMatching(s.text);
     if (!norm) continue;
-    const startChar = cumChar;
-    const endChar = cumChar + norm.length;
-    segStream.push({
-      id: seg.id ?? idx,
+    segs.push({
+      id: s.id ?? idx,
       index: idx,
-      start: typeof seg.start === 'number' ? seg.start : 0,
-      end: typeof seg.end === 'number' ? seg.end : 0,
-      text: seg.text || '',
-      norm,
-      startChar,
-      endChar
+      start: typeof s.start === 'number' ? s.start : 0,
+      end: typeof s.end === 'number' ? s.end : 0,
+      text: s.text || '',
+      norm
     });
-    cumChar = endChar;
   }
 
-  if (segStream.length === 0 || cumChar === 0) {
+  if (segs.length === 0) {
     return paragraphs.map(p => ({
       ...p,
       audioStart: typeof p?.audioStart === 'number' ? p.audioStart : null,
@@ -298,13 +294,10 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
     }));
   }
 
-  const allSegChars = segStream.map(s => s.norm).join('');
+  // 2. Align paragraphs strictly forward (monotonic)
+  let currentSegIdx = 0;
 
-  // 2. Align each paragraph directly to real Whisper segments
-  let cursor = 0;
-  let lastMatchedSegIdx = 0;
-
-  return paragraphs.map(para => {
+  return paragraphs.map((para, pIdx) => {
     const paraNorm = normalizeForAudioMatching(para.text);
     if (!paraNorm) {
       return {
@@ -315,73 +308,84 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
       };
     }
 
-    // Try finding paragraph starting from cursor
-    let matchIdx = allSegChars.indexOf(paraNorm, cursor);
-    if (matchIdx === -1 && cursor > 0) {
-      // Fallback: search from beginning if text had small reordering
-      matchIdx = allSegChars.indexOf(paraNorm, 0);
-    }
-
-    // Fallback: match by substantial prefix (first 25 characters)
-    if (matchIdx === -1 && paraNorm.length > 25) {
-      const prefix = paraNorm.slice(0, 25);
-      const prefixIdx = allSegChars.indexOf(prefix, cursor);
-      if (prefixIdx !== -1) {
-        matchIdx = prefixIdx;
-      } else {
-        const prefixFromZero = allSegChars.indexOf(prefix, 0);
-        if (prefixFromZero !== -1) {
-          matchIdx = prefixFromZero;
-        }
-      }
-    }
-
-    if (matchIdx !== -1) {
-      const charStart = matchIdx;
-      const charEnd = matchIdx + paraNorm.length;
-      cursor = Math.min(allSegChars.length, charEnd);
-
-      // Find all Whisper segments overlapping with [charStart, charEnd)
-      const matched = segStream.filter(s =>
-        (charStart < s.endChar && charEnd > s.startChar) ||
-        (charStart === s.startChar && charEnd === s.startChar)
-      );
-
-      if (matched.length > 0) {
-        const firstSeg = matched[0];
-        const lastSeg = matched[matched.length - 1];
-        lastMatchedSegIdx = lastSeg.index;
-
-        return {
-          ...para,
-          audioStart: firstSeg.start,
-          audioEnd: Math.max(firstSeg.start, lastSeg.end),
-          audioSegments: matched.map(s => ({
-            id: s.id,
-            start: s.start,
-            end: s.end,
-            text: s.text
-          }))
-        };
-      }
-    }
-
-    // Fallback: If exact match failed, match with next available segment
-    if (lastMatchedSegIdx < segStream.length) {
-      const candidateSeg = segStream[lastMatchedSegIdx];
+    if (currentSegIdx >= segs.length) {
+      console.warn(`[alignParagraphs] No remaining Whisper segments for paragraph ${para.id || pIdx + 1}`);
       return {
         ...para,
-        audioStart: candidateSeg.start,
-        audioEnd: candidateSeg.end,
-        audioSegments: [{
-          id: candidateSeg.id,
-          start: candidateSeg.start,
-          end: candidateSeg.end,
-          text: candidateSeg.text
-        }]
+        audioStart: null,
+        audioEnd: null,
+        audioSegments: []
       };
     }
 
+    // Look ahead from currentSegIdx up to a reasonable window (e.g. 5 segments) to find the best start segment
+    let startSegIdx = currentSegIdx;
+    let foundMatch = false;
+
+    // Check if the current segment or upcoming segment matches start of paragraph
+    const maxLookahead = Math.min(segs.length, currentSegIdx + 5);
+    for (let k = currentSegIdx; k < maxLookahead; k++) {
+      const candNorm = segs[k].norm;
+      const prefixLen = Math.min(15, Math.min(paraNorm.length, candNorm.length));
+      const pPrefix = paraNorm.slice(0, prefixLen);
+      const cPrefix = candNorm.slice(0, prefixLen);
+
+      if (
+        candNorm === paraNorm ||
+        candNorm.startsWith(pPrefix) ||
+        paraNorm.startsWith(cPrefix) ||
+        candNorm.includes(pPrefix) ||
+        paraNorm.includes(cPrefix)
+      ) {
+        startSegIdx = k;
+        foundMatch = true;
+        break;
+      }
+    }
+
+    // Accumulate segments from startSegIdx until the paragraph text is covered
+    const matchedSegs = [];
+    let accumulatedNorm = '';
+    let scanIdx = startSegIdx;
+
+    while (scanIdx < segs.length) {
+      const seg = segs[scanIdx];
+      matchedSegs.push(seg);
+      accumulatedNorm += seg.norm;
+      scanIdx++;
+
+      // If we matched or exceeded the normalized paragraph length, or exact match found
+      if (
+        accumulatedNorm === paraNorm ||
+        accumulatedNorm.includes(paraNorm) ||
+        (paraNorm.includes(accumulatedNorm) && accumulatedNorm.length >= paraNorm.length * 0.85) ||
+        accumulatedNorm.length >= paraNorm.length
+      ) {
+        break;
+      }
+    }
+
+    if (matchedSegs.length > 0) {
+      const firstSeg = matchedSegs[0];
+      const lastSeg = matchedSegs[matchedSegs.length - 1];
+      // Advance currentSegIdx monotonically past the consumed segments
+      currentSegIdx = scanIdx;
+
+      return {
+        ...para,
+        audioStart: firstSeg.start,
+        audioEnd: Math.max(firstSeg.start, lastSeg.end),
+        audioSegments: matchedSegs.map(s => ({
+          id: s.id,
+          start: s.start,
+          end: s.end,
+          text: s.text
+        }))
+      };
+    }
+
+    // If no match was possible, do not invent timestamps
+    console.warn(`[alignParagraphs] Could not securely align paragraph ${para.id || pIdx + 1}`);
     return {
       ...para,
       audioStart: null,
