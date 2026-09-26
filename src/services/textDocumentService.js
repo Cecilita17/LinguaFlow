@@ -355,67 +355,60 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
       };
     }
 
-    // Search for best matching candidate group [startIdx ... endIdx] starting from currentSegIdx
-    const maxLookahead = Math.min(segs.length, currentSegIdx + 5);
-    let bestMatch = null;
+    // Align paragraph strictly starting from currentSegIdx
+    let candNorm = '';
+    const maxEnd = Math.min(segs.length, currentSegIdx + 8);
+    let bestEndIdx = currentSegIdx;
     let bestScore = 0;
 
-    for (let startIdx = currentSegIdx; startIdx < maxLookahead; startIdx++) {
-      let candNorm = '';
-      const maxEnd = Math.min(segs.length, startIdx + 8);
+    for (let endIdx = currentSegIdx; endIdx < maxEnd; endIdx++) {
+      candNorm += segs[endIdx].norm;
 
-      for (let endIdx = startIdx; endIdx < maxEnd; endIdx++) {
-        candNorm += segs[endIdx].norm;
-
-        // Exact match -> 100
-        if (candNorm === paraNorm) {
-          bestScore = 100;
-          bestMatch = { startIdx, endIdx };
-          break;
-        }
-
-        // If candNorm starts with paraNorm and is close in length
-        if (candNorm.startsWith(paraNorm)) {
-          const score = Math.round((paraNorm.length / candNorm.length) * 95);
-          if (score > bestScore) {
-            bestScore = score;
-            bestMatch = { startIdx, endIdx };
-          }
-          break;
-        }
-
-        // If paraNorm starts with candNorm but paraNorm is longer, keep accumulating!
-        if (paraNorm.startsWith(candNorm) && candNorm.length < paraNorm.length) {
-          continue;
-        }
-
-        // Calculate similarity for fuzzy / boundary matches
-        const sim = computeStringSimilarity(paraNorm, candNorm);
-        if (sim > bestScore) {
-          bestScore = sim;
-          bestMatch = { startIdx, endIdx };
-        }
-
-        // If candNorm already exceeds paraNorm length significantly, stop accumulating for this startIdx
-        if (candNorm.length > paraNorm.length * 1.3 + 20) {
-          break;
-        }
+      // Exact match -> 100
+      if (candNorm === paraNorm) {
+        bestScore = 100;
+        bestEndIdx = endIdx;
+        break;
       }
 
-      // If we found a near-perfect match from this startIdx, no need to look further ahead
-      if (bestScore >= 90) {
+      // If candNorm starts with paraNorm and covers it
+      if (candNorm.startsWith(paraNorm)) {
+        const score = Math.round((paraNorm.length / candNorm.length) * 95);
+        if (score > bestScore) {
+          bestScore = score;
+          bestEndIdx = endIdx;
+        }
+        break;
+      }
+
+      // If paraNorm starts with candNorm but paraNorm is longer, keep accumulating!
+      if (paraNorm.startsWith(candNorm) && candNorm.length < paraNorm.length) {
+        bestScore = Math.max(bestScore, Math.round((candNorm.length / paraNorm.length) * 80));
+        bestEndIdx = endIdx;
+        continue;
+      }
+
+      // Calculate similarity for fuzzy / boundary matches
+      const sim = computeStringSimilarity(paraNorm, candNorm);
+      if (sim > bestScore) {
+        bestScore = sim;
+        bestEndIdx = endIdx;
+      }
+
+      // If candNorm already exceeds paraNorm length significantly, stop accumulating
+      if (candNorm.length > paraNorm.length * 1.3 + 20) {
         break;
       }
     }
 
-    // Accept match only with positive textual evidence (score >= 60)
-    if (bestMatch && bestScore >= 60) {
-      const matchedSegs = segs.slice(bestMatch.startIdx, bestMatch.endIdx + 1);
+    // Accept match only with positive textual evidence (score >= 50)
+    if (bestScore >= 50) {
+      const matchedSegs = segs.slice(currentSegIdx, bestEndIdx + 1);
       const firstSeg = matchedSegs[0];
       const lastSeg = matchedSegs[matchedSegs.length - 1];
 
       // Advance currentSegIdx strictly past the matched segments
-      currentSegIdx = bestMatch.endIdx + 1;
+      currentSegIdx = bestEndIdx + 1;
 
       return {
         ...para,
