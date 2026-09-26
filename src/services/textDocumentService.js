@@ -343,9 +343,18 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
       }
     }
 
-    // C) Fallback: match by short prefix
+    // C) Fallback: match by medium prefix
     if (matchIdx === -1 && paraNorm.length > 10) {
       const prefix = paraNorm.slice(0, 10);
+      const prefixIdx = allSegChars.indexOf(prefix, cursor);
+      if (prefixIdx !== -1) {
+        matchIdx = prefixIdx;
+      }
+    }
+
+    // D) Fallback: match by short prefix (>= 4 chars)
+    if (matchIdx === -1 && paraNorm.length >= 4) {
+      const prefix = paraNorm.slice(0, 4);
       const prefixIdx = allSegChars.indexOf(prefix, cursor);
       if (prefixIdx !== -1) {
         matchIdx = prefixIdx;

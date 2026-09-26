@@ -214,7 +214,7 @@ self.addEventListener('message', async (event) => {
       // Execute single-pass Transformers.js pipeline with native 30s windowing and 5s stride
       const options = {
         task: 'transcribe', // Strictly transcribe, NEVER translate (preserves original language)
-        return_timestamps: true,
+        return_timestamps: 'word',
         chunk_length_s: 30,
         stride_length_s: 5,
         chunk_callback: () => {
@@ -244,7 +244,7 @@ self.addEventListener('message', async (event) => {
       const rtf = audioDurationSec > 0 ? (inferenceTimeSec / audioDurationSec) : 0;
       const actualWindows = Math.max(1, processedWindowsCount || estimatedWindows);
 
-      // Normalize output segments with absolute timestamps
+      // Normalize output word/token chunks with absolute timestamps
       const rawChunks = Array.isArray(result?.chunks) ? result.chunks : [];
       const segments = rawChunks.map((c, idx) => {
         const start = Array.isArray(c.timestamp) && typeof c.timestamp[0] === 'number'
@@ -252,12 +252,12 @@ self.addEventListener('message', async (event) => {
           : offsetSec;
         const end = Array.isArray(c.timestamp) && typeof c.timestamp[1] === 'number'
           ? (c.timestamp[1] + offsetSec)
-          : (start + 2.0);
+          : start;
 
         return {
           id: idx,
           start: Math.round(start * 100) / 100,
-          end: Math.round(end * 100) / 100,
+          end: Math.round(Math.max(start, end) * 100) / 100,
           text: (c.text || '').trim()
         };
       }).filter(s => Boolean(s.text));

@@ -236,7 +236,7 @@ export async function transcribeWithLocalWhisper({
   const normalizedSegments = (Array.isArray(result.segments) ? result.segments : []).map((seg, idx) => ({
     id: typeof seg.id === 'number' ? seg.id : idx,
     start: typeof seg.start === 'number' ? Math.round(seg.start * 100) / 100 : 0,
-    end: typeof seg.end === 'number' ? Math.round(seg.end * 100) / 100 : 0,
+    end: typeof seg.end === 'number' ? Math.round(Math.max(seg.start || 0, seg.end) * 100) / 100 : 0,
     text: (seg.text || '').trim()
   })).filter(s => Boolean(s.text));
 
