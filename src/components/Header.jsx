@@ -58,7 +58,7 @@ export function Header({
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#201511]/85 backdrop-blur-xl border-b border-black/5 dark:border-white/10 px-4 py-2.5 md:py-3 shadow-sm text-[var(--text-primary)] transition-colors">
+      <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#1a0c08]/90 backdrop-blur-xl border-b border-black/5 dark:border-white/5 px-4 py-2.5 md:py-3 shadow-xs text-[var(--text-primary)] transition-colors">
         {/* MOBILE TOP BAR (< md) */}
         <div className="flex md:hidden items-center justify-between w-full">
           {/* Left: Brand Logo & Titles */}
@@ -82,8 +82,8 @@ export function Header({
             </div>
           </div>
 
-          {/* Right: Site Language Switcher + Circular Target Language Button */}
-          <div className="flex items-center space-x-1.5 shrink-0">
+          {/* Right: Site Language Switcher + Target Language Button */}
+          <div className="flex items-center space-x-3.5 shrink-0">
             {/* Website Language Switcher (ES/EN) */}
             <SiteLanguageToggle variant="compact" />
 
@@ -123,8 +123,8 @@ export function Header({
               </div>
             </div>
 
-            {/* Right: Site Language Switcher + Circular Target Language Button */}
-            <div className="flex items-center space-x-2 shrink-0">
+            {/* Right: Site Language Switcher + Target Language Button */}
+            <div className="flex items-center space-x-4 shrink-0">
               {/* Website Language Switcher (ES/EN) */}
               <SiteLanguageToggle variant="compact" />
 

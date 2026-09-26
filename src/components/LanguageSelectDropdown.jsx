@@ -159,7 +159,7 @@ export function LanguageSelectDropdown({
         aria-label={label ? `${label}: ${currentName}` : currentName}
         className={`group flex items-center transition-all duration-200 outline-none select-none cursor-pointer dropdown-trigger-btn ${
           variant === 'header'
-            ? 'space-x-2 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] px-2.5 py-1.5 rounded-xl border border-black/5 dark:border-white/10 hover:border-rose-500/40 shadow-xs active:scale-95'
+            ? 'space-x-1.5 hover:bg-black/5 dark:hover:bg-white/5 text-[var(--text-primary)] px-2 py-1 rounded-lg border-0 transition-colors active:scale-95'
             : variant === 'card'
             ? 'w-full justify-between bg-white/70 dark:bg-[#2e150d]/80 backdrop-blur-md hover:bg-white/90 dark:hover:bg-[#341b12] text-[var(--text-primary)] p-3 rounded-2xl border border-black/5 dark:border-white/10 hover:border-rose-500/50 shadow-sm active:scale-[0.99]'
             : variant === 'pill'
@@ -200,14 +200,10 @@ export function LanguageSelectDropdown({
               </span>
             )}
 
-            {/* Flag badge */}
-            <div
-              className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border-primary)] bg-[var(--surface-tertiary)] shadow-xs shrink-0 text-base leading-none dropdown-flag-box"
-            >
-              <span className="transform group-hover:scale-110 transition-transform">
-                {currentFlag}
-              </span>
-            </div>
+            {/* Flag */}
+            <span className="text-sm leading-none shrink-0 transform group-hover:scale-110 transition-transform">
+              {currentFlag}
+            </span>
 
             {/* Language Name */}
             <span className="text-xs font-semibold text-[var(--text-primary)] tracking-wide truncate max-w-[110px] sm:max-w-[140px] dropdown-lang-name">
@@ -218,7 +214,7 @@ export function LanguageSelectDropdown({
 
         {/* Smooth rotating chevron */}
         <ChevronDown
-          className={`w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0 transition-transform duration-200 ${
+          className={`w-3.5 h-3.5 text-stone-400 dark:text-stone-300 group-hover:text-[var(--text-primary)] shrink-0 transition-transform duration-200 ${
             isOpen ? 'rotate-180' : 'group-hover:translate-y-0.5'
           }`}
         />

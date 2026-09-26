@@ -1260,9 +1260,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     const textLength = cleanText.length;
     const currentRate = speechRateRef.current || speechRate || 1.0;
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = speechCode;
-    utterance.rate = mapSpeechRateToUtteranceRate(currentRate);
+    const utteranceRate = mapSpeechRateToUtteranceRate(currentRate);
+    utterance.rate = utteranceRate;
 
     // Select suitable voice if available
     try {
@@ -1281,6 +1280,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       tokens: paragraph.tokens || [],
       targetLang: activeDocLang,
       speechRate: currentRate,
+      utteranceRate,
       paragraphId: paragraph.id,
       playbackId,
       isAndroid,

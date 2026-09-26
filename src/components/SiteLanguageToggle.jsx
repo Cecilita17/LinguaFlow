@@ -51,10 +51,10 @@ export function SiteLanguageToggle({
         type="button"
         onClick={toggleSiteLang}
         title={isSpanish ? 'Switch site language to English' : 'Cambiar idioma del sitio a Español'}
-        className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 text-xs font-semibold text-[var(--text-primary)] transition-all shadow-xs cursor-pointer active:scale-95 ${className}`}
+        className={`flex items-center space-x-1.5 px-2 py-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 text-xs font-semibold text-[var(--text-primary)] transition-colors cursor-pointer active:scale-95 select-none ${className}`}
       >
         <span className="text-sm leading-none">{isSpanish ? '🇪🇸' : '🇺🇸'}</span>
-        <span className="tracking-wider uppercase text-[11px] font-bold text-rose-600 dark:text-rose-200">
+        <span className="tracking-wide uppercase text-xs font-semibold text-[var(--text-primary)]">
           {siteLang.toUpperCase()}
         </span>
       </button>

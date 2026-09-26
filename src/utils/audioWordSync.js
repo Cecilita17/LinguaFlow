@@ -246,6 +246,7 @@ export function createAudioWordSynchronizer({
   tokens = [],
   targetLang = 'es',
   speechRate = 1.0,
+  utteranceRate = 1.0,
   paragraphId = '',
   playbackId = '',
   onActiveCharChange = () => {},
@@ -315,8 +316,9 @@ export function createAudioWordSynchronizer({
     }
   }
 
-  function setActiveTokenPos(pos, isSnap = false) {
+  function setActiveTokenPos(pos, source = 'snap') {
     if (wordTokens.length === 0) return;
+    const isSnap = source === 'snap' || source === 'init';
     const clampedPos = Math.max(0, Math.min(wordTokens.length - 1, pos));
 
     // Monotonic progression: during speech, do not jump backwards
@@ -329,7 +331,7 @@ export function createAudioWordSynchronizer({
       return;
     }
 
-    const beforeActiveTokenPos = activeTokenPos;
+    const previousWordPos = activeTokenPos;
     const beforeHighestVisited = highestVisitedTokenPos;
 
     activeTokenPos = clampedPos;
@@ -339,22 +341,33 @@ export function createAudioWordSynchronizer({
 
     const tok = wordTokens[clampedPos];
     const newActiveChar = tok ? tok.startChar : -1;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const elapsed = startTime > 0 ? Math.round(Math.max(0, now - startTime - totalPausedDuration)) : 0;
+
+    console.log(`[TTS_DIAGNOSTIC_VISUAL]
+elapsed=${elapsed}ms
+previousWordPos=${previousWordPos}
+newWordPos=${clampedPos}
+word="${tok?.word || ''}"
+startChar=${newActiveChar}
+calibratedDurationMs=${Math.round(calibratedDurationMs)}ms
+highestVisitedTokenPos=${highestVisitedTokenPos}
+targetBoundaryWordPos=${targetBoundaryWordPos}
+source=${source}`);
 
     // --- DIAGNOSTIC: Log Synchronizer state transitions on Android (debug only) ---
     if (debug && isAndroid) {
-      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      const elapsed = startTime > 0 ? Math.max(0, now - startTime - totalPausedDuration) : 0;
       console.log(`[TextReaderSync:sync] [playback #${playbackId || 'default'}]
-t=${Math.round(elapsed)}ms
-activeTokenPos BEFORE: ${beforeActiveTokenPos}
+t=${elapsed}ms
+activeTokenPos BEFORE: ${previousWordPos}
 highestVisitedTokenPos BEFORE: ${beforeHighestVisited}
 targetBoundaryWordPos: ${targetBoundaryWordPos}
 lastConfirmedWordPos: ${lastConfirmedWordPos}
 new activeTokenPos: ${clampedPos} (word="${tok?.word || ''}")
 new activeCharIndex: ${newActiveChar}`);
 
-      if (!isSnap && beforeActiveTokenPos >= 0 && clampedPos - beforeActiveTokenPos > 1) {
-        console.warn(`[TextReaderSync:VISUAL_GAP] [playback #${playbackId || 'default'}] previous=${beforeActiveTokenPos} current=${clampedPos} gap=${clampedPos - beforeActiveTokenPos}`);
+      if (!isSnap && previousWordPos >= 0 && clampedPos - previousWordPos > 1) {
+        console.warn(`[TextReaderSync:VISUAL_GAP] [playback #${playbackId || 'default'}] previous=${previousWordPos} current=${clampedPos} gap=${clampedPos - previousWordPos}`);
       }
     }
 
@@ -370,21 +383,17 @@ new activeCharIndex: ${newActiveChar}`);
     // --- ANDROID SPECIFIC ANTI-SKIP STRATEGY ---
     if (isAndroid) {
       // 1. Confirmed boundary catch-up:
-      // If Android confirmed a word position ahead, step strictly 1 word at a time towards it.
-      // Guarantees 0 -> 1 -> 2 -> 3 -> 4 without leaping directly from 0 to 4.
       const targetPos = Math.max(targetBoundaryWordPos, lastConfirmedWordPos);
       if (targetPos > highestVisitedTokenPos) {
         const nextStepPos = highestVisitedTokenPos + 1;
         if (debug) {
           console.log(`[TextReaderSync:android] confirmedWordPos=${targetPos} visualWordPos=${nextStepPos}`);
         }
-        setActiveTokenPos(nextStepPos, false);
+        setActiveTokenPos(nextStepPos, 'boundary_catchup');
         return;
       }
 
       // 2. Conservative temporal pacing only before the first boundary arrives:
-      // Once a boundary is confirmed, lastConfirmedWordPos becomes the strict ceiling
-      // so temporal estimation cannot run ahead of the audio.
       if (!hasConfirmedBoundary && highestVisitedTokenPos < wordTokens.length - 1) {
         const elapsedSinceAnchor = Math.max(0, now - clockBaseTime);
         const safeDuration = Math.max(400, calibratedDurationMs);
@@ -398,7 +407,7 @@ new activeCharIndex: ${newActiveChar}`);
           if (debug) {
             console.log(`[TextReaderSync:android:initial] visualWordPos=${nextStepPos}`);
           }
-          setActiveTokenPos(nextStepPos, false);
+          setActiveTokenPos(nextStepPos, 'temporal_estimate');
         }
       }
       return;
@@ -408,7 +417,7 @@ new activeCharIndex: ${newActiveChar}`);
     // 1. If a boundary arrived ahead of our current visual position, smoothly step towards it
     if (targetBoundaryWordPos > highestVisitedTokenPos) {
       const nextStepPos = highestVisitedTokenPos + 1;
-      setActiveTokenPos(nextStepPos, false);
+      setActiveTokenPos(nextStepPos, 'boundary_catchup');
       return;
     }
 
@@ -433,7 +442,7 @@ new activeCharIndex: ${newActiveChar}`);
 
     // Advance smoothly and monotonically
     const nextPos = Math.max(highestVisitedTokenPos, targetPos);
-    setActiveTokenPos(nextPos, false);
+    setActiveTokenPos(nextPos, 'temporal_estimate');
   }
 
   function startTimer() {
@@ -464,6 +473,17 @@ new activeCharIndex: ${newActiveChar}`);
     clockBaseTime = startTime;
     clockBaseFraction = 0;
 
+    console.log(`[TTS_DIAGNOSTIC_START]
+paragraphId=${paragraphId || '(none)'}
+targetLang=${targetLang}
+speechRate=${speechRate}
+utteranceRate=${utteranceRate}
+textLength=${textLength}
+tokenCount=${Array.isArray(tokens) ? tokens.length : 0}
+wordTokenCount=${wordTokens.length}
+estimatedDurationMs=${Math.round(estimatedDurationMs)}ms
+timestamp=${Math.round(startTime)}`);
+
     if (debug && isAndroid) {
       console.log(`[TextReaderSync:tokens] [playback #${playbackId || 'default'}]
 paragraphId: "${paragraphId}"
@@ -486,7 +506,7 @@ ${wordTokens.map((wt, idx) => `  wordPos=${idx} tokenIndex=${wt.tokenIndex} word
       });
     }
 
-    setActiveTokenPos(0, true);
+    setActiveTokenPos(0, 'init');
     startTimer();
   }
 
@@ -502,6 +522,8 @@ ${wordTokens.map((wt, idx) => `  wordPos=${idx} tokenIndex=${wt.tokenIndex} word
 
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const elapsed = Math.max(0, now - startTime - totalPausedDuration);
+
+    const calBefore = Math.round(calibratedDurationMs);
 
     if (isAndroid) {
       const matchedWord = matchedWordPos >= 0 ? wordTokens[matchedWordPos]?.word : '(none)';
@@ -555,6 +577,22 @@ word="${matchedWord}"`);
       lastConfirmedWordPos = Math.max(lastConfirmedWordPos, matchedWordPos);
       targetBoundaryWordPos = Math.max(targetBoundaryWordPos, Math.max(highestVisitedTokenPos, matchedWordPos));
     }
+
+    const calAfter = Math.round(calibratedDurationMs);
+    const matchedWord = matchedWordPos >= 0 ? wordTokens[matchedWordPos]?.word : '(none)';
+
+    console.log(`[TTS_DIAGNOSTIC_BOUNDARY]
+elapsed=${Math.round(elapsed)}ms
+charIndex=${charIndex}
+charLength=${event?.charLength ?? 'N/A'}
+name="${event?.name || 'word'}"
+matchedTokenIdx=${matchedTokenIdx}
+matchedWordPos=${matchedWordPos}
+word="${matchedWord}"
+calibratedDurationBefore=${calBefore}ms
+calibratedDurationAfter=${calAfter}ms
+targetBoundaryWordPos=${targetBoundaryWordPos}
+highestVisitedTokenPos=${highestVisitedTokenPos}`);
 
     if (debug) {
       console.log('[TTS_DEV_DEBUG:onboundary]', {
@@ -610,11 +648,31 @@ word="${matchedWord}"`);
     isRunning = false;
     isPaused = false;
     clearTimer();
+
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const actualDurationMs = startTime > 0 ? Math.round(Math.max(0, now - startTime - totalPausedDuration)) : 0;
+    const estDur = Math.round(estimatedDurationMs);
+    const calDur = Math.round(calibratedDurationMs);
+    const durationRatio = estDur > 0 ? (actualDurationMs / estDur).toFixed(3) : 'N/A';
+    const lastWord = highestVisitedTokenPos >= 0 && wordTokens[highestVisitedTokenPos]
+      ? wordTokens[highestVisitedTokenPos].word
+      : '(none)';
+
+    console.log(`[TTS_DIAGNOSTIC_END]
+actualDurationMs=${actualDurationMs}ms
+estimatedDurationMs=${estDur}ms
+finalCalibratedDurationMs=${calDur}ms
+durationRatio=${durationRatio}
+lastWord="${lastWord}"
+boundaryCount=${boundaryCount}
+highestVisitedTokenPos=${highestVisitedTokenPos}
+totalWordTokens=${wordTokens.length}`);
+
     if (debug) {
       console.log('[TTS_DEV_DEBUG:onend]', {
-        timestamp: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+        timestamp: now,
         highestVisitedTokenPos,
-        lastToken: wordTokens[highestVisitedTokenPos]?.word || null,
+        lastToken: lastWord,
         totalWordTokens: wordTokens.length
       });
     }
