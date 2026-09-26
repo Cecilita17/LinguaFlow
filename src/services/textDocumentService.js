@@ -7,16 +7,7 @@
 import { getLanguageMeta } from '../constants/languages.js';
 import { API_BASE_URL } from './chatService.js';
 import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
-import { upload } from '@vercel/blob/client';
-import {
-  decodeAudioFile,
-  encodeAudioSliceToWav,
-  planAudioChunks,
-  mergeChunkSegments,
-  LONG_AUDIO_THRESHOLD_SECONDS,
-  CHUNK_DURATION_SECONDS,
-  CHUNK_OVERLAP_SECONDS
-} from './audioChunkingService.js';
+import { transcribeAudio } from './transcription/transcriptionService.js';
 import {
   saveTextDocument,
   getTextDocumentById,
@@ -991,9 +982,8 @@ export async function translateParagraphTextApi({
 }
 
 /**
- * Transcribes an uploaded audio file (.mp3, .wav, .m4a, .webm, .ogg)
- * by uploading binary directly to temporary storage (@vercel/blob)
- * and processing via Groq Whisper (/api/transcribe).
+ * Backward-compatibility wrapper: transcribes an uploaded audio file using Groq Whisper.
+ * Delegates directly to the isolated transcription service.
  *
  * @param {object} params
  * @param {File|Blob} params.audioFile - The audio file or blob to transcribe
@@ -1001,7 +991,7 @@ export async function translateParagraphTextApi({
  * @param {string} [params.nativeLang='es'] - Native language
  * @param {string} [params.apiKey=''] - Optional client Groq API key override
  * @param {Function} [params.onProgress] - Optional progress callback
- * @returns {Promise<{ success: boolean, transcript: string, segments: Array, duration: number, source?: string }>}
+ * @returns {Promise<{ success: boolean, transcript: string, segments: Array, duration: number, source?: string, pathname?: string, url?: string, mimeType?: string }>}
  */
 export async function transcribeAudioFileApi({
   audioFile,
@@ -1010,290 +1000,23 @@ export async function transcribeAudioFileApi({
   apiKey = '',
   onProgress = null
 }) {
-  if (!audioFile) {
-    throw new Error('No se seleccionó ningún archivo de audio.');
-  }
-
-  // Max 25 MB client validation
-  const MAX_BYTES = 25 * 1024 * 1024;
-  if (audioFile.size > MAX_BYTES) {
-    const mbSize = (audioFile.size / (1024 * 1024)).toFixed(1);
-    throw new Error(`El archivo de audio (${mbSize} MB) supera el límite permitido de 25 MB. Por favor elige un archivo más pequeño.`);
-  }
-
-  if (typeof onProgress === 'function') {
-    onProgress('Subiendo archivo de audio a almacenamiento temporal...');
-  }
-
-  const rawExt = (audioFile.name || '').split('.').pop()?.toLowerCase();
-  const validExts = ['mp3', 'wav', 'm4a', 'webm', 'ogg', 'aac', 'flac', 'opus'];
-  const fileExt = validExts.includes(rawExt) ? rawExt : 'webm';
-  const safePathname = `transcribe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
-
-  // 1. Direct binary upload to Vercel Blob storage (bypasses 4.5 MB Serverless body limit)
-  let blobResult;
-  const isLargeFile = audioFile.size > 5 * 1024 * 1024;
-  const ticketUrl = (typeof window !== 'undefined' && !API_BASE_URL)
-    ? '/api/transcribe-ticket'
-    : `${API_BASE_URL}/api/transcribe-ticket`;
-
-  console.log('[AudioImport] Prepared audio upload:', {
-    pathname: safePathname,
-    mimeType: audioFile.type || 'audio/webm',
-    sizeBytes: audioFile.size,
-    multipart: isLargeFile,
-    access: 'private'
+  const result = await transcribeAudio({
+    audio: audioFile,
+    language: targetLang,
+    engine: 'groq',
+    apiKey,
+    onProgress
   });
 
-  const uploadOptions = {
-    access: 'private',
-    handleUploadUrl: ticketUrl,
-    contentType: audioFile.type || 'audio/webm',
-    multipart: isLargeFile
+  return {
+    success: true,
+    transcript: result.text,
+    segments: result.segments,
+    duration: result.duration,
+    source: 'groq (whisper-large-v3)',
+    pathname: result.pathname || null,
+    url: result.url || null,
+    mimeType: result.mimeType || audioFile.type || 'audio/webm'
   };
-
-  try {
-    blobResult = await upload(safePathname, audioFile, uploadOptions);
-  } catch (uploadErr) {
-    const errMsg = (uploadErr?.message || '').toLowerCase();
-    // Fallback for public stores if configured with public access
-    if (errMsg.includes('public access') || errMsg.includes('public store')) {
-      console.warn('[AudioImport] Retrying upload with access: "public"');
-      blobResult = await upload(safePathname, audioFile, {
-        ...uploadOptions,
-        access: 'public'
-      });
-    } else {
-      console.error('[AudioImport] Direct audio upload to storage failed:', uploadErr);
-      throw new Error(`Error al subir el archivo de audio al servidor: ${uploadErr.message || 'Fallo de red'}`);
-    }
-  }
-
-  if (!blobResult || !blobResult.url) {
-    throw new Error('No se recibió la confirmación de almacenamiento del archivo temporal.');
-  }
-
-  console.log('[AudioImport] SDK upload response:', {
-    url: blobResult.url,
-    pathname: blobResult.pathname,
-    contentType: blobResult.contentType
-  });
-
-  const headers = { 'Content-Type': 'application/json' };
-  const effectiveKey = (apiKey || '').trim().replace(/^["']|["']$/g, '');
-  if (effectiveKey) {
-    headers['x-api-key'] = effectiveKey;
-  }
-
-  // 2. Decode audio locally using Web Audio API to plan chunking if it exceeds threshold (> 180s)
-  let chunkPlan = null;
-  let decodedAudioBuffer = null;
-
-  try {
-    decodedAudioBuffer = await decodeAudioFile(audioFile);
-    if (decodedAudioBuffer && decodedAudioBuffer.duration > LONG_AUDIO_THRESHOLD_SECONDS) {
-      chunkPlan = planAudioChunks(decodedAudioBuffer, {
-        chunkDurationSec: CHUNK_DURATION_SECONDS,
-        overlapSec: CHUNK_OVERLAP_SECONDS,
-        minDurationForChunking: LONG_AUDIO_THRESHOLD_SECONDS
-      });
-    }
-  } catch (decodeErr) {
-    console.warn('[AudioImport] Web Audio API decoding notice (fallback to standard request):', decodeErr);
-  }
-
-  // 3A. Long Audio Chunked Workflow (> 180s)
-  if (chunkPlan && chunkPlan.shouldChunk && chunkPlan.chunks.length > 1) {
-    const totalChunks = chunkPlan.chunks.length;
-    const chunkResults = [];
-
-    for (let i = 0; i < totalChunks; i++) {
-      const chunk = chunkPlan.chunks[i];
-      if (typeof onProgress === 'function') {
-        const percent = Math.round((i / totalChunks) * 100);
-        onProgress(`Transcribiendo audio: fragmento ${i + 1} de ${totalChunks} (${percent}%)...`);
-      }
-
-      // Encode chunk to 16kHz mono WAV Blob
-      const chunkWavBlob = await encodeAudioSliceToWav(decodedAudioBuffer, chunk.startSec, chunk.endSec, 16000);
-      const chunkPathname = `chunk-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}.wav`;
-
-      // Upload temporary chunk to Vercel Blob storage
-      const chunkUploadOptions = {
-        access: 'private',
-        handleUploadUrl: ticketUrl,
-        contentType: 'audio/wav',
-        multipart: false
-      };
-
-      let chunkBlobResult;
-      try {
-        chunkBlobResult = await upload(chunkPathname, chunkWavBlob, chunkUploadOptions);
-      } catch (chunkUpErr) {
-        chunkBlobResult = await upload(chunkPathname, chunkWavBlob, { ...chunkUploadOptions, access: 'public' });
-      }
-
-      if (!chunkBlobResult || !chunkBlobResult.url) {
-        throw new Error(`Error al subir el fragmento temporal ${i + 1} de ${totalChunks}.`);
-      }
-
-      // Transcribe chunk via backend
-      const chunkController = new AbortController();
-      const chunkTimeoutId = setTimeout(() => chunkController.abort(), 90000);
-
-      try {
-        const chunkRes = await fetch(`${API_BASE_URL}/api/transcribe`, {
-          method: 'POST',
-          headers,
-          signal: chunkController.signal,
-          body: JSON.stringify({
-            fileUrl: chunkBlobResult.url,
-            fileName: chunkPathname,
-            mimeType: 'audio/wav',
-            targetLang,
-            nativeLang,
-            apiKey: effectiveKey,
-            timeoutMs: 85000,
-            persistBlob: false // Temporary chunk is deleted immediately from storage
-          })
-        });
-
-        clearTimeout(chunkTimeoutId);
-        const chunkData = await chunkRes.json().catch(() => ({}));
-
-        if (!chunkRes.ok) {
-          throw new Error(chunkData?.error || `Error del servidor al transcribir fragmento ${i + 1} (${chunkRes.status})`);
-        }
-
-        const rawSegments = Array.isArray(chunkData.segments)
-          ? chunkData.segments.filter(s => s && typeof s.text === 'string' && s.text.trim())
-          : [];
-        const rawTranscript = (chunkData.transcript || '').trim();
-
-        let effectiveSegments = rawSegments;
-
-        // Fallback: If Groq returned a valid transcript but 0 usable segments for this chunk,
-        // preserve the transcript as a fallback segment spanning the chunk to guarantee NO text is lost.
-        if (effectiveSegments.length === 0 && rawTranscript) {
-          console.warn(`[AudioDiagnostics] ⚠️ Chunk ${i + 1}/${totalChunks} returned transcript but no usable segments; preserving transcript as fallback segment.`, {
-            chunkIndex: i,
-            offsetSec: chunk.offsetSec,
-            duration: chunk.duration,
-            transcriptLength: rawTranscript.length,
-            transcriptSnippet: rawTranscript.slice(0, 80)
-          });
-          effectiveSegments = [{
-            id: 0,
-            start: 0,
-            end: chunk.duration,
-            text: rawTranscript,
-            isFallback: true
-          }];
-        }
-
-        console.log(`[AudioImport] Groq chunk response ${i + 1}/${totalChunks}:`, {
-          chunkIndex: i,
-          startSec: chunk.startSec,
-          endSec: chunk.endSec,
-          duration: chunk.duration,
-          segmentsCount: effectiveSegments.length,
-          isFallbackSegment: Boolean(effectiveSegments[0]?.isFallback),
-          firstTimestamp: effectiveSegments[0] ? { start: effectiveSegments[0].start, end: effectiveSegments[0].end, absStart: effectiveSegments[0].start + chunk.offsetSec } : null,
-          lastTimestamp: effectiveSegments[effectiveSegments.length - 1] ? { start: effectiveSegments[effectiveSegments.length - 1].start, end: effectiveSegments[effectiveSegments.length - 1].end, absEnd: effectiveSegments[effectiveSegments.length - 1].end + chunk.offsetSec } : null,
-          transcriptLength: rawTranscript.length,
-          transcriptSnippet: rawTranscript.slice(0, 60)
-        });
-
-        chunkResults.push({
-          chunk,
-          segments: effectiveSegments,
-          transcript: rawTranscript
-        });
-      } catch (chunkErr) {
-        clearTimeout(chunkTimeoutId);
-        throw new Error(`Fallo al transcribir el fragmento ${i + 1} de ${totalChunks}: ${chunkErr.message || 'Error de red'}`);
-      }
-    }
-
-    if (typeof onProgress === 'function') {
-      onProgress('Reconstruyendo transcripción sincronizada...');
-    }
-
-    const { combinedSegments, combinedTranscript } = mergeChunkSegments(
-      chunkResults,
-      CHUNK_OVERLAP_SECONDS,
-      chunkPlan.totalDuration
-    );
-
-    if (!combinedTranscript) {
-      throw new Error('No se detectó contenido de voz en los fragmentos del audio.');
-    }
-
-    return {
-      success: true,
-      transcript: combinedTranscript,
-      segments: combinedSegments,
-      duration: Math.round((chunkPlan.totalDuration || blobResult.duration || 0) * 100) / 100,
-      source: 'groq (whisper-large-v3, chunked)',
-      pathname: blobResult.pathname,
-      mimeType: audioFile.type || blobResult.contentType || 'audio/webm',
-      url: blobResult.url
-    };
-  }
-
-  // 3B. Standard Workflow for Short Audio (<= 180s) or fallback
-  if (typeof onProgress === 'function') {
-    onProgress('Transcribiendo con Groq Whisper (whisper-large-v3)...');
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 125000);
-
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/transcribe`, {
-      method: 'POST',
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify({
-        fileUrl: blobResult.url,
-        fileName: audioFile.name || safePathname,
-        mimeType: audioFile.type || 'audio/webm',
-        targetLang,
-        nativeLang,
-        apiKey: effectiveKey,
-        timeoutMs: 120000,
-        persistBlob: true
-      })
-    });
-
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      const errMsg = data?.error || (res.status === 413 ? 'El archivo excede el tamaño máximo permitido por el servidor (HTTP 413).' : `Error del servidor de transcripción (${res.status})`);
-      throw new Error(errMsg);
-    }
-
-    if (!data.success || !data.transcript) {
-      throw new Error(data?.error || 'No se detectó contenido de voz en el audio.');
-    }
-
-    return {
-      success: true,
-      transcript: data.transcript.trim(),
-      segments: Array.isArray(data.segments) ? data.segments : [],
-      duration: typeof data.duration === 'number' ? data.duration : (Number(data.duration) || 0),
-      source: data.source || 'groq (whisper-large-v3)',
-      pathname: data.pathname || blobResult.pathname || null,
-      mimeType: audioFile.type || blobResult.contentType || 'audio/webm',
-      url: blobResult.url || data.url || null
-    };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
-      throw new Error('Tiempo de espera agotado al transcribir el audio. Por favor intenta de nuevo.');
-    }
-    throw err;
-  }
 }
+

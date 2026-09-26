@@ -1001,8 +1001,12 @@ export async function handleTranscribe(req, res) {
       const normalizedTargetLang = (targetLang || 'es').split('-')[0].toLowerCase();
       formData.append('language', normalizedTargetLang);
 
-      const whisperPrompt = getWhisperPromptForLanguage(targetLang);
-      formData.append('prompt', whisperPrompt);
+      // Only inject speech prompt for Live Calls (base64). For file imports, avoid injecting meta-instructions
+      // that can cause Whisper to hallucinate text like "No traducir" during silent audio passages.
+      if (!fileUrl) {
+        const whisperPrompt = getWhisperPromptForLanguage(targetLang);
+        formData.append('prompt', whisperPrompt);
+      }
 
       const startTime = Date.now();
       const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
@@ -1040,12 +1044,6 @@ export async function handleTranscribe(req, res) {
         if (transcript) {
           if (!fileUrl) {
             transcript = stripSttTranslationArtifacts(transcript, targetLang);
-          } else {
-            // For imported full audio files, only clean bracketed/parenthetical translation notes without truncating lines
-            transcript = transcript
-              .replace(/\[\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\]]*\]/gi, '')
-              .replace(/\(\s*(?:translated|english|translation|subtitles?|traducci[oó]n|en|es)\s*:?[^\)]*\)/gi, '')
-              .trim();
           }
           const pathname = storagePathname;
           console.log(`✅ Audio transcribed via Groq Whisper (${segments.length} segments, ${duration}s, persistBlob=${shouldPersistBlob}): "${transcript.slice(0, 80)}..."`);

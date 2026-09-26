@@ -52,13 +52,12 @@ import {
   loadActiveDocumentFull,
   clearActiveDocumentDraft,
   translateParagraphTextApi,
-  transcribeAudioFileApi,
   resolveAudioBookmark
 } from '../services/textDocumentService.js';
 import {
-  transcribeAudioFileLocal,
+  transcribeAudio,
   isLocalWhisperSupported
-} from '../services/localWhisperService.js';
+} from '../services/transcription/transcriptionService.js';
 import { useLocalAudioImport } from '../context/LocalAudioImportContext.jsx';
 import { API_BASE_URL } from '../services/chatService.js';
 import {
@@ -1936,15 +1935,16 @@ export function TextReaderPage({
     setIsImporting(true);
     setImportStatus(isSpanish ? 'Importando archivo de audio...' : 'Importing audio file...');
     try {
-      const result = await transcribeAudioFileApi({
-        audioFile: file,
-        targetLang,
-        nativeLang,
+      const result = await transcribeAudio({
+        audio: file,
+        language: targetLang,
+        engine: 'groq',
         apiKey,
+        abortSignal: abortCtrl.signal,
         onProgress: (msg) => setImportStatus(msg.startsWith('Importando') ? msg : `Importando archivo de audio: ${msg}`)
       });
 
-      const transcriptText = result.transcript;
+      const transcriptText = result.text;
       if (!transcriptText) {
         throw new Error(isSpanish ? 'No se detectó contenido de voz en el audio.' : 'No speech content detected in audio.');
       }

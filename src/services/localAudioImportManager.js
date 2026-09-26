@@ -4,7 +4,7 @@
  * and persistence across application page navigations.
  */
 
-import { transcribeAudioFileLocal, isLocalWhisperSupported, detectLocalBackend } from './localWhisperService.js';
+import { transcribeAudio, isLocalWhisperSupported, detectLocalBackend } from './transcription/transcriptionService.js';
 import { createTextDocument, saveDocument } from './textDocumentService.js';
 
 class LocalAudioImportManager {
@@ -155,9 +155,10 @@ class LocalAudioImportManager {
 
     this.activeTaskPromise = (async () => {
       try {
-        const result = await transcribeAudioFileLocal({
-          audioFile,
-          targetLang,
+        const result = await transcribeAudio({
+          audio: audioFile,
+          language: targetLang,
+          engine: 'local',
           abortSignal,
           onModelProgress: (prog) => {
             if (abortSignal.aborted) return;
@@ -201,7 +202,7 @@ class LocalAudioImportManager {
           throw new Error('Importación cancelada por el usuario.');
         }
 
-        const transcriptText = (result.transcript || '').trim();
+        const transcriptText = (result.text || '').trim();
         if (!transcriptText) {
           throw new Error('No se detectó contenido de voz en el audio.');
         }
