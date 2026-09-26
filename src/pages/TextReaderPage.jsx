@@ -1193,34 +1193,42 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     userStoppedRef.current = false;
     clearAudioVisualTimer();
 
-    // Check if document has original imported audio and valid segment timestamps
-    const hasOriginalAudio =
-      (document?.sourceType === 'audio' || document?.format === 'audio') &&
-      typeof paragraph.audioStart === 'number' &&
-      typeof paragraph.audioEnd === 'number' &&
-      Boolean(document?.audioPathname || document?.audioUrl || document?.audioBlob);
+    // Check if document has original imported audio
+    const isAudioDoc = Boolean(
+      isAudioDocument ||
+      document?.sourceType === 'audio' ||
+      document?.format === 'audio' ||
+      document?.audioPathname ||
+      document?.audioUrl ||
+      document?.audioBlob
+    );
 
-    if (hasOriginalAudio) {
+    if (isAudioDoc) {
       // 1. CANCEL TTS if active
       try {
         if (window.speechSynthesis) window.speechSynthesis.cancel();
       } catch (e) {}
 
-      setAudioErrorId(null);
-      setPlayingParagraphId(paragraph.id);
-      playingParagraphIdRef.current = paragraph.id;
-      latestAudioPositionRef.current.paragraphId = paragraph.id;
+      if (typeof paragraph.audioStart === 'number' && typeof paragraph.audioEnd === 'number') {
+        setAudioErrorId(null);
+        setPlayingParagraphId(paragraph.id);
+        playingParagraphIdRef.current = paragraph.id;
+        latestAudioPositionRef.current.paragraphId = paragraph.id;
 
-      const startTime = typeof paragraph.audioStart === 'number' ? Math.max(0, paragraph.audioStart) : 0;
-      latestAudioPositionRef.current.time = startTime;
-      setActiveAudioCharIndex(0);
+        const startTime = Math.max(0, paragraph.audioStart);
+        latestAudioPositionRef.current.time = startTime;
+        setActiveAudioCharIndex(0);
 
-      if (audioPlayerRef.current) {
-        if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
-          audioPlayerRef.current.seekAndPlay(startTime);
-        } else if (typeof audioPlayerRef.current.seek === 'function') {
-          audioPlayerRef.current.seek(startTime, true);
+        if (audioPlayerRef.current) {
+          if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
+            audioPlayerRef.current.seekAndPlay(startTime);
+          } else if (typeof audioPlayerRef.current.seek === 'function') {
+            audioPlayerRef.current.seek(startTime, true);
+          }
         }
+      } else {
+        console.warn('[TextReader] Audio document paragraph has no valid alignment timestamps:', paragraph.id);
+        setAudioErrorId(paragraph.id);
       }
       return;
     }
