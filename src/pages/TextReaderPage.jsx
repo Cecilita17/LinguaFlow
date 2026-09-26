@@ -1027,18 +1027,16 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
   const pEnd = activePara.audioEnd;
   if (typeof pStart !== 'number' || typeof pEnd !== 'number' || pEnd <= pStart) return -1;
 
-  const rawSegments = Array.isArray(audioSegments) ? audioSegments : [];
-  // Find segments that belong to or overlap with this paragraph
-  const matchingSegs = rawSegments.filter(s =>
-    typeof s.start === 'number' && typeof s.end === 'number' &&
-    s.end > (pStart - 0.05) && s.start < (pEnd + 0.05)
-  );
+  const matchingSegs = (Array.isArray(activePara.audioSegments) && activePara.audioSegments.length > 0)
+    ? activePara.audioSegments
+    : (Array.isArray(audioSegments) ? audioSegments : []).filter(s =>
+        typeof s.start === 'number' && typeof s.end === 'number' &&
+        s.end > (pStart - 0.05) && s.start < (pEnd + 0.05)
+      );
 
-  // If no segment data is available, do a single local interpolation as fallback
+  // If no segment data is available, do not advance characters into silence
   if (matchingSegs.length === 0) {
-    const duration = pEnd - pStart;
-    const progress = Math.max(0, Math.min(1, (newTime - pStart) / duration));
-    return Math.min(paraText.length - 1, Math.floor(progress * paraText.length));
+    return 0;
   }
 
   // Calculate character spans of each segment inside the paragraph text

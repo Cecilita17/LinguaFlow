@@ -249,8 +249,8 @@ function normalizeForAudioMatching(str) {
 
 /**
  * Deterministically aligns paragraphs with Groq Whisper audio segments.
- * Computes exact audioStart and audioEnd timestamps for each paragraph without AI calls.
- * If a paragraph cannot be safely aligned, sets audioStart: null and audioEnd: null.
+ * Computes exact audioStart and audioEnd timestamps for each paragraph directly
+ * from real Whisper segments without linear character-interpolation or artificial speech speed assumptions.
  *
  * @param {Array<object>} paragraphs
  * @param {Array<object>} audioSegments - Whisper verbose_json segments [{ start, end, text }, ...]
@@ -262,21 +262,26 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
     return paragraphs.map(p => ({
       ...p,
       audioStart: typeof p?.audioStart === 'number' ? p.audioStart : null,
-      audioEnd: typeof p?.audioEnd === 'number' ? p.audioEnd : null
+      audioEnd: typeof p?.audioEnd === 'number' ? p.audioEnd : null,
+      audioSegments: Array.isArray(p?.audioSegments) ? p.audioSegments : []
     }));
   }
 
   // 1. Build cumulative segment stream with character offsets
   const segStream = [];
   let cumChar = 0;
-  for (const seg of audioSegments) {
+  for (let idx = 0; idx < audioSegments.length; idx++) {
+    const seg = audioSegments[idx];
     const norm = normalizeForAudioMatching(seg.text);
     if (!norm) continue;
     const startChar = cumChar;
     const endChar = cumChar + norm.length;
     segStream.push({
+      id: seg.id ?? idx,
+      index: idx,
       start: typeof seg.start === 'number' ? seg.start : 0,
       end: typeof seg.end === 'number' ? seg.end : 0,
+      text: seg.text || '',
       norm,
       startChar,
       endChar
@@ -288,48 +293,26 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
     return paragraphs.map(p => ({
       ...p,
       audioStart: typeof p?.audioStart === 'number' ? p.audioStart : null,
-      audioEnd: typeof p?.audioEnd === 'number' ? p.audioEnd : null
+      audioEnd: typeof p?.audioEnd === 'number' ? p.audioEnd : null,
+      audioSegments: Array.isArray(p?.audioSegments) ? p.audioSegments : []
     }));
   }
 
   const allSegChars = segStream.map(s => s.norm).join('');
 
-  function getTimeAtChar(charIdx, isEnd = false) {
-    const bounded = Math.max(0, Math.min(charIdx, cumChar));
-
-    if (isEnd) {
-      // Finding END time (prioritize segment end bounds)
-      for (let i = segStream.length - 1; i >= 0; i--) {
-        const s = segStream[i];
-        if (bounded === s.endChar) return s.end;
-        if (bounded > s.startChar && bounded < s.endChar) {
-          const frac = (bounded - s.startChar) / Math.max(1, s.endChar - s.startChar);
-          return Math.round((s.start + frac * (s.end - s.start)) * 100) / 100;
-        }
-        if (bounded === s.startChar && i === 0) return s.start;
-      }
-      return segStream[segStream.length - 1].end;
-    } else {
-      // Finding START time (prioritize segment start bounds to avoid inheriting previous segment end across silence)
-      for (let i = 0; i < segStream.length; i++) {
-        const s = segStream[i];
-        if (bounded === s.startChar) return s.start;
-        if (bounded > s.startChar && bounded < s.endChar) {
-          const frac = (bounded - s.startChar) / Math.max(1, s.endChar - s.startChar);
-          return Math.round((s.start + frac * (s.end - s.start)) * 100) / 100;
-        }
-        if (bounded === s.endChar && i === segStream.length - 1) return s.end;
-      }
-      return segStream[0].start;
-    }
-  }
-
-  // 2. Align each paragraph deterministically
+  // 2. Align each paragraph directly to real Whisper segments
   let cursor = 0;
+  let lastMatchedSegIdx = 0;
+
   return paragraphs.map(para => {
     const paraNorm = normalizeForAudioMatching(para.text);
     if (!paraNorm) {
-      return { ...para, audioStart: null, audioEnd: null };
+      return {
+        ...para,
+        audioStart: null,
+        audioEnd: null,
+        audioSegments: []
+      };
     }
 
     // Try finding paragraph starting from cursor
@@ -339,34 +322,71 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
       matchIdx = allSegChars.indexOf(paraNorm, 0);
     }
 
-    // Fallback: match by substantial prefix (first 25 characters) if punctuation normalization caused slight trailing delta
+    // Fallback: match by substantial prefix (first 25 characters)
     if (matchIdx === -1 && paraNorm.length > 25) {
       const prefix = paraNorm.slice(0, 25);
       const prefixIdx = allSegChars.indexOf(prefix, cursor);
       if (prefixIdx !== -1) {
         matchIdx = prefixIdx;
+      } else {
+        const prefixFromZero = allSegChars.indexOf(prefix, 0);
+        if (prefixFromZero !== -1) {
+          matchIdx = prefixFromZero;
+        }
       }
     }
 
     if (matchIdx !== -1) {
       const charStart = matchIdx;
       const charEnd = matchIdx + paraNorm.length;
-      const audioStart = getTimeAtChar(charStart, false);
-      const audioEnd = getTimeAtChar(charEnd, true);
       cursor = Math.min(allSegChars.length, charEnd);
 
+      // Find all Whisper segments overlapping with [charStart, charEnd)
+      const matched = segStream.filter(s =>
+        (charStart < s.endChar && charEnd > s.startChar) ||
+        (charStart === s.startChar && charEnd === s.startChar)
+      );
+
+      if (matched.length > 0) {
+        const firstSeg = matched[0];
+        const lastSeg = matched[matched.length - 1];
+        lastMatchedSegIdx = lastSeg.index;
+
+        return {
+          ...para,
+          audioStart: firstSeg.start,
+          audioEnd: Math.max(firstSeg.start, lastSeg.end),
+          audioSegments: matched.map(s => ({
+            id: s.id,
+            start: s.start,
+            end: s.end,
+            text: s.text
+          }))
+        };
+      }
+    }
+
+    // Fallback: If exact match failed, match with next available segment
+    if (lastMatchedSegIdx < segStream.length) {
+      const candidateSeg = segStream[lastMatchedSegIdx];
       return {
         ...para,
-        audioStart,
-        audioEnd: Math.max(audioStart, audioEnd)
+        audioStart: candidateSeg.start,
+        audioEnd: candidateSeg.end,
+        audioSegments: [{
+          id: candidateSeg.id,
+          start: candidateSeg.start,
+          end: candidateSeg.end,
+          text: candidateSeg.text
+        }]
       };
     }
 
-    // Paragraph could not be reliably mapped: do NOT invent timestamps
     return {
       ...para,
       audioStart: null,
-      audioEnd: null
+      audioEnd: null,
+      audioSegments: []
     };
   });
 }
@@ -449,10 +469,7 @@ export function normalizeDocument(rawDoc) {
   const audioMimeType = rawDoc.audioMimeType || rawDoc.audioMetadata?.mimeType || null;
 
   if ((sourceType === 'audio' || format === 'audio') && audioSegments.length > 0 && paragraphs.length > 0) {
-    const needsAlignment = paragraphs.some(p => typeof p?.audioStart !== 'number');
-    if (needsAlignment) {
-      paragraphs = alignParagraphsWithAudioSegments(paragraphs, audioSegments);
-    }
+    paragraphs = alignParagraphsWithAudioSegments(paragraphs, audioSegments);
   }
 
   const audioBookmark = resolveAudioBookmark(rawDoc);
