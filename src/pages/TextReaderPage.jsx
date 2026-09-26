@@ -1015,6 +1015,87 @@ export function TextReaderPage({
     }
   }, [isEpub]);
 
+/**
+ * Calculates real-time character highlight position inside an active paragraph.
+ * Respects Whisper segment bounds and freezes during silence/pauses instead of
+ * linearly interpolating across silence gaps.
+ */
+function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
+  if (!activePara || !activePara.text) return -1;
+  const paraText = activePara.text;
+  const pStart = activePara.audioStart;
+  const pEnd = activePara.audioEnd;
+  if (typeof pStart !== 'number' || typeof pEnd !== 'number' || pEnd <= pStart) return -1;
+
+  const rawSegments = Array.isArray(audioSegments) ? audioSegments : [];
+  // Find segments that belong to or overlap with this paragraph
+  const matchingSegs = rawSegments.filter(s =>
+    typeof s.start === 'number' && typeof s.end === 'number' &&
+    s.end > (pStart - 0.05) && s.start < (pEnd + 0.05)
+  );
+
+  // If no segment data is available, do a single local interpolation as fallback
+  if (matchingSegs.length === 0) {
+    const duration = pEnd - pStart;
+    const progress = Math.max(0, Math.min(1, (newTime - pStart) / duration));
+    return Math.min(paraText.length - 1, Math.floor(progress * paraText.length));
+  }
+
+  // Calculate character spans of each segment inside the paragraph text
+  let cursor = 0;
+  const segSpans = matchingSegs.map((seg, i) => {
+    const cleanSegText = (seg.text || '').trim();
+    let startIdx = cursor;
+    let endIdx = cursor;
+
+    if (cleanSegText) {
+      const foundIdx = paraText.indexOf(cleanSegText, cursor);
+      if (foundIdx !== -1) {
+        startIdx = foundIdx;
+        endIdx = foundIdx + cleanSegText.length;
+        cursor = endIdx;
+      } else {
+        const remainingChars = Math.max(1, paraText.length - cursor);
+        const estLen = Math.max(1, Math.min(remainingChars, cleanSegText.length));
+        startIdx = cursor;
+        endIdx = Math.min(paraText.length, cursor + estLen);
+        cursor = endIdx;
+      }
+    }
+    return {
+      start: seg.start,
+      end: seg.end,
+      startChar: startIdx,
+      endChar: Math.max(startIdx + 1, endIdx)
+    };
+  });
+
+  // 1. Check if newTime is currently INSIDE one of the speech segments
+  for (const span of segSpans) {
+    if (newTime >= span.start && newTime <= span.end) {
+      const segDur = Math.max(0.05, span.end - span.start);
+      const segProg = Math.max(0, Math.min(1, (newTime - span.start) / segDur));
+      const charSpanLen = span.endChar - span.startChar;
+      return Math.min(paraText.length - 1, span.startChar + Math.floor(segProg * charSpanLen));
+    }
+  }
+
+  // 2. newTime is in a SILENCE GAP between segments (e.g. narrator pause)
+  // Freeze at the end of the last finished segment during the silence!
+  let lastFinishedSpan = null;
+  for (const span of segSpans) {
+    if (span.end <= newTime) {
+      lastFinishedSpan = span;
+    }
+  }
+
+  if (lastFinishedSpan) {
+    return Math.min(paraText.length - 1, lastFinishedSpan.endChar - 1);
+  }
+
+  return segSpans[0]?.startChar ?? 0;
+}
+
   // Playback time update handler — 100% decoupled from bookmarks
   const handleAudioTimeUpdate = useCallback((newTime) => {
     if (typeof newTime !== 'number' || isNaN(newTime)) return;
@@ -1022,6 +1103,8 @@ export function TextReaderPage({
     latestAudioPositionRef.current.time = newTime;
 
     const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
+    const audioSegments = document?.audioSegments || [];
+
     if (Array.isArray(allParas) && allParas.length > 0) {
       const activePara = allParas.find(p =>
         typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
@@ -1034,12 +1117,18 @@ export function TextReaderPage({
           playingParagraphIdRef.current = activePara.id;
         }
 
-        // Calculate proportional character index for real-time word sync during playback
-        if (activePara.text && typeof activePara.audioStart === 'number' && typeof activePara.audioEnd === 'number' && activePara.audioEnd > activePara.audioStart) {
-          const duration = activePara.audioEnd - activePara.audioStart;
-          const progress = Math.max(0, Math.min(1, (newTime - activePara.audioStart) / duration));
-          const charIndex = Math.min(activePara.text.length - 1, Math.floor(progress * activePara.text.length));
-          setActiveAudioCharIndex(charIndex);
+        // Calculate segment-aware character index without absorbing silence gaps
+        const charIndex = getSegmentAwareCharIndex(activePara, audioSegments, newTime);
+        setActiveAudioCharIndex(charIndex);
+      } else {
+        // newTime is outside speech (e.g. music/intro 0-30s or trailing audio)
+        const firstParaStart = allParas[0]?.audioStart;
+        if (typeof firstParaStart === 'number' && newTime < firstParaStart) {
+          if (playingParagraphIdRef.current) {
+            setPlayingParagraphId(null);
+            playingParagraphIdRef.current = null;
+          }
+          setActiveAudioCharIndex(-1);
         }
       }
     }
@@ -1061,7 +1150,7 @@ export function TextReaderPage({
         }
       }
     }
-  }, [document?.paragraphs, advanceToNextParagraph]);
+  }, [document?.paragraphs, document?.audioSegments, advanceToNextParagraph]);
 
   const handleAudioPause = useCallback((pausedTime) => {
     if (typeof pausedTime === 'number') {

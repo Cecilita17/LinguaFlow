@@ -296,16 +296,32 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
 
   function getTimeAtChar(charIdx, isEnd = false) {
     const bounded = Math.max(0, Math.min(charIdx, cumChar));
-    for (let i = 0; i < segStream.length; i++) {
-      const s = segStream[i];
-      if (bounded >= s.startChar && bounded <= s.endChar) {
-        if (bounded === s.startChar) return s.start;
+
+    if (isEnd) {
+      // Finding END time (prioritize segment end bounds)
+      for (let i = segStream.length - 1; i >= 0; i--) {
+        const s = segStream[i];
         if (bounded === s.endChar) return s.end;
-        const frac = (bounded - s.startChar) / Math.max(1, s.endChar - s.startChar);
-        return Math.round((s.start + frac * (s.end - s.start)) * 100) / 100;
+        if (bounded > s.startChar && bounded < s.endChar) {
+          const frac = (bounded - s.startChar) / Math.max(1, s.endChar - s.startChar);
+          return Math.round((s.start + frac * (s.end - s.start)) * 100) / 100;
+        }
+        if (bounded === s.startChar && i === 0) return s.start;
       }
+      return segStream[segStream.length - 1].end;
+    } else {
+      // Finding START time (prioritize segment start bounds to avoid inheriting previous segment end across silence)
+      for (let i = 0; i < segStream.length; i++) {
+        const s = segStream[i];
+        if (bounded === s.startChar) return s.start;
+        if (bounded > s.startChar && bounded < s.endChar) {
+          const frac = (bounded - s.startChar) / Math.max(1, s.endChar - s.startChar);
+          return Math.round((s.start + frac * (s.end - s.start)) * 100) / 100;
+        }
+        if (bounded === s.endChar && i === segStream.length - 1) return s.end;
+      }
+      return segStream[0].start;
     }
-    return isEnd ? segStream[segStream.length - 1].end : 0;
   }
 
   // 2. Align each paragraph deterministically
