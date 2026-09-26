@@ -248,51 +248,47 @@ function normalizeForAudioMatching(str) {
 }
 
 /**
- * Helper: Computes textual match score between normalized paragraph and candidate Whisper segment(s).
- * Returns a score between 0 (no match) and 100 (exact match).
+ * Helper: Computes string similarity score between normalized strings (0 to 100).
  */
-function computeSegmentGroupScore(paraNorm, candNorm) {
-  if (!paraNorm || !candNorm) return 0;
-  if (paraNorm === candNorm) return 100;
-  if (candNorm.startsWith(paraNorm)) return 95;
-  if (paraNorm.startsWith(candNorm)) return 90;
-  if (candNorm.includes(paraNorm)) return 85;
-  if (paraNorm.includes(candNorm)) return 80;
-
-  // Prefix match (at least 6 chars)
-  const minLen = Math.min(paraNorm.length, candNorm.length);
-  const checkLen = Math.min(20, minLen);
-  if (checkLen >= 6) {
-    if (paraNorm.slice(0, checkLen) === candNorm.slice(0, checkLen)) {
-      const lenRatio = Math.min(paraNorm.length, candNorm.length) / Math.max(paraNorm.length, candNorm.length);
-      return Math.round(70 + (lenRatio * 20));
-    }
+function computeStringSimilarity(s1, s2) {
+  if (!s1 || !s2) return 0;
+  if (s1 === s2) return 100;
+  if (s1.includes(s2) || s2.includes(s1)) {
+    const minL = Math.min(s1.length, s2.length);
+    const maxL = Math.max(s1.length, s2.length);
+    return Math.round((minL / maxL) * 95);
   }
 
-  // Common substring / overlap calculation
-  let matchCount = 0;
-  const chunkLen = 6;
-  if (paraNorm.length >= chunkLen && candNorm.length >= chunkLen) {
-    for (let i = 0; i <= paraNorm.length - chunkLen; i += chunkLen) {
-      const chunk = paraNorm.slice(i, i + chunkLen);
-      if (candNorm.includes(chunk)) {
-        matchCount += chunkLen;
+  // Common prefix ratio
+  let prefixLen = 0;
+  const maxPrefix = Math.min(s1.length, s2.length);
+  while (prefixLen < maxPrefix && s1[prefixLen] === s2[prefixLen]) {
+    prefixLen++;
+  }
+
+  // Overlap using 5-character sliding windows
+  let matched = 0;
+  const k = 5;
+  if (s1.length >= k && s2.length >= k) {
+    for (let i = 0; i <= s1.length - k; i += k) {
+      const chunk = s1.slice(i, i + k);
+      if (s2.includes(chunk)) {
+        matched += k;
       }
     }
-    const overlapRatio = matchCount / paraNorm.length;
-    if (overlapRatio >= 0.5) {
-      return Math.round(overlapRatio * 80);
-    }
   }
 
-  return 0;
+  const overlapScore = Math.round((matched / Math.max(s1.length, s2.length)) * 90);
+  const prefixScore = Math.round((prefixLen / Math.max(s1.length, s2.length)) * 90);
+
+  return Math.max(overlapScore, prefixScore);
 }
 
 /**
  * Deterministically aligns paragraphs with Groq Whisper audio segments.
  * Computes exact audioStart and audioEnd timestamps for each paragraph directly
- * from real Whisper segments, ensuring strictly monotonic forward progress and
- * requiring strong textual evidence rather than naive length accumulation.
+ * from real Whisper segments, ensuring strictly monotonic forward progress,
+ * properly accumulating multi-segment paragraphs, and requiring strong textual evidence.
  *
  * @param {Array<object>} paragraphs
  * @param {Array<object>} audioSegments - Whisper verbose_json segments [{ start, end, text }, ...]
@@ -370,24 +366,43 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
 
       for (let endIdx = startIdx; endIdx < maxEnd; endIdx++) {
         candNorm += segs[endIdx].norm;
-        const score = computeSegmentGroupScore(paraNorm, candNorm);
 
-        if (score > bestScore) {
-          bestScore = score;
+        // Exact match -> 100
+        if (candNorm === paraNorm) {
+          bestScore = 100;
           bestMatch = { startIdx, endIdx };
-        }
-
-        // Early break if we got an exact or near-exact match
-        if (score >= 90) {
           break;
         }
 
-        // Don't accumulate excessively past paragraph length
-        if (candNorm.length > paraNorm.length * 1.5 + 30) {
+        // If candNorm starts with paraNorm and is close in length
+        if (candNorm.startsWith(paraNorm)) {
+          const score = Math.round((paraNorm.length / candNorm.length) * 95);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = { startIdx, endIdx };
+          }
+          break;
+        }
+
+        // If paraNorm starts with candNorm but paraNorm is longer, keep accumulating!
+        if (paraNorm.startsWith(candNorm) && candNorm.length < paraNorm.length) {
+          continue;
+        }
+
+        // Calculate similarity for fuzzy / boundary matches
+        const sim = computeStringSimilarity(paraNorm, candNorm);
+        if (sim > bestScore) {
+          bestScore = sim;
+          bestMatch = { startIdx, endIdx };
+        }
+
+        // If candNorm already exceeds paraNorm length significantly, stop accumulating for this startIdx
+        if (candNorm.length > paraNorm.length * 1.3 + 20) {
           break;
         }
       }
 
+      // If we found a near-perfect match from this startIdx, no need to look further ahead
       if (bestScore >= 90) {
         break;
       }
