@@ -410,6 +410,137 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
 }
 
 /**
+ * Constructs paragraphs directly from Whisper timed words/segments.
+ * Each paragraph is built directly by aggregating words up to natural sentence
+ * or line boundaries, so that:
+ *   paragraph.audioStart = firstWord.start
+ *   paragraph.audioEnd   = lastWord.end
+ *   paragraph.audioSegments = words in this paragraph
+ * 
+ * Absolutely NO subsequent text searching (indexOf) or character-level time interpolation.
+ *
+ * @param {Array<object>} audioWords - Array of { id, start, end, text } from Whisper
+ * @param {string} [targetLang='zh']
+ * @param {string} [nativeLang='es']
+ * @param {string} [fallbackRawText='']
+ * @returns {Array<object>}
+ */
+export function buildParagraphsFromAudioWords(audioWords, targetLang = 'zh', nativeLang = 'es', fallbackRawText = '') {
+  if (!Array.isArray(audioWords) || audioWords.length === 0) {
+    if (fallbackRawText && typeof fallbackRawText === 'string') {
+      return splitTextIntoParagraphs(fallbackRawText, targetLang, nativeLang);
+    }
+    return [];
+  }
+
+  // 1. Filter and sanitize words
+  const validWords = audioWords
+    .filter(w => w && typeof w === 'object' && typeof w.text === 'string' && w.text.trim().length > 0)
+    .map((w, idx) => ({
+      id: w.id ?? idx,
+      start: typeof w.start === 'number' ? Math.round(w.start * 100) / 100 : 0,
+      end: typeof w.end === 'number' ? Math.round(Math.max(w.start || 0, w.end) * 100) / 100 : (typeof w.start === 'number' ? w.start : 0),
+      text: w.text
+    }));
+
+  if (validWords.length === 0) {
+    if (fallbackRawText && typeof fallbackRawText === 'string') {
+      return splitTextIntoParagraphs(fallbackRawText, targetLang, nativeLang);
+    }
+    return [];
+  }
+
+  const langMeta = getLanguageMeta(targetLang);
+  const speechCode = langMeta?.speechCode || 'zh-CN';
+  const isCJK = ['zh', 'ja', 'ko', 'th'].includes(targetLang);
+
+  // Helper to join word tokens into natural text
+  function joinWordTokens(words) {
+    if (isCJK) {
+      return words.map(w => w.text.trim()).join('');
+    }
+    let str = '';
+    for (let i = 0; i < words.length; i++) {
+      const t = words[i].text.trim();
+      if (!t) continue;
+      if (i === 0 || str.length === 0) {
+        str = t;
+      } else if (/^[\p{P}\p{S}]/u.test(t) && !/^[([{¿¡"'$]/u.test(t)) {
+        str += t;
+      } else if (/[[({¿¡"'$]$/u.test(str)) {
+        str += t;
+      } else {
+        str += ' ' + t;
+      }
+    }
+    return str.trim();
+  }
+
+  // Regex patterns for punctuation
+  const terminalPunctRegex = /[.!?。！？…]["'”’»)]*$/u;
+  const pausePunctRegex = /[,，;；:：—–]["'”’»)]*$/u;
+
+  const paragraphs = [];
+  let currentGroup = [];
+  let currentChars = 0;
+
+  for (let i = 0; i < validWords.length; i++) {
+    const word = validWords[i];
+    currentGroup.push(word);
+    currentChars += word.text.length + 1;
+
+    const isLastWord = (i === validWords.length - 1);
+    const hasTerminalPunct = terminalPunctRegex.test(word.text.trim()) || word.text.includes('\n');
+    const hasPausePunct = pausePunctRegex.test(word.text.trim());
+
+    let shouldBreak = false;
+
+    if (isLastWord) {
+      shouldBreak = true;
+    } else if (hasTerminalPunct) {
+      shouldBreak = true;
+    } else if (currentChars >= 150 && hasPausePunct) {
+      shouldBreak = true;
+    } else if (currentChars >= 220) {
+      shouldBreak = true;
+    }
+
+    if (shouldBreak && currentGroup.length > 0) {
+      const pText = joinWordTokens(currentGroup);
+      if (pText) {
+        const pIndex = paragraphs.length;
+        const firstWord = currentGroup[0];
+        const lastWord = currentGroup[currentGroup.length - 1];
+
+        paragraphs.push({
+          id: `p-${pIndex + 1}`,
+          index: pIndex,
+          text: pText,
+          audioStart: firstWord.start,
+          audioEnd: Math.max(firstWord.start, lastWord.end),
+          audioSegments: currentGroup.map(w => ({
+            id: w.id,
+            start: w.start,
+            end: w.end,
+            text: w.text
+          })),
+          tokens: tokenizeAndGlossLineOffline(pText, targetLang, nativeLang),
+          glosses: [],
+          tts: {
+            speechCode,
+            rate: 1.0
+          }
+        });
+      }
+      currentGroup = [];
+      currentChars = 0;
+    }
+  }
+
+  return paragraphs;
+}
+
+/**
  * Normalizes a document object to guarantee all required properties exist,
  * including id, title, rawText, targetLang, nativeLang, paragraphs, languageStates,
  * createdAt, and updatedAt.
@@ -426,6 +557,11 @@ export function normalizeDocument(rawDoc) {
   const rawText = typeof rawDoc.rawText === 'string' ? rawDoc.rawText : '';
   const langKey = `${targetLang}_${nativeLang}`;
 
+  const sourceType = rawDoc.sourceType || rawDoc.format || 'txt';
+  const format = rawDoc.format || sourceType;
+  const isAudioDoc = (sourceType === 'audio' || format === 'audio');
+  const audioSegments = Array.isArray(rawDoc.audioSegments) ? rawDoc.audioSegments : (rawDoc.audioMetadata?.segments || []);
+
   // Resolve paragraphs: preserve non-empty array, or recover from languageStates or rawText
   let paragraphs = Array.isArray(rawDoc.paragraphs) && rawDoc.paragraphs.length > 0 ? rawDoc.paragraphs : [];
   if (paragraphs.length === 0 && rawDoc.languageStates && typeof rawDoc.languageStates === 'object') {
@@ -440,8 +576,19 @@ export function normalizeDocument(rawDoc) {
       }
     }
   }
-  if (paragraphs.length === 0 && rawText.trim().length > 0) {
-    paragraphs = splitTextIntoParagraphs(rawText, targetLang, nativeLang);
+
+  if (paragraphs.length === 0) {
+    if (isAudioDoc && audioSegments.length > 0) {
+      paragraphs = buildParagraphsFromAudioWords(audioSegments, targetLang, nativeLang, rawText);
+    } else if (rawText.trim().length > 0) {
+      paragraphs = splitTextIntoParagraphs(rawText, targetLang, nativeLang);
+    }
+  } else if (isAudioDoc && audioSegments.length > 0) {
+    // If existing paragraphs lack audioStart, align them; otherwise preserve saved audioStart!
+    const needsTimestamps = !paragraphs.some(p => typeof p?.audioStart === 'number');
+    if (needsTimestamps) {
+      paragraphs = alignParagraphsWithAudioSegments(paragraphs, audioSegments);
+    }
   }
 
   const effectiveRawText = rawText || (paragraphs.length > 0 ? paragraphs.map(p => p.text || '').join('\n\n') : '');
@@ -473,22 +620,15 @@ export function normalizeDocument(rawDoc) {
   }
 
   const author = typeof rawDoc.author === 'string' ? rawDoc.author.trim() : '';
-  const sourceType = rawDoc.sourceType || rawDoc.format || 'txt';
-  const format = rawDoc.format || sourceType;
   const chapters = Array.isArray(rawDoc.chapters) ? rawDoc.chapters : [];
   const lastReadingPosition = (rawDoc.lastReadingPosition && typeof rawDoc.lastReadingPosition === 'object')
     ? rawDoc.lastReadingPosition
     : null;
-  const audioSegments = Array.isArray(rawDoc.audioSegments) ? rawDoc.audioSegments : (rawDoc.audioMetadata?.segments || []);
   const audioDuration = typeof rawDoc.audioDuration === 'number' ? rawDoc.audioDuration : (rawDoc.audioMetadata?.duration || 0);
   const audioPathname = rawDoc.audioPathname || rawDoc.audioMetadata?.pathname || null;
   const audioUrl = rawDoc.audioUrl || rawDoc.audioMetadata?.url || null;
   const audioBlob = rawDoc.audioBlob || null;
   const audioMimeType = rawDoc.audioMimeType || rawDoc.audioMetadata?.mimeType || null;
-
-  if ((sourceType === 'audio' || format === 'audio') && audioSegments.length > 0 && paragraphs.length > 0) {
-    paragraphs = alignParagraphsWithAudioSegments(paragraphs, audioSegments);
-  }
 
   const audioBookmark = resolveAudioBookmark(rawDoc);
 
@@ -605,16 +745,26 @@ export function createTextDocument({
   createdAt = null
 }) {
   const now = new Date().toISOString();
-  let effectiveParagraphs = paragraphs && Array.isArray(paragraphs) && paragraphs.length > 0
-    ? paragraphs
-    : splitTextIntoParagraphs(rawText, targetLang, nativeLang);
-
   const effectiveSourceType = sourceType || format || 'txt';
   const effectiveFormat = format || sourceType || 'txt';
+  const isAudioDoc = (effectiveSourceType === 'audio' || effectiveFormat === 'audio');
 
-  // Deterministically align paragraphs with audio segments if this is an audio document
-  if ((effectiveSourceType === 'audio' || effectiveFormat === 'audio') && Array.isArray(audioSegments) && audioSegments.length > 0) {
-    effectiveParagraphs = alignParagraphsWithAudioSegments(effectiveParagraphs, audioSegments);
+  let effectiveParagraphs;
+  if (paragraphs && Array.isArray(paragraphs) && paragraphs.length > 0) {
+    effectiveParagraphs = paragraphs;
+  } else if (isAudioDoc && Array.isArray(audioSegments) && audioSegments.length > 0) {
+    // Directly build paragraphs from timed Whisper words: firstWord.start = audioStart, lastWord.end = audioEnd
+    effectiveParagraphs = buildParagraphsFromAudioWords(audioSegments, targetLang, nativeLang, rawText);
+  } else {
+    effectiveParagraphs = splitTextIntoParagraphs(rawText, targetLang, nativeLang);
+  }
+
+  // If audio document paragraphs were provided externally without audioStart, align them
+  if (isAudioDoc && Array.isArray(audioSegments) && audioSegments.length > 0) {
+    const hasTimestamps = effectiveParagraphs.some(p => typeof p?.audioStart === 'number');
+    if (!hasTimestamps) {
+      effectiveParagraphs = alignParagraphsWithAudioSegments(effectiveParagraphs, audioSegments);
+    }
   }
 
   // Derive a fallback title if empty
