@@ -253,8 +253,8 @@ function normalizeForAudioMatching(str) {
  * from real Whisper segments, mapping each paragraph's textual span against the
  * continuous Whisper character stream.
  *
- * When a paragraph boundary falls within a Whisper segment, its audioStart/audioEnd
- * is interpolated within that segment's real [start, end] bounds.
+ * audioStart is the exact start of the first matched Whisper segment (no interpolation).
+ * audioEnd is the exact end of the last matched Whisper segment.
  * Paragraphs can share segments if boundaries fall within that segment.
  * The alignment is strictly forward and monotonic.
  *
@@ -307,23 +307,6 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
 
   const allSegChars = segStream.map(s => s.norm).join('');
 
-  // Interpolates time for any character index in the cumulative stream
-  function getTimeAtChar(charIdx, isEnd = false) {
-    const bounded = Math.max(0, Math.min(charIdx, cumChar));
-    for (let i = 0; i < segStream.length; i++) {
-      const s = segStream[i];
-      if (bounded >= s.startChar && bounded <= s.endChar) {
-        if (bounded === s.startChar) return s.start;
-        if (bounded === s.endChar) return s.end;
-        const segLen = Math.max(1, s.endChar - s.startChar);
-        const frac = (bounded - s.startChar) / segLen;
-        const t = s.start + frac * (s.end - s.start);
-        return Math.round(t * 100) / 100;
-      }
-    }
-    return isEnd ? segStream[segStream.length - 1].end : segStream[0].start;
-  }
-
   // 2. Align paragraphs strictly forward (monotonic)
   let cursor = 0;
 
@@ -372,18 +355,26 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
     if (matchIdx !== -1) {
       const charStart = matchIdx;
       const charEnd = Math.min(allSegChars.length, matchIdx + paraNorm.length);
-      const audioStart = getTimeAtChar(charStart, false);
-      const audioEnd = Math.max(audioStart, getTimeAtChar(charEnd, true));
 
       // Advance cursor strictly forward
       cursor = charEnd;
 
       // Find all Whisper segments overlapping with [charStart, charEnd]
-      const matched = segStream.filter(s =>
+      let matched = segStream.filter(s =>
         (charStart < s.endChar && charEnd > s.startChar) ||
         (charStart === s.startChar && charEnd === s.startChar) ||
         (charStart === s.endChar && charEnd === s.endChar)
       );
+
+      if (matched.length === 0) {
+        const found = segStream.find(s => charStart >= s.startChar && charStart <= s.endChar) || segStream[0];
+        if (found) matched = [found];
+      }
+
+      const firstSeg = matched[0];
+      const lastSeg = matched[matched.length - 1];
+      const audioStart = firstSeg.start;
+      const audioEnd = Math.max(audioStart, lastSeg.end);
 
       return {
         ...para,
