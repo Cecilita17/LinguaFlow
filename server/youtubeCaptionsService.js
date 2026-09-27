@@ -152,6 +152,47 @@ function captionText(event) {
     .trim();
 }
 
+function normalizeCaptionText(value = '') {
+  return decodeXmlEntities(String(value).replace(/<[^>]*>/g, ''))
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseCaptionXml(xml = '') {
+  const subtitles = [];
+  const append = (attributes, rawText) => {
+    const text = normalizeCaptionText(rawText);
+    const startTime = Number(attributes.t ?? attributes.start);
+    const duration = Number(attributes.d ?? attributes.dur);
+    const normalizedStart = Number.isFinite(startTime)
+      ? (attributes.t !== undefined ? startTime / 1000 : startTime)
+      : NaN;
+    const normalizedDuration = Number.isFinite(duration)
+      ? (attributes.d !== undefined ? duration / 1000 : duration)
+      : 2;
+    if (!text || !Number.isFinite(normalizedStart)) return;
+    subtitles.push({
+      startTime: Math.max(0, normalizedStart),
+      endTime: Math.max(
+        normalizedStart + 0.2,
+        normalizedStart + (normalizedDuration > 0 ? normalizedDuration : 2)
+      ),
+      text
+    });
+  };
+
+  for (const match of String(xml).matchAll(/<p\s+([^>]*)>([\s\S]*?)<\/p>/g)) {
+    append(parseXmlAttributes(match[1]), match[2]);
+  }
+  if (subtitles.length > 0) return subtitles;
+
+  for (const match of String(xml).matchAll(/<text\s+([^>]*)>([\s\S]*?)<\/text>/g)) {
+    append(parseXmlAttributes(match[1]), match[2]);
+  }
+  return subtitles;
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -222,21 +263,25 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
     throw new Error('No se pudieron descargar los subtítulos de este vídeo.');
   }
 
-  const payload = await captionsResponse.json().catch(() => null);
-  const subtitles = (payload?.events || [])
-    .map((event, index) => {
+  const captionBody = await captionsResponse.text();
+  const payload = JSON.parse(captionBody || 'null');
+  const jsonSubtitles = (payload?.events || [])
+    .map((event) => {
       const text = captionText(event);
       const startTime = Number(event?.tStartMs) / 1000;
       const duration = Number(event?.dDurationMs) / 1000;
       if (!text || !Number.isFinite(startTime)) return null;
       return {
-        id: `youtube_${index + 1}`,
         startTime: Math.max(0, startTime),
         endTime: Math.max(startTime + 0.2, startTime + (Number.isFinite(duration) && duration > 0 ? duration : 2)),
         text
       };
     })
-    .filter(Boolean)
+    .filter(Boolean);
+
+  const parsedSubtitles = jsonSubtitles.length > 0 ? jsonSubtitles : parseCaptionXml(captionBody);
+  const subtitles = parsedSubtitles
+    .map((subtitle, index) => ({ ...subtitle, id: `youtube_${index + 1}` }))
     .slice(0, 10000);
 
   if (subtitles.length === 0) {
