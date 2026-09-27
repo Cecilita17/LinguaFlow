@@ -63,13 +63,18 @@ export function YouTubeImporter({
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.success || !Array.isArray(payload.subtitles)) {
-          throw new Error(payload.error || 'No se pudieron cargar los subtítulos de YouTube.');
+          const requestError = new Error(payload.error || 'No se pudieron cargar los subtítulos de YouTube.');
+          requestError.code = payload.code || null;
+          throw requestError;
         }
         onImportCaptions({ ...payload, videoId: validation.videoId, videoUrl: urlInput.trim() });
         setJustImported(true);
         setTimeout(() => setJustImported(false), 2000);
       } catch (err) {
-        setError(err.message || 'No se pudieron cargar los subtítulos de YouTube.');
+        setError({
+          message: err.message || 'No se pudieron cargar los subtítulos de YouTube.',
+          code: err.code || null
+        });
       } finally {
         setIsLoadingCaptions(false);
       }
@@ -179,7 +184,14 @@ export function YouTubeImporter({
           {error && (
             <div className="flex items-center space-x-1.5 mt-2 text-xs font-semibold text-amber-300 bg-amber-950/60 p-2 rounded-xl border border-amber-800/80 animate-fade-in">
               <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-400" />
-              <span>{error}</span>
+              <div>
+                <span>{typeof error === 'string' ? error : error.message}</span>
+                {typeof error === 'object' && error.code && (
+                  <div className="mt-0.5 text-[11px] font-medium text-amber-200/80">
+                    {isSpanish ? 'Código:' : 'Code:'} {error.code}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

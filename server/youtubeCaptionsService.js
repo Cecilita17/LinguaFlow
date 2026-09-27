@@ -17,6 +17,49 @@ function logDiagnostic(event, data = {}) {
   console.info('[YouTubeCaptionExtractor]', JSON.stringify({ event, ...data }));
 }
 
+function compactText(value, maximumLength = 180) {
+  const text = textValue(value).replace(/\s+/g, ' ').trim();
+  return text ? text.slice(0, maximumLength) : null;
+}
+
+function describeInfoStructure(info) {
+  const captions = info?.captions;
+  const tracks = captions?.caption_tracks;
+  const playabilityStatus = compactText(info?.playability_status?.status);
+  const playabilityReason = compactText(info?.playability_status?.reason);
+
+  return {
+    basicInfoPresent: Boolean(info?.basic_info),
+    captionsPresent: Boolean(captions),
+    captionsType: captions?.constructor?.name || null,
+    captionKeys: captions ? Object.keys(captions).sort() : [],
+    captionTracksPresent: Array.isArray(tracks),
+    captionTrackCount: Array.isArray(tracks) ? tracks.length : null,
+    playabilityStatus,
+    playabilityReason
+  };
+}
+
+function playbackFailure(structure, diagnostics) {
+  const status = structure.playabilityStatus || '';
+  const reason = structure.playabilityReason || '';
+  const details = { status: 403, diagnostics };
+
+  if (/LOGIN_REQUIRED|AGE_CHECK_REQUIRED|CONTENT_CHECK_REQUIRED/i.test(status)) {
+    return new YouTubeCaptionExtractionError('VIDEO_RESTRICTED', 'YouTube requiere iniciar sesión o una verificación para acceder a este vídeo.', details);
+  }
+
+  if (/UNPLAYABLE|ERROR/i.test(status)) {
+    return new YouTubeCaptionExtractionError(
+      'VIDEO_UNAVAILABLE',
+      reason ? `YouTube no puede reproducir este vídeo: ${reason}` : 'YouTube no puede reproducir este vídeo.',
+      { status: 404, diagnostics }
+    );
+  }
+
+  return null;
+}
+
 function withTimeout(promise, stage) {
   let timeoutId;
   const timeout = new Promise((_, reject) => {
@@ -151,10 +194,23 @@ export async function fetchYouTubeCaptions(
         continue;
       }
 
-      const tracks = info?.captions?.caption_tracks || [];
+      const structure = describeInfoStructure(info);
+      diagnostics.push({ stage: 'get-info', clientProfile, outcome: 'ok', ...structure });
+      logDiagnostic('get-info', { clientProfile, outcome: 'ok', ...structure });
+
+      const unavailableVideo = playbackFailure(structure, diagnostics);
+      if (unavailableVideo) {
+        lastFailure = unavailableVideo;
+        diagnostics.push({ stage: 'playability', clientProfile, outcome: 'unavailable', code: unavailableVideo.code });
+        logDiagnostic('playability', { clientProfile, outcome: 'unavailable', code: unavailableVideo.code });
+        continue;
+      }
+
+      const tracks = Array.isArray(info?.captions?.caption_tracks) ? info.captions.caption_tracks : [];
       const trackSummary = describeCaptionTracks(tracks);
-      diagnostics.push({ stage: 'track-discovery', clientProfile, outcome: 'ok', trackCount: trackSummary.length, tracks: trackSummary });
-      logDiagnostic('track-discovery', { clientProfile, trackCount: trackSummary.length, tracks: trackSummary });
+      const discoveryOutcome = structure.captionTracksPresent ? 'ok' : 'tracks-property-missing';
+      diagnostics.push({ stage: 'track-discovery', clientProfile, outcome: discoveryOutcome, trackCount: trackSummary.length, tracks: trackSummary });
+      logDiagnostic('track-discovery', { clientProfile, outcome: discoveryOutcome, trackCount: trackSummary.length, tracks: trackSummary });
       if (tracks.length === 0) continue;
 
       const track = selectCaptionTrack(tracks, preferredLanguage);
@@ -200,7 +256,28 @@ export async function fetchYouTubeCaptions(
           { status: 422, diagnostics }
         );
       }
-      throw new YouTubeCaptionExtractionError('CAPTIONS_UNAVAILABLE', 'Este vídeo no expone subtítulos CC o autogenerados para importar.', { status: 422, diagnostics });
+
+      if (lastFailure?.code === 'VIDEO_RESTRICTED' || lastFailure?.code === 'VIDEO_UNAVAILABLE') {
+        throw lastFailure;
+      }
+
+      const successfulDiscovery = diagnostics.filter((entry) => entry.stage === 'get-info' && entry.outcome === 'ok');
+      const captionsConfirmedUnavailable = successfulDiscovery.length > 0 && successfulDiscovery.every(
+        (entry) => entry.captionsPresent && entry.captionTracksPresent && entry.captionTrackCount === 0
+      );
+      if (captionsConfirmedUnavailable) {
+        throw new YouTubeCaptionExtractionError(
+          'CAPTIONS_CONFIRMED_UNAVAILABLE',
+          'YouTube informó que este vídeo no tiene subtítulos CC ni autogenerados disponibles para importar.',
+          { status: 422, diagnostics }
+        );
+      }
+
+      throw new YouTubeCaptionExtractionError(
+        'CAPTION_TRACK_DISCOVERY_FAILED',
+        'No se pudieron detectar las pistas de subtítulos que YouTube ofrece para este vídeo.',
+        { status: 502, diagnostics }
+      );
     }
 
     // Supported youtubei.js fallback, after every direct track request failed.
@@ -240,4 +317,3 @@ export async function fetchYouTubeCaptions(
     throw extractionError;
   }
 }
-

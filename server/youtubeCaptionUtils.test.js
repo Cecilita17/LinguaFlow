@@ -33,6 +33,14 @@ function info(tracks, transcriptSegments = []) {
   };
 }
 
+function infoWithoutCaptionTracks() {
+  return {
+    basic_info: { title: 'Test video' },
+    captions: { unexpected_caption_shape: true },
+    getTranscript: async () => ({})
+  };
+}
+
 function factoryByClient(entries) {
   return async () => ({
     getInfo: async (_videoId, options) => entries[options.client] || info([])
@@ -128,6 +136,24 @@ test('returns requested-language-unavailable without silently selecting another 
   );
 });
 
+test('distinguishes confirmed absent captions from track-discovery failures', async () => {
+  await assert.rejects(
+    fetchYouTubeCaptions(
+      { videoId: 'abcdefghijk', preferredLanguage: 'auto' },
+      { innertubeFactory: factoryByClient({ ANDROID: info([]), IOS: info([]), WEB: info([]) }) }
+    ),
+    { code: 'CAPTIONS_CONFIRMED_UNAVAILABLE' }
+  );
+
+  await assert.rejects(
+    fetchYouTubeCaptions(
+      { videoId: 'abcdefghijk', preferredLanguage: 'auto' },
+      { innertubeFactory: factoryByClient({ ANDROID: infoWithoutCaptionTracks(), IOS: infoWithoutCaptionTracks(), WEB: infoWithoutCaptionTracks() }) }
+    ),
+    { code: 'CAPTION_TRACK_DISCOVERY_FAILED' }
+  );
+});
+
 test('returns the direct download failure after direct and getTranscript both fail', async () => {
   const brokenInfo = info([manualEnglish]);
   brokenInfo.getTranscript = async () => { throw new Error('Transcript panel not found'); };
@@ -142,4 +168,3 @@ test('returns the direct download failure after direct and getTranscript both fa
     { code: 'CAPTION_DOWNLOAD_FAILED' }
   );
 });
-
