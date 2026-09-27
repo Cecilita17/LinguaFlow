@@ -47,22 +47,14 @@ export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targ
     })
     .join('\n');
 
-  const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\export function getSavedWordKey(word = '', lang = '') {
-  const cleanWord = String(word || '').trim();
-  const cleanLang = String(lang || '').toLowerCase().trim();
-  if (!cleanWord) return '';
-
-  if (cleanLang === 'zh') {
-    return `zh:${cleanWord}`;
-  }
-  return `${cleanLang}:${cleanWord.toLowerCase()}`;
-}
-');
+  const escapeRegExp = (value) => Array.from(String(value)).map((char) =>
+    '\\^$.*+?()[]{}|/'.includes(char) ? '\\' + char : char
+  ).join('');
   const containsWord = (word) => {
     const cleanWord = String(word || '').trim();
     if (!cleanWord) return false;
     if (language === 'zh' || language === 'ja') return text.includes(cleanWord);
-    return new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(cleanWord)}(?=$|[^\\p{L}\\p{N}])`, 'iu').test(text);
+    return new RegExp(`(^|[^\\p{L}\\p{N}])\${escapeRegExp(cleanWord)}(?=$|[^\\p{L}\\p{N}])`, 'iu').test(text);
   };
 
   const seen = new Set();
@@ -74,7 +66,6 @@ export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targ
     return true;
   });
 }
-
 export function SavedWordsProvider({ children }) {
   const [savedWords, setSavedWords] = useState(() => {
     try {
