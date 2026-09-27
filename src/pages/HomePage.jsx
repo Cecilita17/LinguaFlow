@@ -4,7 +4,6 @@ import {
   Youtube,
   FileText,
   Camera,
-  Flame,
   ArrowRight,
   ChevronRight,
   Sparkles
@@ -215,8 +214,15 @@ export default function HomePage({
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                 </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Flame className="w-7 h-7 sm:w-8 sm:h-8 text-amber-500 fill-amber-500/80 animate-pulse" />
+                <div
+                  className="absolute inset-0 flex items-center justify-center text-amber-600 dark:text-amber-300"
+                  aria-label={isSpanish
+                    ? `${habitStats.completed} de ${habitStats.total} actividades completadas hoy`
+                    : `${habitStats.completed} of ${habitStats.total} activities completed today`}
+                >
+                  <span className="text-2xl sm:text-3xl font-black leading-none tabular-nums">
+                    {habitStats.completed}
+                  </span>
                 </div>
               </div>
               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
