@@ -29,8 +29,6 @@ import {
   Headphones,
   AlertCircle,
   Bookmark,
-  Cpu,
-  Cloud,
   X
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
@@ -55,12 +53,8 @@ import {
   translateParagraphTextApi,
   resolveAudioBookmark
 } from '../services/textDocumentService.js';
-import {
-  transcribeAudio,
-  isLocalWhisperSupported
-} from '../services/transcription/transcriptionService.js';
-import { useLocalAudioImport } from '../context/LocalAudioImportContext.jsx';
-import { API_BASE_URL } from '../services/chatService.js';
+import { parseSubtitlesAuto } from '../services/subtitleService.js';
+import { tokenizeAndGlossLineOffline } from '../services/subtitleGlossService.js';
 import {
   saveTextDocument,
   getTextDocumentById,
@@ -493,45 +487,18 @@ export function TextReaderPage({
     }
   }, [targetLang, nativeLang, isSpanish, clearAudioVisualTimer, refreshLibraryCount, navigateToView]);
 
-  // Global Background Audio Import Manager
-  const localAudioImport = useLocalAudioImport();
+
 
   // EPUB Import state
   const [isEpubImporting, setIsEpubImporting] = useState(false);
   const [epubImportStatus, setEpubImportStatus] = useState('');
 
-  // Groq Audio Import state
+  // Timestamped audio import state. Audio is paired with an existing SRT/VTT
+  // transcript; no Whisper transcription is started from this screen.
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState('');
-  const [audioEngine, setAudioEngine] = useState(() => {
-    try {
-      return localStorage.getItem('linguaflow_audio_transcription_engine') || 'local';
-    } catch (e) {
-      return 'local';
-    }
-  });
-
-  const handleAudioEngineChange = (engine) => {
-    setAudioEngine(engine);
-    try {
-      localStorage.setItem('linguaflow_audio_transcription_engine', engine);
-    } catch (e) {}
-  };
-
-  const audioImportAbortControllerRef = useRef(null);
-
-  const handleCancelAudioImport = useCallback(() => {
-    if (audioEngine === 'local') {
-      localAudioImport.cancelImport();
-    } else {
-      if (audioImportAbortControllerRef.current) {
-        audioImportAbortControllerRef.current.abort();
-        audioImportAbortControllerRef.current = null;
-      }
-      setIsImporting(false);
-      setImportStatus('');
-    }
-  }, [audioEngine, localAudioImport]);
+  const [selectedAudioFile, setSelectedAudioFile] = useState(null);
+  const [selectedTimestampFile, setSelectedTimestampFile] = useState(null);
 
   // Auto-hide entire reader header on scroll down
   const [isHeaderHidden, setIsHeaderHidden] = useState(false);
@@ -2026,129 +1993,85 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     reader.readAsText(file, 'utf-8');
   };
 
-  // Audio File Upload & Transcription handler (.mp3, .wav, .m4a, .webm, .ogg)
-  const handleAudioFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleAudioFileSelection = (event) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = '';
+    if (file) setSelectedAudioFile(file);
+  };
 
-    // Reset file input value so selecting same file again re-triggers
-    e.target.value = '';
+  const handleTimestampFileSelection = (event) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = '';
+    if (file) setSelectedTimestampFile(file);
+  };
 
-    if (audioEngine === 'local') {
-      try {
-        const importPromise = localAudioImport.startImport({
-          audioFile: file,
-          targetLang,
-          nativeLang
-        });
-
-        // If user stays in Text Reader view when finished, load it into view
-        importPromise
-          .then((saved) => {
-            if (saved) {
-              setDocument(saved);
-              setInputText(saved.rawText || '');
-              setInputTitle(saved.title || '');
-              setIsEditing(false);
-              setIsHeaderHidden(false);
-              setPendingScrollParagraphId(null);
-              previousScrollTopRef.current = 0;
-              refreshLibraryCount();
-              navigateToView('reader');
-            }
-          })
-          .catch((err) => {
-            console.error('[TextReaderPage] Background audio import error:', err);
-          });
-      } catch (err) {
-        alert(isSpanish ? `Error al iniciar importación de audio: ${err.message || err}` : `Error starting audio import: ${err.message || err}`);
-      }
-      return;
-    }
-
-    // Fallback engine: Groq Whisper Cloud
-    const abortCtrl = new AbortController();
-    audioImportAbortControllerRef.current = abortCtrl;
-
+  // Imports a user-supplied, timestamped transcript. It intentionally avoids
+  // Whisper so paragraph timing comes directly from the supplied SRT/VTT file.
+  const handleTimestampedAudioImport = async () => {
+    if (!selectedAudioFile || !selectedTimestampFile) return;
     setIsImporting(true);
-    setImportStatus(isSpanish ? 'Importando archivo de audio...' : 'Importing audio file...');
+    setImportStatus(isSpanish ? 'Leyendo transcripción con timestamps...' : 'Reading timestamped transcript...');
     try {
-      const result = await transcribeAudio({
-        audio: file,
-        language: targetLang,
-        engine: 'groq',
-        apiKey,
-        abortSignal: abortCtrl.signal,
-        onProgress: (msg) => setImportStatus(msg.startsWith('Importando') ? msg : `Importando archivo de audio: ${msg}`)
-      });
-
-      const transcriptText = result.text;
-      if (!transcriptText) {
-        throw new Error(isSpanish ? 'No se detectó contenido de voz en el audio.' : 'No speech content detected in audio.');
+      const transcriptContent = await selectedTimestampFile.text();
+      const parsed = parseSubtitlesAuto(transcriptContent, selectedTimestampFile.name, targetLang);
+      if (!['srt', 'vtt'].includes(parsed.format) || !Array.isArray(parsed.subtitles) || parsed.subtitles.length === 0) {
+        throw new Error(isSpanish
+          ? 'Selecciona una transcripción SRT o VTT válida con timestamps.'
+          : 'Choose a valid timestamped SRT or VTT transcript.');
       }
 
-      const defaultTitle = file.name ? file.name.replace(/\.[^/.]+$/, '') : (isSpanish ? 'Audio transcrito' : 'Transcribed audio');
-
+      const paragraphs = parsed.subtitles.map((subtitle, index) => ({
+        id: `p-${index + 1}`,
+        index,
+        text: subtitle.text,
+        tokens: tokenizeAndGlossLineOffline(subtitle.text, targetLang, nativeLang),
+        glosses: [],
+        audioStart: subtitle.startTime,
+        audioEnd: subtitle.endTime,
+        audioSegments: [{
+          id: subtitle.id || `timestamp_${index + 1}`,
+          start: subtitle.startTime,
+          end: subtitle.endTime,
+          text: subtitle.text
+        }],
+        tts: { speechCode: getLanguageMeta(targetLang)?.speechCode || 'zh-CN', rate: 1.0 }
+      }));
+      const rawText = paragraphs.map((paragraph) => paragraph.text).join('\n\n');
+      const defaultTitle = selectedAudioFile.name.replace(/\.[^/.]+$/, '') || (isSpanish ? 'Audio con transcripción' : 'Timestamped audio');
       const docToSave = createTextDocument({
-        title: defaultTitle,
+        title: inputTitle.trim() || defaultTitle,
         sourceType: 'audio',
         format: 'audio',
-        rawText: transcriptText,
+        rawText,
+        paragraphs,
         targetLang,
         nativeLang,
-        audioPathname: result.pathname || null,
-        audioUrl: result.url || null,
-        audioBlob: null,
-        audioMimeType: result.mimeType || file.type || 'audio/webm',
-        audioSegments: Array.isArray(result.segments) ? result.segments : [],
-        audioDuration: typeof result.duration === 'number' ? result.duration : 0,
+        audioBlob: selectedAudioFile,
+        audioMimeType: selectedAudioFile.type || 'audio/webm',
+        audioSegments: paragraphs.flatMap((paragraph) => paragraph.audioSegments),
+        audioDuration: Math.max(...parsed.subtitles.map((subtitle) => subtitle.endTime || 0), 0),
         createdAt: new Date().toISOString()
       });
-
       const saved = await saveDocument(docToSave);
-      console.log('[AudioImport] Groq document verification:', {
-        sourceType: saved.sourceType,
-        format: saved.format,
-        audioPathname: saved.audioPathname,
-        audioUrl: saved.audioUrl,
-        audioMimeType: saved.audioMimeType,
-        audioDuration: saved.audioDuration,
-        audioSegmentsLength: saved.audioSegments?.length
-      });
       setDocument(saved);
       setInputText(saved.rawText || '');
       setInputTitle(saved.title || '');
+      setSelectedAudioFile(null);
+      setSelectedTimestampFile(null);
       setIsEditing(false);
       setIsHeaderHidden(false);
       setPendingScrollParagraphId(null);
       previousScrollTopRef.current = 0;
       await refreshLibraryCount();
-
-      // Auto-glossing is OFF by default:
-      const alreadyComplete = Array.isArray(saved.paragraphs) && saved.paragraphs.every(p => isGlossComplete(p, targetLang, nativeLang));
-      const completedCount = Array.isArray(saved.paragraphs) ? saved.paragraphs.filter(p => isGlossComplete(p, targetLang, nativeLang)).length : 0;
-
-      setGlossingProgress({
-        total: Array.isArray(saved.paragraphs) ? saved.paragraphs.length : 0,
-        completed: completedCount,
-        isGlossing: false,
-        isPaused: false,
-        isComplete: alreadyComplete,
-        failed: 0
-      });
+      setGlossingProgress({ total: saved.paragraphs.length, completed: 0, isGlossing: false, isPaused: false, isComplete: false, failed: 0 });
       setIsAutoGlossing(false);
       navigateToView('reader');
-    } catch (err) {
-      console.error('Error al importar audio con Groq:', err);
-      if (err.message && (err.message.includes('cancelada') || err.message.includes('abort'))) {
-        // Cancelled
-      } else {
-        alert(isSpanish ? `Error al importar el audio: ${err.message || err}` : `Error importing audio: ${err.message || err}`);
-      }
+    } catch (error) {
+      console.error('Error importing timestamped audio:', error);
+      alert(isSpanish ? `Error al importar audio con timestamps: ${error.message || error}` : `Error importing timestamped audio: ${error.message || error}`);
     } finally {
       setIsImporting(false);
       setImportStatus('');
-      audioImportAbortControllerRef.current = null;
     }
   };
 
@@ -2415,19 +2338,14 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
 
               {/* Import status indicator banner */}
               {isImporting && (
-                <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-amber-700 dark:text-amber-300 animate-pulse">
+                <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-amber-700 dark:text-amber-300 animate-pulse">
                   <div className="flex items-center gap-3 min-w-0">
                     <Loader2 className="w-5 h-5 animate-spin shrink-0 text-amber-500" />
                     <span className="text-xs sm:text-sm font-semibold truncate">
                       {importStatus || (isSpanish ? 'Procesando archivo...' : 'Processing file...')}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleCancelAudioImport}
-                    className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400 text-xs font-bold cursor-pointer transition-colors shrink-0 active:scale-95"
-                  >
-                    {isSpanish ? 'Cancelar' : 'Cancel'}
+
                   </button>
                 </div>
               )}
@@ -2465,73 +2383,17 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                 />
               </div>
 
-              {/* Motor de Transcripción de Audio */}
+              {/* Timestamped audio import — Whisper engine choices are intentionally hidden. */}
               <div className="mb-4 p-3 sm:p-3.5 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
                     <Headphones className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>{isSpanish ? 'Motor para importar audio' : 'Audio import engine'}</span>
+                    <span>{isSpanish ? 'Audio con timestamps' : 'Timestamped audio'}</span>
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {/* Local Engine */}
-                  <button
-                    type="button"
-                    onClick={() => handleAudioEngineChange('local')}
-                    className={`p-2.5 rounded-xl border text-left flex items-start space-x-2.5 transition-all cursor-pointer ${
-                      audioEngine === 'local'
-                        ? 'bg-emerald-500/10 border-emerald-500/40 text-[var(--text-primary)] shadow-xs ring-1 ring-emerald-500/30'
-                        : 'bg-[var(--surface-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                    }`}
-                  >
-                    <div className={`p-1.5 rounded-lg shrink-0 ${audioEngine === 'local' ? 'bg-emerald-500 text-white shadow-xs' : 'bg-[var(--surface-secondary)] text-[var(--text-muted)]'}`}>
-                      <Cpu className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-xs font-bold text-[var(--text-primary)]">
-                          {`Whisper local · ${localAudioImport?.backend || 'CPU'}`}
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold">
-                          {isSpanish ? 'Gratis & Privado' : 'Free & Private'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
-                        {isSpanish
-                          ? `En el navegador con ${localAudioImport?.backend === 'WebGPU' ? 'aceleración WebGPU' : 'WebAssembly CPU'}. Sin enviar audio al servidor.`
-                          : `In-browser using ${localAudioImport?.backend === 'WebGPU' ? 'WebGPU acceleration' : 'WebAssembly CPU'}. No server uploads.`}
-                      </p>
-                    </div>
-                  </button>
-
-                  {/* Cloud Groq Engine */}
-                  <button
-                    type="button"
-                    onClick={() => handleAudioEngineChange('groq')}
-                    className={`p-2.5 rounded-xl border text-left flex items-start space-x-2.5 transition-all cursor-pointer ${
-                      audioEngine === 'groq'
-                        ? 'bg-rose-500/10 border-rose-500/40 text-[var(--text-primary)] shadow-xs ring-1 ring-rose-500/30'
-                        : 'bg-[var(--surface-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                    }`}
-                  >
-                    <div className={`p-1.5 rounded-lg shrink-0 ${audioEngine === 'groq' ? 'bg-rose-500 text-white shadow-xs' : 'bg-[var(--surface-secondary)] text-[var(--text-muted)]'}`}>
-                      <Cloud className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-xs font-bold text-[var(--text-primary)]">
-                          Groq Whisper Cloud
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold">
-                          {isSpanish ? 'Rápido' : 'Fast'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
-                        {isSpanish ? 'Transcribe en la nube mediante API (whisper-large-v3).' : 'Transcribes in cloud via Groq API (whisper-large-v3).'}
-                      </p>
-                    </div>
-                  </button>
-                </div>
+                <p className="text-[11px] text-[var(--text-muted)] leading-snug">
+                  {isSpanish ? 'Carga un audio y una transcripción SRT o VTT con sus tiempos. No se realizará transcripción automática.' : 'Upload audio and an SRT or VTT transcript with timing. No automatic transcription will run.'}
+                </p>
               </div>
 
               {/* Textarea for raw text */}
@@ -2578,18 +2440,44 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                     />
                   </label>
 
-                  {/* Audio File Upload Button (.mp3, .wav, .m4a, .webm, .ogg) */}
+                  {/* Timestamped audio import: select the media and its SRT/VTT separately. */}
                   <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
                     <Headphones className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-                    <span>Importar audio</span>
+                    <span className="max-w-[140px] truncate">{selectedAudioFile ? selectedAudioFile.name : (isSpanish ? 'Seleccionar audio' : 'Select audio')}</span>
                     <input
                       type="file"
                       accept=".mp3,.wav,.m4a,.webm,.ogg,audio/*"
-                      onChange={handleAudioFileUpload}
+                      onChange={handleAudioFileSelection}
                       disabled={isImporting}
                       className="hidden"
                     />
                   </label>
+
+                  <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
+                    <FileText className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                    <span className="max-w-[140px] truncate">{selectedTimestampFile ? selectedTimestampFile.name : (isSpanish ? 'Cargar timestamps (.srt/.vtt)' : 'Upload timestamps (.srt/.vtt)')}</span>
+                    <input
+                      type="file"
+                      accept=".srt,.vtt,text/plain"
+                      onChange={handleTimestampFileSelection}
+                      disabled={isImporting}
+                      className="hidden"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleTimestampedAudioImport}
+                    disabled={!selectedAudioFile || !selectedTimestampFile || isImporting}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs ${
+                      selectedAudioFile && selectedTimestampFile && !isImporting
+                        ? 'bg-emerald-500 text-white cursor-pointer hover:bg-emerald-600 active:scale-95'
+                        : 'bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-muted)] cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{isSpanish ? 'Importar con timestamps' : 'Import with timestamps'}</span>
+                  </button>
 
                   {/* Create with AI Button */}
                   <button

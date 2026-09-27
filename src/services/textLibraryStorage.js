@@ -200,6 +200,7 @@ export async function saveTextDocument(rawDoc) {
   let effectiveSourceType = 'txt';
   let effectiveFormat = 'txt';
   let effectiveAudioPathname = null;
+  let effectiveAudioBlob = null;
   let effectiveAudioMimeType = null;
   let effectiveAudioSegments = [];
   let effectiveAudioDuration = 0;
@@ -209,6 +210,7 @@ export async function saveTextDocument(rawDoc) {
     effectiveSourceType = (rawDoc.sourceType && rawDoc.sourceType !== 'audio') ? rawDoc.sourceType : 'txt';
     effectiveFormat = (rawDoc.format && rawDoc.format !== 'audio') ? rawDoc.format : 'txt';
     effectiveAudioPathname = null;
+    effectiveAudioBlob = null;
     effectiveAudioMimeType = null;
     effectiveAudioSegments = [];
     effectiveAudioDuration = 0;
@@ -231,6 +233,7 @@ export async function saveTextDocument(rawDoc) {
     } else {
       effectiveAudioPathname = existing.audioPathname || null;
     }
+    effectiveAudioBlob = typeof Blob !== 'undefined' && rawDoc.audioBlob instanceof Blob ? rawDoc.audioBlob : (existing.audioBlob || null);
 
     // audioMimeType: retain non-empty string if provided, otherwise preserve existing
     if (typeof rawDoc.audioMimeType === 'string' && rawDoc.audioMimeType.trim().length > 0) {
@@ -262,6 +265,7 @@ export async function saveTextDocument(rawDoc) {
     effectiveAudioPathname = (typeof rawDoc.audioPathname === 'string' && rawDoc.audioPathname.trim().length > 0)
       ? rawDoc.audioPathname.trim()
       : null;
+    effectiveAudioBlob = typeof Blob !== 'undefined' && rawDoc.audioBlob instanceof Blob ? rawDoc.audioBlob : null;
     effectiveAudioMimeType = (typeof rawDoc.audioMimeType === 'string' && rawDoc.audioMimeType.trim().length > 0)
       ? rawDoc.audioMimeType
       : null;
@@ -331,6 +335,7 @@ export async function saveTextDocument(rawDoc) {
     coverImage: effectiveCoverImage,
     languageStates: existingStates,
     audioPathname: effectiveAudioPathname,
+    audioBlob: effectiveAudioBlob,
     audioMimeType: effectiveAudioMimeType,
     audioSegments: effectiveAudioSegments,
     audioDuration: effectiveAudioDuration,
