@@ -1951,6 +1951,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
           nativeLang,
           paragraphs: parsed.paragraphs,
           chapters: parsed.chapters,
+          coverImage: parsed.coverImage,
           createdAt: new Date().toISOString()
         });
 
