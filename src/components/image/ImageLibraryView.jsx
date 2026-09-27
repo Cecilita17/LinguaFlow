@@ -366,7 +366,6 @@ export function ImageLibraryView({
               );
             })}
           </div>
-          </div>
         )}
       </main>
     </div>
