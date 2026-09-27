@@ -310,6 +310,12 @@ export async function saveTextDocument(rawDoc) {
     }
   }
 
+  const effectiveCoverImage = typeof rawDoc.coverImage === 'string' && rawDoc.coverImage.startsWith('data:image/')
+    ? rawDoc.coverImage
+    : (typeof existing?.coverImage === 'string' && existing.coverImage.startsWith('data:image/')
+      ? existing.coverImage
+      : null);
+
   const toSave = {
     id: rawDoc.id || existing?.id || `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     title: effectiveTitle,
@@ -322,6 +328,7 @@ export async function saveTextDocument(rawDoc) {
     paragraphsCount: effectiveParagraphs.length,
     paragraphs: effectiveParagraphs,
     chapters: effectiveChapters,
+    coverImage: effectiveCoverImage,
     languageStates: existingStates,
     audioPathname: effectiveAudioPathname,
     audioMimeType: effectiveAudioMimeType,
