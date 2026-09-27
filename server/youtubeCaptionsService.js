@@ -18,8 +18,6 @@ import {
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const EXTRACTOR_TIMEOUT_MS = 20000;
 
-let innertubePromise = null;
-
 function logDiagnostic(event, data = {}) {
   // Never log signed caption URLs, cookies or request headers.
   console.info('[YouTubeCaptionExtractor]', JSON.stringify({ event, ...data }));
@@ -40,19 +38,37 @@ function withTimeout(promise, stage) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
-async function getInnertube() {
-  if (!innertubePromise) {
-    innertubePromise = Innertube.create({
+async function createInnertube(diagnostics) {
+  return withTimeout(
+    Innertube.create({
       client_type: 'WEB',
       generate_session_locally: true,
       enable_session_cache: true,
-      fast_fail: false
-    }).catch((error) => {
-      innertubePromise = null;
-      throw error;
-    });
-  }
-  return innertubePromise;
+      fast_fail: false,
+      fetch: async (input, init) => {
+        const requestUrl = new URL(typeof input === 'string' ? input : input.url);
+        const source = requestUrl.pathname;
+        try {
+          const response = await fetch(input, init);
+          diagnostics.push({
+            stage: 'upstream-request',
+            source,
+            httpStatus: response.status,
+            contentType: response.headers.get('content-type') || ''
+          });
+          return response;
+        } catch (error) {
+          diagnostics.push({
+            stage: 'upstream-request',
+            source,
+            outcome: error?.name === 'AbortError' ? 'timeout' : 'network-error'
+          });
+          throw error;
+        }
+      }
+    }),
+    'create-session'
+  );
 }
 
 function selectTranscriptLanguage(transcriptInfo, track) {
@@ -87,7 +103,7 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
   const diagnostics = [{ stage: 'validate', outcome: 'ok' }];
 
   try {
-    const innertube = await withTimeout(getInnertube(), 'create-session');
+    const innertube = await createInnertube(diagnostics);
     diagnostics.push({ stage: 'create-session', outcome: 'ok' });
 
     const info = await withTimeout(innertube.getInfo(videoId), 'video-metadata');
