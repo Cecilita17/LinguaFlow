@@ -24,6 +24,7 @@ export function computeTokenCharRanges(rawCleanText, tokens, targetLang = 'es') 
 
   let pos = 0;
   const isChinese = targetLang === 'zh' || /[\u4E00-\u9FFF]/.test(cleanText);
+  const isArabic = targetLang === 'ar' || /[\u0600-\u06FF]/.test(cleanText);
 
   return tokens.map((tok) => {
     if (!tok) return { startChar: -1, endChar: -1, word: '', isPunctuation: false };
@@ -381,7 +382,9 @@ new activeCharIndex: ${newActiveChar}`);
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
     // --- ANDROID SPECIFIC ANTI-SKIP STRATEGY ---
-    if (isAndroid) {
+    // Android Arabic voices can report boundary positions ahead of the audible word.
+    // Keep Arabic on the paced path below; boundary intervals still calibrate its speed.
+    if (isAndroid && !isArabic) {
       // 1. Confirmed boundary catch-up:
       const targetPos = Math.max(targetBoundaryWordPos, lastConfirmedWordPos);
       if (targetPos > highestVisitedTokenPos) {
@@ -413,7 +416,7 @@ new activeCharIndex: ${newActiveChar}`);
       return;
     }
 
-    // --- DESKTOP / NON-ANDROID STRATEGY (UNCHANGED) ---
+    // --- DESKTOP AND ARABIC PACED STRATEGY ---
     // 1. If a boundary arrived ahead of our current visual position, smoothly step towards it
     if (targetBoundaryWordPos > highestVisitedTokenPos) {
       const nextStepPos = highestVisitedTokenPos + 1;
@@ -558,7 +561,7 @@ word="${matchedWord}"`);
           const clamped = Math.max(minSafe, Math.min(maxSafe, boundaryEstimatedTotal));
           calibratedDurationMs = 0.6 * calibratedDurationMs + 0.4 * clamped;
         }
-      } else if (boundaryFraction > 0.05 && elapsed > 150) {
+      } else if (!isArabic && boundaryFraction > 0.05 && elapsed > 150) {
         const empiricalDuration = elapsed / boundaryFraction;
         const minSafe = estimatedDurationMs * 0.35;
         const maxSafe = estimatedDurationMs * 2.8;
@@ -566,16 +569,21 @@ word="${matchedWord}"`);
         calibratedDurationMs = 0.65 * calibratedDurationMs + 0.35 * clampedEmpirical;
       }
 
-      // Update anchor point
-      clockBaseTime = now;
-      clockBaseFraction = boundaryFraction;
       lastBoundaryWordPos = matchedWordPos;
       lastBoundaryTime = now;
 
-      // Set smooth catch-up target: do NOT snap directly, let tick() visit intermediate words
-      hasConfirmedBoundary = true;
-      lastConfirmedWordPos = Math.max(lastConfirmedWordPos, matchedWordPos);
-      targetBoundaryWordPos = Math.max(targetBoundaryWordPos, Math.max(highestVisitedTokenPos, matchedWordPos));
+      // Some Android Arabic speech engines emit logical boundary positions ahead of
+      // the audible word. Use their intervals only to calibrate pacing, rather than
+      // allowing a boundary to jump the visual highlight forward.
+      if (!isArabic) {
+        clockBaseTime = now;
+        clockBaseFraction = boundaryFraction;
+
+        // Set smooth catch-up target: do NOT snap directly, let tick() visit intermediate words
+        hasConfirmedBoundary = true;
+        lastConfirmedWordPos = Math.max(lastConfirmedWordPos, matchedWordPos);
+        targetBoundaryWordPos = Math.max(targetBoundaryWordPos, Math.max(highestVisitedTokenPos, matchedWordPos));
+      }
     }
 
     const calAfter = Math.round(calibratedDurationMs);
