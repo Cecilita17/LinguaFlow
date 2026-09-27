@@ -5,7 +5,6 @@ import {
   Camera,
   Loader2,
   AlertCircle,
-  RotateCcw,
   Type,
   Languages,
   CheckCircle2,
@@ -679,19 +678,8 @@ export function ImageReaderPage({
           </div>
         </div>
 
-        {/* Right: Text size & language selector */}
+        {/* Right: Language selector */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Text size — same cycle as Text Reader */}
-          <button
-            type="button"
-            onClick={cycleFontSize}
-            title={isSpanish ? `Tamaño de texto: ${fontSize} — clic para cambiar` : `Text size: ${fontSize} — click to change`}
-            aria-label={isSpanish ? 'Tamaño de texto' : 'Text size'}
-            className="py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold"
-          >
-            <span className="text-[12px] sm:text-sm leading-none tracking-tight">A±</span>
-          </button>
-
           {/* Target Language Dropdown */}
           <LanguageSelectDropdown
             value={targetLang}
@@ -813,6 +801,17 @@ export function ImageReaderPage({
                   <span className="text-[10px] opacity-75">{interlinearMode ? 'ON' : 'OFF'}</span>
                 </button>
 
+                {/* Text size — same cycle as Text Reader */}
+                <button
+                  type="button"
+                  onClick={cycleFontSize}
+                  title={isSpanish ? `Tamaño de texto: ${fontSize} — clic para cambiar` : `Text size: ${fontSize} — click to change`}
+                  aria-label={isSpanish ? 'Tamaño de texto' : 'Text size'}
+                  className="py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold"
+                >
+                  <span className="text-[12px] sm:text-sm leading-none tracking-tight">A±</span>
+                </button>
+
                 {/* AI Batch Gloss Button */}
                 <button
                   type="button"
@@ -847,19 +846,6 @@ export function ImageReaderPage({
                   <span>{isSpanish ? 'Biblioteca' : 'Library'}</span>
                 </button>
 
-                {/* Reset / New photo button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleReset();
-                    setViewMode('uploader');
-                  }}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                  title={isSpanish ? 'Analizar otra imagen' : 'Analyze another image'}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>{isSpanish ? 'Nueva foto' : 'New photo'}</span>
-                </button>
               </div>
             </div>
 
