@@ -117,8 +117,8 @@ export function ChineseWritingPractice({
         showCharacter: false, // In quiz mode, character is hidden so user draws it
         strokeAnimationSpeed: 1.2,
         delayBetweenStrokes: 180,
-        strokeColor: '#e11d48', // rose-600
-        radicalColor: '#f43f5e', // rose-500
+        strokeColor: '#c15f3f', // terracotta-600
+        radicalColor: '#d97757', // terracotta-500
         outlineColor: '#e2e8f0', // slate-200
         drawingColor: '#2563eb', // blue-600
         drawingWidth: 16,
