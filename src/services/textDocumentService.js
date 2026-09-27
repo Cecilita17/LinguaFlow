@@ -621,6 +621,9 @@ export function normalizeDocument(rawDoc) {
 
   const author = typeof rawDoc.author === 'string' ? rawDoc.author.trim() : '';
   const chapters = Array.isArray(rawDoc.chapters) ? rawDoc.chapters : [];
+  const coverImage = typeof rawDoc.coverImage === 'string' && rawDoc.coverImage.startsWith('data:image/')
+    ? rawDoc.coverImage
+    : null;
   const lastReadingPosition = (rawDoc.lastReadingPosition && typeof rawDoc.lastReadingPosition === 'object')
     ? rawDoc.lastReadingPosition
     : null;
@@ -644,6 +647,7 @@ export function normalizeDocument(rawDoc) {
     paragraphsCount: paragraphs.length,
     paragraphs,
     chapters,
+    coverImage,
     languageStates,
     audioPathname,
     audioUrl,
@@ -731,6 +735,7 @@ export function createTextDocument({
   nativeLang = 'es',
   paragraphs = null,
   chapters = null,
+  coverImage = null,
   languageStates = null,
   audioPathname = null,
   audioUrl = null,
@@ -806,6 +811,7 @@ export function createTextDocument({
     paragraphsCount: effectiveParagraphs.length,
     paragraphs: effectiveParagraphs,
     chapters: Array.isArray(chapters) ? chapters : [],
+    coverImage: typeof coverImage === 'string' && coverImage.startsWith('data:image/') ? coverImage : null,
     languageStates: initialStates,
     audioPathname: audioPathname || null,
     audioUrl: audioUrl || null,
