@@ -46,6 +46,28 @@ function extractConfigString(source, key) {
   return match?.[1] || '';
 }
 
+async function fetchEmbeddedPlayerResponse(videoId) {
+  // Some videos omit captions from the watch-page response but expose them to
+  // the embedded player, which is the same public player used in webpages.
+  const url = `https://www.youtube.com/get_video_info?video_id=${encodeURIComponent(videoId)}&el=embedded&hl=en&html5=1`;
+  const response = await fetchWithTimeout(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; LinguaFlow YouTube captions beta)',
+      'Accept-Language': 'en-US,en;q=0.9'
+    }
+  });
+  if (!response.ok) return null;
+
+  const params = new URLSearchParams(await response.text());
+  const playerResponse = params.get('player_response');
+  if (!playerResponse) return null;
+  try {
+    return JSON.parse(playerResponse);
+  } catch {
+    return null;
+  }
+}
+
 async function fetchAndroidPlayerResponse(videoId) {
   // The Android InnerTube client exposes caption tracks more consistently than
   // the watch page. This public client key is required by YouTube's player API.
@@ -246,6 +268,13 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
     extractJsonObject(html, 'ytInitialPlayerResponse=');
 
   let tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+  if (tracks.length === 0) {
+    const embeddedPlayerResponse = await fetchEmbeddedPlayerResponse(videoId);
+    if (embeddedPlayerResponse) {
+      playerResponse = embeddedPlayerResponse;
+      tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+    }
+  }
   if (tracks.length === 0) {
     const androidPlayerResponse = await fetchAndroidPlayerResponse(videoId);
     if (androidPlayerResponse) {
