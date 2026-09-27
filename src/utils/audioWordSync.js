@@ -133,7 +133,9 @@ export function estimateSpeechDurationMs(text, targetLang = 'es', rate = 1.0) {
   if (targetLang === 'zh' || /[\u4E00-\u9FFF]/.test(text)) {
     msPerChar = 220;
   } else if (targetLang === 'ar' || /[\u0600-\u06FF]/.test(text)) {
-    msPerChar = 85;
+    // Arabic browser voices generally speak more slowly than their early boundary
+    // callbacks report, especially on Android. Use a conservative visual pace.
+    msPerChar = 125;
   } else if (targetLang === 'ru') {
     msPerChar = 75;
   }
