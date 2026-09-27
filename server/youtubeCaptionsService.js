@@ -11,7 +11,9 @@ import {
 
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const EXTRACTOR_TIMEOUT_MS = 20000;
-const CLIENT_PROFILES = ['ANDROID', 'IOS', 'WEB'];
+// All profiles are supported by youtubei.js 17.x. Embedded clients can receive
+// a different YouTube playability decision than regular web/mobile clients.
+const CLIENT_PROFILES = ['ANDROID', 'IOS', 'WEB_EMBEDDED', 'TV_EMBEDDED', 'WEB'];
 
 function logDiagnostic(event, data = {}) {
   console.info('[YouTubeCaptionExtractor]', JSON.stringify({ event, ...data }));
@@ -269,7 +271,12 @@ export async function fetchYouTubeCaptions(
         );
       }
 
-      if (lastFailure?.code === 'VIDEO_RESTRICTED' || lastFailure?.code === 'VIDEO_UNAVAILABLE') {
+      if ([
+        'VIDEO_RESTRICTED',
+        'VIDEO_UNAVAILABLE',
+        'YOUTUBE_TEMPORARILY_BLOCKED',
+        'YOUTUBE_POT_REQUIRED'
+      ].includes(lastFailure?.code)) {
         throw lastFailure;
       }
 
