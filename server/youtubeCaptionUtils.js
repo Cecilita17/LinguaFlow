@@ -74,7 +74,10 @@ export function classifyExtractorError(error) {
   if (error?.name === 'AbortError' || message.includes('timeout') || message.includes('timed out')) {
     return { code: 'UPSTREAM_TIMEOUT', status: 504, message: 'YouTube tardó demasiado en responder. Probá nuevamente en unos instantes.' };
   }
-  if (status === 404 || message.includes('unavailable') || message.includes('not found')) {
+  if (message.includes('transcript') || message.includes('caption')) {
+    return { code: 'CAPTIONS_UNAVAILABLE', status: 422, message: 'Este vídeo no expone subtítulos CC o autogenerados para importar.' };
+  }
+  if (status === 404 || message.includes('video unavailable') || message.includes('video not found')) {
     return { code: 'VIDEO_UNAVAILABLE', status: 404, message: 'Este vídeo no existe o ya no está disponible en YouTube.' };
   }
   if (status === 401 || status === 403 || message.includes('restricted') || message.includes('private') || message.includes('sign in')) {
@@ -82,9 +85,6 @@ export function classifyExtractorError(error) {
   }
   if (status === 429 || message.includes('rate limit') || message.includes('too many requests')) {
     return { code: 'YOUTUBE_TEMPORARILY_BLOCKED', status: 429, message: 'YouTube bloqueó temporalmente la consulta. Esperá unos minutos e intentá otra vez.' };
-  }
-  if (message.includes('transcript') || message.includes('caption')) {
-    return { code: 'CAPTIONS_UNAVAILABLE', status: 422, message: 'Este vídeo no expone subtítulos CC o autogenerados para importar.' };
   }
   return { code: 'EXTRACTOR_FAILURE', status: 502, message: 'No se pudo consultar YouTube en este momento. Probá nuevamente.' };
 }
