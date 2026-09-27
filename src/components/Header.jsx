@@ -72,7 +72,7 @@ export function Header({
             <img
               src="/linguaflow-logo.svg"
               alt="LinguaFlow"
-              className="w-9 h-9 shrink-0 group-hover:scale-105 transition-transform"
+              className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 group-hover:scale-105 transition-transform"
               draggable="false"
             />
             <div>
@@ -113,7 +113,7 @@ export function Header({
               <img
                 src="/linguaflow-logo.svg"
                 alt="LinguaFlow"
-                className="w-10 h-10 shrink-0 group-hover:scale-105 transition-transform"
+                className="w-9 h-9 lg:w-10 lg:h-10 shrink-0 group-hover:scale-105 transition-transform"
                 draggable="false"
               />
               <div>
@@ -152,7 +152,7 @@ export function Header({
               <img
                 src="/linguaflow-logo.svg"
                 alt="LinguaFlow"
-                className="w-10 h-10 group-hover:scale-105 transition-transform"
+                className="w-9 h-9 lg:w-10 lg:h-10 group-hover:scale-105 transition-transform"
                 draggable="false"
               />
               <div>
