@@ -1862,11 +1862,12 @@ ${levelInstructions[level]}
 Return STRICT JSON only in this exact shape:
 {"paragraphs":[{"text":"rewritten paragraph in the original language"}]}
 
-Return exactly one rewritten paragraph for every input paragraph, in the same order. Do not include paragraph IDs or indexes in your response; the server restores their stable identities. Keep paragraph boundaries whenever practical. ${strictRetry ? 'Your previous attempt was too short. This time preserve the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
+Return exactly one rewritten paragraph for every input paragraph, in the same order. Do not include paragraph IDs or indexes in your response; the server restores their stable identities. Keep paragraph boundaries whenever practical. Your combined output must remain at least 78% as long as the source (${sourceWordCount} words); preserve details rather than shortening. ${strictRetry ? 'Your previous attempt was too short. This time preserve the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
 
 Input paragraphs:
 ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.text })))}`;
 
+    let lastValidation = { returnedParagraphs: 0, outputWords: 0 };
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 45000);
@@ -1886,7 +1887,10 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
               { role: 'user', content: buildPrompt(attempt > 0) }
             ],
             response_format: { type: 'json_object' },
-            temperature: 0.15,
+            // This is a deterministic rewrite, not a reasoning task. Keeping
+            // reasoning low leaves the completion budget for the full passage.
+            reasoning_effort: 'low',
+            temperature: 0.05,
             max_tokens: maxOutputTokens
           })
         });
@@ -1910,6 +1914,10 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
         const resultText = normalizedRewritten.map((paragraph) => paragraph.text).join(' ');
         const resultWordCount = (resultText.match(/[\p{L}\p{N}]+/gu) || []).length;
         const suspiciouslyShort = resultWordCount < Math.max(20, sourceWordCount * 0.58);
+        lastValidation = {
+          returnedParagraphs: normalizedRewritten.length,
+          outputWords: resultWordCount
+        };
         logCostAudit({
           provider: 'groq', feature: 'epub_simplification', model: activeModel,
           requestId: response.headers.get('x-request-id') || 'no disponible directamente',
@@ -1932,7 +1940,9 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
         }
       }
     }
-    return res.status(422).json({ error: 'La IA devolvió una versión demasiado corta o incompleta. El texto original se conserva.' });
+    return res.status(422).json({
+      error: `La IA devolvió una versión demasiado corta o incompleta (párrafos: ${lastValidation.returnedParagraphs}/${paragraphs.length}, palabras: ${lastValidation.outputWords}/${sourceWordCount}). El texto original se conserva.`
+    });
   } catch (error) {
     console.error('Server error in /api/simplify-epub-block:', error);
     return res.status(500).json({ error: 'Error interno al simplificar el bloque EPUB.' });
