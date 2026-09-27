@@ -24,6 +24,7 @@ const SUPPORTED_VIDEO_LANGUAGES = [
 export function YouTubeImporter({
   onImportVideo,
   onImportCaptions,
+  onImportModeChange,
   initialUrl = '',
   selectedLanguage = 'auto',
   onLanguageChange
@@ -34,6 +35,12 @@ export function YouTubeImporter({
   const [justImported, setJustImported] = useState(false);
   const [importMode, setImportMode] = useState('normal');
   const [isLoadingCaptions, setIsLoadingCaptions] = useState(false);
+
+  const selectImportMode = (mode) => {
+    setImportMode(mode);
+    setError(null);
+    onImportModeChange?.(mode);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -95,14 +102,14 @@ export function YouTubeImporter({
       <div className="flex p-1 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-xs font-semibold">
         <button
           type="button"
-          onClick={() => { setImportMode('normal'); setError(null); }}
+          onClick={() => selectImportMode('normal')}
           className={`flex-1 px-3 py-2 rounded-lg transition-all ${importMode === 'normal' ? 'bg-[var(--surface-primary)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-muted)]'}`}
         >
           {isSpanish ? 'Importación normal' : 'Normal import'}
         </button>
         <button
           type="button"
-          onClick={() => { setImportMode('beta'); setError(null); }}
+          onClick={() => selectImportMode('beta')}
           className={`flex-1 px-3 py-2 rounded-lg transition-all inline-flex items-center justify-center gap-1.5 ${importMode === 'beta' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm' : 'text-[var(--text-muted)]'}`}
         >
           <Sparkles className="w-3.5 h-3.5" />
