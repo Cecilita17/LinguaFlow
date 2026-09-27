@@ -91,6 +91,45 @@ function trackLabel(track) {
   return String(name).trim();
 }
 
+function decodeXmlEntities(value = '') {
+  return String(value)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function parseXmlAttributes(value = '') {
+  const attributes = {};
+  for (const match of value.matchAll(/([\w-]+)="([^"]*)"/g)) {
+    attributes[match[1]] = decodeXmlEntities(match[2]);
+  }
+  return attributes;
+}
+
+async function fetchLegacyCaptionTracks(videoId) {
+  const listUrl = `https://www.youtube.com/api/timedtext?type=list&v=${encodeURIComponent(videoId)}`;
+  const response = await fetchWithTimeout(listUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LinguaFlow YouTube captions beta)' }
+  });
+  if (!response.ok) return [];
+  const xml = await response.text();
+  return [...xml.matchAll(/<track\s+([^>]*)\/?>(?:<\/track>)?/g)]
+    .map((match) => parseXmlAttributes(match[1]))
+    .filter((track) => track.lang_code)
+    .map((track) => {
+      const params = new URLSearchParams({ v: videoId, lang: track.lang_code });
+      if (track.kind) params.set('kind', track.kind);
+      return {
+        baseUrl: `https://www.youtube.com/api/timedtext?${params.toString()}`,
+        languageCode: track.lang_code,
+        kind: track.kind || '',
+        name: { simpleText: track.name || track.lang_translated || track.lang_code }
+      };
+    });
+}
+
 function chooseTrack(tracks, preferredLanguage = 'auto') {
   const preferred = String(preferredLanguage || 'auto').toLowerCase();
   const usable = tracks.filter((track) => track?.baseUrl && track?.languageCode);
@@ -148,11 +187,21 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
 
   let tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
   if (tracks.length === 0) {
-    const fallbackPlayerResponse = await fetchAndroidPlayerResponse(videoId) || await fetchPlayerResponseFallback(html, videoId);
-    if (fallbackPlayerResponse) {
-      playerResponse = fallbackPlayerResponse;
+    const androidPlayerResponse = await fetchAndroidPlayerResponse(videoId);
+    if (androidPlayerResponse) {
+      playerResponse = androidPlayerResponse;
       tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
     }
+  }
+  if (tracks.length === 0) {
+    const webPlayerResponse = await fetchPlayerResponseFallback(html, videoId);
+    if (webPlayerResponse) {
+      playerResponse = webPlayerResponse;
+      tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+    }
+  }
+  if (tracks.length === 0) {
+    tracks = await fetchLegacyCaptionTracks(videoId);
   }
 
   const track = chooseTrack(tracks, preferredLanguage);
