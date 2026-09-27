@@ -417,7 +417,7 @@ export function TextLibraryView({
                 } ${isConfirming ? 'ring-2 ring-red-500/50' : 'cursor-pointer'}`}
               >
                 {/* Book cover for EPUBs, with a consistent fallback for other documents */}
-                <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-xl overflow-hidden shrink-0 bg-[var(--surface-secondary)] border border-[var(--border-primary)] flex items-center justify-center">
+                <div className="w-20 sm:w-24 self-stretch rounded-xl overflow-hidden shrink-0 bg-[var(--surface-secondary)] border border-[var(--border-primary)] flex items-center justify-center">
                   {isEpubDocument && doc.coverImage ? (
                     <img
                       src={doc.coverImage}
