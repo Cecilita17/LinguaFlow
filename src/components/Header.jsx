@@ -58,13 +58,13 @@ export function Header({
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#1a0c08]/90 backdrop-blur-xl border-b border-black/5 dark:border-white/5 px-4 py-2.5 md:py-3 shadow-xs text-[var(--text-primary)] transition-colors">
+      <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#1a0c08]/90 backdrop-blur-xl border-b border-black/5 dark:border-white/5 px-4 py-3 md:py-3.5 shadow-xs text-[var(--text-primary)] transition-colors">
         {/* MOBILE TOP BAR (< md) */}
         <div className="flex md:hidden items-center justify-between w-full">
           {/* Left: Brand Logo & Titles */}
           <div
             onClick={() => setActiveTab && setActiveTab('home')}
-            className="flex items-center space-x-2.5 cursor-pointer select-none group"
+            className="flex items-center space-x-3 cursor-pointer select-none group"
             role="button"
             tabIndex={0}
             title={t('nav_home')}
@@ -72,11 +72,11 @@ export function Header({
             <img
               src="/linguaflow-logo.svg"
               alt="LinguaFlow"
-              className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 group-hover:scale-105 transition-transform"
+              className="w-10 h-10 shrink-0 drop-shadow-sm group-hover:scale-105 transition-transform"
               draggable="false"
             />
             <div>
-              <h1 className="font-bold text-[var(--text-primary)] text-[17px] leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
+              <h1 className="font-extrabold text-[18px] leading-tight tracking-[0.01em] group-hover:text-rose-500 transition-colors">
                 LinguaFlow
               </h1>
             </div>
@@ -105,7 +105,7 @@ export function Header({
             {/* Left: Brand Logo & Title */}
             <div
               onClick={() => setActiveTab && setActiveTab('home')}
-              className="flex items-center space-x-2.5 cursor-pointer select-none group"
+              className="flex items-center space-x-3 cursor-pointer select-none group"
               role="button"
               tabIndex={0}
               title={t('nav_home')}
@@ -113,11 +113,11 @@ export function Header({
               <img
                 src="/linguaflow-logo.svg"
                 alt="LinguaFlow"
-                className="w-9 h-9 lg:w-10 lg:h-10 shrink-0 group-hover:scale-105 transition-transform"
+                className="w-10 h-10 lg:w-11 lg:h-11 shrink-0 drop-shadow-sm group-hover:scale-105 transition-transform"
                 draggable="false"
               />
               <div>
-                <h1 className="font-bold text-[var(--text-primary)] text-lg leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
+                <h1 className="font-extrabold text-[19px] leading-tight tracking-[0.01em] group-hover:text-rose-500 transition-colors">
                   LinguaFlow
                 </h1>
               </div>
@@ -144,7 +144,7 @@ export function Header({
             {/* Logo & Title */}
             <div
               onClick={() => setActiveTab && setActiveTab('home')}
-              className="flex items-center space-x-2.5 cursor-pointer select-none group"
+              className="flex items-center space-x-3 cursor-pointer select-none group"
               role="button"
               tabIndex={0}
               title={t('nav_home')}
@@ -152,11 +152,11 @@ export function Header({
               <img
                 src="/linguaflow-logo.svg"
                 alt="LinguaFlow"
-                className="w-9 h-9 lg:w-10 lg:h-10 group-hover:scale-105 transition-transform"
+                className="w-10 h-10 lg:w-11 lg:h-11 drop-shadow-sm group-hover:scale-105 transition-transform"
                 draggable="false"
               />
               <div>
-                <h1 className="font-bold text-[var(--text-primary)] text-lg leading-tight tracking-wide group-hover:text-rose-500 transition-colors">
+                <h1 className="font-extrabold text-[19px] leading-tight tracking-[0.01em] group-hover:text-rose-500 transition-colors">
                   LinguaFlow
                 </h1>
               </div>
