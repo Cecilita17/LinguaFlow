@@ -136,7 +136,7 @@ export function YouTubeLibraryView({
   };
 
   return (
-    <div className="flex flex-col h-full w-full max-w-5xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-hidden text-[var(--text-primary)]">
+    <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-hidden text-[var(--text-primary)]">
       {/* Top Header Bar */}
       <div className="flex-shrink-0 flex items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-black/5 dark:border-white/10">
         <div className="flex items-center space-x-3">
@@ -183,7 +183,7 @@ export function YouTubeLibraryView({
       </div>
 
       {/* Search & Stats Bar */}
-      <div className="flex-shrink-0 pt-3 pb-3 flex items-center gap-3">
+      <div className="flex-shrink-0 pt-4 pb-3 flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
@@ -243,7 +243,7 @@ export function YouTubeLibraryView({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             {filtered.map((item) => {
               const langMeta = LANGUAGE_META[item.targetLanguage] || { name: item.targetLanguage.toUpperCase(), flag: '🌐' };
               const isCurrent = currentVideoId && item.videoId === currentVideoId;
@@ -258,14 +258,14 @@ export function YouTubeLibraryView({
                 <div
                   key={item.id}
                   onClick={() => onSelectVideo(item)}
-                  className={`group relative rounded-2xl border transition-all cursor-pointer flex flex-col overflow-hidden bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] hover:border-rose-500/70 hover:shadow-xl dark:bg-[#220e08] dark:hover:bg-[#2b120a] dark:border-[#441f15] ${
+                  className={`group relative min-h-[156px] rounded-2xl border transition-all duration-200 cursor-pointer flex overflow-hidden bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] hover:border-rose-500/70 hover:shadow-lg hover:-translate-y-0.5 dark:bg-[#220e08] dark:hover:bg-[#2b120a] dark:border-[#441f15] ${
                     isCurrent
                       ? 'border-rose-500 ring-1 ring-rose-500/50 shadow-md shadow-rose-950/20'
-                      : 'border-[var(--border-primary)]'
+                      : 'border-[var(--border-primary)] shadow-sm'
                   }`}
                 >
                   {/* Video Thumbnail Header */}
-                  <div className="relative aspect-video w-full bg-black/60 overflow-hidden">
+                  <div className="relative w-[42%] min-w-[132px] max-w-[210px] self-stretch bg-black/60 overflow-hidden">
                     <img
                       src={thumbUrl}
                       alt={item.videoTitle || item.videoId}
@@ -277,13 +277,13 @@ export function YouTubeLibraryView({
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
 
                     {/* Language Badge */}
-                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-xs border border-white/10 text-xs font-semibold text-rose-100 shadow-xs">
+                    <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs border border-white/10 text-xs font-semibold text-rose-100 shadow-xs">
                       <span>{langMeta.flag}</span>
-                      <span className="text-[11px]">{langMeta.name}</span>
+                      <span className="hidden sm:inline text-[10px]">{langMeta.name}</span>
                     </div>
 
                     {/* Status Badge */}
-                    <div className="absolute top-2.5 right-2.5">
+                    <div className="absolute top-2 right-2">
                       {isComplete ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-300 bg-emerald-950/80 backdrop-blur-xs border border-emerald-700/80 px-2 py-0.5 rounded-full shadow-xs">
                           <CheckCircle2 className="w-3 h-3" />
@@ -298,8 +298,8 @@ export function YouTubeLibraryView({
                     </div>
 
                     {/* Play Overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
-                      <div className="w-11 h-11 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
+                    <div className="absolute inset-0 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-black/20">
+                      <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-lg transform sm:group-hover:scale-110 transition-transform">
                         <Play className="w-5 h-5 fill-white ml-0.5" />
                       </div>
                     </div>
@@ -314,20 +314,20 @@ export function YouTubeLibraryView({
                   </div>
 
                   {/* Card Content */}
-                  <div className="p-3.5 flex-1 flex flex-col justify-between">
+                  <div className="p-3 sm:p-3.5 flex-1 min-w-0 flex flex-col justify-between">
                     <div>
                       <h4 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-rose-600 dark:group-hover:text-rose-200 transition-colors line-clamp-2 leading-snug">
                         {item.videoTitle || item.videoId}
                       </h4>
-                      <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] mt-1.5 font-mono">
-                        <span>ID: {item.videoId}</span>
-                        <span>•</span>
-                        <span>{item.subtitlesCount} {isSpanish ? 'líneas' : 'lines'}</span>
+                      <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-[var(--text-muted)] mt-1.5 font-mono min-w-0">
+                        <span className="truncate">ID: {item.videoId}</span>
+                        <span className="shrink-0">•</span>
+                        <span className="shrink-0">{item.subtitlesCount} {isSpanish ? 'líneas' : 'lines'}</span>
                       </div>
                     </div>
 
                     {/* Card Footer: Date + Actions */}
-                    <div className="flex items-center justify-between pt-3 mt-2 border-t border-[var(--border-primary)] text-[11px] text-[var(--text-muted)]">
+                    <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-[var(--border-primary)] text-[10px] sm:text-[11px] text-[var(--text-muted)]">
                       <span>{item.updatedAt ? formatDate(item.updatedAt) : ''}</span>
 
                       <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
