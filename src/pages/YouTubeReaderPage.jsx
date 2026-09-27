@@ -1312,7 +1312,7 @@ export function YouTubeReaderPage({
               onImportVideo={handleImportVideo}
               onImportCaptions={handleImportCaptions}
               onImportModeChange={setYoutubeImportMode}
-              initialUrl={videoUrl}
+              initialUrl=""
               selectedLanguage={videoLanguage}
               onLanguageChange={setVideoLanguage}
             />
