@@ -89,9 +89,14 @@ function withTimeout(promise, stage) {
 async function createInnertube(diagnostics) {
   return withTimeout(Innertube.create({
     client_type: 'WEB',
-    generate_session_locally: true,
+    // YouTube currently rejects locally generated visitor data as bot traffic.
+    // Let youtubei.js obtain the visitor data from YouTube instead.
+    generate_session_locally: false,
     enable_session_cache: true,
-    fast_fail: false,
+    // Do not silently fall back to locally generated session data.
+    fast_fail: true,
+    visitor_data: process.env.YOUTUBE_VISITOR_DATA || undefined,
+    po_token: process.env.YOUTUBE_PO_TOKEN || undefined,
     fetch: async (input, init) => {
       const rawUrl = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
       const source = new URL(rawUrl).pathname;
