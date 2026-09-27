@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Calendar,
   Clock,
+  BookOpen,
   AlertCircle,
   Loader2,
   Edit2,
@@ -246,8 +247,8 @@ export function ImageLibraryView({
             )}
           </div>
         ) : (
-          /* Cards Grid */
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4.5 animate-fade-in">
+          /* Compact document list */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
             {filtered.map((doc) => {
               const langMeta = getLanguageMeta(doc.targetLang);
               const isDeleting = deleteConfirmId === doc.id;
@@ -257,53 +258,49 @@ export function ImageLibraryView({
                 <div
                   key={doc.id}
                   onClick={() => !isEditing && onSelectDocument(doc)}
-                  className="group relative flex flex-col justify-between rounded-2xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/50 transition-all duration-200 shadow-xs hover:shadow-sm overflow-hidden cursor-pointer active:scale-[0.99]"
+                  className="group relative flex min-h-[104px] gap-3 p-3 rounded-2xl bg-[var(--surface-primary)] hover:bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:border-rose-500/40 transition-all duration-200 shadow-xs hover:shadow-md cursor-pointer active:scale-[0.99]"
                 >
-                  {/* Compact Thumbnail Container */}
-                  <div className="relative w-full aspect-[16/8] bg-[var(--surface-secondary)] overflow-hidden">
+                  {/* Compact thumbnail */}
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-[var(--surface-secondary)] overflow-hidden shrink-0">
                     {doc.imageBase64 ? (
                       <img
                         src={doc.imageBase64}
                         alt={doc.title}
-                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">
-                        <Camera className="w-6 h-6 opacity-30" />
+                        <Camera className="w-5 h-5 opacity-40" />
                       </div>
                     )}
-
-                    {/* Delete action button - sleek floating button in top-right corner */}
-                    <button
-                      type="button"
-                      onClick={(e) => handleDelete(doc.id, e)}
-                      title={isDeleting ? (isSpanish ? 'Confirmar eliminación' : 'Confirm delete') : (isSpanish ? 'Eliminar imagen' : 'Delete image')}
-                      className={`absolute top-2 right-2 rounded-lg backdrop-blur-xs transition-all cursor-pointer flex items-center gap-1 ${
-                        isDeleting
-                          ? 'bg-rose-600 text-white shadow-md animate-pulse ring-2 ring-white/50 text-[10px] font-bold px-2 py-1'
-                          : 'bg-black/40 text-white/80 hover:text-white hover:bg-rose-600/90 opacity-70 sm:opacity-0 group-hover:opacity-100 p-1.5'
-                      }`}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      {isDeleting && <span>{isSpanish ? 'Confirmar' : 'Confirm'}</span>}
-                    </button>
                   </div>
 
-                  {/* Card Content Body */}
-                  <div className="p-3 sm:p-3.5 flex-1 flex flex-col justify-between">
-                    <div>
-                      {/* Language & Level Tag - Clean & integrated */}
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded-md bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)]">
-                          <span>{langMeta?.flag || '🌐'}</span>
-                          <span>{doc.level || 'B1'}</span>
-                        </span>
-                      </div>
+                  {/* Discreet delete action */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleDelete(doc.id, e)}
+                    title={isDeleting ? (isSpanish ? 'Confirmar eliminación' : 'Confirm delete') : (isSpanish ? 'Eliminar imagen' : 'Delete image')}
+                    className={`absolute top-2.5 right-2.5 rounded-lg backdrop-blur-xs transition-all cursor-pointer flex items-center gap-1 ${
+                      isDeleting
+                        ? 'bg-rose-600 text-white shadow-md animate-pulse ring-1 ring-white/50 text-[10px] font-bold px-2 py-1'
+                        : 'bg-[var(--surface-secondary)]/80 text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 opacity-60 sm:opacity-0 sm:group-hover:opacity-100 p-1.5'
+                    }`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {isDeleting && <span>{isSpanish ? 'Confirmar' : 'Confirm'}</span>}
+                  </button>
 
-                      {/* Title or Inline Edit */}
+                  {/* Document details */}
+                  <div className="min-w-0 flex-1 flex flex-col pr-5">
+                    <div className="flex items-start gap-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-300 shrink-0">
+                        <span>{langMeta?.flag || '🌐'}</span>
+                        <span>{doc.level || 'B1'}</span>
+                      </span>
+
                       {isEditing ? (
-                        <div className="flex items-center gap-1 my-1" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex min-w-0 flex-1 items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="text"
                             value={editingTitleText}
@@ -313,7 +310,7 @@ export function ImageLibraryView({
                               if (e.key === 'Escape') handleCancelRename(e);
                             }}
                             autoFocus
-                            className="flex-1 px-2 py-1 rounded-lg bg-[var(--input-bg)] border border-rose-500 text-xs text-[var(--text-primary)] font-bold focus:outline-hidden"
+                            className="min-w-0 flex-1 px-2 py-1 rounded-lg bg-[var(--input-bg)] border border-rose-500 text-xs text-[var(--text-primary)] font-semibold focus:outline-hidden"
                           />
                           <button
                             type="button"
@@ -333,8 +330,8 @@ export function ImageLibraryView({
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-start justify-between gap-1 group/title">
-                          <h3 className="font-bold text-xs sm:text-sm text-[var(--text-primary)] line-clamp-1 group-hover:text-rose-500 transition-colors leading-snug">
+                        <div className="flex min-w-0 flex-1 items-start gap-1 group/title">
+                          <h3 className="min-w-0 flex-1 text-sm sm:text-base font-semibold text-[var(--text-primary)] line-clamp-1 group-hover:text-rose-500 transition-colors leading-snug">
                             {doc.title || (isSpanish ? 'Imagen sin título' : 'Untitled Image')}
                           </h3>
                           <button
@@ -343,31 +340,32 @@ export function ImageLibraryView({
                             title={isSpanish ? 'Editar título' : 'Edit title'}
                             className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0"
                           >
-                            <Edit2 className="w-2.5 h-2.5" />
+                            <Edit2 className="w-3 h-3" />
                           </button>
                         </div>
                       )}
-
-                      {/* Snippet / Description Preview */}
-                      <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2 mt-1 leading-relaxed">
-                        {doc.description || ''}
-                      </p>
                     </div>
 
-                    {/* Card Footer: Date and Paragraphs count */}
-                    <div className="mt-3 pt-2 border-t border-[var(--border-primary)]/40 flex items-center justify-between text-[10px] text-[var(--text-muted)] font-medium">
+                    <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2 min-h-[2.75rem] mt-1.5 leading-relaxed">
+                      {doc.description || ''}
+                    </p>
+
+                    <div className="mt-auto pt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] font-medium">
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 opacity-60" />
+                        <Clock className="w-3.5 h-3.5 opacity-70" />
                         <span>{formatDate(doc.updatedAt || doc.createdAt)}</span>
                       </span>
-                      <span>
-                        {Array.isArray(doc.paragraphs) ? doc.paragraphs.length : 0} {isSpanish ? 'párrafos' : 'paragraphs'}
+                      <span className="opacity-50">•</span>
+                      <span className="flex items-center gap-1">
+                        <BookOpen className="w-3.5 h-3.5 opacity-70" />
+                        <span>{Array.isArray(doc.paragraphs) ? doc.paragraphs.length : 0} {isSpanish ? 'párrafos' : 'paragraphs'}</span>
                       </span>
                     </div>
                   </div>
                 </div>
               );
             })}
+          </div>
           </div>
         )}
       </main>
