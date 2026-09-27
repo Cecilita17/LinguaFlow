@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   MessageSquare,
   Youtube,
@@ -9,9 +9,14 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { getLanguageMeta } from '../constants/languages.js';
 import { getStudyGreeting } from '../constants/greetings.js';
-import { loadHabitTrackerData } from '../services/habitTrackerService.js';
+import {
+  HABIT_TRACKER_UPDATED_EVENT,
+  getHabitStorageKey,
+  loadHabitTrackerData
+} from '../services/habitTrackerService.js';
 
 export default function HomePage({
   onSelectMode,
@@ -23,13 +28,34 @@ export default function HomePage({
   apiWarning = null
 }) {
   const { t, isSpanish } = useSiteLanguage();
+  const { user } = useAuth();
+  const [habitDataVersion, setHabitDataVersion] = useState(0);
   const currentTargetMeta = getLanguageMeta(targetLang);
   const greeting = getStudyGreeting(targetLang);
 
-  // Compute daily habit progress
+  useEffect(() => {
+    const storageKey = getHabitStorageKey(user);
+    const refreshHabitProgress = (event) => {
+      if (!event?.detail || event.detail.storageKey === storageKey) {
+        setHabitDataVersion((version) => version + 1);
+      }
+    };
+    const refreshFromOtherTab = (event) => {
+      if (event.key === storageKey) setHabitDataVersion((version) => version + 1);
+    };
+
+    window.addEventListener(HABIT_TRACKER_UPDATED_EVENT, refreshHabitProgress);
+    window.addEventListener('storage', refreshFromOtherTab);
+    return () => {
+      window.removeEventListener(HABIT_TRACKER_UPDATED_EVENT, refreshHabitProgress);
+      window.removeEventListener('storage', refreshFromOtherTab);
+    };
+  }, [user]);
+
+  // Compute daily habit progress from the active user's tracker data.
   const habitStats = useMemo(() => {
     try {
-      const data = loadHabitTrackerData();
+      const data = loadHabitTrackerData(user);
       const today = new Date();
       const yyyy = today.getFullYear();
       const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -42,7 +68,7 @@ export default function HomePage({
     } catch {
       return { completed: 0, total: 3, pct: 0 };
     }
-  }, [targetLang]);
+  }, [targetLang, user, habitDataVersion]);
 
   return (
     <div className="flex-1 overflow-y-auto w-full relative bg-gradient-to-b from-[#faf5f0] via-[#f7f0e8] to-[#f0e6dc] text-[var(--text-primary)] dark:from-[#230f08] dark:via-[#2b140c] dark:to-[#1f0b06] dark:text-stone-100 flex flex-col justify-between px-3.5 sm:px-6 py-4 sm:py-6 home-gradient-bg min-h-0">
