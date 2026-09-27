@@ -277,6 +277,11 @@ export async function saveTextDocument(rawDoc) {
   const effectiveChapters = (Array.isArray(rawDoc.chapters) && rawDoc.chapters.length > 0)
     ? rawDoc.chapters
     : (Array.isArray(existing?.chapters) && existing.chapters.length > 0 ? existing.chapters : []);
+  // EPUB simplifications are an alternate representation only. Keep them on the
+  // original document so they never become separate library entries.
+  const effectiveEpubSimplifications = rawDoc.epubSimplifications && typeof rawDoc.epubSimplifications === 'object'
+    ? rawDoc.epubSimplifications
+    : (existing?.epubSimplifications && typeof existing.epubSimplifications === 'object' ? existing.epubSimplifications : {});
 
   // 6. Safe preservation of manual audioBookmark & legacy fields:
   let effectiveAudioBookmark = null;
@@ -332,6 +337,7 @@ export async function saveTextDocument(rawDoc) {
     paragraphsCount: effectiveParagraphs.length,
     paragraphs: effectiveParagraphs,
     chapters: effectiveChapters,
+    epubSimplifications: effectiveEpubSimplifications,
     coverImage: effectiveCoverImage,
     languageStates: existingStates,
     audioPathname: effectiveAudioPathname,

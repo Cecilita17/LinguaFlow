@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleTranscribeTicket, handleSentenceBreakdown, handleBatchGloss, handleGenerateText, handleTranslateText, handleAudioStream, handleImageDescription } from './handlers.js';
+import { handleHealth, handleLanguages, handleChat, handlePedagogicalCorrect, handleLookupWord, handleTranscribe, handleTranscribeTicket, handleSentenceBreakdown, handleBatchGloss, handleGenerateText, handleSimplifyEpubBlock, handleTranslateText, handleAudioStream, handleImageDescription } from './handlers.js';
 import { handleGoogleAuth, handleGetSession, handleLogout } from './authHandlers.js';
 import { handlePipelineChatStream, handlePipelineTTS, handleListCartesiaVoices } from './pipelineHandlers.js';
 
@@ -58,6 +58,9 @@ app.post('/batch-gloss', handleBatchGloss);
 
 app.post('/api/generate-text', handleGenerateText);
 app.post('/generate-text', handleGenerateText);
+
+app.post('/api/simplify-epub-block', handleSimplifyEpubBlock);
+app.post('/simplify-epub-block', handleSimplifyEpubBlock);
 
 app.post('/api/translate-text', handleTranslateText);
 app.post('/translate-text', handleTranslateText);

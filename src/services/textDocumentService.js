@@ -647,6 +647,9 @@ export function normalizeDocument(rawDoc) {
     paragraphsCount: paragraphs.length,
     paragraphs,
     chapters,
+    epubSimplifications: (rawDoc.epubSimplifications && typeof rawDoc.epubSimplifications === 'object')
+      ? rawDoc.epubSimplifications
+      : {},
     coverImage,
     languageStates,
     audioPathname,

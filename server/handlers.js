@@ -1803,6 +1803,132 @@ Write the complete reading text in ${targetName} now.`;
   }
 }
 
+// EPUB pedagogical simplification. This intentionally preserves one output paragraph
+// for every source paragraph so the reader can retain its stable paragraph identity.
+export async function handleSimplifyEpubBlock(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  try {
+    const body = parseRequestBody(req);
+    const {
+      sourceParagraphs = [],
+      targetLang = 'es',
+      level = 'light',
+      apiKey: clientApiKey
+    } = body;
+    const acceptedLevels = ['light', 'medium', 'strong'];
+    const paragraphs = Array.isArray(sourceParagraphs)
+      ? sourceParagraphs
+        .map((paragraph) => ({
+          sourceParagraphId: String(paragraph?.sourceParagraphId || '').trim(),
+          text: String(paragraph?.text || '').trim()
+        }))
+        .filter((paragraph) => paragraph.sourceParagraphId && paragraph.text)
+      : [];
+
+    if (!acceptedLevels.includes(level) || paragraphs.length === 0) {
+      return res.status(400).json({ error: 'Bloque o nivel de simplificación inválido.' });
+    }
+
+    const effectiveApiKey = (
+      process.env.GROQ_API_KEY ||
+      (clientApiKey?.startsWith('gsk_') ? clientApiKey : '') ||
+      (req.headers['x-api-key'] || '')
+    ).trim().replace(/^["']|["']$/g, '');
+    if (!effectiveApiKey) {
+      return res.status(400).json({ error: 'Para simplificar EPUBs, configura tu GROQ_API_KEY en el servidor o en Ajustes.' });
+    }
+
+    const activeModel = getSanitizedGroqModel();
+    const langObj = SUPPORTED_LANGUAGES.find((language) => language.code === targetLang) || { name: targetLang, englishName: targetLang };
+    const targetName = langObj.englishName || langObj.name;
+    const levelInstructions = {
+      light: 'Make conservative vocabulary substitutions, clarify hard idioms, and simplify only unusually complex constructions. Preserve nearly the same wording, structure, tone, and length.',
+      medium: 'Use more frequent vocabulary, simplify complex grammar, and split only excessively long sentences when needed. Preserve every detail and event.',
+      strong: 'Adapt vocabulary and syntax substantially for a lower-level learner, while preserving every detail, scene, dialogue, example, and event.'
+    };
+    const sourceWordCount = paragraphs.reduce((total, paragraph) => total + (paragraph.text.match(/[\p{L}\p{N}]+/gu) || []).length, 0);
+    const buildPrompt = (strictRetry) => `You are a literary language-learning editor. Rewrite the supplied EPUB passage in ${targetName} (language code: ${targetLang}) at the requested ${level} simplification level.
+
+THIS IS NOT A SUMMARY. DO NOT SUMMARIZE. Preserve all information, events, characters, dialogue, chronology, descriptions, examples, narrative order, tone, and approximately the same information density. Do not translate the text and do not add explanations, notes, titles, or commentary.
+
+${levelInstructions[level]}
+
+Return STRICT JSON only in this exact shape:
+{"paragraphs":[{"sourceParagraphId":"original id","text":"rewritten paragraph in the original language"}]}
+
+Return exactly one rewritten paragraph for every input paragraph, in the same order and with the same sourceParagraphId. Keep paragraph boundaries whenever practical. ${strictRetry ? 'Your previous attempt was too short. This time preserve the full amount of information and a closely comparable length; omission or condensation is unacceptable.' : ''}
+
+Input paragraphs:
+${JSON.stringify(paragraphs)}`;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      try {
+        const startedAt = Date.now();
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveApiKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: activeModel,
+            messages: [
+              { role: 'system', content: 'You preserve literary content exactly while simplifying language. You return only valid JSON.' },
+              { role: 'user', content: buildPrompt(attempt > 0) }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.15,
+            max_tokens: 5000
+          })
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+          const errorText = await response.text();
+          const categorized = categorizeGroqError(response.status, errorText);
+          return res.status(response.status).json({ error: categorized.userMessage, error_type: categorized.type });
+        }
+        const data = await response.json();
+        const parsed = cleanAndParseJSON(data?.choices?.[0]?.message?.content || '');
+        const rewritten = Array.isArray(parsed?.paragraphs) ? parsed.paragraphs : [];
+        const valid = rewritten.length === paragraphs.length
+          && rewritten.every((paragraph, index) => paragraph?.sourceParagraphId === paragraphs[index].sourceParagraphId && typeof paragraph?.text === 'string' && paragraph.text.trim());
+        const resultText = rewritten.map((paragraph) => String(paragraph?.text || '')).join(' ');
+        const resultWordCount = (resultText.match(/[\p{L}\p{N}]+/gu) || []).length;
+        const suspiciouslyShort = resultWordCount < Math.max(20, sourceWordCount * 0.58);
+        logCostAudit({
+          provider: 'groq', feature: 'epub_simplification', model: activeModel,
+          requestId: response.headers.get('x-request-id') || 'no disponible directamente',
+          inputTokens: data?.usage?.prompt_tokens ?? 'no disponible directamente',
+          outputTokens: data?.usage?.completion_tokens ?? 'no disponible directamente',
+          totalTokens: data?.usage?.total_tokens ?? 'no disponible directamente',
+          characters: paragraphs.reduce((total, paragraph) => total + paragraph.text.length, 0),
+          durationMs: Date.now() - startedAt, retry: attempt > 0, streaming: false,
+          extra: `targetLang=${targetLang} level=${level} paragraphs=${paragraphs.length}`
+        });
+        if (valid && !suspiciouslyShort) {
+          return res.status(200).json({ success: true, paragraphs: rewritten });
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (attempt === 1) {
+          return res.status(error.name === 'AbortError' ? 408 : 500).json({
+            error: error.name === 'AbortError' ? 'Tiempo de espera agotado al simplificar el EPUB.' : `Error al simplificar el EPUB: ${error.message}`
+          });
+        }
+      }
+    }
+    return res.status(422).json({ error: 'La IA devolvió una versión demasiado corta o incompleta. El texto original se conserva.' });
+  } catch (error) {
+    console.error('Server error in /api/simplify-epub-block:', error);
+    return res.status(500).json({ error: 'Error interno al simplificar el bloque EPUB.' });
+  }
+}
+
 // Translate text endpoint (Groq openai/gpt-oss-120b)
 export async function handleTranslateText(req, res) {
   setCorsHeaders(res);

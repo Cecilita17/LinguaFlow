@@ -69,6 +69,14 @@ import {
   isGlossComplete
 } from '../services/textGlossService.js';
 import { parseEpubFile } from '../services/epubService.js';
+import {
+  EPUB_SIMPLIFICATION_LEVELS,
+  buildEpubSimplificationBlocks,
+  getCachedSimplification,
+  getParagraphRepresentationKey,
+  projectSimplifiedParagraphs,
+  simplifyEpubBlockApi
+} from '../services/epubSimplificationService.js';
 import { requestAutoBackup } from '../services/autoBackupService.js';
 import { useAudioSettings, SPEECH_RATE_OPTIONS, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 import { estimateSpeechDurationMs, createAudioWordSynchronizer } from '../utils/audioWordSync.js';
@@ -226,6 +234,11 @@ export function TextReaderPage({
   // On-demand paragraph translation state: { [paragraphId]: { text, isTranslating, isVisible, error } }
   const [paragraphTranslations, setParagraphTranslations] = useState({});
 
+  // EPUB alternate representation. The original paragraphs remain canonical.
+  const [simplificationMode, setSimplificationMode] = useState({ kind: 'original', level: null });
+  const [simplificationStatus, setSimplificationStatus] = useState({ isLoading: false, error: null, blockId: null });
+  const [simplificationRetryNonce, setSimplificationRetryNonce] = useState(0);
+
   // Load existing draft if available
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
   const documentRef = useRef(document);
@@ -285,14 +298,24 @@ export function TextReaderPage({
 
   const currentChapter = isEpub && chapters[currentChapterIndex] ? chapters[currentChapterIndex] : null;
 
+  const readerParagraphs = useMemo(() => {
+    if (!document || simplificationMode.kind !== 'simplified') return document?.paragraphs || [];
+    return projectSimplifiedParagraphs({
+      paragraphs: document.paragraphs || [],
+      document,
+      level: simplificationMode.level,
+      nativeLang
+    });
+  }, [document, simplificationMode, nativeLang]);
+
   // All paragraphs belonging to the active chapter (or entire document for TXT)
   const chapterParagraphs = useMemo(() => {
-    if (!document || !Array.isArray(document.paragraphs)) return [];
+    if (!document || !Array.isArray(readerParagraphs)) return [];
     if (!isEpub || chapters.length === 0 || !currentChapter) {
-      return document.paragraphs;
+      return readerParagraphs;
     }
-    return document.paragraphs.filter(p => p.chapterId === currentChapter.id);
-  }, [document?.id, document?.paragraphs, isEpub, chapters, currentChapter]);
+    return readerParagraphs.filter(p => p.chapterId === currentChapter.id);
+  }, [document?.id, readerParagraphs, isEpub, chapters, currentChapter]);
   chapterParagraphsRef.current = chapterParagraphs;
 
   // Total pages: fixed 15 paragraphs per page for EPUB, 1 page for TXT (continuous scroll)
@@ -318,6 +341,63 @@ export function TextReaderPage({
     return chapterParagraphs.slice(start, start + PARAGRAPHS_PER_PAGE);
   }, [isEpub, chapters.length, chapterParagraphs, currentParagraphPage, totalPages]);
   visibleParagraphsRef.current = visibleParagraphs;
+
+  const ensureCurrentSimplification = useCallback(async () => {
+    if (!document || !isEpub || simplificationMode.kind !== 'simplified' || !currentChapter) return;
+    const sourceChapterParagraphs = (document.paragraphs || []).filter((paragraph) => paragraph.chapterId === currentChapter.id);
+    const currentSourceParagraph = sourceChapterParagraphs[currentParagraphPage * PARAGRAPHS_PER_PAGE];
+    const block = buildEpubSimplificationBlocks(sourceChapterParagraphs, currentChapter.id)
+      .find((candidate) => candidate.sourceParagraphIds.includes(currentSourceParagraph?.id));
+    if (!block || getCachedSimplification(document, block, simplificationMode.level)) {
+      setSimplificationStatus({ isLoading: false, error: null, blockId: block?.id || null });
+      return;
+    }
+
+    setSimplificationStatus({ isLoading: true, error: null, blockId: block.id });
+    try {
+      const cachedBlock = await simplifyEpubBlockApi({
+        block,
+        documentId: document.id,
+        targetLang: document.targetLang,
+        nativeLang,
+        level: simplificationMode.level,
+        apiKey
+      });
+      setDocument((previous) => {
+        if (!previous || previous.id !== document.id) return previous;
+        return {
+          ...previous,
+          epubSimplifications: {
+            ...(previous.epubSimplifications || {}),
+            [cachedBlock.key]: cachedBlock
+          }
+        };
+      });
+      setSimplificationStatus({ isLoading: false, error: null, blockId: block.id });
+    } catch (error) {
+      setSimplificationStatus({
+        isLoading: false,
+        error: error.message || 'No se pudo simplificar este bloque. El original sigue disponible.',
+        blockId: block.id
+      });
+    }
+  }, [document, isEpub, simplificationMode, currentChapter, currentParagraphPage, apiKey, simplificationRetryNonce]);
+
+  useEffect(() => {
+    ensureCurrentSimplification();
+  }, [ensureCurrentSimplification]);
+
+  const handleSimplificationModeChange = useCallback((value) => {
+    if (value === 'original') {
+      setSimplificationMode({ kind: 'original', level: null });
+      setSimplificationStatus({ isLoading: false, error: null, blockId: null });
+      return;
+    }
+    if (!EPUB_SIMPLIFICATION_LEVELS.includes(value)) return;
+    setSimplificationMode({ kind: 'simplified', level: value });
+    setSimplificationStatus((previous) => ({ ...previous, error: null }));
+    setSimplificationRetryNonce((previous) => previous + 1);
+  }, []);
 
   // Navigation mode: 'library' | 'importer' | 'reader'
   // Default to 'library' when entering Text Reader
@@ -1445,6 +1525,39 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     } catch (e) {}
   }, [audioBookmark, isAudioDocument, document?.paragraphs, handlePlayParagraph]);
 
+  // Writes glosses to the currently displayed representation. Simplified EPUB
+  // glosses are kept inside their cache block and can never overwrite original tokens.
+  const applyGlossedParagraphs = useCallback((updatedParagraphs) => {
+    if (!Array.isArray(updatedParagraphs) || updatedParagraphs.length === 0) return;
+    const updatedMap = new Map(updatedParagraphs.map((paragraph) => [paragraph.id, paragraph]));
+    setDocument((previous) => {
+      if (!previous || !Array.isArray(previous.paragraphs)) return previous;
+      if (simplificationMode.kind !== 'simplified') {
+        return {
+          ...previous,
+          paragraphs: previous.paragraphs.map((paragraph) => updatedMap.get(paragraph.id) || paragraph)
+        };
+      }
+      const nextSimplifications = Object.fromEntries(
+        Object.entries(previous.epubSimplifications || {}).map(([key, block]) => {
+          if (block?.level !== simplificationMode.level || !Array.isArray(block.paragraphs)) return [key, block];
+          return [key, {
+            ...block,
+            paragraphs: block.paragraphs.map((variant) => {
+              const updated = updatedMap.get(variant.sourceParagraphId);
+              return updated ? {
+                ...variant,
+                tokens: updated.tokens || variant.tokens,
+                glosses: updated.glosses || variant.glosses || []
+              } : variant;
+            })
+          }];
+        })
+      );
+      return { ...previous, epubSimplifications: nextSimplifications };
+    });
+  }, [simplificationMode]);
+
   // Trigger background AI glossing
   const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
     if (!Array.isArray(paragraphsToGloss) || paragraphsToGloss.length === 0) return;
@@ -1463,17 +1576,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       apiKey,
       abortSignal: controller.signal,
       onUpdate: (updatedParagraphs) => {
-        setDocument(prev => {
-          if (!prev || !Array.isArray(prev.paragraphs)) return prev;
-          const updatedMap = new Map(updatedParagraphs.map(p => [p.id, p]));
-          const nextParagraphs = prev.paragraphs.map(p => updatedMap.get(p.id) || p);
-          const nextDoc = {
-            ...prev,
-            paragraphs: nextParagraphs
-          };
-          saveDocument(nextDoc).catch(err => console.warn('Error saving glossing update:', err));
-          return nextDoc;
-        });
+        applyGlossedParagraphs(updatedParagraphs);
       },
       onProgress: (prog) => {
         setGlossingProgress(prog);
@@ -1500,16 +1603,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     });
 
     // Update document with immediately prepared offline tokens
-    setDocument(prev => {
-      if (!prev || !Array.isArray(prev.paragraphs)) return prev;
-      const enrichedMap = new Map(enriched.map(p => [p.id, p]));
-      const nextParagraphs = prev.paragraphs.map(p => enrichedMap.get(p.id) || p);
-      return {
-        ...prev,
-        paragraphs: nextParagraphs
-      };
-    });
-  }, [targetLang, nativeLang, apiKey]);
+    applyGlossedParagraphs(enriched);
+  }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs]);
 
   // Toggle Global Auto-Glossing (ON / OFF)
   const handleToggleAutoGlossing = useCallback(() => {
@@ -1564,7 +1659,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
   const handleResumeGlossing = () => {
     if (document && Array.isArray(document.paragraphs)) {
       setIsAutoGlossing(true);
-      triggerGlossing(document.paragraphs, targetLang);
+      triggerGlossing(isEpub ? visibleParagraphs : document.paragraphs, targetLang);
     }
   };
 
@@ -1586,21 +1681,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       });
 
       // Replace ONLY this paragraph inside document.paragraphs and persist immediately
-      setDocument(prev => {
-        if (!prev || !Array.isArray(prev.paragraphs)) return prev;
-        const updatedParagraphs = prev.paragraphs.map(p =>
-          p.id === paragraph.id ? updatedParagraph : p
-        );
-        const updatedDoc = {
-          ...prev,
-          paragraphs: updatedParagraphs
-        };
-        saveDocument(updatedDoc).then(() => {
-          refreshLibraryCount();
-        }).catch(err => console.warn('Failed to save single glossed paragraph to library:', err));
-
-        return updatedDoc;
-      });
+      applyGlossedParagraphs([updatedParagraph]);
     } catch (err) {
       console.error('Failed to gloss single paragraph:', err);
     } finally {
@@ -1610,7 +1691,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         return next;
       });
     }
-  }, [activeDocLang, nativeLang, apiKey, refreshLibraryCount]);
+  }, [activeDocLang, nativeLang, apiKey, applyGlossedParagraphs]);
 
   // Alias for backwards compatibility
   const handleGlossSingleParagraph = handleGlossParagraph;
@@ -1618,7 +1699,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
   // Individual paragraph full translation (Groq openai/gpt-oss-120b, cached in-memory per paragraph)
   const handleTranslateParagraph = useCallback(async (paragraph) => {
     if (!paragraph || !paragraph.id) return;
-    const paraId = paragraph.id;
+    const paraId = getParagraphRepresentationKey(paragraph, simplificationMode);
 
     // Check current state for this paragraph
     setParagraphTranslations(prev => {
@@ -1683,7 +1764,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         }
       }));
     }
-  }, [paragraphTranslations, activeDocLang, nativeLang, apiKey]);
+  }, [paragraphTranslations, activeDocLang, nativeLang, apiKey, simplificationMode]);
 
   // Submit / Start reading parsed text (OFFLINE ONLY: Zero AI calls!)
   const handleStartReading = async () => {
@@ -2536,6 +2617,31 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               </h2>
             </div>
 
+            {isEpub && (
+              <div className="relative shrink-0">
+                <select
+                  value={simplificationMode.kind === 'simplified' ? simplificationMode.level : 'original'}
+                  onChange={(event) => handleSimplificationModeChange(event.target.value)}
+                  disabled={simplificationStatus.isLoading}
+                  aria-label={isSpanish ? 'Modo de texto EPUB' : 'EPUB text mode'}
+                  title={simplificationStatus.isLoading
+                    ? (isSpanish ? 'Simplificando el bloque actual…' : 'Simplifying the current block…')
+                    : (isSpanish ? 'Cambiar entre el original y texto simplificado' : 'Switch between original and simplified text')}
+                  className="max-w-[118px] sm:max-w-[160px] h-8 sm:h-9 appearance-none rounded-xl border border-black/5 dark:border-white/10 bg-black/5 dark:bg-white/10 pl-2 pr-6 text-[10px] sm:text-xs font-semibold text-[var(--text-primary)] cursor-pointer focus:outline-none focus:ring-1 focus:ring-rose-500 disabled:cursor-wait disabled:opacity-70"
+                >
+                  <option value="original">{isSpanish ? 'Original' : 'Original'}</option>
+                  <option value="light">✨ {isSpanish ? 'Simplificado — Ligero' : 'Simplified — Light'}</option>
+                  <option value="medium">✨ {isSpanish ? 'Simplificado — Intermedio' : 'Simplified — Medium'}</option>
+                  <option value="strong">✨ {isSpanish ? 'Simplificado — Fuerte' : 'Simplified — Strong'}</option>
+                </select>
+                {simplificationStatus.isLoading ? (
+                  <Loader2 className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-rose-500" />
+                ) : (
+                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+                )}
+              </div>
+            )}
+
             {/* ☰ Hamburger menu — reuses existing isActionsMenuOpen / toggleActionsMenu / actionsMenuRef */}
             <div className="relative shrink-0" ref={actionsMenuRef}>
               <button
@@ -2777,6 +2883,19 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         ) : null}
       </header>
 
+          {isEpub && simplificationMode.kind === 'simplified' && simplificationStatus.error && (
+            <div className="mx-3 mt-2 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-[var(--text-primary)]" role="alert">
+              <span>{isSpanish ? `No se pudo simplificar este bloque. Se muestra el original.` : 'This block could not be simplified. The original is shown.'}</span>
+              <button
+                type="button"
+                onClick={() => setSimplificationRetryNonce((previous) => previous + 1)}
+                className="shrink-0 font-semibold text-rose-600 dark:text-rose-300 underline cursor-pointer"
+              >
+                {isSpanish ? 'Reintentar' : 'Retry'}
+              </button>
+            </div>
+          )}
+
           {/* MAIN CONTENT AREA */}
           <main
             ref={scrollContainerRef}
@@ -2919,10 +3038,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
                       isAudioBookmark={audioBookmark?.paragraphId === paragraph.id}
                       isLastAudioPosition={audioBookmark?.paragraphId === paragraph.id}
-                      translation={paragraphTranslations[paragraph.id]?.text || null}
-                      isTranslating={Boolean(paragraphTranslations[paragraph.id]?.isTranslating)}
-                      isTranslationVisible={Boolean(paragraphTranslations[paragraph.id]?.isVisible)}
-                      translationError={paragraphTranslations[paragraph.id]?.error || null}
+                      translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
+                      isTranslating={Boolean(paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.isTranslating)}
+                      isTranslationVisible={Boolean(paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.isVisible)}
+                      translationError={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.error || null}
                       onPlay={handlePlayParagraph}
                       onStop={handleStopAudio}
                       onWordClick={onWordClick}
