@@ -2307,7 +2307,15 @@ export async function handleYouTubeCaptions(req, res) {
     return res.status(200).json({ success: true, ...result });
   } catch (error) {
     const message = error?.message || 'No se pudieron obtener los subtítulos de YouTube.';
-    console.warn('[YouTubeCaptions] beta import failed:', message);
-    return res.status(422).json({ error: message });
+    const status = Number.isInteger(error?.status) ? error.status : 502;
+    const code = error?.code || 'EXTRACTOR_FAILURE';
+    // Diagnostics are deliberately sanitized by the extractor: no signed URLs,
+    // cookies or tokens are returned to the browser.
+    console.warn('[YouTubeCaptions] beta import failed:', { code, status, diagnostics: error?.diagnostics || [] });
+    return res.status(status).json({
+      error: message,
+      code,
+      diagnostics: Array.isArray(error?.diagnostics) ? error.diagnostics : []
+    });
   }
 }
