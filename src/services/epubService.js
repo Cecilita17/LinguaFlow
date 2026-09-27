@@ -124,15 +124,15 @@ async function extractEpubCoverDataUrl(zip, manifestMap, opfDoc, opfXml) {
     let coverId = opfDoc?.querySelector('metadata meta[name="cover"]')?.getAttribute('content') || '';
 
     if (!coverId) {
-      const metaMatch = opfXml.match(/<meta\\b[^>]*name=["']cover["'][^>]*content=["']([^"']+)["'][^>]*>/i)
-        || opfXml.match(/<meta\\b[^>]*content=["']([^"']+)["'][^>]*name=["']cover["'][^>]*>/i);
+      const metaMatch = opfXml.match(/<meta\b[^>]*name=["']cover["'][^>]*content=["']([^"']+)["'][^>]*>/i)
+        || opfXml.match(/<meta\b[^>]*content=["']([^"']+)["'][^>]*name=["']cover["'][^>]*>/i);
       coverId = metaMatch?.[1] || '';
     }
 
     let coverItem = coverId ? manifestMap.get(coverId) : null;
     if (!coverItem) {
       coverItem = [...manifestMap.values()].find((item) => (
-        /\\bcover-image\\b/i.test(item.properties || '')
+        /\bcover-image\b/i.test(item.properties || '')
         || (item.mediaType || '').startsWith('image/') && /cover/i.test(item.href || '')
       )) || null;
     }
