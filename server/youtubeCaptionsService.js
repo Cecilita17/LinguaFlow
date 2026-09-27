@@ -41,6 +41,34 @@ function extractJsonObject(source, marker) {
   return null;
 }
 
+function extractConfigString(source, key) {
+  const match = source.match(new RegExp(`"${key}":"([^\"]+)"`));
+  return match?.[1] || '';
+}
+
+async function fetchPlayerResponseFallback(html, videoId) {
+  const apiKey = extractConfigString(html, 'INNERTUBE_API_KEY');
+  if (!apiKey) return null;
+  const clientVersion = extractConfigString(html, 'INNERTUBE_CLIENT_VERSION') || '2.20250101.00.00';
+  const response = await fetchWithTimeout(`https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (compatible; LinguaFlow YouTube captions beta)',
+      'X-YouTube-Client-Name': '1',
+      'X-YouTube-Client-Version': clientVersion
+    },
+    body: JSON.stringify({
+      videoId,
+      contentCheckOk: true,
+      racyCheckOk: true,
+      context: { client: { clientName: 'WEB', clientVersion } }
+    })
+  });
+  if (!response.ok) return null;
+  return response.json().catch(() => null);
+}
+
 function trackLabel(track) {
   const name = track?.name?.simpleText || track?.name?.runs?.map((run) => run.text).join('') || track?.languageCode || '';
   return String(name).trim();
@@ -101,10 +129,18 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
     extractJsonObject(html, 'var ytInitialPlayerResponse =') ||
     extractJsonObject(html, 'ytInitialPlayerResponse=');
 
-  const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+  let tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+  if (tracks.length === 0) {
+    const fallbackPlayerResponse = await fetchPlayerResponseFallback(html, videoId);
+    if (fallbackPlayerResponse) {
+      playerResponse = fallbackPlayerResponse;
+      tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+    }
+  }
+
   const track = chooseTrack(tracks, preferredLanguage);
   if (!track) {
-    throw new Error('Este vídeo no tiene subtítulos CC ni subtítulos automáticos disponibles.');
+    throw new Error('YouTube no expuso una pista CC o auto-generada para este vídeo. Probá otro idioma o la importación normal.');
   }
 
   const captionUrl = new URL(track.baseUrl);
