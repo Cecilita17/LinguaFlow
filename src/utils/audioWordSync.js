@@ -24,7 +24,6 @@ export function computeTokenCharRanges(rawCleanText, tokens, targetLang = 'es') 
 
   let pos = 0;
   const isChinese = targetLang === 'zh' || /[\u4E00-\u9FFF]/.test(cleanText);
-  const isArabic = targetLang === 'ar' || /[\u0600-\u06FF]/.test(cleanText);
 
   return tokens.map((tok) => {
     if (!tok) return { startChar: -1, endChar: -1, word: '', isPunctuation: false };
@@ -256,6 +255,7 @@ export function createAudioWordSynchronizer({
 }) {
   const cleanText = normalizeAudioText(text);
   const textLength = cleanText.length;
+  const isArabic = targetLang === 'ar' || /[\u0600-\u06FF]/.test(cleanText);
   const tokenRanges = computeTokenCharRanges(cleanText, tokens, targetLang);
 
   // Extract valid non-punctuation word tokens
