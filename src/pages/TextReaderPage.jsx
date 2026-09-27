@@ -1063,7 +1063,367 @@ export function TextReaderPage({
           setCurrentParagraphPage(nextPage);
           if (scrollContainerRef.current) {
             scrollContainerRef.current.scrollTop = 0;
-            previousScrollTopRefarIndex(-1);
+            previousScrollTopRef.current = 0;
+          }
+          setIsHeaderHidden(false);
+          setTimeout(() => {
+            isProgrammaticScrollRef.current = false;
+            if (scrollContainerRef.current) {
+              previousScrollTopRef.current = scrollContainerRef.current.scrollTop;
+            }
+          }, 250);
+        }
+        handlePlayParagraphRef.current(nextPara);
+        setTimeout(() => {
+          try {
+            const el = window.document.querySelector(`[data-paragraph-id="${nextPara.id}"]`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          } catch (scrollErr) {}
+        }, 80);
+      }
+    }
+  }, [isEpub]);
+
+/**
+ * Calculates real-time character highlight position inside an active paragraph.
+ * Respects Whisper segment bounds and freezes during silence/pauses instead of
+ * linearly interpolating across silence gaps.
+ */
+function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
+  if (!activePara || !activePara.text) return -1;
+  const paraText = activePara.text;
+  const pStart = activePara.audioStart;
+  const pEnd = activePara.audioEnd;
+  if (typeof pStart !== 'number' || typeof pEnd !== 'number' || pEnd <= pStart) return -1;
+
+  const matchingSegs = (Array.isArray(activePara.audioSegments) && activePara.audioSegments.length > 0)
+    ? activePara.audioSegments
+    : (Array.isArray(audioSegments) ? audioSegments : []).filter(s =>
+        typeof s.start === 'number' && typeof s.end === 'number' &&
+        s.end > (pStart - 0.05) && s.start < (pEnd + 0.05)
+      );
+
+  // If no segment data is available, do not advance characters into silence
+  if (matchingSegs.length === 0) {
+    return 0;
+  }
+
+  // Calculate character spans of each segment inside the paragraph text
+  let cursor = 0;
+  const segSpans = matchingSegs.map((seg, i) => {
+    const cleanSegText = (seg.text || '').trim();
+    let startIdx = cursor;
+    let endIdx = cursor;
+
+    if (cleanSegText) {
+      const foundIdx = paraText.indexOf(cleanSegText, cursor);
+      if (foundIdx !== -1) {
+        startIdx = foundIdx;
+        endIdx = foundIdx + cleanSegText.length;
+        cursor = endIdx;
+      } else {
+        const remainingChars = Math.max(1, paraText.length - cursor);
+        const estLen = Math.max(1, Math.min(remainingChars, cleanSegText.length));
+        startIdx = cursor;
+        endIdx = Math.min(paraText.length, cursor + estLen);
+        cursor = endIdx;
+      }
+    }
+    return {
+      start: seg.start,
+      end: seg.end,
+      startChar: startIdx,
+      endChar: Math.max(startIdx + 1, endIdx)
+    };
+  });
+
+  // 1. Check if newTime is currently INSIDE one of the speech segments
+  for (const span of segSpans) {
+    if (newTime >= span.start && newTime <= span.end) {
+      const segDur = Math.max(0.05, span.end - span.start);
+      const segProg = Math.max(0, Math.min(1, (newTime - span.start) / segDur));
+      const charSpanLen = span.endChar - span.startChar;
+      return Math.min(paraText.length - 1, span.startChar + Math.floor(segProg * charSpanLen));
+    }
+  }
+
+  // 2. newTime is in a SILENCE GAP between segments (e.g. narrator pause)
+  // Freeze at the end of the last finished segment during the silence!
+  let lastFinishedSpan = null;
+  for (const span of segSpans) {
+    if (span.end <= newTime) {
+      lastFinishedSpan = span;
+    }
+  }
+
+  if (lastFinishedSpan) {
+    return Math.min(paraText.length - 1, lastFinishedSpan.endChar - 1);
+  }
+
+  return segSpans[0]?.startChar ?? 0;
+}
+
+  // Playback time update handler — 100% decoupled from bookmarks
+  const handleAudioTimeUpdate = useCallback((newTime) => {
+    if (typeof newTime !== 'number' || isNaN(newTime)) return;
+    setAudioCurrentTime(newTime);
+    latestAudioPositionRef.current.time = newTime;
+
+    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
+    const audioSegments = document?.audioSegments || [];
+
+    if (Array.isArray(allParas) && allParas.length > 0) {
+      const activePara = allParas.find(p =>
+        typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
+        newTime >= p.audioStart && newTime < p.audioEnd
+      );
+      if (activePara) {
+        latestAudioPositionRef.current.paragraphId = activePara.id;
+        if (playingParagraphIdRef.current !== activePara.id) {
+          setPlayingParagraphId(activePara.id);
+          playingParagraphIdRef.current = activePara.id;
+          try {
+            const el = window.document.querySelector(`[data-paragraph-id="${activePara.id}"]`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          } catch (e) {}
+        }
+
+        // Calculate segment-aware character index without absorbing silence gaps
+        const charIndex = getSegmentAwareCharIndex(activePara, audioSegments, newTime);
+        setActiveAudioCharIndex(charIndex);
+      } else {
+        // newTime is outside speech (e.g. music/intro 0-30s or trailing audio)
+        const firstParaStart = allParas[0]?.audioStart;
+        if (typeof firstParaStart === 'number' && newTime < firstParaStart) {
+          if (playingParagraphIdRef.current) {
+            setPlayingParagraphId(null);
+            playingParagraphIdRef.current = null;
+            setActiveAudioCharIndex(-1);
+          }
+        }
+      }
+    }
+  }, [document?.paragraphs, document?.audioSegments]);
+
+  const handleAudioSeek = useCallback((seekTime) => {
+    if (typeof seekTime !== 'number' || isNaN(seekTime)) return;
+    setAudioCurrentTime(seekTime);
+    latestAudioPositionRef.current.time = seekTime;
+  }, []);
+
+  const handleAudioPause = useCallback((pausedTime) => {
+    if (typeof pausedTime === 'number' && !isNaN(pausedTime)) {
+      setAudioCurrentTime(pausedTime);
+      latestAudioPositionRef.current.time = pausedTime;
+    }
+    setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
+    setActiveAudioCharIndex(-1);
+  }, []);
+
+  const handleAudioEnded = useCallback(() => {
+    setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
+    setActiveAudioCharIndex(-1);
+  }, []);
+
+  const handleAudioError = useCallback((err) => {
+    console.warn('[TextReader] Original audio playback error:', err);
+    if (playingParagraphIdRef.current) {
+      setAudioErrorId(playingParagraphIdRef.current);
+    }
+    setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
+    setActiveAudioCharIndex(-1);
+  }, []);
+
+  // Handle single-paragraph playback (Original Audio if imported, window.speechSynthesis TTS otherwise)
+  const handlePlayParagraph = useCallback((paragraph) => {
+    if (!paragraph || !paragraph.text) return;
+    const playbackId = ++audioPlaybackIdRef.current;
+    userStoppedRef.current = false;
+    clearAudioVisualTimer();
+
+    // Check if document has original imported audio
+    const isAudioDoc = Boolean(
+      isAudioDocument ||
+      document?.sourceType === 'audio' ||
+      document?.format === 'audio' ||
+      document?.audioPathname ||
+      document?.audioUrl ||
+      document?.audioBlob
+    );
+
+    if (isAudioDoc) {
+      // 1. CANCEL TTS if active
+      try {
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+      } catch (e) {}
+
+      if (typeof paragraph.audioStart === 'number' && typeof paragraph.audioEnd === 'number') {
+        setAudioErrorId(null);
+        setPlayingParagraphId(paragraph.id);
+        playingParagraphIdRef.current = paragraph.id;
+        latestAudioPositionRef.current.paragraphId = paragraph.id;
+
+        const startTime = Math.max(0, paragraph.audioStart);
+        latestAudioPositionRef.current.time = startTime;
+        setActiveAudioCharIndex(0);
+
+        if (audioPlayerRef.current) {
+          if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
+            audioPlayerRef.current.seekAndPlay(startTime);
+          } else if (typeof audioPlayerRef.current.seek === 'function') {
+            audioPlayerRef.current.seek(startTime, true);
+          }
+        }
+      } else {
+        console.warn('[TextReader] Audio document paragraph has no valid alignment timestamps:', paragraph.id);
+        setAudioErrorId(paragraph.id);
+      }
+      return;
+    }
+
+    // 2. Fallback to 100% UNCHANGED SpeechSynthesis TTS for normal documents (TXT, EPUB, AI)
+    if (audioPlayerRef.current) {
+      try { audioPlayerRef.current.pause(); } catch (e) {}
+    }
+
+    if (!window.speechSynthesis) {
+      setAudioErrorId(paragraph.id);
+      return;
+    }
+
+    // Cancel any current utterance
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+
+    setAudioErrorId(null);
+    setPlayingParagraphId(paragraph.id);
+    playingParagraphIdRef.current = paragraph.id;
+    latestAudioPositionRef.current.paragraphId = paragraph.id;
+    setActiveAudioCharIndex(0);
+
+    const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
+    const speechCode = paragraph.tts?.speechCode || getLanguageMeta(docLang)?.speechCode || 'zh-CN';
+    const cleanText = paragraph.text.replace(/<[^>]*>/g, '').trim();
+    const textLength = cleanText.length;
+    const currentRate = speechRateRef.current || speechRate || 1.0;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = speechCode;
+
+    const utteranceRate = mapSpeechRateToUtteranceRate(currentRate);
+    utterance.rate = utteranceRate;
+
+    // Select suitable voice if available
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(speechCode.slice(0, 2).toLowerCase()));
+      if (matchingVoice) {
+        utterance.voice = matchingVoice;
+      }
+    } catch (voiceErr) {}
+
+    // Create encapsulated Audio Word Synchronizer for boundary-anchored local token progression
+    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+    let prevActiveCharIndex = -1;
+    const synchronizer = createAudioWordSynchronizer({
+      text: cleanText,
+      tokens: paragraph.tokens || [],
+      targetLang: activeDocLang,
+      speechRate: currentRate,
+      utteranceRate,
+      paragraphId: paragraph.id,
+      playbackId,
+      isAndroid,
+      onActiveCharChange: (charIndex) => {
+        if (playbackId !== audioPlaybackIdRef.current) return;
+        if (isAndroid && charIndex >= 0) {
+          const matchedTok = synchronizer.wordTokens.find(wt => wt.startChar === charIndex);
+          if (prevActiveCharIndex >= 0 && charIndex > prevActiveCharIndex) {
+            const prevTok = synchronizer.wordTokens.find(wt => wt.startChar === prevActiveCharIndex);
+            const prevPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === prevActiveCharIndex);
+            const currPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === charIndex);
+          }
+          prevActiveCharIndex = charIndex;
+        }
+        setActiveAudioCharIndex(charIndex);
+      },
+      debug: process.env.NODE_ENV !== 'production'
+    });
+    audioSynchronizerRef.current = synchronizer;
+
+    utterance.onstart = (event) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      synchronizer.handleStart(event);
+    };
+
+    utterance.onboundary = (event) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      synchronizer.handleBoundary(event);
+    };
+
+    utterance.onpause = (event) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      synchronizer.handlePause(event);
+    };
+
+    utterance.onresume = (event) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      synchronizer.handleResume(event);
+    };
+
+    utterance.onend = (event) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      synchronizer.handleEnd(event);
+      setPlayingParagraphId(null);
+      playingParagraphIdRef.current = null;
+      setActiveAudioCharIndex(-1);
+      advanceToNextParagraph(paragraph);
+    };
+
+    utterance.onerror = (e) => {
+      if (playbackId !== audioPlaybackIdRef.current) return;
+      synchronizer.stop();
+      setPlayingParagraphId(null);
+      playingParagraphIdRef.current = null;
+      setActiveAudioCharIndex(-1);
+      if (!userStoppedRef.current) {
+        console.warn('TTS playback error for paragraph:', paragraph.id, e);
+        setAudioErrorId(paragraph.id);
+      }
+    };
+
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (speakErr) {
+      console.warn('SpeechSynthesis speak call error:', speakErr);
+    }
+  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate]);
+
+  handlePlayParagraphRef.current = handlePlayParagraph;
+
+  const handleStopAudio = useCallback(() => {
+    userStoppedRef.current = true;
+    audioPlaybackIdRef.current++;
+    clearAudioVisualTimer();
+    if (audioPlayerRef.current) {
+      try {
+        audioPlayerRef.current.pause();
+      } catch (e) {}
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
+    setActiveAudioCharIndex(-1);
   }, [clearAudioVisualTimer]);
 
   // Manual Audio Bookmark Persistence — ONLY saved upon explicit user action
@@ -1201,9 +1561,62 @@ export function TextReaderPage({
       nativeLang,
       apiKey,
       abortSignal: controller.signal,
-      onUpssing.length === 0) {
+      onUpdate: (updatedParagraphs) => {
+        applyGlossedParagraphs(updatedParagraphs);
+      },
+      onProgress: (prog) => {
+        setGlossingProgress(prog);
+        if (!prog.isGlossing) {
+          setIsAutoGlossing(false);
+          if (!prog.isPaused) {
+            const completedCount = prog.completed;
+            const totalCount = prog.total;
+            const failedCount = (typeof prog.failed === 'number' && prog.failed >= 0) ? prog.failed : (totalCount - completedCount);
+            if (completedCount === totalCount) {
+              setGlossNotice({
+                message: isSpanish ? `Glosado terminado: ${totalCount}/${totalCount}` : `Glossing complete: ${totalCount}/${totalCount}`,
+                type: 'success'
+              });
+            } else {
+              setGlossNotice({
+                message: isSpanish ? `Glosado terminado: ${completedCount}/${totalCount}. ${failedCount} pendientes.` : `Glossing complete: ${completedCount}/${totalCount}. ${failedCount} pending.`,
+                type: 'warning'
+              });
+            }
+          }
+        }
+      }
+    });
+
+    // Update document with immediately prepared offline tokens
+    applyGlossedParagraphs(enriched);
+  }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs, isSpanish]);
+
+  // Toggle Global Auto-Glossing (ON / OFF)
+  const handleToggleAutoGlossing = useCallback(() => {
+    if (isAutoGlossing) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsAutoGlossing(false);
+      setGlossingProgress(prev => ({
+        ...prev,
+        isGlossing: false,
+        isPaused: true
+      }));
+    } else {
+      const paragraphsToGloss = (isEpub && visibleParagraphs.length > 0)
+        ? visibleParagraphs
+        : (document?.paragraphs || []);
+      if (!paragraphsToGloss || paragraphsToGloss.length === 0) return;
+
+      const activeTarget = activeDocLang || targetLang;
+      const missing = paragraphsToGloss.filter(p => !isGlossComplete(p, activeTarget, nativeLang));
+
+      if (missing.length === 0) {
         setGlossNotice({
-          message: `Glosado terminado: ${paragraphsToGloss.length}/${paragraphsToGloss.length}`,
+          message: isSpanish ? `Glosado terminado: ${paragraphsToGloss.length}/${paragraphsToGloss.length}` : `Glossing complete: ${paragraphsToGloss.length}/${paragraphsToGloss.length}`,
           type: 'success'
         });
         return;
@@ -1212,7 +1625,7 @@ export function TextReaderPage({
       setIsAutoGlossing(true);
       triggerGlossing(paragraphsToGloss, activeDocLang);
     }
-  }, [isAutoGlossing, document, isEpub, visibleParagraphs, activeDocLang, targetLang, nativeLang, triggerGlossing]);
+  }, [isAutoGlossing, document, isEpub, visibleParagraphs, activeDocLang, targetLang, nativeLang, triggerGlossing, isSpanish]);
 
   // Stop/Pause glossing
   const handleStopGlossing = () => {
