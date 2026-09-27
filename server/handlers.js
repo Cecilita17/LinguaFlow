@@ -1860,12 +1860,12 @@ THIS IS NOT A SUMMARY. DO NOT SUMMARIZE. Preserve all information, events, chara
 ${levelInstructions[level]}
 
 Return STRICT JSON only in this exact shape:
-{"paragraphs":[{"sourceParagraphId":"original id","text":"rewritten paragraph in the original language"}]}
+{"paragraphs":[{"text":"rewritten paragraph in the original language"}]}
 
-Return exactly one rewritten paragraph for every input paragraph, in the same order and with the same sourceParagraphId. Keep paragraph boundaries whenever practical. ${strictRetry ? 'Your previous attempt was too short. This time preserve the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
+Return exactly one rewritten paragraph for every input paragraph, in the same order. Do not include paragraph IDs or indexes in your response; the server restores their stable identities. Keep paragraph boundaries whenever practical. ${strictRetry ? 'Your previous attempt was too short. This time preserve the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
 
 Input paragraphs:
-${JSON.stringify(paragraphs)}`;
+${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.text })))}`;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = new AbortController();
@@ -1899,9 +1899,15 @@ ${JSON.stringify(paragraphs)}`;
         const data = await response.json();
         const parsed = cleanAndParseJSON(data?.choices?.[0]?.message?.content || '');
         const rewritten = Array.isArray(parsed?.paragraphs) ? parsed.paragraphs : [];
-        const valid = rewritten.length === paragraphs.length
-          && rewritten.every((paragraph, index) => paragraph?.sourceParagraphId === paragraphs[index].sourceParagraphId && typeof paragraph?.text === 'string' && paragraph.text.trim());
-        const resultText = rewritten.map((paragraph) => String(paragraph?.text || '')).join(' ');
+        // The model only needs to preserve order. Reattach stable source IDs here
+        // instead of requiring it to copy opaque EPUB paragraph IDs verbatim.
+        const normalizedRewritten = rewritten.map((paragraph, index) => ({
+          sourceParagraphId: paragraphs[index]?.sourceParagraphId,
+          text: String(paragraph?.text || '').trim()
+        }));
+        const valid = normalizedRewritten.length === paragraphs.length
+          && normalizedRewritten.every((paragraph) => paragraph.sourceParagraphId && paragraph.text);
+        const resultText = normalizedRewritten.map((paragraph) => paragraph.text).join(' ');
         const resultWordCount = (resultText.match(/[\p{L}\p{N}]+/gu) || []).length;
         const suspiciouslyShort = resultWordCount < Math.max(20, sourceWordCount * 0.58);
         logCostAudit({
@@ -1915,7 +1921,7 @@ ${JSON.stringify(paragraphs)}`;
           extra: `targetLang=${targetLang} level=${level} paragraphs=${paragraphs.length}`
         });
         if (valid && !suspiciouslyShort) {
-          return res.status(200).json({ success: true, paragraphs: rewritten });
+          return res.status(200).json({ success: true, paragraphs: normalizedRewritten });
         }
       } catch (error) {
         clearTimeout(timeoutId);
