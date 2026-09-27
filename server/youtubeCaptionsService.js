@@ -264,7 +264,12 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
   }
 
   const captionBody = await captionsResponse.text();
-  const payload = JSON.parse(captionBody || 'null');
+  let payload = null;
+  try {
+    payload = JSON.parse(captionBody || 'null');
+  } catch {
+    // Public timedtext endpoints can return XML even when fmt=json3 is requested.
+  }
   const jsonSubtitles = (payload?.events || [])
     .map((event) => {
       const text = captionText(event);
