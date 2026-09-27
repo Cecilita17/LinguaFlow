@@ -45,8 +45,20 @@ function playbackFailure(structure, diagnostics) {
   const reason = structure.playabilityReason || '';
   const details = { status: 403, diagnostics };
 
-  if (/LOGIN_REQUIRED|AGE_CHECK_REQUIRED|CONTENT_CHECK_REQUIRED/i.test(status)) {
+  if (/proof of origin|po token|potoken/i.test(`${status} ${reason}`)) {
+    return new YouTubeCaptionExtractionError('YOUTUBE_POT_REQUIRED', 'YouTube exige una verificación adicional para consultar este vídeo.', details);
+  }
+
+  if (/not a bot|confirm.*bot|unusual traffic|automated/i.test(reason)) {
+    return new YouTubeCaptionExtractionError('YOUTUBE_TEMPORARILY_BLOCKED', 'YouTube solicitó una verificación anti-bot al servidor. Probá nuevamente más tarde.', { status: 429, diagnostics });
+  }
+
+  if (/AGE_CHECK_REQUIRED|CONTENT_CHECK_REQUIRED/i.test(status) || (status === 'LOGIN_REQUIRED' && /age|mature/i.test(reason))) {
     return new YouTubeCaptionExtractionError('VIDEO_RESTRICTED', 'YouTube requiere iniciar sesión o una verificación para acceder a este vídeo.', details);
+  }
+
+  if (status === 'LOGIN_REQUIRED') {
+    return new YouTubeCaptionExtractionError('YOUTUBE_TEMPORARILY_BLOCKED', 'YouTube rechazó temporalmente la consulta del servidor y pidió iniciar sesión.', { status: 429, diagnostics });
   }
 
   if (/UNPLAYABLE|ERROR/i.test(status)) {

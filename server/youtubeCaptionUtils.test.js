@@ -154,6 +154,20 @@ test('distinguishes confirmed absent captions from track-discovery failures', as
   );
 });
 
+test('does not misclassify YouTube anti-bot login challenges as a user video restriction', async () => {
+  const blockedInfo = {
+    basic_info: { title: 'Test video' },
+    playability_status: { status: 'LOGIN_REQUIRED', reason: 'Sign in to confirm you’re not a bot' }
+  };
+  await assert.rejects(
+    fetchYouTubeCaptions(
+      { videoId: 'abcdefghijk', preferredLanguage: 'auto' },
+      { innertubeFactory: factoryByClient({ ANDROID: blockedInfo, IOS: blockedInfo, WEB: blockedInfo }) }
+    ),
+    { code: 'YOUTUBE_TEMPORARILY_BLOCKED' }
+  );
+});
+
 test('returns the direct download failure after direct and getTranscript both fail', async () => {
   const brokenInfo = info([manualEnglish]);
   brokenInfo.getTranscript = async () => { throw new Error('Transcript panel not found'); };
