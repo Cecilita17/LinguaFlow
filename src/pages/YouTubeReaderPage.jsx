@@ -964,7 +964,7 @@ export function YouTubeReaderPage({
       });
   };
 
-  const handleSubtitlesLoaded = useCallback(async (newSubtitles, format, sourceName) => {
+  const handleSubtitlesLoaded = useCallback(async (newSubtitles, format, sourceName, videoContext = null) => {
     flushPlaybackPosition();
     abortGlossWithLog('handleSubtitlesLoaded');
     if (progressiveTokenizeRef.current) {
@@ -975,6 +975,9 @@ export function YouTubeReaderPage({
     setSubtitleFormat(format);
     setSubtitleSource(sourceName);
     setIsAutoGlossing(false);
+    const importVideoId = videoContext?.videoId || videoId || 'novideo';
+    const importVideoUrl = videoContext?.videoUrl || videoUrl || (importVideoId !== 'novideo' ? `https://www.youtube.com/watch?v=${importVideoId}` : '');
+    const importVideoTitle = videoContext?.videoTitle || '';
 
     // Normalize safely (filters invalid/empty items and ensures all properties exist)
     const normalized = normalizeSubtitlesSafely(newSubtitles, format || 'sub');
@@ -985,12 +988,12 @@ export function YouTubeReaderPage({
     }
 
     const subHash = computeSubtitleHash(normalized);
-    const recId = getLibraryKey(videoId || 'novideo', subHash, targetLang);
+    const recId = getLibraryKey(importVideoId, subHash, targetLang);
     setCurrentRecordId(recId);
 
     // Check if transcript already exists in library ($0 Groq cost reuse)
     try {
-      const existing = await getTranscriptFromLibrary(videoId || 'novideo', subHash, targetLang);
+      const existing = await getTranscriptFromLibrary(importVideoId, subHash, targetLang);
       if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
         handleLoadFromLibrary(existing);
         return;
@@ -1004,20 +1007,20 @@ export function YouTubeReaderPage({
 
     // Persist initial record in library with position (uses shared position if existing)
     try {
-      const sharedPos = videoId ? getSharedPlaybackPosition(videoId) : null;
+      const sharedPos = importVideoId !== 'novideo' ? getSharedPlaybackPosition(importVideoId) : null;
       const initialTime = sharedPos?.lastPlaybackTime || 0;
       const initialSubId = sharedPos?.lastSubtitleId || null;
 
-      const effectiveVideoId = videoId || 'novideo';
-      const effectiveTitle = (videoTitle && titleVideoIdRef.current === effectiveVideoId)
+      const effectiveVideoId = importVideoId;
+      const effectiveTitle = importVideoTitle || ((videoTitle && titleVideoIdRef.current === effectiveVideoId)
         ? videoTitle
-        : `YouTube Video (${effectiveVideoId})`;
+        : `YouTube Video (${effectiveVideoId})`);
 
       await saveTranscriptToLibrary({
         id: recId,
         videoId: effectiveVideoId,
         videoTitle: effectiveTitle,
-        videoUrl: videoUrl || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : ''),
+        videoUrl: importVideoUrl,
         targetLanguage: targetLang,
         nativeLanguage: nativeLang,
         sourceType: sourceName || 'srt',
@@ -1038,6 +1041,35 @@ export function YouTubeReaderPage({
     // Navigate to Reader where the user can watch the video with the imported transcript
     navigateToView('reader');
   }, [videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition, navigateToView, abortGlossWithLog]);
+  const handleImportCaptions = useCallback(async (payload) => {
+    if (!payload?.videoId || !Array.isArray(payload.subtitles)) return;
+    flushPlaybackPosition();
+    abortGlossWithLog('handleImportCaptions');
+    if (progressiveTokenizeRef.current) {
+      progressiveTokenizeRef.current.abort();
+      progressiveTokenizeRef.current = null;
+    }
+
+    const importedVideoId = payload.videoId;
+    const importedVideoUrl = payload.videoUrl || `https://www.youtube.com/watch?v=${importedVideoId}`;
+    const importedTitle = payload.title || `YouTube Video (${importedVideoId})`;
+    activeVideoIdRef.current = importedVideoId;
+    titleVideoIdRef.current = importedVideoId;
+    setVideoId(importedVideoId);
+    setVideoUrl(importedVideoUrl);
+    setVideoTitle(importedTitle);
+    setVideoLanguage(payload.languageCode || 'auto');
+    setCurrentTime(0);
+    setCurrentRecordId('');
+    latestPositionRef.current = { videoId: importedVideoId, recordId: '', time: 0, subId: null };
+
+    await handleSubtitlesLoaded(
+      payload.subtitles,
+      'youtube-json3',
+      payload.source || 'YouTube captions (Beta)',
+      { videoId: importedVideoId, videoUrl: importedVideoUrl, videoTitle: importedTitle }
+    );
+  }, [flushPlaybackPosition, abortGlossWithLog, handleSubtitlesLoaded]);
 
   const handleFileUpload = (file) => {
     if (!file) return;
@@ -1277,6 +1309,7 @@ export function YouTubeReaderPage({
           <div className="space-y-4 max-w-2xl mx-auto w-full">
             <YouTubeImporter
               onImportVideo={handleImportVideo}
+              onImportCaptions={handleImportCaptions}
               initialUrl={videoUrl}
               selectedLanguage={videoLanguage}
               onLanguageChange={setVideoLanguage}
