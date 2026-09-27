@@ -243,8 +243,14 @@ export function HabitTrackerPage({
   const trackedLanguageCodes = trackerData.settings?.trackedLanguages || [];
 
   const trackedLanguages = useMemo(() => {
-    return allLanguages.filter(lang => trackedLanguageCodes.includes(lang.code));
-  }, [allLanguages, trackedLanguageCodes]);
+    return allLanguages
+      .filter(lang => trackedLanguageCodes.includes(lang.code))
+      .sort((first, second) => {
+        if (first.code === targetLang) return -1;
+        if (second.code === targetLang) return 1;
+        return 0;
+      });
+  }, [allLanguages, trackedLanguageCodes, targetLang]);
 
   const daysInCurrentMonth = useMemo(() => {
     return getDaysInMonth(currentYear, currentMonth);
