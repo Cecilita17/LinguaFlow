@@ -155,6 +155,7 @@ export function YouTubeReaderPage({
   const [interlinearMode, setInterlinearMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isUrlImporterOpen, setIsUrlImporterOpen] = useState(false);
+  const [youtubeImportMode, setYoutubeImportMode] = useState('normal');
 
   // Auto-backup trigger strictly upon content exit/closure with stable videoId
   const viewModeRef = useRef(viewMode);
@@ -1310,21 +1311,24 @@ export function YouTubeReaderPage({
             <YouTubeImporter
               onImportVideo={handleImportVideo}
               onImportCaptions={handleImportCaptions}
+              onImportModeChange={setYoutubeImportMode}
               initialUrl={videoUrl}
               selectedLanguage={videoLanguage}
               onLanguageChange={setVideoLanguage}
             />
 
-            <SubtitleImporter
-              onSubtitlesLoaded={handleSubtitlesLoaded}
-              subtitlesCount={subtitles.length}
-              currentFormat={subtitleFormat}
-              onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
-              glossProgress={glossProgress}
-              onStopOrPauseGlossing={handleStopOrPauseGlossing}
-              onResumeGlossing={handleResumeGlossing}
-              targetLang={targetLang}
-            />
+            {youtubeImportMode !== 'beta' && (
+              <SubtitleImporter
+                onSubtitlesLoaded={handleSubtitlesLoaded}
+                subtitlesCount={subtitles.length}
+                currentFormat={subtitleFormat}
+                onClearSubtitles={subtitles.length > 0 ? handleClearSubtitles : null}
+                glossProgress={glossProgress}
+                onStopOrPauseGlossing={handleStopOrPauseGlossing}
+                onResumeGlossing={handleResumeGlossing}
+                targetLang={targetLang}
+              />
+            )}
           </div>
         </div>
       ) : (
