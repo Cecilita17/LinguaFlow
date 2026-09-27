@@ -146,7 +146,7 @@ export function ImageLibraryView({
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-rose-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-600 via-rose-500 to-pink-400 flex items-center justify-center text-white shrink-0 shadow-sm">
               <Camera className="w-4 h-4" />
             </div>
             <h1 className="font-bold text-sm sm:text-base text-[var(--text-primary)] truncate">
