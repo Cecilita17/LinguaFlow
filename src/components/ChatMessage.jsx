@@ -880,15 +880,15 @@ export function ChatMessage({
                 <Globe className="w-3.5 h-3.5" />
               </button>
             )}
+            <button
+              onClick={handleCopy}
+              className="p-1.5 rounded-lg bg-stone-100 dark:bg-[var(--surface-primary)] hover:bg-rose-100 hover:text-rose-900 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 text-stone-700 dark:text-[var(--text-secondary)] transition-colors cursor-pointer border border-transparent dark:border-[var(--border-primary)]"
+              title={isSpanish ? "Copiar texto" : "Copy text"}
+              aria-label={isSpanish ? "Copiar texto" : "Copy text"}
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-amber-600" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
           </div>
-
-          <button
-            onClick={handleCopy}
-            className="p-1 text-stone-400 dark:text-[var(--text-muted)] hover:text-stone-700 dark:hover:text-[var(--text-primary)] hover:bg-stone-100 dark:hover:bg-[var(--surface-primary)] rounded-md transition-colors cursor-pointer"
-            title={isSpanish ? "Copiar texto" : "Copy text"}
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-amber-600" /> : <Copy className="w-3.5 h-3.5 text-stone-400 dark:text-[var(--text-muted)]" />}
-          </button>
         </div>
       </div>
     </div>
