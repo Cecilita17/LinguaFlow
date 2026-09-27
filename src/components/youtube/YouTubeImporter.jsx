@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { validateYouTubeUrl } from '../../services/youtubeService.js';
-import { Youtube, Search, AlertCircle, Globe, Check } from 'lucide-react';
+import { Youtube, Search, AlertCircle, Globe, Check, Loader2, Sparkles } from 'lucide-react';
+import { API_BASE_URL } from '../../services/chatService.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 const SUPPORTED_VIDEO_LANGUAGES = [
@@ -22,6 +23,7 @@ const SUPPORTED_VIDEO_LANGUAGES = [
 
 export function YouTubeImporter({
   onImportVideo,
+  onImportCaptions,
   initialUrl = '',
   selectedLanguage = 'auto',
   onLanguageChange
@@ -30,14 +32,40 @@ export function YouTubeImporter({
   const [urlInput, setUrlInput] = useState(initialUrl);
   const [error, setError] = useState(null);
   const [justImported, setJustImported] = useState(false);
+  const [importMode, setImportMode] = useState('normal');
+  const [isLoadingCaptions, setIsLoadingCaptions] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
     const validation = validateYouTubeUrl(urlInput);
     if (!validation.isValid) {
       setError(validation.error);
+      return;
+    }
+
+    if (importMode === 'beta') {
+      if (!onImportCaptions) return;
+      setIsLoadingCaptions(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/youtube-captions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: validation.videoId, preferredLanguage: selectedLanguage })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.success || !Array.isArray(payload.subtitles)) {
+          throw new Error(payload.error || 'No se pudieron cargar los subtítulos de YouTube.');
+        }
+        onImportCaptions({ ...payload, videoId: validation.videoId, videoUrl: urlInput.trim() });
+        setJustImported(true);
+        setTimeout(() => setJustImported(false), 2000);
+      } catch (err) {
+        setError(err.message || 'No se pudieron cargar los subtítulos de YouTube.');
+      } finally {
+        setIsLoadingCaptions(false);
+      }
       return;
     }
 
