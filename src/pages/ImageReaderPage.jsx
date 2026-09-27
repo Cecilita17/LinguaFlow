@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   ArrowLeft,
   Sparkles,
@@ -16,6 +16,7 @@ import {
 import { ImageUploader } from '../components/image/ImageUploader.jsx';
 import { ImageLibraryView } from '../components/image/ImageLibraryView.jsx';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
+import { CreateWithAiModal } from '../components/text/CreateWithAiModal.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { describeImageApi } from '../services/imageDescriptionService.js';
 import {
@@ -28,9 +29,10 @@ import {
   enrichParagraphsWithGlosses,
   isGlossComplete
 } from '../services/textGlossService.js';
-import { translateParagraphTextApi } from '../services/textDocumentService.js';
+import { translateParagraphTextApi, createTextDocument, saveDocument } from '../services/textDocumentService.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useSavedWords, getSavedWordsInParagraphs } from '../context/SavedWordsContext.jsx';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
 import { getLanguageMeta, isRtlLanguage, getTextDirection } from '../constants/languages.js';
@@ -182,6 +184,7 @@ export function ImageReaderPage({
   setActiveTab
 }) {
   const { user } = useAuth();
+  const { savedWords } = useSavedWords();
   const { isSpanish } = useSiteLanguage();
   const { speechRate } = useAudioSettings();
 
@@ -213,6 +216,7 @@ export function ImageReaderPage({
   const [resultTitle, setResultTitle] = useState('');
   const [paragraphs, setParagraphs] = useState([]);
   const [usedModel, setUsedModel] = useState('');
+  const [isPracticeAiModalOpen, setIsPracticeAiModalOpen] = useState(false);
 
   // Linguistic UI preferences
   const [interlinearMode, setInterlinearMode] = useState(true);
@@ -507,6 +511,41 @@ export function ImageReaderPage({
       setIsBatchGlossing(false);
     }
   }, [isBatchGlossing, paragraphs, targetLang, nativeLang, apiKey, persistDocumentChanges]);
+
+  const practiceVocabulary = useMemo(
+    () => getSavedWordsInParagraphs(savedWords, paragraphs, targetLang),
+    [savedWords, paragraphs, targetLang]
+  );
+  const practiceTextCharacterCount = useMemo(
+    () => paragraphs.reduce((total, paragraph) => total + (paragraph?.text || '').length, 0),
+    [paragraphs]
+  );
+  const canCreateVocabularyPractice = (
+    paragraphs.length > 0 &&
+    paragraphs.length <= 25 &&
+    practiceTextCharacterCount <= 6000 &&
+    practiceVocabulary.length > 0 &&
+    practiceVocabulary.length <= 30
+  );
+
+  const handlePracticeTextGenerated = useCallback(async ({ title, text }) => {
+    const rawText = String(text || '').trim();
+    if (!rawText) throw new Error(isSpanish ? 'La IA no generó un texto.' : 'AI did not generate a text.');
+
+    const practiceDoc = createTextDocument({
+      title: String(title || '').trim() || (isSpanish ? 'Práctica con IA' : 'AI Practice'),
+      rawText,
+      targetLang,
+      nativeLang,
+      sourceType: 'ai',
+      format: 'txt',
+      createdAt: new Date().toISOString()
+    });
+    const saved = await saveDocument(practiceDoc);
+    if (!saved) throw new Error(isSpanish ? 'No se pudo guardar el texto de práctica.' : 'Could not save the practice text.');
+
+    if (setActiveTab) setActiveTab('text');
+  }, [targetLang, nativeLang, isSpanish, setActiveTab]);
 
   // Main generation trigger
   const handleGenerateDescription = async () => {
@@ -882,9 +921,44 @@ export function ImageReaderPage({
                 </div>
               ))}
             </div>
+
+            {canCreateVocabularyPractice && (
+              <section className="p-4 sm:p-5 rounded-3xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                    <Sparkles className="w-4 h-4 shrink-0" />
+                    <h3 className="text-sm font-bold">
+                      {isSpanish ? '¿Practicar estas palabras en otro texto?' : 'Practice these words in another text?'}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
+                    {isSpanish
+                      ? `La IA incluirá tus ${practiceVocabulary.length} palabras guardadas de esta lectura.`
+                      : `AI will include the ${practiceVocabulary.length} saved words from this reading.`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPracticeAiModalOpen(true)}
+                  className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-rose-950/30 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{isSpanish ? 'Crear práctica con IA' : 'Create AI practice'}</span>
+                </button>
+              </section>
+            )}
           </div>
         )}
       </main>
+
+      <CreateWithAiModal
+        isOpen={isPracticeAiModalOpen}
+        onClose={() => setIsPracticeAiModalOpen(false)}
+        targetLang={targetLang}
+        apiKey={apiKey}
+        requiredVocabulary={canCreateVocabularyPractice ? practiceVocabulary : []}
+        onTextGenerated={handlePracticeTextGenerated}
+      />
     </div>
   );
 }
