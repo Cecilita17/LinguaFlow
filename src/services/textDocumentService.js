@@ -1056,6 +1056,7 @@ export function clearActiveDocumentDraft() {
  * @param {string} [options.level='B1'] - CEFR level ('A1-A2', 'B1', 'B2', 'C1')
  * @param {string} [options.length='medium'] - Desired length ('short', 'medium', 'long')
  * @param {string} [options.apiKey=''] - Optional client override API key
+ * @param {string[]} [options.requiredVocabulary=[]] - Saved words that must appear in the generated text
  * @returns {Promise<{ success: boolean, title: string, text: string }>}
  */
 export async function generateAiTextDocument({
@@ -1063,7 +1064,8 @@ export async function generateAiTextDocument({
   targetLang = 'es',
   level = 'B1',
   length = 'medium',
-  apiKey = ''
+  apiKey = '',
+  requiredVocabulary = []
 }) {
   const trimmedTopic = (topic || '').trim();
   if (!trimmedTopic) {
@@ -1089,7 +1091,10 @@ export async function generateAiTextDocument({
         targetLang,
         level,
         length,
-        apiKey: effectiveKey
+        apiKey: effectiveKey,
+        requiredVocabulary: Array.isArray(requiredVocabulary)
+          ? requiredVocabulary.map((word) => String(word || '').trim()).filter(Boolean)
+          : []
       })
     });
 
