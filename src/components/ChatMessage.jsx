@@ -85,7 +85,7 @@ export function ChatMessage({
   const allowsTransliteration = targetLang === 'zh' || targetLang === 'ar' || isArabic;
 
   // Helper for rendering transliteration in user bubble (luminous, clear rose-tinted white)
-  const renderUserRubyWord = (word, translit, key) => {
+  const renderUserRubyWord = (word, translit, key, token = null) => {
     if (targetLang === 'zh') {
       const { baseWord, cleanTranslit, punctuation } = splitChineseWordAndPunctuation(word, translit);
 
@@ -101,16 +101,24 @@ export function ChatMessage({
 
       return (
         <React.Fragment key={key}>
-          {showTransliteration && cleanTranslit ? (
-            <ruby className="user-ruby mx-0.5 inline-flex flex-col items-center">
-              <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
-                {cleanTranslit}
-              </rt>
-              <span dir="ltr" className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
-            </ruby>
-          ) : (
-            <span dir="ltr" className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
-          )}
+          <button
+            type="button"
+            dir="ltr"
+            onClick={() => onWordClick(baseWord, token)}
+            className="inline-flex cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors"
+            title={isSaved ? `Palabra guardada: "${baseWord}"` : `Clic para ver significado de "${baseWord}"`}
+          >
+            {showTransliteration && cleanTranslit ? (
+              <ruby className="user-ruby mx-0.5 inline-flex flex-col items-center">
+                <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
+                  {cleanTranslit}
+                </rt>
+                <span dir="ltr" className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
+              </ruby>
+            ) : (
+              <span dir="ltr" className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{baseWord}</span>
+            )}
+          </button>
           {punctuation && (
             <span className="text-white/90 text-[17px] sm:text-[18.5px] font-normal select-text">
               {punctuation}
@@ -127,15 +135,35 @@ export function ChatMessage({
 
     if (showTransliteration && effectiveTranslit) {
       return (
-        <ruby key={key} className="user-ruby mx-0.5 inline-flex flex-col items-center">
-          <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
-            {effectiveTranslit}
-          </rt>
-          <span dir={isArabic ? 'rtl' : 'ltr'} className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{word}</span>
-        </ruby>
+        <button
+          key={key}
+          type="button"
+          dir={isArabic ? 'rtl' : 'ltr'}
+          onClick={() => onWordClick(word, token)}
+          className="mx-0.5 inline-flex cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors"
+          title={isSaved ? `Palabra guardada: "${word}"` : `Clic para ver significado de "${word}"`}
+        >
+          <ruby className="user-ruby inline-flex flex-col items-center">
+            <rt dir="ltr" className="text-[12.5px] sm:text-[13.5px] leading-tight text-pink-100 font-extrabold tracking-wider select-none drop-shadow-xs">
+              {effectiveTranslit}
+            </rt>
+            <span dir={isArabic ? 'rtl' : 'ltr'} className={`leading-relaxed ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{word}</span>
+          </ruby>
+        </button>
       );
     }
-    return <span key={key} dir={isArabic ? 'rtl' : 'ltr'} className={`${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 rounded shadow-xs' : ''}`}>{word}</span>;
+    return (
+      <button
+        key={key}
+        type="button"
+        dir={isArabic ? 'rtl' : 'ltr'}
+        onClick={() => onWordClick(word, token)}
+        className={`cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 shadow-xs' : ''}`}
+        title={isSaved ? `Palabra guardada: "${word}"` : `Clic para ver significado de "${word}"`}
+      >
+        {word}
+      </button>
+    );
   };
 
   // Common Chinese Pinyin lexicon for guaranteed fallback
@@ -257,9 +285,11 @@ export function ChatMessage({
                     return (
                       <React.Fragment key={idx}>
                         {needsSpace && ' '}
-                        <span
+                        <button
+                          type="button"
+                          onClick={() => onWordClick(baseWord || cleanWord, token)}
                           dir="ltr"
-                          className="relative inline-block mx-0.5 text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-help group/word"
+                          className="relative inline-block mx-0.5 text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-pointer group/word"
                           title={token.original ? `Original: "${token.original}"` : 'Palabra corregida'}
                         >
                           {showTransliteration && cleanTranslit ? (
@@ -277,7 +307,7 @@ export function ChatMessage({
                               Original: <span className="line-through text-rose-300">{token.original}</span>
                             </span>
                           )}
-                        </span>
+                        </button>
                         {punctuation && (
                           <span className="text-white/90 text-[17px] sm:text-[18.5px] font-normal select-text">
                             {punctuation}
@@ -290,9 +320,11 @@ export function ChatMessage({
                   return (
                     <React.Fragment key={idx}>
                       {needsSpace && ' '}
-                      <span
+                      <button
+                        type="button"
+                        onClick={() => onWordClick(cleanWord, token)}
                         dir={isArabic ? 'rtl' : 'ltr'}
-                        className="relative inline-block mx-0.5 text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-help group/word"
+                        className="relative inline-block mx-0.5 text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-pointer group/word"
                         title={token.original ? `Original: "${token.original}"` : 'Palabra corregida'}
                       >
                         {showTransliteration && tokenTranslit ? (
@@ -310,7 +342,7 @@ export function ChatMessage({
                             Original: <span className="line-through text-rose-300">{token.original}</span>
                           </span>
                         )}
-                      </span>
+                      </button>
                     </React.Fragment>
                   );
                 }
@@ -318,12 +350,26 @@ export function ChatMessage({
                 return (
                   <React.Fragment key={idx}>
                     {needsSpace && ' '}
-                    {renderUserRubyWord(cleanWord, tokenTranslit, idx)}
+                    {renderUserRubyWord(cleanWord, tokenTranslit, idx, token)}
                   </React.Fragment>
                 );
               })
             ) : (
-              <span dir={isArabic ? 'rtl' : 'ltr'}>{message.text}</span>
+              isChinese ? (
+                Array.from(message.text || '').map((char, idx) => {
+                  if (/^[\u4E00-\u9FFF]$/.test(char)) {
+                    return renderUserRubyWord(char, resolveTranslit({ word: char }), idx, { word: char });
+                  }
+                  return <span key={idx} className="select-text">{char}</span>;
+                })
+              ) : (
+                (message.text || '').split(/(\s+)/).map((part, idx) => {
+                  if (!part || /^\s+$/.test(part)) return <span key={idx} className="whitespace-pre-wrap select-text">{part}</span>;
+                  const cleanWord = part.replace(/^[^\p{L}\p{N}\p{M}]+|[^\p{L}\p{N}\p{M}]+$/gu, '').trim();
+                  if (!cleanWord) return <span key={idx} className="select-text">{part}</span>;
+                  return renderUserRubyWord(part, null, idx, { word: part, clean_word: cleanWord });
+                })
+              )
             )}
           </div>
 
