@@ -47,18 +47,37 @@ function extractConfigString(source, key) {
 }
 
 async function fetchAndroidPlayerResponse(videoId) {
+  // The Android InnerTube client exposes caption tracks more consistently than
+  // the watch page. This public client key is required by YouTube's player API.
   const clientVersion = '20.10.38';
-  const response = await fetchWithTimeout('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': `com.google.android.youtube/${clientVersion} (Linux; U; Android 14)`
-    },
-    body: JSON.stringify({
-      context: { client: { clientName: 'ANDROID', clientVersion } },
-      videoId
-    })
-  });
+  const clientKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+  const response = await fetchWithTimeout(
+    `https://www.youtube.com/youtubei/v1/player?key=${clientKey}&prettyPrint=false`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': `com.google.android.youtube/${clientVersion} (Linux; U; Android 14)`,
+        'X-YouTube-Client-Name': '3',
+        'X-YouTube-Client-Version': clientVersion,
+        'Origin': 'https://www.youtube.com'
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'ANDROID',
+            clientVersion,
+            androidSdkVersion: 30,
+            hl: 'en',
+            gl: 'US'
+          }
+        },
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true
+      })
+    }
+  );
   if (!response.ok) return null;
   return response.json().catch(() => null);
 }
