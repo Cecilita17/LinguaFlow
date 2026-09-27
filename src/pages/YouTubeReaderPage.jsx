@@ -105,6 +105,9 @@ export function YouTubeReaderPage({
   const { user } = useAuth();
   const { isSpanish } = useSiteLanguage();
   const {
+    speechRate,
+    setSpeechRate,
+    speechRateOptions,
     wordHighlightEnabled,
     setWordHighlightEnabled
   } = useAudioSettings();
@@ -140,7 +143,6 @@ export function YouTubeReaderPage({
   // Player & synchronization state
   const [currentTime, setCurrentTime] = useState(0);
   const [seekToTime, setSeekToTime] = useState(null);
-  const [playbackRate, setPlaybackRate] = useState(1);
   const [currentRecordId, setCurrentRecordId] = useState('');
   const [pendingScrollSubtitleId, setPendingScrollSubtitleId] = useState(null);
   const latestPositionRef = useRef({ videoId: '', recordId: '', time: 0, subId: null });
@@ -217,18 +219,12 @@ export function YouTubeReaderPage({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActionsMenuOpen]);
 
-  // Helpers to cycle font size and playback speed
+  // Helper to cycle font size
   const fontSizes = ['sm', 'base', 'lg', 'xl', '2xl'];
   const cycleFontSize = () => {
     const currentIndex = fontSizes.indexOf(fontSize);
     const nextIndex = (currentIndex + 1) % fontSizes.length;
     setFontSize(fontSizes[nextIndex]);
-  };
-
-  const cyclePlaybackRate = () => {
-    const nextRateMap = { 1: 0.75, 0.75: 0.5, 0.5: 1 };
-    const next = nextRateMap[playbackRate] || 1;
-    setPlaybackRate(next);
   };
 
   const handleFileChange = (e) => {
@@ -1431,20 +1427,23 @@ export function YouTubeReaderPage({
                           </span>
                         </button>
 
-                        {/* Playback speed */}
-                        <button
-                          type="button"
-                          onClick={cyclePlaybackRate}
-                          className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                        >
+                        {/* Playback speed uses the shared global audio setting. */}
+                        <label className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]">
                           <span className="flex items-center space-x-2.5">
                             <Gauge className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
                             <span>Playback speed</span>
                           </span>
-                          <span className="text-[11px] font-mono font-bold text-rose-600 dark:text-rose-300 shrink-0">
-                            {playbackRate}×
-                          </span>
-                        </button>
+                          <select
+                            value={speechRate}
+                            onChange={(event) => setSpeechRate(parseFloat(event.target.value) || 1)}
+                            className="bg-transparent text-[11px] font-mono font-bold text-rose-600 dark:text-rose-300 shrink-0 cursor-pointer outline-none"
+                            aria-label={isSpanish ? 'Velocidad de reproducción' : 'Playback speed'}
+                          >
+                            {speechRateOptions.map((rate) => (
+                              <option key={rate} value={rate}>{rate.toFixed(2)}×</option>
+                            ))}
+                          </select>
+                        </label>
 
                         {/* Transliterations [ON/OFF] */}
                         <button
@@ -1612,7 +1611,7 @@ export function YouTubeReaderPage({
                   onPlayerStateChange={handlePlayerStateChange}
                   onPlayerReady={handlePlayerReady}
                   seekToTime={seekToTime}
-                  playbackRate={playbackRate}
+                  playbackRate={speechRate}
                 />
               </div>
             )}
@@ -1762,21 +1761,28 @@ export function YouTubeReaderPage({
                   <span className="text-[12px] sm:text-sm leading-none tracking-tight">A±</span>
                 </button>
 
-                {/* 4. Playback speed — Gauge */}
-                <button
-                  type="button"
-                  onClick={cyclePlaybackRate}
+                {/* 4. Playback speed — shared global audio setting */}
+                <label
                   title={isSpanish
-                    ? `Velocidad del vídeo (${playbackRate}×) — clic para cambiar`
-                    : `Video playback speed (${playbackRate}×) — click to change`}
-                  aria-label="Playback speed"
+                    ? `Velocidad del vídeo (${speechRate.toFixed(2)}×)`
+                    : `Video playback speed (${speechRate.toFixed(2)}×)`}
                   className="relative inline-flex items-center justify-center py-1.5 px-3 rounded-xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group"
                 >
                   <Gauge className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors shrink-0" />
                   <span className="ml-1 text-[11px] sm:text-xs font-mono font-bold text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
-                    {playbackRate}×
+                    {speechRate.toFixed(2)}×
                   </span>
-                </button>
+                  <select
+                    value={speechRate}
+                    onChange={(event) => setSpeechRate(parseFloat(event.target.value) || 1)}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    aria-label={isSpanish ? 'Velocidad de reproducción' : 'Playback speed'}
+                  >
+                    {speechRateOptions.map((rate) => (
+                      <option key={rate} value={rate}>{rate.toFixed(2)}×</option>
+                    ))}
+                  </select>
+                </label>
               </div>
             </div>
           )}
