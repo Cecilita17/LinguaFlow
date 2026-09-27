@@ -10,9 +10,9 @@ import { getLanguageMeta } from '../constants/languages.js';
 
 export const EPUB_SIMPLIFICATION_LEVELS = ['light', 'medium', 'strong'];
 export const EPUB_SIMPLIFICATION_SOURCE_VERSION = 1;
-const TARGET_WORDS_PER_BLOCK = 1100;
+const TARGET_WORDS_PER_BLOCK = 900;
 const MIN_WORDS_PER_BLOCK = 800;
-const MAX_WORDS_PER_BLOCK = 1500;
+const MAX_WORDS_PER_BLOCK = 1200;
 const inFlightRequests = new Map();
 
 function countWords(text = '') {

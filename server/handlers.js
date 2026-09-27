@@ -1849,6 +1849,10 @@ export async function handleSimplifyEpubBlock(req, res) {
       strong: 'Adapt vocabulary and syntax substantially for a lower-level learner, while preserving every detail, scene, dialogue, example, and event.'
     };
     const sourceWordCount = paragraphs.reduce((total, paragraph) => total + (paragraph.text.match(/[\p{L}\p{N}]+/gu) || []).length, 0);
+    // Literary Arabic and other non-Latin passages can consume considerably more
+    // output tokens than their word count suggests. Reserve enough room to avoid
+    // truncating a faithful rewrite and accidentally accepting a summary.
+    const maxOutputTokens = Math.min(8000, Math.max(4000, Math.ceil(sourceWordCount * 4.5)));
     const buildPrompt = (strictRetry) => `You are a literary language-learning editor. Rewrite the supplied EPUB passage in ${targetName} (language code: ${targetLang}) at the requested ${level} simplification level.
 
 THIS IS NOT A SUMMARY. DO NOT SUMMARIZE. Preserve all information, events, characters, dialogue, chronology, descriptions, examples, narrative order, tone, and approximately the same information density. Do not translate the text and do not add explanations, notes, titles, or commentary.
@@ -1858,7 +1862,7 @@ ${levelInstructions[level]}
 Return STRICT JSON only in this exact shape:
 {"paragraphs":[{"sourceParagraphId":"original id","text":"rewritten paragraph in the original language"}]}
 
-Return exactly one rewritten paragraph for every input paragraph, in the same order and with the same sourceParagraphId. Keep paragraph boundaries whenever practical. ${strictRetry ? 'Your previous attempt was too short. This time preserve the full amount of information and a closely comparable length; omission or condensation is unacceptable.' : ''}
+Return exactly one rewritten paragraph for every input paragraph, in the same order and with the same sourceParagraphId. Keep paragraph boundaries whenever practical. ${strictRetry ? 'Your previous attempt was too short. This time preserve the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
 
 Input paragraphs:
 ${JSON.stringify(paragraphs)}`;
@@ -1883,7 +1887,7 @@ ${JSON.stringify(paragraphs)}`;
             ],
             response_format: { type: 'json_object' },
             temperature: 0.15,
-            max_tokens: 5000
+            max_tokens: maxOutputTokens
           })
         });
         clearTimeout(timeoutId);
