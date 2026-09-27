@@ -109,17 +109,63 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
     const innertube = await createInnertube(diagnostics);
     diagnostics.push({ stage: 'create-session', outcome: 'ok' });
 
-    const info = await withTimeout(innertube.getInfo(videoId), 'video-metadata');
+    // Caption availability differs between YouTube client profiles. Start with WEB,
+    // then use ANDROID only when WEB returns no caption tracks. This is one
+    // equivalent extraction strategy, rather than a chain of unrelated scrapers.
+    let info = null;
+    let tracks = [];
+    let lastMetadataError = null;
+
+    for (const clientProfile of ['WEB', 'ANDROID']) {
+      try {
+        const candidate = await withTimeout(
+          innertube.getInfo(videoId, clientProfile),
+          `video-metadata-${clientProfile.toLowerCase()}`
+        );
+        const candidateTracks = candidate?.captions?.caption_tracks || [];
+        const candidateSummary = describeCaptionTracks(candidateTracks);
+        diagnostics.push({
+          stage: 'video-metadata',
+          clientProfile,
+          outcome: 'ok',
+          trackCount: candidateSummary.length,
+          tracks: candidateSummary
+        });
+        logDiagnostic('metadata', {
+          videoId,
+          clientProfile,
+          trackCount: candidateSummary.length,
+          tracks: candidateSummary
+        });
+
+        // Keep WEB metadata as a fallback, but prefer the first profile that
+        // actually exposes the tracks required by the caption importer.
+        if (!info) info = candidate;
+        if (candidateTracks.length > 0) {
+          info = candidate;
+          tracks = candidateTracks;
+          break;
+        }
+      } catch (error) {
+        lastMetadataError = error;
+        diagnostics.push({
+          stage: 'video-metadata',
+          clientProfile,
+          outcome: 'error',
+          code: classifyExtractorError(error).code
+        });
+        logDiagnostic('metadata-error', {
+          videoId,
+          clientProfile,
+          code: classifyExtractorError(error).code
+        });
+      }
+    }
+
+    if (!info && lastMetadataError) throw lastMetadataError;
+
     const title = textValue(info?.basic_info?.title) || `YouTube Video (${videoId})`;
-    const tracks = info?.captions?.caption_tracks || [];
     const trackSummary = describeCaptionTracks(tracks);
-    diagnostics.push({
-      stage: 'video-metadata',
-      outcome: 'ok',
-      trackCount: trackSummary.length,
-      tracks: trackSummary
-    });
-    logDiagnostic('metadata', { videoId, title, trackCount: trackSummary.length, tracks: trackSummary });
 
     if (tracks.length === 0) {
       throw new YouTubeCaptionExtractionError(
