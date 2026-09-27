@@ -26,6 +26,55 @@ export function getSavedWordKey(word = '', lang = '') {
   return `${cleanLang}:${cleanWord.toLowerCase()}`;
 }
 
+/**
+ * Returns only the user's saved vocabulary that actually appears in a reading.
+ * Token values are preferred because they are the same values highlighted in yellow;
+ * the text check covers documents that have not yet been tokenized.
+ */
+export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targetLang = '') {
+  const language = String(targetLang || '').toLowerCase().split('-')[0];
+  if (!language || !Array.isArray(savedWords) || !Array.isArray(paragraphs)) return [];
+
+  const tokenKeys = new Set();
+  const text = paragraphs
+    .map((paragraph) => {
+      const tokens = Array.isArray(paragraph?.tokens) ? paragraph.tokens : [];
+      tokens.forEach((token) => {
+        const word = typeof token === 'string' ? token : (token?.word || token?.text);
+        if (word) tokenKeys.add(getSavedWordKey(word, language));
+      });
+      return paragraph?.text || '';
+    })
+    .join('\n');
+
+  const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\export function getSavedWordKey(word = '', lang = '') {
+  const cleanWord = String(word || '').trim();
+  const cleanLang = String(lang || '').toLowerCase().trim();
+  if (!cleanWord) return '';
+
+  if (cleanLang === 'zh') {
+    return `zh:${cleanWord}`;
+  }
+  return `${cleanLang}:${cleanWord.toLowerCase()}`;
+}
+');
+  const containsWord = (word) => {
+    const cleanWord = String(word || '').trim();
+    if (!cleanWord) return false;
+    if (language === 'zh' || language === 'ja') return text.includes(cleanWord);
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(cleanWord)}(?=$|[^\\p{L}\\p{N}])`, 'iu').test(text);
+  };
+
+  const seen = new Set();
+  return savedWords.filter((item) => {
+    if (!item?.word || String(item.lang || '').toLowerCase().split('-')[0] !== language) return false;
+    const key = getSavedWordKey(item.word, language);
+    if (seen.has(key) || (!tokenKeys.has(key) && !containsWord(item.word))) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function SavedWordsProvider({ children }) {
   const [savedWords, setSavedWords] = useState(() => {
     try {
