@@ -1,0 +1,22 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LinguaFlow">
+  <defs>
+    <linearGradient id="background" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4b2117"/>
+      <stop offset="100%" stop-color="#2f130d"/>
+    </linearGradient>
+    <linearGradient id="globe" x1="12%" y1="8%" x2="88%" y2="92%">
+      <stop offset="0%" stop-color="#edab89"/>
+      <stop offset="55%" stop-color="#d97757"/>
+      <stop offset="100%" stop-color="#a9472e"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#background)"/>
+  <circle cx="256" cy="270" r="184" fill="url(#globe)"/>
+  <ellipse cx="256" cy="270" rx="70" ry="184" fill="none" stroke="#fff0e7" stroke-width="3" opacity=".6"/>
+  <ellipse cx="256" cy="270" rx="140" ry="184" fill="none" stroke="#fff0e7" stroke-width="3" opacity=".6"/>
+  <path d="M83 206 Q256 177 429 206M72 270 Q256 270 440 270M83 334 Q256 363 429 334" fill="none" stroke="#fff0e7" stroke-width="3" opacity=".6"/>
+  <circle cx="256" cy="270" r="184" fill="none" stroke="#fff0e7" stroke-width="4" opacity=".58"/>
+  <path d="M365 62 C370 101 391 122 430 127 C391 132 370 153 365 192 C360 153 339 132 300 127 C339 122 360 101 365 62Z" fill="#fff7f2"/>
+  <path d="M153 151 C156 167 165 176 181 179 C165 182 156 191 153 207 C150 191 141 182 125 179 C141 176 150 167 153 151Z" fill="#fff7f2"/>
+  <path d="M179 354 C181 366 188 373 200 375 C188 377 181 384 179 396 C177 384 170 377 158 375 C170 373 177 366 179 354Z" fill="#fff7f2"/>
+</svg>
