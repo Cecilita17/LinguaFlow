@@ -37,14 +37,6 @@ import { recordHabitActivityForToday } from '../services/habitTrackerService.js'
 import { getLanguageMeta, isRtlLanguage, getTextDirection } from '../constants/languages.js';
 import { createAudioWordSynchronizer } from '../utils/audioWordSync.js';
 
-const CEFR_LEVELS = [
-  { value: 'A1', es: 'Principiante (A1)', en: 'Beginner (A1)' },
-  { value: 'A2', es: 'Elemental (A2)', en: 'Elementary (A2)' },
-  { value: 'B1', es: 'Intermedio (B1)', en: 'Intermediate (B1)' },
-  { value: 'B2', es: 'Intermedio Alto (B2)', en: 'Upper Intermediate (B2)' },
-  { value: 'C1', es: 'Avanzado (C1)', en: 'Advanced (C1)' }
-];
-
 /**
  * Segments an image description into natural pedagogical paragraphs.
  * For Chinese / CJK: splits at natural terminal punctuation (。！？；) and clause boundaries if long,
@@ -214,13 +206,6 @@ export function ImageReaderPage({
     }
   });
 
-  const handleLevelChange = (newLevel) => {
-    setLevel(newLevel);
-    try {
-      localStorage.setItem('linguaflow_image_reader_level', newLevel);
-    } catch (e) {}
-  };
-
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState(null);
@@ -233,6 +218,13 @@ export function ImageReaderPage({
   // Linguistic UI preferences
   const [interlinearMode, setInterlinearMode] = useState(true);
   const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl' | '2xl'
+
+  // Same font-size cycle used by Text Reader.
+  const cycleFontSize = () => {
+    const order = ['sm', 'base', 'lg', 'xl', '2xl'];
+    const nextIdx = (order.indexOf(fontSize) + 1) % order.length;
+    setFontSize(order[nextIdx]);
+  };
 
   // Paragraph translations state: { [paraId]: { text, isTranslating, isVisible, error } }
   const [paragraphTranslations, setParagraphTranslations] = useState({});
@@ -687,22 +679,18 @@ export function ImageReaderPage({
           </div>
         </div>
 
-        {/* Right: Language selector & CEFR Level dropdown */}
+        {/* Right: Text size & language selector */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* CEFR Level Selector */}
-          <select
-            value={level}
-            onChange={(e) => handleLevelChange(e.target.value)}
-            disabled={isGenerating}
-            className="px-2.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/10 border border-black/5 dark:border-white/10 text-[var(--text-primary)] text-xs font-bold focus:border-rose-500 focus:outline-hidden transition-all cursor-pointer active:scale-95"
-            title={isSpanish ? 'Nivel de aprendizaje' : 'Proficiency level'}
+          {/* Text size — same cycle as Text Reader */}
+          <button
+            type="button"
+            onClick={cycleFontSize}
+            title={isSpanish ? `Tamaño de texto: ${fontSize} — clic para cambiar` : `Text size: ${fontSize} — click to change`}
+            aria-label={isSpanish ? 'Tamaño de texto' : 'Text size'}
+            className="py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold"
           >
-            {CEFR_LEVELS.map(lvl => (
-              <option key={lvl.value} value={lvl.value}>
-                {isSpanish ? lvl.es : lvl.en}
-              </option>
-            ))}
-          </select>
+            <span className="text-[12px] sm:text-sm leading-none tracking-tight">A±</span>
+          </button>
 
           {/* Target Language Dropdown */}
           <LanguageSelectDropdown
