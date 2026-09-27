@@ -115,6 +115,51 @@ export function cleanHtmlText(htmlStr) {
 }
 
 /**
+ * Extracts an EPUB cover as a data URL when the package declares one.
+ * Supports the EPUB 2 cover metadata convention and EPUB 3 cover-image
+ * manifest property. A missing or unreadable cover leaves the document usable.
+ */
+async function extractEpubCoverDataUrl(zip, manifestMap, opfDoc, opfXml) {
+  try {
+    let coverId = opfDoc?.querySelector('metadata meta[name="cover"]')?.getAttribute('content') || '';
+
+    if (!coverId) {
+      const metaMatch = opfXml.match(/<meta\\b[^>]*name=["']cover["'][^>]*content=["']([^"']+)["'][^>]*>/i)
+        || opfXml.match(/<meta\\b[^>]*content=["']([^"']+)["'][^>]*name=["']cover["'][^>]*>/i);
+      coverId = metaMatch?.[1] || '';
+    }
+
+    let coverItem = coverId ? manifestMap.get(coverId) : null;
+    if (!coverItem) {
+      coverItem = [...manifestMap.values()].find((item) => (
+        /\\bcover-image\\b/i.test(item.properties || '')
+        || (item.mediaType || '').startsWith('image/') && /cover/i.test(item.href || '')
+      )) || null;
+    }
+
+    if (!coverItem?.href) return null;
+    const coverFile = zip.file(coverItem.href);
+    if (!coverFile) return null;
+
+    const extension = (coverItem.href.split('.').pop() || '').toLowerCase();
+    const fallbackMimeType = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      svg: 'image/svg+xml'
+    }[extension] || 'image/jpeg';
+    const mimeType = (coverItem.mediaType || fallbackMimeType).split(';')[0];
+    const base64 = await coverFile.async('base64');
+    return base64 ? `data:${mimeType};base64,${base64}` : null;
+  } catch (error) {
+    console.warn('[epubService] Could not extract EPUB cover:', error);
+    return null;
+  }
+}
+
+/**
  * Extracts blocks of text and headings from a parsed DOM document or HTML string.
  * Returns array of objects: { type: 'heading' | 'paragraph', text: string, level?: number }
  */
@@ -291,7 +336,8 @@ export async function parseEpubFile(file, options = {}) {
       if (id && href) {
         manifestMap.set(id, {
           href: resolveZipPath(opfDir, href),
-          mediaType
+          mediaType,
+          properties: el.getAttribute('properties') || ''
         });
       }
     });
@@ -302,12 +348,18 @@ export async function parseEpubFile(file, options = {}) {
     const itemRegex = /<item\s+[^>]*id=["']([^"']+)["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
     let match;
     while ((match = itemRegex.exec(opfXml)) !== null) {
+      const itemTag = match[0];
+      const mediaType = itemTag.match(/media-type=["']([^"']+)["']/i)?.[1] || '';
+      const properties = itemTag.match(/properties=["']([^"']+)["']/i)?.[1] || '';
       manifestMap.set(match[1], {
         href: resolveZipPath(opfDir, match[2]),
-        mediaType: ''
+        mediaType,
+        properties
       });
     }
   }
+
+  const coverImage = await extractEpubCoverDataUrl(zip, manifestMap, opfDoc, opfXml);
 
   // 5. Extract Spine (ordered chapter itemrefs)
   const spineIds = [];
@@ -486,6 +538,7 @@ export async function parseEpubFile(file, options = {}) {
     targetLang: finalTargetLang,
     nativeLang,
     detectedLanguage,
+    coverImage,
     chapters,
     paragraphs: allParagraphs,
     paragraphsCount: allParagraphs.length,
