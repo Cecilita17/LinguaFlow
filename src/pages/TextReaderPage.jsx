@@ -42,6 +42,7 @@ import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx
 import { getLanguageMeta } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useSavedWords, getSavedWordsInParagraphs } from '../context/SavedWordsContext.jsx';
 import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
 import {
   splitTextIntoParagraphs,
@@ -101,6 +102,9 @@ function resolveChapterIndexForDoc(doc) {
 }
 
 const PARAGRAPHS_PER_PAGE = 15;
+const PRACTICE_TEXT_MAX_PARAGRAPHS = 25;
+const PRACTICE_TEXT_MAX_CHARACTERS = 6000;
+const PRACTICE_VOCABULARY_MAX = 30;
 
 /**
  * Resolves the initial 0-based paragraph page for an EPUB chapter based on
@@ -136,6 +140,7 @@ export function TextReaderPage({
   setActiveTab = null
 }) {
   const { user } = useAuth();
+  const { savedWords } = useSavedWords();
   const { t, isSpanish } = useSiteLanguage();
   const {
     speechRate,
@@ -859,6 +864,23 @@ export function TextReaderPage({
 
   // Active document language (falls back to selected targetLang if editing/new)
   const activeDocLang = (document && !isEditing && document.targetLang) ? document.targetLang : targetLang;
+  const practiceVocabulary = useMemo(
+    () => getSavedWordsInParagraphs(savedWords, document?.paragraphs || [], activeDocLang),
+    [savedWords, document?.paragraphs, activeDocLang]
+  );
+  const practiceTextCharacterCount = useMemo(
+    () => (document?.rawText || (document?.paragraphs || []).map((paragraph) => paragraph.text || '').join('\n')).length,
+    [document?.rawText, document?.paragraphs]
+  );
+  const canCreateVocabularyPractice = Boolean(
+    document &&
+    !isEpub &&
+    Array.isArray(document.paragraphs) &&
+    document.paragraphs.length <= PRACTICE_TEXT_MAX_PARAGRAPHS &&
+    practiceTextCharacterCount <= PRACTICE_TEXT_MAX_CHARACTERS &&
+    practiceVocabulary.length > 0 &&
+    practiceVocabulary.length <= PRACTICE_VOCABULARY_MAX
+  );
 
   // Count how many paragraphs are completely glossed
   const completedParagraphsCount = useMemo(() => {
@@ -3028,6 +3050,32 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               })}
             </div>
 
+            {canCreateVocabularyPractice && (
+              <section className="mt-8 p-4 sm:p-5 rounded-3xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                    <Sparkles className="w-4 h-4 shrink-0" />
+                    <h3 className="text-sm font-bold">
+                      {isSpanish ? '¿Practicar estas palabras en otro texto?' : 'Practice these words in another text?'}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
+                    {isSpanish
+                      ? `La IA incluirá tus ${practiceVocabulary.length} palabras guardadas de este texto.`
+                      : `AI will include the ${practiceVocabulary.length} saved words from this text.`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAiModalOpen(true)}
+                  className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-rose-950/30 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{isSpanish ? 'Crear práctica con IA' : 'Create AI practice'}</span>
+                </button>
+              </section>
+            )}
+
             {/* EPUB Page Navigation Bar (Bottom): Shown when chapter has multiple 15-paragraph pages */}
             {isEpub && totalPages > 1 && (
               <div className="flex items-center justify-between py-2.5 px-3 mt-4 mb-2 rounded-xl bg-[var(--surface-primary)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] shadow-sm">
@@ -3214,6 +3262,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         onClose={() => setIsAiModalOpen(false)}
         targetLang={targetLang}
         apiKey={apiKey}
+        requiredVocabulary={canCreateVocabularyPractice ? practiceVocabulary : []}
         onTextGenerated={handleAiTextGenerated}
       />
 
