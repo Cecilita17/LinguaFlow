@@ -2372,7 +2372,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
           </div>
 
           <div className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full animate-fade-in my-auto">
-            <div className="p-6 sm:p-8 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl text-[var(--text-primary)]">
+            <div className="p-4 sm:p-7 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl text-[var(--text-primary)]">
               {/* Header Title inside card */}
               <div className="flex items-center justify-between mb-5 pb-4 border-b border-[var(--border-primary)]">
                 <div className="flex items-center space-x-3">
@@ -2429,8 +2429,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                 </div>
               )}
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 p-3 sm:p-4 rounded-2xl bg-[var(--surface-secondary)]/55 border border-[var(--border-primary)]">
               {/* Title Input */}
-              <div className="mb-4">
+              <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
                   Título del texto (opcional)
                 </label>
@@ -2444,7 +2445,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               </div>
 
               {/* Language Selector (Idioma del texto) */}
-              <div className="mb-4">
+              <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
                   {t('text_language') || 'Idioma del texto'}
                 </label>
@@ -2461,9 +2462,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   className="w-full"
                 />
               </div>
+              </div>
 
               {/* Timestamped audio import — Whisper engine choices are intentionally hidden. */}
-              <div className="mb-4 p-3 sm:p-3.5 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+              <div className="mb-4 p-3 sm:p-4 rounded-2xl bg-emerald-500/[0.045] border border-emerald-500/20">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
                     <Headphones className="w-3.5 h-3.5 text-emerald-500" />
@@ -2476,10 +2478,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               </div>
 
               {/* Textarea for raw text */}
-              <div className="mb-4">
+              <div className="mb-4 p-3 sm:p-4 rounded-2xl bg-[var(--surface-secondary)]/55 border border-[var(--border-primary)]">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    Contenido del texto
+                    {isSpanish ? 'Escribir o pegar texto' : 'Write or paste text'}
                   </label>
                   <span className="text-[11px] text-[var(--text-muted)]">
                     {inputText.trim() ? `${splitTextIntoParagraphs(inputText, targetLang).length} párrafos detectados` : 'Escribe o pega aquí'}
@@ -2490,12 +2492,14 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder="Pega o escribe tu texto aquí en cualquier idioma (chino, árabe, polaco, ruso, etc.). Cada salto de línea o espacio en blanco formará un párrafo independiente."
-                  className="w-full p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm leading-relaxed transition-all resize-y"
+                  className="w-full min-h-40 p-4 rounded-xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm leading-relaxed transition-all resize-y"
                 />
               </div>
 
-              {/* Action Buttons Strip (Paste clipboard, Upload .txt/.epub file, Upload audio, Create with AI, Start Reading) */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              {/* Import actions retain their handlers, but are visually grouped by source. */}
+              <div className="p-3 sm:p-4 rounded-2xl bg-[var(--surface-secondary)]/55 border border-[var(--border-primary)]">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">{isSpanish ? 'Agregar contenido' : 'Add content'}</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Paste from Clipboard */}
                   <button
@@ -2520,6 +2524,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   </label>
 
                   {/* Timestamped audio import: select the media and its SRT/VTT separately. */}
+                  <div className="basis-full flex items-center gap-2 pt-2 mt-1 border-t border-[var(--border-primary)] text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">
+                    <Headphones className="w-3.5 h-3.5" />
+                    <span>{isSpanish ? 'Audio sincronizado' : 'Synchronized audio'}</span>
+                  </div>
                   <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
                     <Headphones className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
                     <span className="max-w-[140px] truncate">{selectedAudioFile ? selectedAudioFile.name : (isSpanish ? 'Seleccionar audio' : 'Select audio')}</span>
@@ -2559,6 +2567,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   </button>
 
                   {/* Create with AI Button */}
+                  <div className="basis-full flex items-center gap-2 pt-2 mt-1 border-t border-[var(--border-primary)] text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-300">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{isSpanish ? 'Crear con IA' : 'Create with AI'}</span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setIsAiModalOpen(true)}
@@ -2583,6 +2595,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   <span>Comenzar a leer</span>
                   <Play className="w-4 h-4 fill-current ml-0.5" />
                 </button>
+              </div>
               </div>
             </div>
           </div>
