@@ -1260,6 +1260,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     const textLength = cleanText.length;
     const currentRate = speechRateRef.current || speechRate || 1.0;
 
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = speechCode;
+
     const utteranceRate = mapSpeechRateToUtteranceRate(currentRate);
     utterance.rate = utteranceRate;
 
