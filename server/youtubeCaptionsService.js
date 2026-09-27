@@ -125,6 +125,44 @@ async function fetchAndroidPlayerResponse(videoId) {
   return response.json().catch(() => null);
 }
 
+async function fetchEmbeddedInnertubePlayerResponse(videoId) {
+  // This is YouTube's public embedded-player client. It is separate from the
+  // watch page and Android client, and often returns caption tracks for lessons
+  // that only show CC inside the player.
+  const clientVersion = '2.0';
+  const clientKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+  const response = await fetchWithTimeout(
+    `https://www.youtube.com/youtubei/v1/player?key=${clientKey}&prettyPrint=false`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; LinguaFlow YouTube captions beta)',
+        'X-YouTube-Client-Name': '85',
+        'X-YouTube-Client-Version': clientVersion,
+        'Origin': 'https://www.youtube.com'
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+            clientVersion,
+            clientScreen: 'EMBED',
+            hl: 'en',
+            gl: 'US'
+          },
+          thirdParty: { embedUrl: 'https://www.youtube.com/' }
+        },
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true
+      })
+    }
+  );
+  if (!response.ok) return null;
+  return response.json().catch(() => null);
+}
+
 async function fetchPlayerResponseFallback(html, videoId) {
   const apiKey = extractConfigString(html, 'INNERTUBE_API_KEY');
   if (!apiKey) return null;
@@ -307,6 +345,13 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
     const androidPlayerResponse = await fetchAndroidPlayerResponse(videoId);
     if (androidPlayerResponse) {
       playerResponse = androidPlayerResponse;
+      tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+    }
+  }
+  if (tracks.length === 0) {
+    const embeddedInnertubePlayerResponse = await fetchEmbeddedInnertubePlayerResponse(videoId);
+    if (embeddedInnertubePlayerResponse) {
+      playerResponse = embeddedInnertubePlayerResponse;
       tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
     }
   }
