@@ -17,11 +17,13 @@ export function ChatMessage({
   speakingCharIndex = -1,
   speakingText = '',
   onOpenGrammarBreakdown,
-  onDeleteMessage
+  onDeleteMessage,
+  onTranslateMessage
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const { isWordSaved } = useSavedWords();
   const [showTranslation, setShowTranslation] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [writingPracticeOpen, setWritingPracticeOpen] = useState(false);
   const [writingPracticeMode, setWritingPracticeMode] = useState('words'); // 'words' | 'sentence'
@@ -164,6 +166,28 @@ export function ChatMessage({
         {word}
       </button>
     );
+  };
+
+  const handleUserTranslation = async () => {
+    if (showTranslation) {
+      setShowTranslation(false);
+      return;
+    }
+    if (message.translation) {
+      setShowTranslation(true);
+      return;
+    }
+    if (!onTranslateMessage || isTranslating) return;
+
+    setIsTranslating(true);
+    try {
+      await onTranslateMessage(message);
+      setShowTranslation(true);
+    } catch (error) {
+      console.warn('Chat message translation error:', error);
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   // Common Chinese Pinyin lexicon for guaranteed fallback
@@ -373,6 +397,20 @@ export function ChatMessage({
             )}
           </div>
 
+          {showTranslation && message.translation && (
+            <div dir="ltr" className="mt-2.5 pt-2.5 border-t border-white/20 text-left animate-fade-in">
+              <div className="flex items-start gap-2 text-rose-100">
+                <Globe className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <div>
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-100/80 mb-0.5">
+                    {isSpanish ? 'Traducción completa:' : 'Full translation:'}
+                  </span>
+                  <p className="text-xs sm:text-sm font-medium leading-snug">{message.translation}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons on user message */}
           <div className="mt-2.5 pt-1.5 border-t border-white/20 flex flex-wrap items-center justify-between gap-1.5 text-rose-100 text-xs">
             <div className="flex items-center space-x-1.5">
@@ -404,11 +442,27 @@ export function ChatMessage({
             <div className="flex items-center space-x-1">
               <button
                 onClick={() => onPlayAudio(message.correctedText || message.text)}
-                className="p-1 hover:text-white hover:bg-white/20 rounded-md transition-colors flex items-center space-x-1 cursor-pointer"
+                className="p-1.5 hover:text-white hover:bg-white/20 rounded-md transition-colors cursor-pointer"
                 title={isSpanish ? "Escuchar pronunciación correcta" : "Listen to correct pronunciation"}
+                aria-label={isSpanish ? "Escuchar pronunciación correcta" : "Listen to correct pronunciation"}
               >
                 <Volume2 className="w-3.5 h-3.5" />
-                <span className="text-[11px] font-medium">{t('listen')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleUserTranslation}
+                disabled={isTranslating}
+                className={`p-1.5 rounded-md transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60 ${
+                  showTranslation ? 'bg-white/20 text-white' : 'hover:text-white hover:bg-white/20'
+                }`}
+                title={showTranslation
+                  ? (isSpanish ? 'Ocultar traducción' : 'Hide translation')
+                  : (isSpanish ? 'Traducir el mensaje entero' : 'Translate the entire message')}
+                aria-label={showTranslation
+                  ? (isSpanish ? 'Ocultar traducción' : 'Hide translation')
+                  : (isSpanish ? 'Traducir el mensaje entero' : 'Translate the entire message')}
+              >
+                <Globe className={`w-3.5 h-3.5 ${isTranslating ? 'animate-pulse' : ''}`} />
               </button>
               <button
                 onClick={handleCopy}
@@ -800,34 +854,30 @@ export function ChatMessage({
             {/* Audio Button */}
             <button
               onClick={() => onPlayAudio(message.text)}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-[var(--surface-primary)] hover:bg-rose-100 hover:text-rose-900 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 text-stone-700 dark:text-[var(--text-secondary)] text-[11px] font-medium transition-colors cursor-pointer border border-transparent dark:border-[var(--border-primary)]"
+              className="p-1.5 rounded-lg bg-stone-100 dark:bg-[var(--surface-primary)] hover:bg-rose-100 hover:text-rose-900 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 text-stone-700 dark:text-[var(--text-secondary)] transition-colors cursor-pointer border border-transparent dark:border-[var(--border-primary)]"
               title={isSpanish ? "Escuchar en voz alta" : "Listen aloud"}
+              aria-label={isSpanish ? "Escuchar en voz alta" : "Listen aloud"}
             >
               <Volume2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>{t('listen')}</span>
             </button>
 
             {/* Translate Button */}
             {message.translation && (
               <button
                 onClick={() => setShowTranslation(!showTranslation)}
-                className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                   showTranslation
                     ? 'bg-rose-600 text-white'
                     : 'bg-stone-100 dark:bg-[var(--surface-primary)] hover:bg-rose-100 hover:text-rose-900 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 text-stone-700 dark:text-[var(--text-secondary)] border border-transparent dark:border-[var(--border-primary)]'
                 }`}
-                title={isSpanish ? "Traducir la respuesta entera" : "Translate the entire response"}
+                title={showTranslation
+                  ? (isSpanish ? 'Ocultar traducción' : 'Hide translation')
+                  : (isSpanish ? 'Traducir la respuesta entera' : 'Translate the entire response')}
+                aria-label={showTranslation
+                  ? (isSpanish ? 'Ocultar traducción' : 'Hide translation')
+                  : (isSpanish ? 'Traducir la respuesta entera' : 'Translate the entire response')}
               >
                 <Globe className="w-3.5 h-3.5" />
-                <span>
-                  {showTranslation
-                    ? isSpanish
-                      ? 'Ocultar traducción'
-                      : 'Hide translation'
-                    : isSpanish
-                    ? 'Traducir respuesta'
-                    : 'Translate response'}
-                </span>
               </button>
             )}
           </div>

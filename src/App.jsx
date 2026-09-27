@@ -18,6 +18,7 @@ import { Sparkles, RotateCcw, ArrowLeft, ArrowUp, MoreVertical } from 'lucide-re
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
 import { normalizeChineseTokens, validateChineseTokens } from './services/chineseTokenNormalizer';
+import { translateParagraphTextApi } from './services/textDocumentService.js';
 import { useSiteLanguage } from './context/SiteLanguageContext.jsx';
 import { useAudioSettings } from './context/AudioSettingsContext.jsx';
 import { useAuth } from './context/AuthContext.jsx';
@@ -872,6 +873,30 @@ export default function App() {
     }
   };
 
+  const handleTranslateChatMessage = async (message) => {
+    if (message?.translation) return message.translation;
+
+    const sourceText = (message?.sender === 'user'
+      ? message.correctedText || message.text
+      : message?.text || '').trim();
+    if (!sourceText) throw new Error('No hay texto para traducir.');
+
+    const result = await translateParagraphTextApi({
+      text: sourceText,
+      targetLang,
+      nativeLang,
+      apiKey: config?.apiKey || ''
+    });
+
+    setMessages((currentMessages) => currentMessages.map((currentMessage) => (
+      currentMessage.id === message.id
+        ? { ...currentMessage, translation: result.translation }
+        : currentMessage
+    )));
+
+    return result.translation;
+  };
+
   // Word lookup on-click: Works independently for YouTube Reader, Text Reader, and Chat
   const handleWordClick = async (rawWord, tokenOrVocab) => {
     if (!rawWord && !tokenOrVocab) return;
@@ -1333,6 +1358,7 @@ export default function App() {
                   speakingText={speakingText}
                   onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
                   onDeleteMessage={handleDeleteMessage}
+                  onTranslateMessage={handleTranslateChatMessage}
                 />
               ))}
 
