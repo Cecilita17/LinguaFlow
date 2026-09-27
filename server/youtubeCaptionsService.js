@@ -46,6 +46,23 @@ function extractConfigString(source, key) {
   return match?.[1] || '';
 }
 
+async function fetchAndroidPlayerResponse(videoId) {
+  const clientVersion = '20.10.38';
+  const response = await fetchWithTimeout('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': `com.google.android.youtube/${clientVersion} (Linux; U; Android 14)`
+    },
+    body: JSON.stringify({
+      context: { client: { clientName: 'ANDROID', clientVersion } },
+      videoId
+    })
+  });
+  if (!response.ok) return null;
+  return response.json().catch(() => null);
+}
+
 async function fetchPlayerResponseFallback(html, videoId) {
   const apiKey = extractConfigString(html, 'INNERTUBE_API_KEY');
   if (!apiKey) return null;
@@ -131,7 +148,7 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
 
   let tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
   if (tracks.length === 0) {
-    const fallbackPlayerResponse = await fetchPlayerResponseFallback(html, videoId);
+    const fallbackPlayerResponse = await fetchAndroidPlayerResponse(videoId) || await fetchPlayerResponseFallback(html, videoId);
     if (fallbackPlayerResponse) {
       playerResponse = fallbackPlayerResponse;
       tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
