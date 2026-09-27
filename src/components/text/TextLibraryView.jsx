@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BookOpen,
   Search,
@@ -18,6 +18,7 @@ import {
   getAllDocuments,
   deleteDocument
 } from '../../services/textDocumentService.js';
+import { saveTextDocument } from '../../services/textLibraryStorage.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 const LANGUAGE_META = {
@@ -49,6 +50,9 @@ export function TextLibraryView({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [coverUploadDocument, setCoverUploadDocument] = useState(null);
+  const [coverUploadingId, setCoverUploadingId] = useState(null);
+  const coverFileInputRef = useRef(null);
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -66,6 +70,66 @@ export function TextLibraryView({
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
+
+  const handleAddCover = (doc, event) => {
+    event.stopPropagation();
+    setCoverUploadDocument(doc);
+    coverFileInputRef.current?.click();
+  };
+
+  const handleCoverFileSelected = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file || !coverUploadDocument) return;
+    if (!file.type.startsWith('image/')) {
+      setNotification({
+        type: 'error',
+        message: isSpanish ? 'Elegí un archivo de imagen para la portada.' : 'Choose an image file for the cover.'
+      });
+      return;
+    }
+
+    const documentToUpdate = coverUploadDocument;
+    setCoverUploadDocument(null);
+    setCoverUploadingId(documentToUpdate.id);
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setCoverUploadingId(null);
+      setNotification({
+        type: 'error',
+        message: isSpanish ? 'No se pudo leer la imagen de portada.' : 'Could not read the cover image.'
+      });
+    };
+    reader.onload = async () => {
+      try {
+        const coverImage = reader.result;
+        if (typeof coverImage !== 'string') throw new Error('Invalid cover image');
+
+        const saved = await saveTextDocument({
+          ...documentToUpdate,
+          coverImage
+        });
+        if (!saved) throw new Error('Could not save cover image');
+
+        setDocuments((previous) => previous.map((doc) => doc.id === saved.id ? saved : doc));
+        setNotification({
+          type: 'success',
+          message: isSpanish ? '✓ Portada agregada al libro' : '✓ Book cover added'
+        });
+      } catch (error) {
+        console.warn('[TextLibraryView] Error saving EPUB cover:', error);
+        setNotification({
+          type: 'error',
+          message: isSpanish ? 'No se pudo guardar la portada.' : 'Could not save the cover image.'
+        });
+      } finally {
+        setCoverUploadingId(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleConfirmDelete = async (id, e) => {
     e.stopPropagation();
@@ -178,6 +242,14 @@ export function TextLibraryView({
 
   return (
     <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-hidden text-[var(--text-primary)]">
+      <input
+        ref={coverFileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleCoverFileSelected}
+        className="hidden"
+      />
+
       {/* Top Header Bar: [ ← ]  Text Reader  [ + Add ] */}
       <div className="flex-shrink-0 flex items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-black/5 dark:border-white/10">
         {onBackToHome ? (
@@ -353,6 +425,25 @@ export function TextLibraryView({
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
+                  ) : isEpubDocument ? (
+                    <button
+                      type="button"
+                      onClick={(event) => handleAddCover(doc, event)}
+                      disabled={coverUploadingId === doc.id}
+                      title={isSpanish ? 'Agregar portada' : 'Add cover'}
+                      className="w-full h-full flex flex-col items-center justify-center gap-1 text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:cursor-wait"
+                    >
+                      {coverUploadingId === doc.id ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <BookOpen className="w-6 h-6" />
+                      )}
+                      <span className="text-[9px] font-semibold">
+                        {coverUploadingId === doc.id
+                          ? (isSpanish ? 'Guardando...' : 'Saving...')
+                          : (isSpanish ? 'Agregar portada' : 'Add cover')}
+                      </span>
+                    </button>
                   ) : (
                     <BookOpen className="w-6 h-6 text-rose-500/60" />
                   )}
