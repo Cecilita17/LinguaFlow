@@ -1031,8 +1031,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
-      {/* Global Header — hidden in Text Reader, YouTube Reader, Image Reader & Live Call because they own their dedicated full-screen headers */}
-      {activeTab !== 'text' && activeTab !== 'youtube' && activeTab !== 'image' && !(activeTab === 'chat' && chatViewMode === 'call') && (
+      {/* Global Header — hidden where a dedicated reader, call, or conversation navbar owns the top area */}
+      {activeTab !== 'text' && activeTab !== 'youtube' && activeTab !== 'image' && !(activeTab === 'chat' && (chatViewMode === 'call' || chatViewMode === 'chat')) && (
         <Header
           languages={languages}
           targetLang={targetLang}
@@ -1200,14 +1200,9 @@ export default function App() {
       ) : (
         <>
           <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
-            {/* Main Chat Scroll Area */}
-            <main
-              ref={chatContainerRef}
-              onScroll={handleChatScroll}
-              className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
-            >
-              {/* Top Navigation Bar inside active chat to return to Chat Hub */}
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-primary)]/70">
+            {/* Conversation-specific navbar */}
+            <div className="shrink-0 z-30 border-b border-[var(--border-primary)] bg-[var(--app-bg)]/95 backdrop-blur-xl shadow-xs">
+              <div className="flex items-center justify-between max-w-4xl w-full mx-auto px-4 py-3">
                 <button
                   type="button"
                   onClick={handleReturnToChatHub}
@@ -1237,7 +1232,14 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </div>
 
+            {/* Main Chat Scroll Area */}
+            <main
+              ref={chatContainerRef}
+              onScroll={handleChatScroll}
+              className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
+            >
               {/* API Error Warning Banner */}
               {apiWarning && (
                 <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in gap-3">
