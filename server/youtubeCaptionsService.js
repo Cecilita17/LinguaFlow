@@ -124,7 +124,7 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
   }
 
   const html = await watchResponse.text();
-  const playerResponse =
+  let playerResponse =
     extractJsonObject(html, 'ytInitialPlayerResponse =') ||
     extractJsonObject(html, 'var ytInitialPlayerResponse =') ||
     extractJsonObject(html, 'ytInitialPlayerResponse=');
