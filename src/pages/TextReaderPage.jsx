@@ -2714,19 +2714,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                     <span>Editar título</span>
                   </button>
 
-                  {/* Guardar marcador manual */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsActionsMenuOpen(false);
-                      handleSaveAudioBookmark();
-                    }}
-                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
-                  >
-                    <Bookmark className={`w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0 ${audioBookmark ? 'fill-rose-500' : ''}`} />
-                    <span>{audioBookmark ? 'Actualizar marcador' : 'Guardar marcador'}</span>
-                  </button>
-
                   {/* Continuar desde marcador */}
                   {audioBookmark && (
                     <button
@@ -3246,6 +3233,20 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               }`}
             >
               <Sparkles className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500/30' : ''}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSaveAudioBookmark()}
+              title={audioBookmark ? 'Actualizar marcador' : 'Guardar marcador'}
+              aria-label={audioBookmark ? 'Actualizar marcador' : 'Guardar marcador'}
+              className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
+                audioBookmark
+                  ? 'text-rose-600 dark:text-rose-400 bg-rose-500/15'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
+              }`}
+            >
+              <Bookmark className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${audioBookmark ? 'fill-current' : ''}`} />
             </button>
           </div>
         </div>
