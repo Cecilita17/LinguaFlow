@@ -29,7 +29,7 @@ export function SubtitleImporter({
   const handleProcessPasted = () => {
     setError(null);
     if (!pastedText.trim()) {
-      setError('Pega texto o contenido SRT/VTT en el campo antes de procesar.');
+      setError(isSpanish ? 'Pega texto o contenido SRT/VTT en el campo antes de procesar.' : 'Paste text or SRT/VTT content into the field before processing.');
       return;
     }
 
@@ -38,17 +38,17 @@ export function SubtitleImporter({
       const { format, subtitles } = parseSubtitlesAuto(pastedText, '', targetLang);
 
       if (!subtitles || subtitles.length === 0) {
-        setError('No se detectaron líneas de texto válidas.');
+        setError(isSpanish ? 'No se detectaron líneas de texto válidas.' : 'No valid text lines were detected.');
         return;
       }
 
       if (onSubtitlesLoaded) {
-        onSubtitlesLoaded(subtitles, format, 'Texto pegado');
+        onSubtitlesLoaded(subtitles, format, isSpanish ? 'Texto pegado' : 'Pasted text');
       }
       setPastedText('');
       setIsExpanded(false);
     } catch (err) {
-      setError('Error al procesar el texto: ' + err.message);
+      setError((isSpanish ? 'Error al procesar el texto: ' : 'Error processing text: ') + err.message);
     } finally {
       setIsProcessing(false);
     }
@@ -67,14 +67,14 @@ export function SubtitleImporter({
       try {
         const content = event.target?.result;
         if (typeof content !== 'string') {
-          setError('No se pudo leer el archivo seleccionado.');
+          setError(isSpanish ? 'No se pudo leer el archivo seleccionado.' : 'The selected file could not be read.');
           return;
         }
 
         const { format, subtitles } = parseSubtitlesAuto(content, file.name, targetLang);
 
         if (!subtitles || subtitles.length === 0) {
-          setError(`El archivo "${file.name}" no contiene líneas de subtítulos legibles.`);
+          setError(isSpanish ? `El archivo "${file.name}" no contiene líneas de subtítulos legibles.` : `The file "${file.name}" does not contain readable subtitle lines.`);
           return;
         }
 
@@ -84,13 +84,13 @@ export function SubtitleImporter({
             setIsExpanded(false);
           } catch (loadErr) {
             console.error('Error in onSubtitlesLoaded:', loadErr);
-            setError('Error al procesar la transcripción: ' + (loadErr.message || 'Error desconocido'));
+            setError((isSpanish ? 'Error processing transcript: ' : 'Error processing transcript: ') + (loadErr.message || (isSpanish ? 'Error desconocido' : 'Unknown error')));
           }
         } else {
           setIsExpanded(false);
         }
       } catch (err) {
-        setError('Error al parsear el archivo: ' + err.message);
+        setError((isSpanish ? 'Error al analizar el archivo: ' : 'Error parsing file: ') + err.message);
       } finally {
         setIsProcessing(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -98,7 +98,7 @@ export function SubtitleImporter({
     };
 
     reader.onerror = () => {
-      setError('Error al abrir el archivo.');
+      setError(isSpanish ? 'Error al abrir el archivo.' : 'Error opening file.');
       setIsProcessing(false);
     };
 
@@ -150,7 +150,7 @@ export function SubtitleImporter({
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
-          <span>Pegar transcript</span>
+          <span>{isSpanish ? 'Pegar transcripción' : 'Paste transcript'}</span>
         </button>
         <button
           type="button"
@@ -162,7 +162,7 @@ export function SubtitleImporter({
           }`}
         >
           <Upload className="w-3.5 h-3.5" />
-          <span>Importar archivo</span>
+          <span>{isSpanish ? 'Importar archivo' : 'Import file'}</span>
         </button>
       </div>
 
@@ -173,13 +173,15 @@ export function SubtitleImporter({
             rows={4}
             value={pastedText}
             onChange={(e) => setPastedText(e.target.value)}
-            placeholder="Pega aquí el texto plano o el contenido de un archivo .srt o .vtt...&#10;Ejemplo:&#10;1&#10;00:00:01,000 --> 00:00:03,000&#10;Hello, how are you?"
+            placeholder={isSpanish
+              ? 'Pega aquí el texto plano o el contenido de un archivo .srt o .vtt...\nEjemplo:\n1\n00:00:01,000 --> 00:00:03,000\nHello, how are you?'
+              : 'Paste plain text or the content of a .srt or .vtt file here...\nExample:\n1\n00:00:01,000 --> 00:00:03,000\nHello, how are you?'}
             className="w-full bg-[var(--input-bg)] text-[var(--text-primary)] text-xs font-mono rounded-xl p-3 border border-[var(--input-border)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-inner resize-y"
           />
 
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-[var(--text-muted)]">
-              Detecta automáticamente SRT, WebVTT o texto simple línea por línea.
+              {isSpanish ? 'Detecta automáticamente SRT, WebVTT o texto simple línea por línea.' : 'Automatically detects SRT, WebVTT, or plain text line by line.'}
             </span>
             <button
               type="button"
@@ -187,7 +189,7 @@ export function SubtitleImporter({
               disabled={isProcessing || !pastedText.trim()}
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-xs shadow-md disabled:opacity-40 active:scale-95 transition-all"
             >
-              {isProcessing ? 'Procesando...' : 'Cargar transcript'}
+              {isProcessing ? (isSpanish ? 'Procesando...' : 'Processing...') : (isSpanish ? 'Cargar transcripción' : 'Load transcript')}
             </button>
           </div>
         </div>
@@ -202,10 +204,10 @@ export function SubtitleImporter({
           >
             <Upload className="w-7 h-7 mx-auto text-rose-500 dark:text-rose-400 group-hover:scale-110 transition-transform mb-2" />
             <p className="text-xs font-bold text-[var(--text-primary)] mb-0.5">
-              Haz clic para seleccionar o arrastra tu archivo aquí
+              {isSpanish ? 'Haz clic para seleccionar o arrastra tu archivo aquí' : 'Click to select or drag your file here'}
             </p>
             <p className="text-[11px] text-[var(--text-muted)]">
-              Formatos soportados: <span className="font-semibold text-rose-600 dark:text-rose-300">.srt</span>, <span className="font-semibold text-rose-600 dark:text-rose-300">.vtt</span>, <span className="font-semibold text-rose-600 dark:text-rose-300">.txt</span> (codificación UTF-8)
+              {isSpanish ? 'Formatos soportados: ' : 'Supported formats: '}<span className="font-semibold text-rose-600 dark:text-rose-300">.srt</span>, <span className="font-semibold text-rose-600 dark:text-rose-300">.vtt</span>, <span className="font-semibold text-rose-600 dark:text-rose-300">.txt</span> {isSpanish ? '(codificación UTF-8)' : '(UTF-8 encoding)'}
             </p>
           </div>
 

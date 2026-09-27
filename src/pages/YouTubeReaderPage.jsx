@@ -598,11 +598,11 @@ export function YouTubeReaderPage({
           text: null,
           isTranslating: false,
           isVisible: true,
-          error: err.message || 'Error al traducir la línea.'
+          error: err.message || (isSpanish ? 'Error al traducir la línea.' : 'Could not translate the line.')
         }
       }));
     }
-  }, [lineTranslations, targetLang, nativeLang, apiKey]);
+  }, [lineTranslations, targetLang, nativeLang, apiKey, isSpanish]);
 
   // 1. Restore previous session on initial mount
   useEffect(() => {
@@ -1468,7 +1468,7 @@ export function YouTubeReaderPage({
                         <label className="w-full px-3 py-2 rounded-xl text-left flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]">
                           <span className="flex items-center space-x-2.5">
                             <Gauge className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
-                            <span>Playback speed</span>
+                            <span>{isSpanish ? 'Velocidad de reproducción' : 'Playback speed'}</span>
                           </span>
                           <select
                             value={speechRate}
@@ -1490,7 +1490,7 @@ export function YouTubeReaderPage({
                         >
                           <span className="flex items-center space-x-2.5">
                             <span className="w-3.5 h-3.5 flex items-center justify-center font-bold text-[12px] leading-none text-rose-500 dark:text-rose-400 shrink-0">A文</span>
-                            <span>Transliterations</span>
+                            <span>{isSpanish ? 'Transliteraciones' : 'Transliterations'}</span>
                           </span>
                           <span
                             className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
@@ -1511,7 +1511,7 @@ export function YouTubeReaderPage({
                         >
                           <span className="flex items-center space-x-2.5">
                             <span className="w-3.5 h-3.5 flex items-center justify-center font-bold text-[12px] leading-none text-rose-500 dark:text-rose-400 shrink-0">A±</span>
-                            <span>Text size</span>
+                            <span>{isSpanish ? 'Tamaño de texto' : 'Text size'}</span>
                           </span>
                           <span className="text-[11px] font-mono font-bold uppercase text-rose-600 dark:text-rose-300 shrink-0">
                             {fontSize}
@@ -1526,7 +1526,7 @@ export function YouTubeReaderPage({
                         >
                           <span className="flex items-center space-x-2.5">
                             <Sparkles className={`w-3.5 h-3.5 shrink-0 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500' : 'text-rose-500 dark:text-rose-400'}`} />
-                            <span>Auto glossing</span>
+                            <span>{isSpanish ? 'Glosado automático' : 'Auto glossing'}</span>
                           </span>
                           <span
                             className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
@@ -1547,7 +1547,7 @@ export function YouTubeReaderPage({
                         >
                           <span className="flex items-center space-x-2.5">
                             <ArrowDown className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
-                            <span>Auto-scroll</span>
+                            <span>{isSpanish ? 'Desplazamiento automático' : 'Auto-scroll'}</span>
                           </span>
                           <span
                             className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
@@ -1725,7 +1725,7 @@ export function YouTubeReaderPage({
                   title={isAutoGlossing
                     ? (isSpanish ? 'Glosado automático activo (clic para pausar)' : 'Auto-glossing active (click to pause)')
                     : (isSpanish ? 'Activar glosado automático' : 'Enable auto-glossing')}
-                  aria-label="Auto glossing"
+                  aria-label={isSpanish ? 'Glosado automático' : 'Auto glossing'}
                   aria-pressed={isAutoGlossing}
                   className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                     isAutoGlossing
@@ -1741,7 +1741,7 @@ export function YouTubeReaderPage({
                   type="button"
                   onClick={cycleFontSize}
                   title={isSpanish ? `Tamaño de texto: ${fontSize.toUpperCase()} — clic para cambiar` : `Text size: ${fontSize.toUpperCase()} — click to change`}
-                  aria-label="Tamaño de texto"
+                  aria-label={isSpanish ? 'Tamaño de texto' : 'Text size'}
                   className="py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold"
                 >
                   <span className="text-[12px] sm:text-sm leading-none tracking-tight">A±</span>

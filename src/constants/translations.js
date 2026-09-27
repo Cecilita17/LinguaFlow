@@ -9,9 +9,9 @@ export const TRANSLATIONS = {
     ai_tutor_badge: 'AI TUTOR',
     nav_home: 'Inicio',
     nav_chat: 'Tutor Chat',
-    nav_youtube: 'YouTube Reader',
-    nav_text_reader: 'Importar texto',
-    nav_image_reader: 'Image Reader',
+    nav_youtube: 'Lector de YouTube',
+    nav_text_reader: 'Lector de textos',
+    nav_image_reader: 'Lector de imágenes',
     practice_label: 'Practicar',
     native_lang_label: 'Tu idioma',
     website_lang: 'Idioma del Sitio',
@@ -107,14 +107,14 @@ export const TRANSLATIONS = {
     home_chat_f3: 'Desglose gramatical palabra por palabra',
     home_chat_btn: 'Comenzar a Chatear',
     home_yt_tag: 'MODO MULTIMEDIA',
-    home_yt_title: 'YouTube Reader',
+    home_yt_title: 'Lector de YouTube',
     home_yt_desc: 'Cargá videos de YouTube y analizá subtítulos interactivos, glosados interlineales y traducciones sincronizadas.',
     home_yt_f1: 'Sincronización de video en vivo',
     home_yt_f2: 'Glosado interlineal inteligente',
     home_yt_f3: 'Modo inmersivo tipo Miraa',
     home_yt_btn: 'Abrir Lector de YouTube',
     home_text_tag: 'LECTOR DE TEXTOS',
-    home_text_title: 'Importar Texto',
+    home_text_title: 'Lector de textos',
     home_text_desc: 'Pega o importa cualquier texto sin video. Lee párrafos con audio individual y glosado inteligente.',
     home_text_f1: 'Lectura independiente sin video',
     home_text_f2: 'Audio TTS por párrafo individual',
@@ -208,7 +208,7 @@ export const TRANSLATIONS = {
     scroll_to_top: 'Volver arriba',
 
     // Habit Tracker
-    habit_tracker_title: 'Habit Tracker',
+    habit_tracker_title: 'Seguimiento de hábitos',
     habit_tracker_subtitle: 'Lleva un registro de los idiomas que practicas cada día.',
     habit_tracker_desc: 'Selecciona los idiomas que quieres trackear y marca lo que estudiaste.',
     habit_config_title: 'Configura los idiomas que quieres trackear',
@@ -216,9 +216,9 @@ export const TRANSLATIONS = {
     habit_activity_conversation: 'Conversación',
     habit_activity_youtube: 'YouTube',
     habit_activity_reading: 'Lectura',
-    habit_card_title: 'Habit Tracker',
+    habit_card_title: 'Seguimiento de hábitos',
     habit_card_desc: 'Lleva un registro diario de tus hábitos de estudio por idioma.',
-    habit_card_action: 'Abrir Habit Tracker'
+    habit_card_action: 'Abrir seguimiento de hábitos'
   },
   en: {
     // Header & Branding

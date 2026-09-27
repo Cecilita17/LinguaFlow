@@ -350,7 +350,7 @@ export function LiveCallView({
                 ? 'bg-rose-500 text-white border-rose-600'
                 : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
-            title="Activar o desactivar transcripción en vivo"
+            title={isSpanish ? 'Activar o desactivar transcripción en vivo' : 'Enable or disable live transcription'}
           >
             <FileText className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{t('call_transcription_toggle')}</span>

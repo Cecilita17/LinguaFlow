@@ -14,6 +14,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { extractHanziItems } from '../services/chineseWritingService.js';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 export function ChineseWritingPractice({
   isOpen,
@@ -23,6 +24,7 @@ export function ChineseWritingPractice({
   diffTokens = [],
   showTransliteration = true
 }) {
+  const { isSpanish } = useSiteLanguage();
   const [mode, setMode] = useState(initialMode); // 'words' | 'sentence'
   const [filterType, setFilterType] = useState('corrections'); // 'corrections' | 'all'
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -267,13 +269,15 @@ export function ChineseWritingPractice({
             </div>
             <div>
               <h3 className="text-base font-bold text-stone-900 dark:text-stone-100 flex items-center gap-1.5">
-                <span>Práctica de Escritura</span>
+                <span>{isSpanish ? 'Práctica de escritura' : 'Writing practice'}</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-semibold">
                   汉字
                 </span>
               </h3>
               <p className="text-xs text-stone-500 dark:text-stone-400">
-                {mode === 'sentence' ? 'Oración corregida completa' : 'Caracteres corregidos / nuevos'}
+                {mode === 'sentence'
+                  ? (isSpanish ? 'Oración corregida completa' : 'Full corrected sentence')
+                  : (isSpanish ? 'Caracteres corregidos / nuevos' : 'Corrected / new characters')}
               </p>
             </div>
           </div>
@@ -281,7 +285,7 @@ export function ChineseWritingPractice({
           <button
             onClick={onClose}
             className="p-1.5 rounded-xl hover:bg-stone-200/60 dark:hover:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition-colors"
-            title="Cerrar práctica"
+            title={isSpanish ? 'Cerrar práctica' : 'Close practice'}
           >
             <X className="w-5 h-5" />
           </button>
@@ -300,7 +304,7 @@ export function ChineseWritingPractice({
               }`}
             >
               <PenTool className="w-3.5 h-3.5" />
-              <span>✍️ Escritura</span>
+              <span>{isSpanish ? '✍️ Escritura' : '✍️ Writing'}</span>
             </button>
             <button
               type="button"
@@ -312,7 +316,7 @@ export function ChineseWritingPractice({
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>📝 Oración</span>
+              <span>{isSpanish ? '📝 Oración' : '📝 Sentence'}</span>
             </button>
           </div>
 
@@ -328,7 +332,7 @@ export function ChineseWritingPractice({
                     : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
                 }`}
               >
-                Solo corrección ({changedItems.length})
+                {isSpanish ? `Solo corrección (${changedItems.length})` : `Corrections only (${changedItems.length})`}
               </button>
               <button
                 type="button"
@@ -339,7 +343,7 @@ export function ChineseWritingPractice({
                     : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
                 }`}
               >
-                Todos ({allItems.length})
+                {isSpanish ? `Todos (${allItems.length})` : `All (${allItems.length})`}
               </button>
             </div>
           )}
@@ -354,10 +358,10 @@ export function ChineseWritingPractice({
                 <Award className="w-9 h-9" />
               </div>
               <h4 className="text-2xl font-black text-stone-900 dark:text-stone-100 mb-1">
-                ¡Práctica Completada!
+                {isSpanish ? '¡Práctica completada!' : 'Practice completed!'}
               </h4>
               <p className="text-sm text-stone-500 dark:text-stone-400 mb-6">
-                Has escrito todos los caracteres en orden de trazos correcto.
+                {isSpanish ? 'Has escrito todos los caracteres en orden de trazos correcto.' : 'You wrote every character in the correct stroke order.'}
               </p>
 
               <div className="grid grid-cols-2 gap-3 w-full max-w-xs mb-8">
@@ -365,13 +369,13 @@ export function ChineseWritingPractice({
                   <span className="text-2xl font-bold text-rose-600 dark:text-rose-400">
                     {completedCharIndices.size} / {activeItems.length}
                   </span>
-                  <p className="text-xs text-stone-500 dark:text-stone-400 font-medium mt-0.5">Caracteres</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 font-medium mt-0.5">{isSpanish ? 'Caracteres' : 'Characters'}</p>
                 </div>
                 <div className="p-3 rounded-2xl bg-stone-100 dark:bg-stone-800/60 text-center">
                   <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
                     {totalMistakes}
                   </span>
-                  <p className="text-xs text-stone-500 dark:text-stone-400 font-medium mt-0.5">Errores de trazo</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 font-medium mt-0.5">{isSpanish ? 'Errores de trazo' : 'Stroke mistakes'}</p>
                 </div>
               </div>
 
@@ -382,14 +386,14 @@ export function ChineseWritingPractice({
                   className="px-4 py-2 rounded-xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 font-semibold text-sm transition-all flex items-center gap-1.5"
                 >
                   <RotateCcw className="w-4 h-4" />
-                  <span>Repetir</span>
+                  <span>{isSpanish ? 'Repetir' : 'Repeat'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
                   className="px-5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-semibold text-sm shadow-md transition-all"
                 >
-                  Continuar Chat
+                  {isSpanish ? 'Continuar chat' : 'Continue chat'}
                 </button>
               </div>
             </div>
@@ -400,8 +404,8 @@ export function ChineseWritingPractice({
               {mode === 'sentence' && (
                 <div className="w-full mb-4 p-3 rounded-2xl bg-stone-100/90 dark:bg-stone-800/50 border border-stone-200/80 dark:border-stone-700/60">
                   <div className="text-xs font-semibold text-stone-500 dark:text-stone-400 mb-1 flex items-center justify-between">
-                    <span>Oración corregida:</span>
-                    <span>{currentIndex + 1} de {activeItems.length}</span>
+                    <span>{isSpanish ? 'Oración corregida:' : 'Corrected sentence:'}</span>
+                    <span>{currentIndex + 1} {isSpanish ? 'de' : 'of'} {activeItems.length}</span>
                   </div>
                   <div className="flex flex-wrap gap-1 items-center text-lg leading-loose font-chinese">
                     {activeItems.map((item, idx) => {
@@ -442,23 +446,23 @@ export function ChineseWritingPractice({
                     {currentItem.pinyin}
                   </span>
                 ) : (
-                  <span className="text-xs text-stone-400 dark:text-stone-500 font-medium">Escribe con el dedo o mouse</span>
+                  <span className="text-xs text-stone-400 dark:text-stone-500 font-medium">{isSpanish ? 'Escribe con el dedo o mouse' : 'Write with your finger or mouse'}</span>
                 )}
 
                 {/* Status badges */}
                 <div className="flex items-center space-x-2 mt-1">
                   <span className="text-xs font-semibold text-stone-500 dark:text-stone-400">
-                    Carácter {currentIndex + 1} de {activeItems.length}
+                    {isSpanish ? 'Carácter' : 'Character'} {currentIndex + 1} {isSpanish ? 'de' : 'of'} {activeItems.length}
                   </span>
                   {currentItem?.isNewOrChanged && (
                     <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-bold border border-amber-500/30">
-                      Elemento corregido
+                      {isSpanish ? 'Elemento corregido' : 'Corrected item'}
                     </span>
                   )}
                   {isCharCompleted && (
                     <span className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
                       <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                      <span>¡Correcto!</span>
+                      <span>{isSpanish ? '¡Correcto!' : 'Correct!'}</span>
                     </span>
                   )}
                 </div>
@@ -499,13 +503,13 @@ export function ChineseWritingPractice({
               <div className="h-6 mt-2 flex items-center justify-center">
                 {charMistakes > 0 && !isCharCompleted && (
                   <span className="text-xs font-semibold text-rose-500 dark:text-rose-400">
-                    Errores en este carácter: {charMistakes}
+                    {isSpanish ? `Errores en este carácter: ${charMistakes}` : `Mistakes on this character: ${charMistakes}`}
                   </span>
                 )}
                 {isCharCompleted && (
                   <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                     <Sparkles className="w-3.5 h-3.5" />
-                    ¡Trazos completados! Pulsa Siguiente para avanzar.
+                    {isSpanish ? '¡Trazos completados! Pulsa Siguiente para avanzar.' : 'Strokes complete! Press Next to continue.'}
                   </span>
                 )}
               </div>
@@ -517,30 +521,30 @@ export function ChineseWritingPractice({
                   onClick={handleAnimate}
                   disabled={isAnimating}
                   className="px-3 py-1.5 rounded-xl bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-                  title="Ver animación del orden de trazos"
+                  title={isSpanish ? 'Ver animación del orden de trazos' : 'View stroke-order animation'}
                 >
                   <Play className={`w-3.5 h-3.5 text-rose-500 ${isAnimating ? 'animate-pulse' : ''}`} />
-                  <span>{isAnimating ? 'Animando...' : 'Ver trazos'}</span>
+                  <span>{isAnimating ? (isSpanish ? 'Animando...' : 'Animating...') : (isSpanish ? 'Ver trazos' : 'View strokes')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleHint}
                   className="px-3 py-1.5 rounded-xl bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
-                  title="Mostrar pista del siguiente trazo"
+                  title={isSpanish ? 'Mostrar pista del siguiente trazo' : 'Show next-stroke hint'}
                 >
                   <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Pista</span>
+                  <span>{isSpanish ? 'Pista' : 'Hint'}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleResetCurrent}
                   className="px-3 py-1.5 rounded-xl bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
-                  title="Borrar y reiniciar este carácter"
+                  title={isSpanish ? 'Borrar y reiniciar este carácter' : 'Clear and restart this character'}
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-stone-500" />
-                  <span>Reiniciar</span>
+                  <span>{isSpanish ? 'Reiniciar' : 'Restart'}</span>
                 </button>
               </div>
             </>
@@ -557,7 +561,7 @@ export function ChineseWritingPractice({
               className="px-3 py-1.5 rounded-xl border border-stone-300 dark:border-stone-700 text-stone-700 dark:text-stone-300 text-xs font-semibold hover:bg-stone-200/50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:pointer-events-none transition-all flex items-center gap-1"
             >
               <ChevronLeft className="w-4 h-4" />
-              <span>Anterior</span>
+              <span>{isSpanish ? 'Anterior' : 'Previous'}</span>
             </button>
 
             {/* Quick Character Thumbnails strip in 'words' mode */}
@@ -574,7 +578,7 @@ export function ChineseWritingPractice({
                       ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
                       : 'bg-stone-200/60 dark:bg-stone-800 text-stone-600 dark:text-stone-400'
                   }`}
-                  title={`Carácter: ${it.char}`}
+                  title={`${isSpanish ? 'Carácter' : 'Character'}: ${it.char}`}
                 >
                   {it.char}
                 </button>
@@ -590,7 +594,7 @@ export function ChineseWritingPractice({
                   : 'bg-rose-600 hover:bg-rose-500 text-white'
               }`}
             >
-              <span>{currentIndex + 1 >= activeItems.length ? 'Finalizar' : 'Siguiente'}</span>
+              <span>{currentIndex + 1 >= activeItems.length ? (isSpanish ? 'Finalizar' : 'Finish') : (isSpanish ? 'Siguiente' : 'Next')}</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

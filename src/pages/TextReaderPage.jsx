@@ -979,7 +979,9 @@ export function TextReaderPage({
       if (hasManual) {
         const newMeta = getLanguageMeta(newLang);
         const confirmed = window.confirm(
-          `El documento actual contiene glosas manuales.\n\nAl cambiar el idioma a "${newMeta.name}", el texto se retokenizará para ese idioma pero se conservarán automáticamente todas las glosas manuales de las palabras coincidentes.\n\n¿Deseas cambiar el idioma del documento?`
+          isSpanish
+            ? `El documento actual contiene glosas manuales.\n\nAl cambiar el idioma a "${newMeta.name}", el texto se retokenizará para ese idioma pero se conservarán automáticamente todas las glosas manuales de las palabras coincidentes.\n\n¿Deseas cambiar el idioma del documento?`
+            : `This document contains manual glosses.\n\nWhen changing the language to "${newMeta.name}", the text will be retokenized for that language while preserving matching manual glosses automatically.\n\nDo you want to change the document language?`
         );
         if (!confirmed) {
           return;
@@ -1061,383 +1063,7 @@ export function TextReaderPage({
           setCurrentParagraphPage(nextPage);
           if (scrollContainerRef.current) {
             scrollContainerRef.current.scrollTop = 0;
-            previousScrollTopRef.current = 0;
-          }
-          setIsHeaderHidden(false);
-          setTimeout(() => {
-            isProgrammaticScrollRef.current = false;
-            if (scrollContainerRef.current) {
-              previousScrollTopRef.current = scrollContainerRef.current.scrollTop;
-            }
-          }, 250);
-        }
-        handlePlayParagraphRef.current(nextPara);
-        setTimeout(() => {
-          try {
-            const el = window.document.querySelector(`[data-paragraph-id="${nextPara.id}"]`);
-            if (el) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-          } catch (scrollErr) {}
-        }, 80);
-      }
-    }
-  }, [isEpub]);
-
-/**
- * Calculates real-time character highlight position inside an active paragraph.
- * Respects Whisper segment bounds and freezes during silence/pauses instead of
- * linearly interpolating across silence gaps.
- */
-function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
-  if (!activePara || !activePara.text) return -1;
-  const paraText = activePara.text;
-  const pStart = activePara.audioStart;
-  const pEnd = activePara.audioEnd;
-  if (typeof pStart !== 'number' || typeof pEnd !== 'number' || pEnd <= pStart) return -1;
-
-  const matchingSegs = (Array.isArray(activePara.audioSegments) && activePara.audioSegments.length > 0)
-    ? activePara.audioSegments
-    : (Array.isArray(audioSegments) ? audioSegments : []).filter(s =>
-        typeof s.start === 'number' && typeof s.end === 'number' &&
-        s.end > (pStart - 0.05) && s.start < (pEnd + 0.05)
-      );
-
-  // If no segment data is available, do not advance characters into silence
-  if (matchingSegs.length === 0) {
-    return 0;
-  }
-
-  // Calculate character spans of each segment inside the paragraph text
-  let cursor = 0;
-  const segSpans = matchingSegs.map((seg, i) => {
-    const cleanSegText = (seg.text || '').trim();
-    let startIdx = cursor;
-    let endIdx = cursor;
-
-    if (cleanSegText) {
-      const foundIdx = paraText.indexOf(cleanSegText, cursor);
-      if (foundIdx !== -1) {
-        startIdx = foundIdx;
-        endIdx = foundIdx + cleanSegText.length;
-        cursor = endIdx;
-      } else {
-        const remainingChars = Math.max(1, paraText.length - cursor);
-        const estLen = Math.max(1, Math.min(remainingChars, cleanSegText.length));
-        startIdx = cursor;
-        endIdx = Math.min(paraText.length, cursor + estLen);
-        cursor = endIdx;
-      }
-    }
-    return {
-      start: seg.start,
-      end: seg.end,
-      startChar: startIdx,
-      endChar: Math.max(startIdx + 1, endIdx)
-    };
-  });
-
-  // 1. Check if newTime is currently INSIDE one of the speech segments
-  for (const span of segSpans) {
-    if (newTime >= span.start && newTime <= span.end) {
-      const segDur = Math.max(0.05, span.end - span.start);
-      const segProg = Math.max(0, Math.min(1, (newTime - span.start) / segDur));
-      const charSpanLen = span.endChar - span.startChar;
-      return Math.min(paraText.length - 1, span.startChar + Math.floor(segProg * charSpanLen));
-    }
-  }
-
-  // 2. newTime is in a SILENCE GAP between segments (e.g. narrator pause)
-  // Freeze at the end of the last finished segment during the silence!
-  let lastFinishedSpan = null;
-  for (const span of segSpans) {
-    if (span.end <= newTime) {
-      lastFinishedSpan = span;
-    }
-  }
-
-  if (lastFinishedSpan) {
-    return Math.min(paraText.length - 1, lastFinishedSpan.endChar - 1);
-  }
-
-  return segSpans[0]?.startChar ?? 0;
-}
-
-  // Playback time update handler — 100% decoupled from bookmarks
-  const handleAudioTimeUpdate = useCallback((newTime) => {
-    if (typeof newTime !== 'number' || isNaN(newTime)) return;
-    setAudioCurrentTime(newTime);
-    latestAudioPositionRef.current.time = newTime;
-
-    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
-    const audioSegments = document?.audioSegments || [];
-
-    if (Array.isArray(allParas) && allParas.length > 0) {
-      const activePara = allParas.find(p =>
-        typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
-        newTime >= p.audioStart && newTime < p.audioEnd
-      );
-      if (activePara) {
-        latestAudioPositionRef.current.paragraphId = activePara.id;
-        if (playingParagraphIdRef.current !== activePara.id) {
-          setPlayingParagraphId(activePara.id);
-          playingParagraphIdRef.current = activePara.id;
-          try {
-            const el = window.document.querySelector(`[data-paragraph-id="${activePara.id}"]`);
-            if (el) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
-          } catch (e) {}
-        }
-
-        // Calculate segment-aware character index without absorbing silence gaps
-        const charIndex = getSegmentAwareCharIndex(activePara, audioSegments, newTime);
-        setActiveAudioCharIndex(charIndex);
-      } else {
-        // newTime is outside speech (e.g. music/intro 0-30s or trailing audio)
-        const firstParaStart = allParas[0]?.audioStart;
-        if (typeof firstParaStart === 'number' && newTime < firstParaStart) {
-          if (playingParagraphIdRef.current) {
-            setPlayingParagraphId(null);
-            playingParagraphIdRef.current = null;
-          }
-          setActiveAudioCharIndex(-1);
-        }
-      }
-    }
-
-    // Check segment boundary of currently playing paragraph when autoPlay is disabled
-    const curId = playingParagraphIdRef.current;
-    if (curId) {
-      const currentPara = allParas.find(p => p.id === curId);
-      if (
-        currentPara &&
-        typeof currentPara.audioStart === 'number' &&
-        typeof currentPara.audioEnd === 'number' &&
-        currentPara.audioEnd > currentPara.audioStart &&
-        newTime >= currentPara.audioEnd &&
-        newTime >= currentPara.audioStart
-      ) {
-        if (!autoPlayTextReaderRef.current) {
-          if (audioPlayerRef.current) {
-            audioPlayerRef.current.pause();
-          }
-          setPlayingParagraphId(null);
-          playingParagraphIdRef.current = null;
-          setActiveAudioCharIndex(-1);
-        }
-      }
-    }
-  }, [document?.paragraphs, document?.audioSegments]);
-
-  const handleAudioPause = useCallback((pausedTime) => {
-    if (typeof pausedTime === 'number') {
-      latestAudioPositionRef.current.time = pausedTime;
-    }
-    setPlayingParagraphId(null);
-    playingParagraphIdRef.current = null;
-    setActiveAudioCharIndex(-1);
-  }, []);
-
-  const handleAudioEnded = useCallback(() => {
-    setPlayingParagraphId(null);
-    playingParagraphIdRef.current = null;
-    setActiveAudioCharIndex(-1);
-  }, []);
-
-  const handleAudioError = useCallback((err) => {
-    console.warn('[TextReader] Original audio playback error:', err);
-    if (playingParagraphIdRef.current) {
-      setAudioErrorId(playingParagraphIdRef.current);
-    }
-    setPlayingParagraphId(null);
-    playingParagraphIdRef.current = null;
-    setActiveAudioCharIndex(-1);
-  }, []);
-
-  // Handle single-paragraph playback (Original Audio if imported, window.speechSynthesis TTS otherwise)
-  const handlePlayParagraph = useCallback((paragraph) => {
-    if (!paragraph || !paragraph.text) return;
-    const playbackId = ++audioPlaybackIdRef.current;
-    userStoppedRef.current = false;
-    clearAudioVisualTimer();
-
-    // Check if document has original imported audio
-    const isAudioDoc = Boolean(
-      isAudioDocument ||
-      document?.sourceType === 'audio' ||
-      document?.format === 'audio' ||
-      document?.audioPathname ||
-      document?.audioUrl ||
-      document?.audioBlob
-    );
-
-    if (isAudioDoc) {
-      // 1. CANCEL TTS if active
-      try {
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
-      } catch (e) {}
-
-      if (typeof paragraph.audioStart === 'number' && typeof paragraph.audioEnd === 'number') {
-        setAudioErrorId(null);
-        setPlayingParagraphId(paragraph.id);
-        playingParagraphIdRef.current = paragraph.id;
-        latestAudioPositionRef.current.paragraphId = paragraph.id;
-
-        const startTime = Math.max(0, paragraph.audioStart);
-        latestAudioPositionRef.current.time = startTime;
-        setActiveAudioCharIndex(0);
-
-        if (audioPlayerRef.current) {
-          if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
-            audioPlayerRef.current.seekAndPlay(startTime);
-          } else if (typeof audioPlayerRef.current.seek === 'function') {
-            audioPlayerRef.current.seek(startTime, true);
-          }
-        }
-      } else {
-        console.warn('[TextReader] Audio document paragraph has no valid alignment timestamps:', paragraph.id);
-        setAudioErrorId(paragraph.id);
-      }
-      return;
-    }
-
-    // 2. Fallback to 100% UNCHANGED SpeechSynthesis TTS for normal documents (TXT, EPUB, AI)
-    if (audioPlayerRef.current) {
-      try { audioPlayerRef.current.pause(); } catch (e) {}
-    }
-
-    if (!window.speechSynthesis) {
-      setAudioErrorId(paragraph.id);
-      return;
-    }
-
-    // Cancel any current utterance
-    try {
-      window.speechSynthesis.cancel();
-    } catch (e) {}
-
-    setAudioErrorId(null);
-    setPlayingParagraphId(paragraph.id);
-    playingParagraphIdRef.current = paragraph.id;
-    latestAudioPositionRef.current.paragraphId = paragraph.id;
-    setActiveAudioCharIndex(0);
-
-    const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
-    const speechCode = paragraph.tts?.speechCode || getLanguageMeta(docLang)?.speechCode || 'zh-CN';
-    const cleanText = paragraph.text.replace(/<[^>]*>/g, '').trim();
-    const textLength = cleanText.length;
-    const currentRate = speechRateRef.current || speechRate || 1.0;
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = speechCode;
-
-    const utteranceRate = mapSpeechRateToUtteranceRate(currentRate);
-    utterance.rate = utteranceRate;
-
-    // Select suitable voice if available
-    try {
-      const voices = window.speechSynthesis.getVoices();
-      const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(speechCode.slice(0, 2).toLowerCase()));
-      if (matchingVoice) {
-        utterance.voice = matchingVoice;
-      }
-    } catch (voiceErr) {}
-
-    // Create encapsulated Audio Word Synchronizer for boundary-anchored local token progression
-    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
-    let prevActiveCharIndex = -1;
-    const synchronizer = createAudioWordSynchronizer({
-      text: cleanText,
-      tokens: paragraph.tokens || [],
-      targetLang: activeDocLang,
-      speechRate: currentRate,
-      utteranceRate,
-      paragraphId: paragraph.id,
-      playbackId,
-      isAndroid,
-      onActiveCharChange: (charIndex) => {
-        if (playbackId !== audioPlaybackIdRef.current) return;
-        if (isAndroid && charIndex >= 0) {
-          const matchedTok = synchronizer.wordTokens.find(wt => wt.startChar === charIndex);
-          if (prevActiveCharIndex >= 0 && charIndex > prevActiveCharIndex) {
-            const prevTok = synchronizer.wordTokens.find(wt => wt.startChar === prevActiveCharIndex);
-            const prevPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === prevActiveCharIndex);
-            const currPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === charIndex);
-          }
-          prevActiveCharIndex = charIndex;
-        }
-        setActiveAudioCharIndex(charIndex);
-      },
-      debug: process.env.NODE_ENV !== 'production'
-    });
-    audioSynchronizerRef.current = synchronizer;
-
-    utterance.onstart = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handleStart(event);
-    };
-
-    utterance.onboundary = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handleBoundary(event);
-    };
-
-    utterance.onpause = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handlePause(event);
-    };
-
-    utterance.onresume = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handleResume(event);
-    };
-
-    utterance.onend = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handleEnd(event);
-      setPlayingParagraphId(null);
-      playingParagraphIdRef.current = null;
-      setActiveAudioCharIndex(-1);
-      advanceToNextParagraph(paragraph);
-    };
-
-    utterance.onerror = (e) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.stop();
-      setPlayingParagraphId(null);
-      playingParagraphIdRef.current = null;
-      setActiveAudioCharIndex(-1);
-      if (!userStoppedRef.current) {
-        console.warn('TTS playback error for paragraph:', paragraph.id, e);
-        setAudioErrorId(paragraph.id);
-      }
-    };
-
-    try {
-      window.speechSynthesis.speak(utterance);
-    } catch (speakErr) {
-      console.warn('SpeechSynthesis speak call error:', speakErr);
-    }
-  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate]);
-
-  handlePlayParagraphRef.current = handlePlayParagraph;
-
-  const handleStopAudio = useCallback(() => {
-    userStoppedRef.current = true;
-    audioPlaybackIdRef.current++;
-    clearAudioVisualTimer();
-    if (audioPlayerRef.current) {
-      try {
-        audioPlayerRef.current.pause();
-      } catch (e) {}
-    }
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    setPlayingParagraphId(null);
-    playingParagraphIdRef.current = null;
-    setActiveAudioCharIndex(-1);
+            previousScrollTopRefarIndex(-1);
   }, [clearAudioVisualTimer]);
 
   // Manual Audio Bookmark Persistence — ONLY saved upon explicit user action
@@ -1575,60 +1201,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       nativeLang,
       apiKey,
       abortSignal: controller.signal,
-      onUpdate: (updatedParagraphs) => {
-        applyGlossedParagraphs(updatedParagraphs);
-      },
-      onProgress: (prog) => {
-        setGlossingProgress(prog);
-        if (!prog.isGlossing) {
-          setIsAutoGlossing(false);
-          if (!prog.isPaused) {
-            const completedCount = prog.completed;
-            const totalCount = prog.total;
-            const failedCount = (typeof prog.failed === 'number' && prog.failed >= 0) ? prog.failed : (totalCount - completedCount);
-            if (completedCount === totalCount) {
-              setGlossNotice({
-                message: `Glosado terminado: ${totalCount}/${totalCount}`,
-                type: 'success'
-              });
-            } else {
-              setGlossNotice({
-                message: `Glosado terminado: ${completedCount}/${totalCount}. ${failedCount} pendientes.`,
-                type: 'warning'
-              });
-            }
-          }
-        }
-      }
-    });
-
-    // Update document with immediately prepared offline tokens
-    applyGlossedParagraphs(enriched);
-  }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs]);
-
-  // Toggle Global Auto-Glossing (ON / OFF)
-  const handleToggleAutoGlossing = useCallback(() => {
-    if (isAutoGlossing) {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-      setIsAutoGlossing(false);
-      setGlossingProgress(prev => ({
-        ...prev,
-        isGlossing: false,
-        isPaused: true
-      }));
-    } else {
-      const paragraphsToGloss = (isEpub && visibleParagraphs.length > 0)
-        ? visibleParagraphs
-        : (document?.paragraphs || []);
-      if (!paragraphsToGloss || paragraphsToGloss.length === 0) return;
-
-      const activeTarget = activeDocLang || targetLang;
-      const missing = paragraphsToGloss.filter(p => !isGlossComplete(p, activeTarget, nativeLang));
-
-      if (missing.length === 0) {
+      onUpssing.length === 0) {
         setGlossNotice({
           message: `Glosado terminado: ${paragraphsToGloss.length}/${paragraphsToGloss.length}`,
           type: 'success'
@@ -1760,11 +1333,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
           text: null,
           isTranslating: false,
           isVisible: true,
-          error: err.message || 'Error al traducir el párrafo.'
+          error: err.message || (isSpanish ? 'Error al traducir el párrafo.' : 'Could not translate the paragraph.')
         }
       }));
     }
-  }, [paragraphTranslations, activeDocLang, nativeLang, apiKey, simplificationMode]);
+  }, [paragraphTranslations, activeDocLang, nativeLang, apiKey, simplificationMode, isSpanish]);
 
   // Submit / Start reading parsed text (OFFLINE ONLY: Zero AI calls!)
   const handleStartReading = async () => {
@@ -2004,13 +1577,15 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
 
     if (isEpub) {
       setIsEpubImporting(true);
-      setEpubImportStatus('Leyendo libro EPUB...');
+      setEpubImportStatus(isSpanish ? 'Leyendo libro EPUB...' : 'Reading EPUB book...');
       try {
         const parsed = await parseEpubFile(file, {
           targetLang,
           nativeLang,
           onProgress: (prog) => {
-            setEpubImportStatus(`Extrayendo capítulos... (${prog.current} de ${prog.total})`);
+            setEpubImportStatus(isSpanish
+              ? `Extrayendo capítulos... (${prog.current} de ${prog.total})`
+              : `Extracting chapters... (${prog.current} of ${prog.total})`);
           }
         });
 
@@ -2442,13 +2017,13 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               {/* Title Input */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
-                  Título del texto (opcional)
+                  {isSpanish ? 'Título del texto (opcional)' : 'Text title (optional)'}
                 </label>
                 <input
                   type="text"
                   value={inputTitle}
                   onChange={(e) => setInputTitle(e.target.value)}
-                  placeholder="Ej: Mi primer día de clases / 我的学校..."
+                  placeholder={isSpanish ? 'Ej: Mi primer día de clases / 我的学校...' : 'E.g.: My first day of school / 我的学校...'}
                   className="w-full px-4 py-2.5 rounded-2xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm transition-all shadow-xs"
                 />
               </div>
@@ -2493,14 +2068,18 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                     {isSpanish ? 'Escribir o pegar texto' : 'Write or paste text'}
                   </label>
                   <span className="text-[11px] text-[var(--text-muted)]">
-                    {inputText.trim() ? `${splitTextIntoParagraphs(inputText, targetLang).length} párrafos detectados` : 'Escribe o pega aquí'}
+                    {inputText.trim()
+                      ? (isSpanish ? `${splitTextIntoParagraphs(inputText, targetLang).length} párrafos detectados` : `${splitTextIntoParagraphs(inputText, targetLang).length} paragraphs detected`)
+                      : (isSpanish ? 'Escribe o pega aquí' : 'Write or paste here')}
                   </span>
                 </div>
                 <textarea
                   rows={8}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Pega o escribe tu texto aquí en cualquier idioma (chino, árabe, polaco, ruso, etc.). Cada salto de línea o espacio en blanco formará un párrafo independiente."
+                  placeholder={isSpanish
+                    ? 'Pega o escribe tu texto aquí en cualquier idioma (chino, árabe, polaco, ruso, etc.). Cada salto de línea o espacio en blanco formará un párrafo independiente.'
+                    : 'Paste or write your text here in any language (Chinese, Arabic, Polish, Russian, etc.). Each line break or blank space will form an independent paragraph.'}
                   className="w-full min-h-40 p-4 rounded-xl bg-[var(--input-bg)] border border-[var(--input-border)] focus:border-rose-500 focus:outline-hidden text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm leading-relaxed transition-all resize-y"
                 />
               </div>
@@ -2517,13 +2096,13 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                     className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
                   >
                     <Clipboard className="w-4 h-4 text-rose-500 dark:text-rose-400" />
-                    <span>Pegar texto</span>
+                    <span>{isSpanish ? 'Pegar texto' : 'Paste text'}</span>
                   </button>
 
                   {/* File Upload Button (.txt, .epub) */}
                   <label className="px-3.5 py-2 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer">
                     <Upload className="w-4 h-4 text-amber-500 dark:text-amber-400" />
-                    <span>Cargar archivo (.txt, .epub)</span>
+                    <span>{isSpanish ? 'Cargar archivo (.txt, .epub)' : 'Upload file (.txt, .epub)'}</span>
                     <input
                       type="file"
                       accept=".txt,.epub,text/plain,application/epub+zip"
@@ -2586,7 +2165,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                     className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-500/10 via-rose-500/10 to-pink-500/10 hover:from-purple-500/20 hover:via-rose-500/20 hover:to-pink-500/20 border border-purple-500/30 text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
                   >
                     <Sparkles className="w-4 h-4 text-purple-500 dark:text-purple-400" />
-                    <span>Crear con IA</span>
+                    <span>{isSpanish ? 'Crear con IA' : 'Create with AI'}</span>
                   </button>
                 </div>
 
@@ -2601,7 +2180,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       : 'bg-[var(--surface-secondary)] text-[var(--text-muted)] border border-[var(--border-primary)] cursor-not-allowed opacity-60'
                   }`}
                 >
-                  <span>Comenzar a leer</span>
+                  <span>{isSpanish ? 'Comenzar a leer' : 'Start reading'}</span>
                   <Play className="w-4 h-4 fill-current ml-0.5" />
                 </button>
               </div>
@@ -2669,8 +2248,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               <button
                 type="button"
                 onClick={toggleActionsMenu}
-                title="Menú"
-                aria-label="Menú"
+                title={isSpanish ? 'Menú' : 'Menu'}
+                aria-label={isSpanish ? 'Menú' : 'Menu'}
                 aria-expanded={isActionsMenuOpen}
                 className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 text-[var(--text-primary)] hover:text-rose-500 dark:hover:text-rose-300 ${
                   isActionsMenuOpen
@@ -2701,7 +2280,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                     className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
                   >
                     <BookOpen className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
-                    <span>Librería</span>
+                    <span>{isSpanish ? 'Librería' : 'Library'}</span>
                   </button>
 
                   {/* Editar Título — reuses handleEditTitle */}
@@ -2711,7 +2290,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                     className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[var(--text-primary)]"
                   >
                     <Edit3 className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
-                    <span>Editar título</span>
+                    <span>{isSpanish ? 'Editar título' : 'Edit title'}</span>
                   </button>
 
                   {/* Continuar desde marcador */}
@@ -2725,7 +2304,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-rose-600 dark:text-rose-400 font-semibold"
                     >
                       <Play className="w-4 h-4 text-rose-500 fill-rose-500 shrink-0 ml-0.5" />
-                      <span>Continuar desde marcador</span>
+                      <span>{isSpanish ? 'Continuar desde marcador' : 'Resume from bookmark'}</span>
                     </button>
                   )}
 
@@ -2741,7 +2320,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   >
                     <span className="flex items-center space-x-2.5">
                       <Settings className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />
-                      <span>Configuraciones</span>
+                      <span>{isSpanish ? 'Configuraciones' : 'Settings'}</span>
                     </span>
                     {isSettingsSubmenuOpen ? (
                       <ChevronUp className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
@@ -2760,7 +2339,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       >
                         <span className="flex items-center space-x-2.5">
                           <Play className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
-                          <span>Auto play</span>
+                          <span>{isSpanish ? 'Reproducción automática' : 'Auto-play'}</span>
                         </span>
                         <span
                           className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
@@ -2799,12 +2378,12 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       <div className="w-full px-3 py-1.5 rounded-xl flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors">
                         <span className="flex items-center space-x-2.5 text-xs text-[var(--text-primary)]">
                           <Gauge className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
-                          <span>Playback speed</span>
+                          <span>{isSpanish ? 'Velocidad de reproducción' : 'Playback speed'}</span>
                         </span>
                         <select
                           value={speechRate}
                           onChange={(e) => setSpeechRate(parseFloat(e.target.value) || 1.0)}
-                          aria-label="Playback speed"
+                          aria-label={isSpanish ? 'Velocidad de reproducción' : 'Playback speed'}
                           className="bg-[var(--surface-secondary)] text-rose-600 dark:text-rose-300 font-mono font-bold text-[11px] px-2 py-1 rounded-lg border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
                         >
                           {(Array.isArray(speechRateOptions) && speechRateOptions.length > 0 ? speechRateOptions : [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]).map((rate) => (
@@ -2823,7 +2402,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       >
                         <span className="flex items-center space-x-2.5">
                           <span className="w-3.5 h-3.5 flex items-center justify-center font-serif font-bold text-[13px] leading-none text-rose-500 dark:text-rose-400 shrink-0">T</span>
-                          <span>Transliterations</span>
+                          <span>{isSpanish ? 'Transliteraciones' : 'Transliterations'}</span>
                         </span>
                         <span
                           className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
@@ -2844,7 +2423,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       >
                         <span className="flex items-center space-x-2.5">
                           <span className="w-3.5 h-3.5 flex items-center justify-center font-bold text-[13px] leading-none text-rose-500 dark:text-rose-400 shrink-0">A</span>
-                          <span>Text size</span>
+                          <span>{isSpanish ? 'Tamaño de texto' : 'Text size'}</span>
                         </span>
                         <span className="text-[11px] font-mono font-bold uppercase text-rose-600 dark:text-rose-300 shrink-0">
                           {fontSize}
@@ -2859,7 +2438,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       >
                         <span className="flex items-center space-x-2.5">
                           <Sparkles className={`w-3.5 h-3.5 shrink-0 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500' : 'text-rose-500 dark:text-rose-400'}`} />
-                          <span>Auto glossing</span>
+                          <span>{isSpanish ? 'Glosado automático' : 'Auto glossing'}</span>
                         </span>
                         <span
                           className={`w-8 h-4 rounded-full flex items-center px-0.5 shrink-0 ${
@@ -2883,7 +2462,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                     className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4 shrink-0" />
-                    <span>Eliminar</span>
+                    <span>{isSpanish ? 'Eliminar' : 'Delete'}</span>
                   </button>
                 </div>
               )}
@@ -2932,10 +2511,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       ? 'opacity-30 cursor-not-allowed text-[var(--text-muted)]'
                       : 'hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-primary)] cursor-pointer active:scale-95'
                   }`}
-                  title="Capítulo anterior"
+                  title={isSpanish ? 'Capítulo anterior' : 'Previous chapter'}
                 >
                   <ChevronLeft className="w-4 h-4 shrink-0" />
-                  <span className="hidden sm:inline">Capítulo anterior</span>
+                  <span className="hidden sm:inline">{isSpanish ? 'Capítulo anterior' : 'Previous chapter'}</span>
                 </button>
 
                 <div className="flex-1 min-w-0 max-w-sm sm:max-w-md mx-auto text-center">
@@ -2948,8 +2527,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       {chapters.map((ch, idx) => {
                         const hasCustomTitle = ch.title && !/^cap[ií]tulo\s+\d+$/i.test(ch.title.trim()) && !/^chapter\s+\d+$/i.test(ch.title.trim());
                         const label = hasCustomTitle
-                          ? `Capítulo ${idx + 1} de ${chapters.length}: ${ch.title}`
-                          : `Capítulo ${idx + 1} de ${chapters.length}`;
+                          ? (isSpanish ? `Capítulo ${idx + 1} de ${chapters.length}: ${ch.title}` : `Chapter ${idx + 1} of ${chapters.length}: ${ch.title}`)
+                          : (isSpanish ? `Capítulo ${idx + 1} de ${chapters.length}` : `Chapter ${idx + 1} of ${chapters.length}`);
                         return (
                           <option key={ch.id || idx} value={idx} className="bg-[var(--surface-primary)] text-[var(--text-primary)]">
                             {label}
@@ -2970,9 +2549,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       ? 'opacity-30 cursor-not-allowed text-[var(--text-muted)]'
                       : 'hover:bg-black/5 dark:hover:bg-white/10 text-[var(--text-primary)] cursor-pointer active:scale-95'
                   }`}
-                  title="Siguiente capítulo"
+                  title={isSpanish ? 'Siguiente capítulo' : 'Next chapter'}
                 >
-                  <span className="hidden sm:inline">Siguiente capítulo</span>
+                  <span className="hidden sm:inline">{isSpanish ? 'Siguiente capítulo' : 'Next chapter'}</span>
                   <ChevronRight className="w-4 h-4 shrink-0" />
                 </button>
               </div>
@@ -2986,18 +2565,18 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   disabled={currentParagraphPage === 0}
                   onClick={() => handleNavigatePage(currentParagraphPage - 1)}
                   className="px-2.5 py-1 rounded-lg font-medium flex items-center space-x-1 transition-all bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95"
-                  title="Página anterior"
+                  title={isSpanish ? 'Página anterior' : 'Previous page'}
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Página anterior</span>
-                  <span className="sm:hidden">Anterior</span>
+                  <span className="hidden sm:inline">{isSpanish ? 'Página anterior' : 'Previous page'}</span>
+                  <span className="sm:hidden">{isSpanish ? 'Anterior' : 'Previous'}</span>
                 </button>
                 <div className="flex items-center space-x-1.5 font-semibold text-[var(--text-primary)]">
-                  <span>Página</span>
+                  <span>{isSpanish ? 'Página' : 'Page'}</span>
                   <span className="px-2 py-0.5 rounded-md bg-[var(--surface-secondary)] border border-[var(--border-subtle)] text-rose-500 font-bold">
                     {currentParagraphPage + 1}
                   </span>
-                  <span className="text-[var(--text-muted)]">de</span>
+                  <span className="text-[var(--text-muted)]">{isSpanish ? 'de' : 'of'}</span>
                   <span>{totalPages}</span>
                 </div>
                 <button
@@ -3005,10 +2584,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   disabled={currentParagraphPage === totalPages - 1}
                   onClick={() => handleNavigatePage(currentParagraphPage + 1)}
                   className="px-2.5 py-1 rounded-lg font-medium flex items-center space-x-1 transition-all bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95"
-                  title="Siguiente página"
+                  title={isSpanish ? 'Siguiente página' : 'Next page'}
                 >
-                  <span className="hidden sm:inline">Siguiente página</span>
-                  <span className="sm:hidden">Siguiente</span>
+                  <span className="hidden sm:inline">{isSpanish ? 'Siguiente página' : 'Next page'}</span>
+                  <span className="sm:hidden">{isSpanish ? 'Siguiente' : 'Next'}</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -3029,7 +2608,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                         </div>
                         {document.author && pIdx === 0 && (
                           <span className="text-xs text-[var(--text-muted)] italic">
-                            de {document.author}
+                            {isSpanish ? 'de' : 'by'} {document.author}
                           </span>
                         )}
                       </div>
@@ -3098,18 +2677,18 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   disabled={currentParagraphPage === 0}
                   onClick={() => handleNavigatePage(currentParagraphPage - 1)}
                   className="px-3 py-1.5 rounded-lg font-medium flex items-center space-x-1.5 transition-all bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95"
-                  title="Página anterior"
+                  title={isSpanish ? 'Página anterior' : 'Previous page'}
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Página anterior</span>
-                  <span className="sm:hidden">Anterior</span>
+                  <span className="hidden sm:inline">{isSpanish ? 'Página anterior' : 'Previous page'}</span>
+                  <span className="sm:hidden">{isSpanish ? 'Anterior' : 'Previous'}</span>
                 </button>
                 <div className="flex items-center space-x-1.5 font-semibold text-[var(--text-primary)]">
-                  <span>Página</span>
+                  <span>{isSpanish ? 'Página' : 'Page'}</span>
                   <span className="px-2 py-0.5 rounded-md bg-[var(--surface-secondary)] border border-[var(--border-subtle)] text-rose-500 font-bold">
                     {currentParagraphPage + 1}
                   </span>
-                  <span className="text-[var(--text-muted)]">de</span>
+                  <span className="text-[var(--text-muted)]">{isSpanish ? 'de' : 'of'}</span>
                   <span>{totalPages}</span>
                 </div>
                 <button
@@ -3117,10 +2696,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   disabled={currentParagraphPage === totalPages - 1}
                   onClick={() => handleNavigatePage(currentParagraphPage + 1)}
                   className="px-3 py-1.5 rounded-lg font-medium flex items-center space-x-1.5 transition-all bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] border border-[var(--border-primary)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer active:scale-95"
-                  title="Siguiente página"
+                  title={isSpanish ? 'Siguiente página' : 'Next page'}
                 >
-                  <span className="hidden sm:inline">Siguiente página</span>
-                  <span className="sm:hidden">Siguiente</span>
+                  <span className="hidden sm:inline">{isSpanish ? 'Siguiente página' : 'Next page'}</span>
+                  <span className="sm:hidden">{isSpanish ? 'Siguiente' : 'Next'}</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -3131,8 +2710,12 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
               <span className="truncate">
                 {isEpub && chapters.length > 1
-                  ? `Capítulo ${currentChapterIndex + 1} de ${chapters.length} • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación`
-                  : 'Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación'}
+                  ? (isSpanish
+                    ? `Capítulo ${currentChapterIndex + 1} de ${chapters.length} • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación`
+                    : `Chapter ${currentChapterIndex + 1} of ${chapters.length} • Click ▶️ on any paragraph to hear its pronunciation`)
+                  : (isSpanish
+                    ? 'Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación'
+                    : 'End of text • Click ▶️ on any paragraph to hear its pronunciation')}
               </span>
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
             </footer>
@@ -3172,7 +2755,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
             {/* Playback speed — Select dropdown directly selecting from SPEECH_RATE_OPTIONS */}
             <div
               className="relative inline-flex items-center justify-center py-1.5 px-3 rounded-xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group"
-              title={`Velocidad de reproducción (${Number(speechRate).toFixed(2)}×)`}
+              title={isSpanish ? `Velocidad de reproducción (${Number(speechRate).toFixed(2)}×)` : `Playback speed (${Number(speechRate).toFixed(2)}×)`}
             >
               <Gauge className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors shrink-0" />
               <span className="ml-1 text-[11px] sm:text-xs font-mono font-bold text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
@@ -3181,7 +2764,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               <select
                 value={speechRate}
                 onChange={(e) => setSpeechRate(parseFloat(e.target.value) || 1.0)}
-                aria-label="Velocidad de reproducción"
+                aria-label={isSpanish ? 'Velocidad de reproducción' : 'Playback speed'}
                 className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
               >
                 {(Array.isArray(speechRateOptions) && speechRateOptions.length > 0 ? speechRateOptions : SPEECH_RATE_OPTIONS).map((rate) => (
@@ -3196,8 +2779,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
             <button
               type="button"
               onClick={() => setInterlinearMode(!interlinearMode)}
-              title={interlinearMode ? 'Desactivar traducción / glosado interlineal' : 'Activar traducción / glosado interlineal'}
-              aria-label="Traducción y glosado interlineal"
+              title={interlinearMode
+                ? (isSpanish ? 'Desactivar traducción / glosado interlineal' : 'Disable interlinear translation / glossing')
+                : (isSpanish ? 'Activar traducción / glosado interlineal' : 'Enable interlinear translation / glossing')}
+              aria-label={isSpanish ? 'Traducción y glosado interlineal' : 'Interlinear translation and glossing'}
               aria-pressed={interlinearMode}
               className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none ${
                 interlinearMode
@@ -3212,8 +2797,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
             <button
               type="button"
               onClick={cycleFontSize}
-              title={`Tamaño de texto: ${fontSize} — clic para cambiar`}
-              aria-label="Tamaño de texto"
+              title={isSpanish ? `Tamaño de texto: ${fontSize} — clic para cambiar` : `Text size: ${fontSize} — click to change`}
+              aria-label={isSpanish ? 'Tamaño de texto' : 'Text size'}
               className="py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold"
             >
               <span className="text-[12px] sm:text-sm leading-none tracking-tight">A±</span>
@@ -3223,8 +2808,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
             <button
               type="button"
               onClick={handleToggleAutoGlossing}
-              title={isAutoGlossing ? 'Glosado automático activo (clic para pausar)' : 'Activar glosado automático'}
-              aria-label="Auto glossing"
+              title={isAutoGlossing
+                ? (isSpanish ? 'Glosado automático activo (clic para pausar)' : 'Automatic glossing active (click to pause)')
+                : (isSpanish ? 'Activar glosado automático' : 'Enable automatic glossing')}
+              aria-label={isSpanish ? 'Glosado automático' : 'Automatic glossing'}
               aria-pressed={isAutoGlossing}
               className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                 isAutoGlossing
@@ -3238,8 +2825,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
             <button
               type="button"
               onClick={() => handleSaveAudioBookmark()}
-              title={audioBookmark ? 'Actualizar marcador' : 'Guardar marcador'}
-              aria-label={audioBookmark ? 'Actualizar marcador' : 'Guardar marcador'}
+              title={audioBookmark ? (isSpanish ? 'Actualizar marcador' : 'Update bookmark') : (isSpanish ? 'Guardar marcador' : 'Save bookmark')}
+              aria-label={audioBookmark ? (isSpanish ? 'Actualizar marcador' : 'Update bookmark') : (isSpanish ? 'Guardar marcador' : 'Save bookmark')}
               className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                 audioBookmark
                   ? 'text-rose-600 dark:text-rose-400 bg-rose-500/15'
@@ -3266,7 +2853,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                 Importando libro EPUB
               </h4>
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                {epubImportStatus || 'Procesando capítulos y texto...'}
+                {epubImportStatus || (isSpanish ? 'Procesando capítulos y texto...' : 'Processing chapters and text...')}
               </p>
             </div>
           </div>

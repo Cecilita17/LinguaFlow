@@ -151,7 +151,7 @@ export function ImageLibraryView({
               <Camera className="w-4 h-4" />
             </div>
             <h1 className="font-bold text-sm sm:text-base text-[var(--text-primary)] truncate">
-              Image Reader
+              {isSpanish ? 'Lector de imágenes' : 'Image Reader'}
             </h1>
           </div>
         </div>

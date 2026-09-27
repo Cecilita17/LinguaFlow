@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef, useCallback } from 'react';
 import { Play, Pause, Volume2, AlertCircle, Loader2, Bookmark } from 'lucide-react';
 import { API_BASE_URL } from '../../services/chatService.js';
+import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 function formatTime(seconds) {
   if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
@@ -38,6 +39,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   isBookmarked = false
 }, ref) {
   const audioRef = useRef(null);
+  const { isSpanish } = useSiteLanguage();
   const [duration, setDuration] = useState(0);
   const [localCurrentTime, setLocalCurrentTime] = useState(initialTime || 0);
   const [isPlayingInternal, setIsPlayingInternal] = useState(false);
@@ -376,7 +378,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
             onPointerDown={handleSliderPointerDown}
             onPointerUp={handleSliderCommit}
             className="w-full h-1.5 sm:h-2 bg-[var(--surface-secondary)] rounded-lg appearance-none cursor-pointer accent-rose-500 focus:outline-hidden"
-            aria-label="Progreso del audio original"
+            aria-label={isSpanish ? 'Progreso del audio original' : 'Original audio progress'}
           />
         </div>
 
@@ -397,12 +399,14 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
                 ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
                 : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-primary)]'
             }`}
-            title={isBookmarked ? 'Posición guardada (haz clic para actualizar)' : 'Guardar posición actual'}
-            aria-label={isBookmarked ? 'Posición guardada' : 'Guardar posición'}
+            title={isBookmarked
+              ? (isSpanish ? 'Posición guardada (haz clic para actualizar)' : 'Position saved (click to update)')
+              : (isSpanish ? 'Guardar posición actual' : 'Save current position')}
+            aria-label={isBookmarked ? (isSpanish ? 'Posición guardada' : 'Position saved') : (isSpanish ? 'Guardar posición' : 'Save position')}
           >
             <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-rose-500 text-rose-500' : 'text-rose-500'}`} />
             <span className="hidden sm:inline">
-              {isBookmarked ? 'Posición guardada' : 'Guardar posición'}
+              {isBookmarked ? (isSpanish ? 'Posición guardada' : 'Position saved') : (isSpanish ? 'Guardar posición' : 'Save position')}
             </span>
           </button>
         )}

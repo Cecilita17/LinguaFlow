@@ -151,11 +151,11 @@ export function InputBar({
                 <span className="font-bold text-rose-200 tracking-wide flex items-center gap-1.5 text-sm">
                   {isDraggingCancel ? (
                     <span className="text-amber-400 flex items-center gap-1 font-semibold">
-                      <X className="w-4 h-4" /> Deslizado fuera: se cancelará al soltar
+                      <X className="w-4 h-4" /> {isSpanish ? 'Deslizado fuera: se cancelará al soltar' : 'Dragged away: it will cancel on release'}
                     </span>
                   ) : (
                     <>
-                      <span>Grabando voz:</span>
+                      <span>{isSpanish ? 'Grabando voz:' : 'Recording voice:'}</span>
                       <span className="font-mono text-white bg-rose-950/80 px-2 py-0.5 rounded-lg border border-rose-800/60">
                         {formatTime(recordingSeconds)} / 1:00
                       </span>
@@ -179,7 +179,7 @@ export function InputBar({
               {interimTranscript ? (
                 <span className="text-white font-medium not-italic">{interimTranscript}</span>
               ) : (
-                <span className="text-rose-300/60">Habla con tranquilidad... escuchamos en tu idioma o mixto</span>
+                <span className="text-rose-300/60">{isSpanish ? 'Habla con tranquilidad... escuchamos en tu idioma o mixto' : 'Speak freely... we listen in your language or a mix of languages'}</span>
               )}
             </div>
 
@@ -209,10 +209,10 @@ export function InputBar({
           <div className="mb-3 px-4 py-2.5 bg-gradient-to-r from-amber-950/80 via-rose-950/80 to-amber-950/80 border border-amber-500/50 rounded-2xl flex items-center justify-between text-xs text-amber-200 animate-pulse shadow-lg">
             <div className="flex items-center space-x-2">
               <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-              <span className="font-semibold text-white">Transcribiendo audio con IA multimodal...</span>
+              <span className="font-semibold text-white">{isSpanish ? 'Transcribiendo audio con IA multimodal...' : 'Transcribing audio with multimodal AI...'}</span>
             </div>
             <span className="text-[11px] text-amber-300/80 flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-amber-400" /> Reconociendo acentos y mezcla de idiomas
+              <Sparkles className="w-3 h-3 text-amber-400" /> {isSpanish ? 'Reconociendo acentos y mezcla de idiomas' : 'Recognizing accents and language switching'}
             </span>
           </div>
         )}
@@ -230,7 +230,7 @@ export function InputBar({
               onMouseLeave={() => setIsHovered(false)}
               onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
               disabled={isProcessing || isTranscribingAudio}
-              title="Mantén presionado para hablar (máx. 1 min) • Suelta para enviar"
+              title={isSpanish ? 'Mantén presionado para hablar (máx. 1 min) • Suelta para enviar' : 'Press and hold to speak (max. 1 min) • Release to send'}
               style={{
                 touchAction: 'none',
                 WebkitTouchCallout: 'none',
@@ -257,7 +257,7 @@ export function InputBar({
             {/* Hover Tooltip */}
             {!isRecording && !isTranscribingAudio && isHovered && (
               <div className="absolute bottom-full left-0 mb-2 z-30 whitespace-nowrap bg-stone-900 text-rose-100 text-xs px-3 py-1.5 rounded-xl shadow-xl border border-stone-700 pointer-events-none animate-fade-in">
-                🎙️ <span className="font-bold text-white">Mantén presionado</span> para hablar, <span className="font-bold text-amber-300">suelta para enviar</span>
+                🎙️ <span className="font-bold text-white">{isSpanish ? 'Mantén presionado' : 'Press and hold'}</span> {isSpanish ? 'para hablar,' : 'to speak,'} <span className="font-bold text-amber-300">{isSpanish ? 'suelta para enviar' : 'release to send'}</span>
               </div>
             )}
           </div>

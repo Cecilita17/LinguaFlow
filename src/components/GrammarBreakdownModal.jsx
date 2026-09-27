@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, BookOpen, Volume2, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 export function GrammarBreakdownModal({
   isOpen,
@@ -11,6 +12,7 @@ export function GrammarBreakdownModal({
   onPronounceWord,
   isLoading = false
 }) {
+  const { isSpanish } = useSiteLanguage();
   if (!isOpen) return null;
 
   return (
@@ -30,12 +32,12 @@ export function GrammarBreakdownModal({
             </div>
             <div>
               <h3 className="text-base font-bold text-stone-900 flex items-center gap-1.5">
-                <span>Desglose Gramatical de la Oración</span>
+                <span>{isSpanish ? 'Desglose gramatical de la oración' : 'Sentence grammar breakdown'}</span>
                 <span className="text-[10px] bg-rose-100 text-rose-800 font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">
                   {targetLang.toUpperCase()}
                 </span>
               </h3>
-              <p className="text-[11px] text-stone-500">Análisis morfosintáctico palabra por palabra</p>
+              <p className="text-[11px] text-stone-500">{isSpanish ? 'Análisis morfosintáctico palabra por palabra' : 'Word-by-word morphosyntactic analysis'}</p>
             </div>
           </div>
           <button
@@ -53,8 +55,8 @@ export function GrammarBreakdownModal({
             <div className="flex items-center space-x-2.5 p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs shadow-xs animate-pulse">
               <Sparkles className="w-4 h-4 text-amber-600 animate-spin flex-shrink-0" />
               <div>
-                <p className="font-bold">Analizando gramática y pronunciación con Groq IA...</p>
-                <p className="text-[11px] text-amber-700/90">Obteniendo análisis morfosintáctico preciso y pinyin para cada palabra.</p>
+                <p className="font-bold">{isSpanish ? 'Analizando gramática y pronunciación con Groq IA...' : 'Analyzing grammar and pronunciation with Groq AI...'}</p>
+                <p className="text-[11px] text-amber-700/90">{isSpanish ? 'Obteniendo análisis morfosintáctico preciso y pinyin para cada palabra.' : 'Getting precise morphosyntactic analysis and pinyin for each word.'}</p>
               </div>
             </div>
           )}
@@ -63,7 +65,7 @@ export function GrammarBreakdownModal({
           <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wide text-stone-500 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Frase corregida y analizada:
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> {isSpanish ? 'Frase corregida y analizada:' : 'Corrected and analyzed sentence:'}
               </span>
               {onPronounceWord && (
                 <button
@@ -72,7 +74,7 @@ export function GrammarBreakdownModal({
                   className="flex items-center space-x-1 text-xs text-rose-700 hover:text-rose-900 font-semibold bg-rose-100/70 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors"
                 >
                   <Volume2 className="w-3.5 h-3.5" />
-                  <span>Escuchar completa</span>
+                  <span>{isSpanish ? 'Escuchar completa' : 'Listen to full sentence'}</span>
                 </button>
               )}
             </div>
@@ -112,7 +114,7 @@ export function GrammarBreakdownModal({
           {/* Word Breakdown Cards */}
           <div className="space-y-2.5">
             <h4 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
-              Análisis palabra por palabra ({sentenceBreakdown.length} términos):
+              {isSpanish ? `Análisis palabra por palabra (${sentenceBreakdown.length} términos):` : `Word-by-word analysis (${sentenceBreakdown.length} terms):`}
             </h4>
 
             {sentenceBreakdown.map((item) => {
@@ -150,7 +152,7 @@ export function GrammarBreakdownModal({
                         <button
                           type="button"
                           onClick={() => onPronounceWord(item.cleanWord || item.word, targetLang)}
-                          title="Escuchar pronunciación"
+                          title={isSpanish ? 'Escuchar pronunciación' : 'Listen to pronunciation'}
                           className="p-1 rounded-md text-rose-600 hover:bg-rose-50 transition-colors"
                         >
                           <Volume2 className="w-3.5 h-3.5" />
@@ -161,7 +163,7 @@ export function GrammarBreakdownModal({
                     <div className="flex items-center gap-1.5">
                       {item.wasCorrected && (
                         <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-md border border-amber-300">
-                          Corregido de: "{item.originalWord}"
+                          {isSpanish ? `Corregido de: "${item.originalWord}"` : `Corrected from: "${item.originalWord}"`}
                         </span>
                       )}
                       <span className="text-[11px] font-semibold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-200">
@@ -178,19 +180,19 @@ export function GrammarBreakdownModal({
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 pt-1">
                       {pinyinOrTranslit && (
                         <span>
-                          <span className="font-semibold text-stone-700">Pinyin / Transliteración:</span>{' '}
+                          <span className="font-semibold text-stone-700">{isSpanish ? 'Pinyin / Transliteración:' : 'Pinyin / Transliteration:'}</span>{' '}
                           <span className="font-bold text-rose-700">{pinyinOrTranslit}</span>
                         </span>
                       )}
                       {item.lemma && item.lemma !== item.cleanWord && (
                         <span>
-                          <span className="font-semibold text-stone-700">Forma base (Lema):</span>{' '}
+                          <span className="font-semibold text-stone-700">{isSpanish ? 'Forma base (lema):' : 'Base form (lemma):'}</span>{' '}
                           <span className="font-mono text-rose-700 font-medium">{item.lemma}</span>
                         </span>
                       )}
                       {item.meaning && (
                         <span>
-                          <span className="font-semibold text-stone-700">Significado:</span>{' '}
+                          <span className="font-semibold text-stone-700">{isSpanish ? 'Significado:' : 'Meaning:'}</span>{' '}
                           <span className="text-stone-800 font-medium italic">{item.meaning}</span>
                         </span>
                       )}
@@ -206,13 +208,13 @@ export function GrammarBreakdownModal({
         <div className="px-5 py-3 border-t border-stone-200 bg-stone-50 flex items-center justify-between">
           <span className="text-xs text-stone-500 flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            Gramática explicada según la norma estándar
+            {isSpanish ? 'Gramática explicada según la norma estándar' : 'Grammar explained according to standard usage'}
           </span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-semibold text-xs transition-colors shadow-xs"
           >
-            Cerrar
+            {isSpanish ? 'Cerrar' : 'Close'}
           </button>
         </div>
       </div>

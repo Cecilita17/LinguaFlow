@@ -90,7 +90,7 @@ export function TranscriptControls({
           }`}
         >
           <ArrowDown className={`w-3.5 h-3.5 ${autoScroll ? 'animate-bounce' : ''}`} />
-          <span className="hidden sm:inline">Auto-scroll</span>
+          <span className="hidden sm:inline">{isSpanish ? 'Desplazamiento automático' : 'Auto-scroll'}</span>
           <span className={`text-[9px] px-1 rounded ${autoScroll ? 'bg-rose-800 text-white' : 'bg-[var(--surface-secondary)] text-[var(--text-muted)]'}`}>
             {autoScroll ? 'ON' : 'OFF'}
           </span>
@@ -145,7 +145,7 @@ export function TranscriptControls({
             type="button"
             onClick={handleZoomOut}
             disabled={fontSize === 'sm'}
-            title="Reducir tamaño de letra"
+            title={isSpanish ? 'Reducir tamaño de letra' : 'Decrease text size'}
             className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors"
           >
             <ZoomOut className="w-3.5 h-3.5" />
@@ -157,7 +157,7 @@ export function TranscriptControls({
             type="button"
             onClick={handleZoomIn}
             disabled={fontSize === '2xl'}
-            title="Aumentar tamaño de letra"
+            title={isSpanish ? 'Aumentar tamaño de letra' : 'Increase text size'}
             className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 transition-colors"
           >
             <ZoomIn className="w-3.5 h-3.5" />

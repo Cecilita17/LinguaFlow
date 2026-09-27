@@ -6,6 +6,7 @@ import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
 import { useAudioSettings } from '../../context/AudioSettingsContext.jsx';
+import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 import { calculateActiveTokenIndexFromTime, calculateActiveChunkIndexFromTime } from '../../utils/audioWordSync.js';
 
@@ -35,6 +36,7 @@ export function TranscriptLine({
 }) {
   const { isWordSaved } = useSavedWords();
   const { wordHighlightEnabled } = useAudioSettings();
+  const { isSpanish } = useSiteLanguage();
   if (!line || typeof line !== 'object') return null;
   const startTime = typeof line.startTime === 'number' && !isNaN(line.startTime) ? line.startTime : 0;
   const rawText = typeof line.text === 'string' ? line.text : (line.text != null ? String(line.text) : '');
@@ -109,19 +111,19 @@ export function TranscriptLine({
       disabled={isTranslating}
       aria-label={
         isTranslating
-          ? 'Traduciendo línea...'
+          ? (isSpanish ? 'Traduciendo línea...' : 'Translating line...')
           : isTranslationVisible && translation
-          ? 'Ocultar traducción de la línea'
-          : 'Traducir línea completa'
+          ? (isSpanish ? 'Ocultar traducción de la línea' : 'Hide line translation')
+          : (isSpanish ? 'Traducir línea completa' : 'Translate full line')
       }
       title={
         isTranslating
-          ? 'Traduciendo línea con IA...'
+          ? (isSpanish ? 'Traduciendo línea con IA...' : 'Translating line with AI...')
           : isTranslationVisible && translation
-          ? 'Ocultar traducción de la línea'
+          ? (isSpanish ? 'Ocultar traducción de la línea' : 'Hide line translation')
           : translation
-          ? 'Mostrar traducción de la línea'
-          : 'Traducir esta línea'
+          ? (isSpanish ? 'Mostrar traducción de la línea' : 'Show line translation')
+          : (isSpanish ? 'Traducir esta línea' : 'Translate this line')
       }
       className={`inline-flex items-center justify-center align-middle w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg transition-all cursor-pointer select-none active:scale-90 self-center ${
         isRtl ? 'mr-1 sm:mr-1.5' : 'ml-1 sm:ml-1.5'
@@ -160,7 +162,7 @@ export function TranscriptLine({
         <button
           type="button"
           onClick={handleLineClick}
-          title="Reproducir audio de este párrafo"
+          title={isSpanish ? 'Reproducir audio de este párrafo' : 'Play audio for this paragraph'}
           className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
             isActive
               ? 'bg-rose-600 text-white shadow-xs'
@@ -182,10 +184,10 @@ export function TranscriptLine({
           disabled={glossing || isComplete}
           title={
             glossing
-              ? 'Glosando este párrafo...'
+              ? (isSpanish ? 'Glosando este párrafo...' : 'Glossing this paragraph...')
               : isComplete
-              ? 'Párrafo glosado'
-              : 'Glosar este párrafo con IA'
+              ? (isSpanish ? 'Párrafo glosado' : 'Paragraph glossed')
+              : (isSpanish ? 'Glosar este párrafo con IA' : 'Gloss this paragraph with AI')
           }
           className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
             glossing
@@ -388,7 +390,7 @@ export function TranscriptLine({
             {isTranslating ? (
               <div className="flex items-center gap-2 text-violet-600 dark:text-violet-400 py-1">
                 <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                <span className="text-xs font-medium italic">Traduciendo línea completa...</span>
+                <span className="text-xs font-medium italic">{isSpanish ? 'Traduciendo línea completa...' : 'Translating full line...'}</span>
               </div>
             ) : translationError ? (
               <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs">
@@ -402,7 +404,7 @@ export function TranscriptLine({
                     }}
                     className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-100 font-semibold cursor-pointer active:scale-95 transition-all text-[11px]"
                   >
-                    Reintentar
+                    {isSpanish ? 'Reintentar' : 'Retry'}
                   </button>
                 )}
               </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { loadYouTubeIFrameApi } from '../../services/youtubeService.js';
 import { Play, AlertCircle, Video } from 'lucide-react';
+import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 export function YouTubePlayer({
   videoId,
@@ -10,6 +11,7 @@ export function YouTubePlayer({
   seekToTime = null,
   playbackRate = 1
 }) {
+  const { isSpanish } = useSiteLanguage();
   const containerRef = useRef(null);
   const playerRef = useRef(null);
   const timerRef = useRef(null);
@@ -24,7 +26,7 @@ export function YouTubePlayer({
       })
       .catch((err) => {
         console.warn('Failed to load YouTube IFrame API:', err);
-        setLoadError('No se pudo cargar el reproductor oficial de YouTube.');
+        setLoadError(isSpanish ? 'No se pudo cargar el reproductor oficial de YouTube.' : 'The official YouTube player could not be loaded.');
       });
   }, []);
 
@@ -78,7 +80,9 @@ export function YouTubePlayer({
           onError: (event) => {
             console.warn('YouTube Player error code:', event.data);
             if (event.data === 101 || event.data === 150) {
-              setLoadError('Este vídeo no permite reproducción insertada (embed) según la configuración del autor en YouTube.');
+              setLoadError(isSpanish
+                ? 'Este vídeo no permite reproducción insertada (embed) según la configuración del autor en YouTube.'
+                : 'This video does not allow embedded playback under the creator’s YouTube settings.');
             }
           }
         }
@@ -114,7 +118,7 @@ export function YouTubePlayer({
         } catch (e) {}
       }
     };
-  }, [isApiReady, videoId]);
+  }, [isApiReady, videoId, isSpanish]);
 
   // 3. Handle external seek requests (e.g. user clicked a subtitle line)
   useEffect(() => {
@@ -148,9 +152,11 @@ export function YouTubePlayer({
         <div className="w-14 h-14 rounded-2xl bg-[#3b1e15] flex items-center justify-center text-rose-400 mb-3 shadow-inner">
           <Video className="w-7 h-7" />
         </div>
-        <h4 className="text-sm font-bold text-rose-200 mb-1">Sin vídeo seleccionado</h4>
+        <h4 className="text-sm font-bold text-rose-200 mb-1">{isSpanish ? 'Sin vídeo seleccionado' : 'No video selected'}</h4>
         <p className="text-xs text-rose-300/70 max-w-sm">
-          Pega un enlace de YouTube arriba para cargar el vídeo y empezar a leer sus subtítulos en sincronía.
+          {isSpanish
+            ? 'Pega un enlace de YouTube arriba para cargar el vídeo y empezar a leer sus subtítulos en sincronía.'
+            : 'Paste a YouTube link above to load the video and read its subtitles in sync.'}
         </p>
       </div>
     );
@@ -160,7 +166,7 @@ export function YouTubePlayer({
     return (
       <div className="aspect-video w-full rounded-2xl bg-amber-950/40 border border-amber-800/60 flex flex-col items-center justify-center text-amber-200 p-6 text-center">
         <AlertCircle className="w-10 h-10 text-amber-400 mb-2" />
-        <h4 className="text-sm font-bold mb-1">Aviso del reproductor</h4>
+        <h4 className="text-sm font-bold mb-1">{isSpanish ? 'Aviso del reproductor' : 'Player notice'}</h4>
         <p className="text-xs text-amber-300/80 max-w-md">{loadError}</p>
       </div>
     );

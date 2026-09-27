@@ -1,11 +1,13 @@
 import React from 'react';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { SiteLanguageContext } from '../../context/SiteLanguageContext.jsx';
 
 /**
  * Robust React Error Boundary component to prevent uncaught rendering errors
  * from turning the entire page white.
  */
 export class ErrorBoundary extends React.Component {
+  static contextType = SiteLanguageContext;
   constructor(props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -31,6 +33,7 @@ export class ErrorBoundary extends React.Component {
   };
 
   render() {
+    const { isSpanish = true } = this.context || {};
     if (this.state.hasError) {
       if (this.props.fallback) {
         return typeof this.props.fallback === 'function'
@@ -44,10 +47,10 @@ export class ErrorBoundary extends React.Component {
             <AlertTriangle className="w-6 h-6 text-rose-500 dark:text-rose-400" />
           </div>
           <h3 className="text-base font-bold mb-1 text-[var(--text-primary)]">
-            {this.props.title || 'Error al renderizar la transcripción'}
+            {this.props.title || (isSpanish ? 'Error al renderizar la transcripción' : 'Error rendering transcript')}
           </h3>
           <p className="text-xs text-[var(--text-secondary)] max-w-md mb-4 leading-relaxed">
-            {this.state.error?.message || 'Se produjo un error inesperado al procesar la transcripción.'}
+            {this.state.error?.message || (isSpanish ? 'Se produjo un error inesperado al procesar la transcripción.' : 'An unexpected error occurred while processing the transcript.')}
           </p>
           <button
             type="button"
@@ -55,7 +58,7 @@ export class ErrorBoundary extends React.Component {
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>{this.props.resetLabel || 'Reiniciar lector'}</span>
+            <span>{this.props.resetLabel || (isSpanish ? 'Reiniciar lector' : 'Restart reader')}</span>
           </button>
         </div>
       );

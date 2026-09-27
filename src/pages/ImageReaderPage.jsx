@@ -808,7 +808,7 @@ export function ImageReaderPage({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30">
-                      Nivel {level}
+                      {isSpanish ? 'Nivel' : 'Level'} {level}
                     </span>
                     {usedModel && (
                       <span className="text-[10px] font-mono text-[var(--text-muted)]">

@@ -36,7 +36,7 @@ export function Header({
   activeTab = 'chat',
   setActiveTab
 }) {
-  const { t } = useSiteLanguage();
+  const { t, isSpanish } = useSiteLanguage();
   const { user, isAuthenticated } = useAuth();
   const {
     speechRate,
@@ -258,7 +258,7 @@ export function Header({
               <button
                 type="button"
                 onClick={() => setShowTransliteration(!showTransliteration)}
-                title={showTransliteration ? "Desactivar transliteración" : "Activar transliteración sobre palabras"}
+                title={showTransliteration ? t('transliteration_title_on') : t('transliteration_title_off')}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                   showTransliteration
                     ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 ring-1 ring-rose-500/30'
@@ -266,7 +266,7 @@ export function Header({
                 }`}
               >
                 <Type className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Transliteración</span>
+                <span className="hidden md:inline">{t('transliteration')}</span>
                 <span className={`text-[10px] px-1 rounded ${showTransliteration ? 'bg-rose-600 text-white' : 'bg-black/10 dark:bg-white/10 text-[var(--text-muted)]'}`}>
                   {showTransliteration ? 'ON' : 'OFF'}
                 </span>
@@ -276,7 +276,7 @@ export function Header({
               <button
                 type="button"
                 onClick={() => setHandsFree(!handsFree)}
-                title={handsFree ? "Desactivar modo manos libres" : "Activar modo manos libres"}
+                title={handsFree ? (isSpanish ? 'Desactivar modo manos libres' : 'Disable hands-free mode') : (isSpanish ? 'Activar modo manos libres' : 'Enable hands-free mode')}
                 className={`relative flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                   handsFree
                     ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-sm'
@@ -286,7 +286,7 @@ export function Header({
                 {handsFree ? (
                   <>
                     <Mic className="w-3.5 h-3.5 animate-pulse text-white" />
-                    <span>Manos Libres</span>
+                    <span>{t('hands_free')}</span>
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-300 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
@@ -295,7 +295,7 @@ export function Header({
                 ) : (
                   <>
                     <MicOff className="w-3.5 h-3.5 text-rose-500 dark:text-rose-300/50" />
-                    <span className="hidden sm:inline">Manos Libres</span>
+                    <span className="hidden sm:inline">{t('hands_free')}</span>
                   </>
                 )}
               </button>
@@ -305,21 +305,21 @@ export function Header({
                 <button
                   type="button"
                   onClick={onOpenSettings}
-                  title="Aviso de Groq AI: Clic para revisar el backend"
+                  title={isSpanish ? 'Aviso de Groq AI: clic para revisar el backend' : 'Groq AI warning: click to review the backend'}
                   className="hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/60 text-amber-200 text-xs font-semibold shadow-xs hover:bg-amber-900/80 transition-all animate-pulse active:scale-95 cursor-pointer"
                 >
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                  <span>⚠️ Aviso Groq AI</span>
+                  <span>{isSpanish ? '⚠️ Aviso Groq AI' : '⚠️ Groq AI warning'}</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={onOpenSettings}
-                  title="Groq AI Activa (openai/gpt-oss-120b)"
+                  title={isSpanish ? 'Groq AI activa (openai/gpt-oss-120b)' : 'Groq AI active (openai/gpt-oss-120b)'}
                   className="hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-600/60 text-emerald-200 text-xs font-semibold shadow-xs hover:bg-emerald-900/80 transition-all active:scale-95 cursor-pointer"
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>⚡ Groq IA Activa</span>
+                  <span>{isSpanish ? '⚡ Groq IA activa' : '⚡ Groq AI active'}</span>
                 </button>
               )}
 
@@ -328,7 +328,7 @@ export function Header({
                 <button
                   type="button"
                   onClick={onResetChat}
-                  title="Reiniciar chat en este idioma"
+                  title={isSpanish ? 'Reiniciar chat en este idioma' : 'Reset chat in this language'}
                   className="p-2 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer active:scale-95 transition-all"
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -339,7 +339,7 @@ export function Header({
               <button
                 type="button"
                 onClick={onOpenSettings}
-                title="Ajustes de API y Voz"
+                title={isSpanish ? 'Ajustes de API y voz' : 'API and voice settings'}
                 className="p-2 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer active:scale-95 transition-all"
               >
                 <Settings className="w-4 h-4" />
@@ -356,14 +356,14 @@ export function Header({
               <span>
                 {isSpeaking ? (
                   <span className="text-pink-300 font-medium flex items-center gap-1">
-                    <Volume2 className="w-3.5 h-3.5" /> El bot está hablando...
+                    <Volume2 className="w-3.5 h-3.5" /> {isSpanish ? 'El bot está hablando...' : 'The bot is speaking...'}
                   </span>
                 ) : isListening ? (
                   <span className="text-rose-200 font-medium flex items-center gap-1">
-                    <Mic className="w-3.5 h-3.5 animate-bounce text-rose-400" /> Escuchándote... habla con tranquilidad
+                    <Mic className="w-3.5 h-3.5 animate-bounce text-rose-400" /> {isSpanish ? 'Escuchándote... habla con tranquilidad' : 'Listening... speak freely'}
                   </span>
                 ) : (
-                  <span>Modo Manos Libres activo: responde automáticamente al terminar</span>
+                  <span>{isSpanish ? 'Modo manos libres activo: responde automáticamente al terminar' : 'Hands-free mode active: replies automatically when you finish'}</span>
                 )}
               </span>
             </div>
@@ -371,7 +371,7 @@ export function Header({
               onClick={() => setHandsFree(false)}
               className="text-rose-300/60 hover:text-rose-200 text-[11px] underline"
             >
-              Pausar
+              {isSpanish ? 'Pausar' : 'Pause'}
             </button>
           </div>
         )}

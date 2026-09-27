@@ -348,7 +348,7 @@ export function HabitTrackerPage({
 
           <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
             <span className="text-sm">📅</span>
-            <span>Habit Tracker</span>
+            <span>{isSpanish ? 'Seguimiento de hábitos' : 'Habit Tracker'}</span>
           </div>
         </div>
 
@@ -361,7 +361,7 @@ export function HabitTrackerPage({
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[var(--text-primary)] dark:text-white">
-                  Habit Tracker
+                  {isSpanish ? 'Seguimiento de hábitos' : 'Habit Tracker'}
                 </h1>
                 <p className="text-xs sm:text-sm text-[var(--text-secondary)] dark:text-rose-100/70 font-medium">
                   {isSpanish

@@ -1,11 +1,12 @@
 import React from 'react';
 import { X, Volume2, Snail, BookA, Star } from 'lucide-react';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
 export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWord }) {
-  if (!wordData) return null;
-
   const { isWordSaved, toggleSavedWord } = useSavedWords();
+  const { isSpanish } = useSiteLanguage();
+  if (!wordData) return null;
   const { word, meaning, part_of_speech, translit } = wordData;
   const activeLang = targetLang || wordData.targetLang || 'zh';
   const isSaved = isWordSaved(word, activeLang);
@@ -26,7 +27,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
           <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400">
             <BookA className="w-5 h-5" />
             <span className="text-xs uppercase font-bold tracking-wider text-stone-400 dark:text-stone-500">
-              Diccionario de Palabra Completa
+              {isSpanish ? 'Diccionario de palabra completa' : 'Full word dictionary'}
             </span>
           </div>
           <button
@@ -69,9 +70,9 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
                   ? 'bg-amber-300 dark:bg-amber-400 text-stone-950 border-amber-400 shadow-xs ring-2 ring-amber-400/40'
                   : 'bg-stone-100 dark:bg-stone-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-stone-700 dark:text-stone-200 hover:text-amber-900 dark:hover:text-amber-300 border-stone-200 dark:border-stone-700 hover:border-amber-300 dark:hover:border-amber-500/50'
               }`}
-              title={isSaved ? 'Eliminar de palabras guardadas' : 'Guardar palabra'}
+              title={isSaved ? (isSpanish ? 'Eliminar de palabras guardadas' : 'Remove from saved words') : (isSpanish ? 'Guardar palabra' : 'Save word')}
             >
-              <span>{isSaved ? '★ Guardada' : '☆ Guardar'}</span>
+              <span>{isSaved ? (isSpanish ? '★ Guardada' : '★ Saved') : (isSpanish ? '☆ Guardar' : '☆ Save')}</span>
             </button>
           </div>
         </div>
@@ -85,7 +86,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
           <span className={`text-[11px] font-bold block uppercase tracking-wider mb-1 ${
             wordData.error ? 'text-amber-800 dark:text-amber-400' : 'text-rose-800 dark:text-rose-400'
           }`}>
-            {wordData.error ? 'Aviso del diccionario:' : 'Significado en tu idioma:'}
+            {wordData.error ? (isSpanish ? 'Aviso del diccionario:' : 'Dictionary notice:') : (isSpanish ? 'Significado en tu idioma:' : 'Meaning in your language:')}
           </span>
           <p className="text-stone-850 dark:text-stone-100 text-base font-medium leading-snug">
             {wordData.error ? (
@@ -93,7 +94,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
                 {wordData.error}
               </span>
             ) : (
-              meaning || 'Buscando definición...'
+              meaning || (isSpanish ? 'Buscando definición...' : 'Looking up definition...')
             )}
           </p>
         </div>
@@ -103,18 +104,18 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
           <button
             onClick={() => onPronounceWord(word, 1.0)}
             className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-semibold shadow-sm transition-all"
-            title="Escuchar velocidad normal"
+            title={isSpanish ? 'Escuchar velocidad normal' : 'Listen at normal speed'}
           >
             <Volume2 className="w-4 h-4" />
-            <span>Pronunciar</span>
+            <span>{isSpanish ? 'Pronunciar' : 'Pronounce'}</span>
           </button>
           <button
             onClick={() => onPronounceWord(word, 0.7)}
             className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-stone-100 dark:bg-stone-800 hover:bg-rose-100 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 hover:text-rose-900 dark:hover:text-rose-300 text-xs font-medium transition-all border border-stone-200 dark:border-stone-700"
-            title="Escuchar velocidad lenta (fácil)"
+            title={isSpanish ? 'Escuchar velocidad lenta (fácil)' : 'Listen at slow speed (easy)'}
           >
             <Snail className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <span>Lento (0.7x)</span>
+            <span>{isSpanish ? 'Lento (0.7x)' : 'Slow (0.7x)'}</span>
           </button>
         </div>
       </div>

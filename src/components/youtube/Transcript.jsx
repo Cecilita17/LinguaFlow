@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import { TranscriptLine } from './TranscriptLine.jsx';
 import { FileText, SearchX } from 'lucide-react';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
+import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 export function Transcript({
   subtitles = [],
@@ -25,6 +26,7 @@ export function Transcript({
   pendingScrollSubtitleId = null,
   onScrollComplete = null
 }) {
+  const { isSpanish } = useSiteLanguage();
   const containerRef = useRef(null);
   const activeLineRef = useRef(null);
   const userInteractingRef = useRef(false);
@@ -126,9 +128,11 @@ export function Transcript({
     return (
       <div className="p-8 rounded-2xl bg-[#2b160f]/60 border border-[#482519] text-center flex flex-col items-center justify-center text-rose-300/60 my-auto">
         <FileText className="w-10 h-10 text-rose-400/50 mb-2" />
-        <h4 className="text-sm font-bold text-rose-200 mb-1">Sin subtítulos cargados</h4>
+        <h4 className="text-sm font-bold text-rose-200 mb-1">{isSpanish ? 'Sin subtítulos cargados' : 'No subtitles loaded'}</h4>
         <p className="text-xs text-rose-300/70 max-w-sm">
-          Pega el transcript o sube un archivo .srt, .vtt o .txt para ver la transcripción y seguir el vídeo en sincronía.
+          {isSpanish
+            ? 'Pega la transcripción o sube un archivo .srt, .vtt o .txt para verla y seguir el vídeo en sincronía.'
+            : 'Paste a transcript or upload a .srt, .vtt, or .txt file to follow the video in sync.'}
         </p>
       </div>
     );
@@ -138,9 +142,9 @@ export function Transcript({
     return (
       <div className="p-8 rounded-2xl bg-[#2b160f]/60 border border-[#482519] text-center flex flex-col items-center justify-center text-rose-300/60 my-auto">
         <SearchX className="w-8 h-8 text-rose-400 mb-2" />
-        <h4 className="text-sm font-bold text-rose-200 mb-1">Sin coincidencias</h4>
+        <h4 className="text-sm font-bold text-rose-200 mb-1">{isSpanish ? 'Sin coincidencias' : 'No matches found'}</h4>
         <p className="text-xs text-rose-300/70">
-          No se encontraron líneas que coincidan con "{searchQuery}".
+          {isSpanish ? `No se encontraron líneas que coincidan con "${searchQuery}".` : `No lines match "${searchQuery}".`}
         </p>
       </div>
     );

@@ -7,6 +7,7 @@ import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { useSavedWords } from '../../context/SavedWordsContext.jsx';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 import { useAudioSettings } from '../../context/AudioSettingsContext.jsx';
+import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { computeTokenCharRanges, findActiveTokenIndex } from '../../utils/audioWordSync.js';
 
 /**
@@ -47,6 +48,7 @@ function TextParagraphItemComponent({
 }) {
   const { isWordSaved } = useSavedWords();
   const { wordHighlightEnabled } = useAudioSettings();
+  const { isSpanish } = useSiteLanguage();
   const { text, tokens = [] } = paragraph;
   const isChinese = targetLang === 'zh';
   const isRtl = isRtlLanguage(targetLang);
@@ -98,19 +100,19 @@ function TextParagraphItemComponent({
       disabled={isTranslating}
       aria-label={
         isTranslating
-          ? 'Traduciendo párrafo...'
+          ? (isSpanish ? 'Traduciendo párrafo...' : 'Translating paragraph...')
           : isTranslationVisible && translation
-          ? 'Ocultar traducción del párrafo'
-          : 'Traducir párrafo completo'
+          ? (isSpanish ? 'Ocultar traducción del párrafo' : 'Hide paragraph translation')
+          : (isSpanish ? 'Traducir párrafo completo' : 'Translate full paragraph')
       }
       title={
         isTranslating
-          ? 'Traduciendo párrafo con IA...'
+          ? (isSpanish ? 'Traduciendo párrafo con IA...' : 'Translating paragraph with AI...')
           : isTranslationVisible && translation
-          ? 'Ocultar traducción del párrafo'
+          ? (isSpanish ? 'Ocultar traducción del párrafo' : 'Hide paragraph translation')
           : translation
-          ? 'Mostrar traducción del párrafo'
-          : 'Traducir este párrafo'
+          ? (isSpanish ? 'Mostrar traducción del párrafo' : 'Show paragraph translation')
+          : (isSpanish ? 'Traducir este párrafo' : 'Translate this paragraph')
       }
       className={`inline-flex items-center justify-center align-middle w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg transition-all cursor-pointer select-none active:scale-90 self-center ${
         isRtl ? 'mr-1 sm:mr-1.5' : 'ml-1 sm:ml-1.5'
@@ -150,12 +152,12 @@ function TextParagraphItemComponent({
       {/* MANUAL AUDIO BOOKMARK — Discreet, clearly visible manual bookmark accent */}
       {isMarked && !isPlaying && (
         <div
-          aria-label="Marcador de posición guardado"
-          title="Posición guardada manualmente"
+          aria-label={isSpanish ? 'Marcador de posición guardado' : 'Saved position bookmark'}
+          title={isSpanish ? 'Posición guardada manualmente' : 'Position saved manually'}
           className={`absolute -top-2.5 ${isRtl ? 'left-4 sm:left-6' : 'right-4 sm:right-6'} z-10 px-2.5 py-0.5 rounded-full bg-[var(--surface-primary)] border border-rose-500/50 shadow-sm flex items-center gap-1.5 text-[10px] font-medium text-rose-600 dark:text-rose-400 select-none pointer-events-none`}
         >
           <Bookmark className="w-2.5 h-2.5 text-rose-500 fill-rose-500 shrink-0" />
-          <span>Marcador</span>
+          <span>{isSpanish ? 'Marcador' : 'Bookmark'}</span>
         </div>
       )}
       <div
@@ -359,7 +361,7 @@ function TextParagraphItemComponent({
               ) : translation ? (
                 <div className="flex items-start gap-2.5 leading-relaxed">
                   <span className="not-italic text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 dark:text-violet-300 shrink-0 border border-violet-500/30 select-none mt-0.5">
-                    TRADUCCIÓN
+                    {isSpanish ? 'TRADUCCIÓN' : 'TRANSLATION'}
                   </span>
                   <span className="flex-1 select-text text-[var(--text-primary)] dark:text-stone-200 italic">
                     {translation}
@@ -381,17 +383,17 @@ function TextParagraphItemComponent({
             onClick={handleAudioClick}
             aria-label={
               isAudioError
-                ? 'Error de reproducción (clic para reintentar)'
+                ? (isSpanish ? 'Error de reproducción (clic para reintentar)' : 'Playback error (click to retry)')
                 : isPlaying
-                ? 'Pausar o detener reproducción de audio'
-                : 'Reproducir párrafo'
+                ? (isSpanish ? 'Pausar o detener reproducción de audio' : 'Pause or stop audio playback')
+                : (isSpanish ? 'Reproducir párrafo' : 'Play paragraph')
             }
             title={
               isAudioError
-                ? 'Error de TTS. Haz clic para reintentar.'
+                ? (isSpanish ? 'Error de TTS. Haz clic para reintentar.' : 'TTS error. Click to retry.')
                 : isPlaying
-                ? 'Pausar o detener audio'
-                : 'Reproducir párrafo'
+                ? (isSpanish ? 'Pausar o detener audio' : 'Pause or stop audio')
+                : (isSpanish ? 'Reproducir párrafo' : 'Play paragraph')
             }
             className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer ${
               isAudioError
@@ -423,13 +425,13 @@ function TextParagraphItemComponent({
               }
             }}
             disabled={isGlossing || isComplete}
-            aria-label="Glosar este párrafo"
+            aria-label={isSpanish ? 'Glosar este párrafo' : 'Gloss this paragraph'}
             title={
               isGlossing
-                ? 'Glosando este párrafo...'
+                ? (isSpanish ? 'Glosando este párrafo...' : 'Glossing this paragraph...')
                 : isComplete
-                ? 'Párrafo glosado'
-                : 'Glosar este párrafo con IA'
+                ? (isSpanish ? 'Párrafo glosado' : 'Paragraph glossed')
+                : (isSpanish ? 'Glosar este párrafo con IA' : 'Gloss this paragraph with AI')
             }
             className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer ${
               isGlossing

@@ -63,7 +63,7 @@ export function YouTubeImporter({
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.success || !Array.isArray(payload.subtitles)) {
-          const requestError = new Error(payload.error || 'No se pudieron cargar los subtítulos de YouTube.');
+          const requestError = new Error(payload.error || (isSpanish ? 'No se pudieron cargar los subtítulos de YouTube.' : 'YouTube captions could not be loaded.'));
           requestError.code = payload.code || null;
           throw requestError;
         }
@@ -72,7 +72,7 @@ export function YouTubeImporter({
         setTimeout(() => setJustImported(false), 2000);
       } catch (err) {
         setError({
-          message: err.message || 'No se pudieron cargar los subtítulos de YouTube.',
+          message: err.message || (isSpanish ? 'No se pudieron cargar los subtítulos de YouTube.' : 'YouTube captions could not be loaded.'),
           code: err.code || null
         });
       } finally {
