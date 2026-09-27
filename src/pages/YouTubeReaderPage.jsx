@@ -1630,57 +1630,6 @@ export function YouTubeReaderPage({
               />
             </div>
 
-            {/* Search Input & Quick Controls */}
-            {subtitles.length > 0 && (
-              <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 shrink-0 px-0.5">
-                <div className="relative flex-1">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={isSpanish ? "Buscar en el transcript..." : "Search transcript..."}
-                    className="w-full bg-[var(--input-bg)] text-[var(--text-primary)] text-xs pl-8 pr-7 py-1.5 rounded-xl border border-[var(--input-border)] placeholder-[var(--text-muted)] focus:outline-hidden focus:border-rose-500 shadow-xs"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleResetToStart}
-                  title={isSpanish ? "Ir al inicio del vídeo y transcript" : "Rewind to video start"}
-                  className="p-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-primary)] transition-colors cursor-pointer shrink-0 shadow-xs active:scale-95"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAutoScroll(!autoScroll)}
-                  title={autoScroll ? (isSpanish ? "Auto-scroll activo: clic para desactivar" : "Auto-scroll active: click to disable") : (isSpanish ? "Activar auto-scroll" : "Enable auto-scroll")}
-                  className={`px-2 py-1.5 rounded-xl border text-[10px] font-semibold transition-all flex items-center gap-1 shrink-0 shadow-xs cursor-pointer active:scale-95 ${
-                    autoScroll
-                      ? 'bg-rose-600 text-white border-rose-500 shadow-xs'
-                      : 'bg-[var(--surface-secondary)] text-[var(--text-muted)] border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
-                  }`}
-                >
-                  <ArrowDown className={`w-3 h-3 ${autoScroll ? 'animate-bounce' : ''}`} />
-                  <span className="hidden xs:inline">Auto-scroll</span>
-                  <span className={`text-[8px] px-1 py-0.2 rounded font-bold ${autoScroll ? 'bg-rose-900 text-white' : 'bg-[var(--surface-tertiary)] text-[var(--text-muted)]'}`}>
-                    {autoScroll ? 'ON' : 'OFF'}
-                  </span>
-                </button>
-              </div>
-            )}
-
             {/* Transcript (Maximum vertical space with independent scroll) */}
             {subtitles.length > 0 && (
               <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden pt-0.5">
