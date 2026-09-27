@@ -92,6 +92,32 @@ export function YouTubeImporter({
         </div>
       </div>
 
+      <div className="flex p-1 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-xs font-semibold">
+        <button
+          type="button"
+          onClick={() => { setImportMode('normal'); setError(null); }}
+          className={`flex-1 px-3 py-2 rounded-lg transition-all ${importMode === 'normal' ? 'bg-[var(--surface-primary)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-muted)]'}`}
+        >
+          {isSpanish ? 'Importación normal' : 'Normal import'}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setImportMode('beta'); setError(null); }}
+          className={`flex-1 px-3 py-2 rounded-lg transition-all inline-flex items-center justify-center gap-1.5 ${importMode === 'beta' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm' : 'text-[var(--text-muted)]'}`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>{isSpanish ? 'Beta: CC de YouTube' : 'Beta: YouTube CC'}</span>
+        </button>
+      </div>
+
+      {importMode === 'beta' && (
+        <p className="text-[11px] leading-relaxed text-[var(--text-muted)] px-1">
+          {isSpanish
+            ? 'Carga el vídeo y una pista CC o auto-generada disponible. Si YouTube no expone subtítulos, podés usar la importación normal.'
+            : 'Loads the video and an available CC or auto-generated track. If YouTube does not expose captions, normal import remains available.'}
+        </p>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label htmlFor="yt-url-input" className="block text-xs font-semibold text-[var(--text-secondary)] mb-1.5">
@@ -117,13 +143,19 @@ export function YouTubeImporter({
             </div>
             <button
               type="submit"
+              disabled={isLoadingCaptions}
               className={`px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 shadow-md flex-shrink-0 cursor-pointer ${
                 justImported
                   ? 'bg-emerald-600 text-white shadow-emerald-900/40'
                   : 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950 active:scale-95'
               }`}
             >
-              {justImported ? (
+              {isLoadingCaptions ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{isSpanish ? 'Cargando CC...' : 'Loading CC...'}</span>
+                </>
+              ) : justImported ? (
                 <>
                   <Check className="w-4 h-4" />
                   <span>{isSpanish ? '¡Vídeo cargado!' : 'Video loaded!'}</span>
@@ -131,7 +163,7 @@ export function YouTubeImporter({
               ) : (
                 <>
                   <Search className="w-4 h-4" />
-                  <span>{isSpanish ? 'Importar vídeo' : 'Import video'}</span>
+                  <span>{importMode === 'beta' ? (isSpanish ? 'Cargar vídeo y CC' : 'Load video & CC') : (isSpanish ? 'Importar vídeo' : 'Import video')}</span>
                 </>
               )}
             </button>
