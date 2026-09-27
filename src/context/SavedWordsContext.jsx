@@ -54,7 +54,7 @@ export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targ
     const cleanWord = String(word || '').trim();
     if (!cleanWord) return false;
     if (language === 'zh' || language === 'ja') return text.includes(cleanWord);
-    return new RegExp(`(^|[^\\p{L}\\p{N}])\${escapeRegExp(cleanWord)}(?=$|[^\\p{L}\\p{N}])`, 'iu').test(text);
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(cleanWord)}(?=$|[^\\p{L}\\p{N}])`, 'iu').test(text);
   };
 
   const seen = new Set();
@@ -66,6 +66,7 @@ export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targ
     return true;
   });
 }
+
 export function SavedWordsProvider({ children }) {
   const [savedWords, setSavedWords] = useState(() => {
     try {
