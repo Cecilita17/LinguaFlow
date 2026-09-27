@@ -18,7 +18,8 @@ export function CreateWithAiModal({
   onClose,
   targetLang = 'es',
   apiKey = '',
-  onTextGenerated
+  onTextGenerated,
+  requiredVocabulary = []
 }) {
   const { isSpanish } = useSiteLanguage();
   const [topic, setTopic] = useState('');
@@ -34,6 +35,9 @@ export function CreateWithAiModal({
     nativeName: targetLang.toUpperCase(),
     flag: '🌐'
   };
+  const practiceVocabulary = Array.isArray(requiredVocabulary)
+    ? requiredVocabulary.map((item) => typeof item === 'string' ? item : item?.word).filter(Boolean)
+    : [];
 
   const handleGenerate = async (e) => {
     if (e) e.preventDefault();
@@ -52,12 +56,13 @@ export function CreateWithAiModal({
         targetLang,
         level,
         length,
-        apiKey
+        apiKey,
+        requiredVocabulary: practiceVocabulary
       });
 
       if (result && result.text) {
         if (onTextGenerated) {
-          onTextGenerated({
+          await onTextGenerated({
             title: result.title || trimmedTopic,
             text: result.text
           });
@@ -109,7 +114,9 @@ export function CreateWithAiModal({
           </div>
           <div>
             <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
-              <span>{isSpanish ? 'Crear texto con IA' : 'Create text with AI'}</span>
+<span>{practiceVocabulary.length > 0
+                ? (isSpanish ? 'Crear práctica con IA' : 'Create AI practice')
+                : (isSpanish ? 'Crear texto con IA' : 'Create text with AI')}</span>
             </h3>
             <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] mt-0.5">
               <span>{isSpanish ? 'Idioma de aprendizaje:' : 'Target language:'}</span>
@@ -120,6 +127,21 @@ export function CreateWithAiModal({
             </div>
           </div>
         </div>
+
+        {practiceVocabulary.length > 0 && (
+          <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-2">
+              {isSpanish ? 'Palabras guardadas que se incluirán' : 'Saved words to include'}
+            </p>
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar pr-1">
+              {practiceVocabulary.map((word) => (
+                <span key={word} className="px-2 py-0.5 rounded-md bg-amber-300 text-stone-950 text-[11px] font-bold">
+                  {word}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Error Alert */}
         {error && (
