@@ -1,0 +1,155 @@
+/**
+ * Retrieves public YouTube caption tracks for the YouTube Reader beta importer.
+ * This is intentionally server-side because YouTube caption endpoints are not
+ * reliably accessible from browsers due to CORS restrictions.
+ */
+
+const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+function extractJsonObject(source, marker) {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) return null;
+  const start = source.indexOf('{', markerIndex + marker.length);
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(source.slice(start, index + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function trackLabel(track) {
+  const name = track?.name?.simpleText || track?.name?.runs?.map((run) => run.text).join('') || track?.languageCode || '';
+  return String(name).trim();
+}
+
+function chooseTrack(tracks, preferredLanguage = 'auto') {
+  const preferred = String(preferredLanguage || 'auto').toLowerCase();
+  const usable = tracks.filter((track) => track?.baseUrl && track?.languageCode);
+  if (preferred !== 'auto') {
+    const exact = usable.find((track) => track.languageCode.toLowerCase() === preferred);
+    const languageFamily = usable.find((track) => track.languageCode.toLowerCase().startsWith(`${preferred}-`));
+    if (exact || languageFamily) return exact || languageFamily;
+  }
+
+  // Prefer a human-made CC track. Auto-generated tracks are a supported fallback.
+  return usable.find((track) => track.kind !== 'asr') || usable[0] || null;
+}
+
+function captionText(event) {
+  return (event?.segs || [])
+    .map((segment) => segment?.utf8 || '')
+    .join('')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto' }) {
+  if (!VIDEO_ID_PATTERN.test(String(videoId || ''))) {
+    throw new Error('El enlace de YouTube no es válido.');
+  }
+
+  const watchUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&hl=en`;
+  const watchResponse = await fetchWithTimeout(watchUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; LinguaFlow YouTube captions beta)',
+      'Accept-Language': 'en-US,en;q=0.9'
+    }
+  });
+
+  if (!watchResponse.ok) {
+    throw new Error('YouTube no permitió consultar los subtítulos de este vídeo.');
+  }
+
+  const html = await watchResponse.text();
+  const playerResponse =
+    extractJsonObject(html, 'ytInitialPlayerResponse =') ||
+    extractJsonObject(html, 'var ytInitialPlayerResponse =') ||
+    extractJsonObject(html, 'ytInitialPlayerResponse=');
+
+  const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+  const track = chooseTrack(tracks, preferredLanguage);
+  if (!track) {
+    throw new Error('Este vídeo no tiene subtítulos CC ni subtítulos automáticos disponibles.');
+  }
+
+  const captionUrl = new URL(track.baseUrl);
+  captionUrl.searchParams.set('fmt', 'json3');
+  const captionsResponse = await fetchWithTimeout(captionUrl.toString(), {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; LinguaFlow YouTube captions beta)',
+      'Referer': watchUrl
+    }
+  });
+
+  if (!captionsResponse.ok) {
+    throw new Error('No se pudieron descargar los subtítulos de este vídeo.');
+  }
+
+  const payload = await captionsResponse.json().catch(() => null);
+  const subtitles = (payload?.events || [])
+    .map((event, index) => {
+      const text = captionText(event);
+      const startTime = Number(event?.tStartMs) / 1000;
+      const duration = Number(event?.dDurationMs) / 1000;
+      if (!text || !Number.isFinite(startTime)) return null;
+      return {
+        id: `youtube_${index + 1}`,
+        startTime: Math.max(0, startTime),
+        endTime: Math.max(startTime + 0.2, startTime + (Number.isFinite(duration) && duration > 0 ? duration : 2)),
+        text
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 10000);
+
+  if (subtitles.length === 0) {
+    throw new Error('YouTube devolvió una pista de subtítulos vacía.');
+  }
+
+  const title = playerResponse?.videoDetails?.title || `YouTube Video (${videoId})`;
+  const isAutoGenerated = track.kind === 'asr';
+  return {
+    videoId,
+    title,
+    languageCode: track.languageCode,
+    languageLabel: trackLabel(track),
+    source: isAutoGenerated ? 'YouTube auto-generated captions' : 'YouTube CC',
+    isAutoGenerated,
+    subtitles
+  };
+}
