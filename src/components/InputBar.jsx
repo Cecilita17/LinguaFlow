@@ -318,19 +318,6 @@ export function InputBar({
           </button>
         </form>
 
-        <div className="mt-2 text-center">
-          <p className="text-[11px] text-rose-200/60">
-            {isSpanish ? (
-              <>
-                Mantén presionado <span className="text-rose-300 font-semibold">🎙️ Mic</span> para hablar (soporta acentos y mezcla de idiomas) • Suelta para enviar.
-              </>
-            ) : (
-              <>
-                Press and hold <span className="text-rose-300 font-semibold">🎙️ Mic</span> to speak (supports accents & code-switching) • Release to send.
-              </>
-            )}
-          </p>
-        </div>
       </div>
     </div>
   );

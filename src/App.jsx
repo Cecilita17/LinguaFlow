@@ -14,7 +14,7 @@ import HomePage from './pages/HomePage';
 import BottomNavBar from './components/BottomNavBar.jsx';
 import { useSpeech } from './hooks/useSpeech';
 import { usePipelineCall } from './hooks/usePipelineCall.js';
-import { Sparkles, RotateCcw, ArrowLeft, ArrowUp } from 'lucide-react';
+import { Sparkles, RotateCcw, ArrowLeft, ArrowUp, MoreVertical } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
 import { normalizeChineseTokens, validateChineseTokens } from './services/chineseTokenNormalizer';
@@ -24,6 +24,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import { initAutoBackupService, stopAutoBackupService, requestAutoBackup } from './services/autoBackupService.js';
 import { isDriveAuthorized, isDriveConnected, restoreDriveConnectionSilently } from './services/googleDriveService.js';
 import { ChatHubView } from './components/chat/ChatHubView.jsx';
+import { ChatVoicePlaybackMenu } from './components/chat/ChatVoicePlaybackMenu.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
 import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
@@ -188,6 +189,7 @@ export default function App() {
   const [chatViewMode, setChatViewMode] = useState('hub'); // 'hub' | 'chat' | 'call' | 'call-detail'
   const [selectedCallData, setSelectedCallData] = useState(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isChatVoiceMenuOpen, setIsChatVoiceMenuOpen] = useState(false);
 
   // Synchronize activeTab to URL and localStorage
   useEffect(() => {
@@ -1218,6 +1220,21 @@ export default function App() {
                 <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
                   <span className="text-sm">{currentLangObj.flag || '💬'}</span>
                   <span>{currentLangObj.name}</span>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsChatVoiceMenuOpen((isOpen) => !isOpen)}
+                      className="ml-1 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer active:scale-95"
+                      aria-label={isSpanish ? 'Abrir ajustes de voz y reproducción' : 'Open voice and playback settings'}
+                      aria-expanded={isChatVoiceMenuOpen}
+                      title={isSpanish ? 'Voz y reproducción' : 'Voice & Playback'}
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {isChatVoiceMenuOpen && (
+                      <ChatVoicePlaybackMenu onClose={() => setIsChatVoiceMenuOpen(false)} />
+                    )}
+                  </div>
                 </div>
               </div>
 
