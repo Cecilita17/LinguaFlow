@@ -2898,7 +2898,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
 
           {isEpub && simplificationMode.kind === 'simplified' && simplificationStatus.error && (
             <div className="mx-3 mt-2 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-[var(--text-primary)]" role="alert">
-              <span>{isSpanish ? `No se pudo simplificar este bloque. Se muestra el original.` : 'This block could not be simplified. The original is shown.'}</span>
+              <span>{simplificationStatus.error || (isSpanish ? 'No se pudo simplificar este bloque. Se muestra el original.' : 'This block could not be simplified. The original is shown.')}</span>
               <button
                 type="button"
                 onClick={() => setSimplificationRetryNonce((previous) => previous + 1)}
