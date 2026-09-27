@@ -4,10 +4,6 @@ import {
   Settings as SettingsIcon,
   Globe,
   Palette,
-  Sparkles,
-  Zap,
-  Server,
-  Info,
   Gauge,
   Volume2,
   Type,
@@ -21,7 +17,6 @@ import {
   User,
   ChevronRight
 } from 'lucide-react';
-import { API_BASE_URL } from '../services/chatService.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { useAudioSettings, SPEECH_RATE_OPTIONS } from '../context/AudioSettingsContext.jsx';
@@ -63,47 +58,12 @@ export function SettingsPage({
   const [activeSubView, setActiveSubView] = useState('main'); // 'main' | 'account'
   const [level, setLevel] = useState(config.level || 'A2/B1');
   const [speechRate, setSpeechRate] = useState(globalSpeechRate || config.speechRate || 1.0);
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState(null);
   const [savedNotice, setSavedNotice] = useState(false);
 
   useEffect(() => {
     if (config.level) setLevel(config.level);
     if (globalSpeechRate) setSpeechRate(globalSpeechRate);
   }, [config, globalSpeechRate]);
-
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    setConnectionStatus(null);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/health`);
-      if (res.ok) {
-        const data = await res.json();
-        setConnectionStatus({
-          success: true,
-          message: isSpanish
-            ? `¡Conexión exitosa con el backend de LinguaFlow! Modelo activo: ${data.model || 'openai/gpt-oss-120b'}.`
-            : `Successful connection to LinguaFlow backend! Active model: ${data.model || 'openai/gpt-oss-120b'}.`
-        });
-      } else {
-        setConnectionStatus({
-          success: false,
-          message: isSpanish
-            ? `El servidor respondió con estado HTTP ${res.status}.`
-            : `Server responded with HTTP status ${res.status}.`
-        });
-      }
-    } catch (e) {
-      setConnectionStatus({
-        success: false,
-        message: isSpanish
-          ? `Error de conexión con el backend: ${e.message}. Asegúrate de que el servidor esté en ejecución.`
-          : `Connection error with backend: ${e.message}. Make sure server is running.`
-      });
-    } finally {
-      setTestingConnection(false);
-    }
-  };
 
   const handleLevelChange = (newLevel) => {
     setLevel(newLevel);
@@ -462,36 +422,9 @@ export function SettingsPage({
                 ))}
               </select>
             </div>
-          </div>
-        </div>
 
-        {/* SECTION 2.5: VOCES PARA LLAMADAS (CARTESIA) */}
-        <CallVoiceSettingsSection onPreferencesChange={triggerNotice} />
-
-        {/* SECTION 3: INTELIGENCIA ARTIFICIAL Y BACKEND */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-rose-500" />
-            <span>{isSpanish ? 'Inteligencia Artificial y Conexión' : 'AI & Backend'}</span>
-          </h2>
-
-          <div className="space-y-4">
-            {/* Active Model */}
-            <div className="p-3 bg-[var(--surface-secondary)] border border-[var(--border-primary)] rounded-2xl flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <Zap className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0" />
-                <div>
-                  <div className="text-xs font-bold text-[var(--text-primary)]">Groq Cloud AI</div>
-                  <div className="text-[11px] text-rose-600 dark:text-rose-300 font-mono">openai/gpt-oss-120b</div>
-                </div>
-              </div>
-              <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
-                ⚡ {isSpanish ? 'Ultra Rápido' : 'Ultra Fast'}
-              </span>
-            </div>
-
-            {/* Proficiency Level */}
-            <div>
+            {/* Tutor Proficiency Level */}
+            <div className="p-3 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
               <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1.5 flex items-center gap-1.5">
                 <Gauge className="w-3.5 h-3.5 text-rose-500" />
                 <span>{isSpanish ? 'Nivel de Dificultad del Tutor' : 'Tutor Proficiency Level'}</span>
@@ -507,77 +440,30 @@ export function SettingsPage({
               </select>
             </div>
 
-            {/* Backend Status Check */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
-                  <Server className="w-3.5 h-3.5 text-rose-500" />
-                  <span>{isSpanish ? 'Estado del Backend' : 'Backend Status'}</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (onResetChat) onResetChat();
+                triggerNotice();
+              }}
+              className="w-full bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] rounded-2xl p-3.5 flex items-center space-x-3 text-left transition-colors cursor-pointer active:scale-98"
+            >
+              <RotateCcw className="w-4 h-4 text-rose-500 shrink-0" />
+              <div>
+                <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] block">
+                  {t('reset_conv')}
                 </span>
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={testingConnection}
-                  className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-semibold underline disabled:opacity-50 cursor-pointer"
-                >
-                  {testingConnection ? (isSpanish ? 'Comprobando...' : 'Checking...') : (isSpanish ? 'Verificar conexión' : 'Test connection')}
-                </button>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  {isSpanish ? 'Reinicia la conversación del chat para el idioma seleccionado' : 'Reset chat conversation for the selected language'}
+                </span>
               </div>
-
-              {connectionStatus && (
-                <div
-                  className={`p-2.5 rounded-xl text-xs flex items-start space-x-2 border mb-2 ${
-                    connectionStatus.success
-                      ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 border-emerald-500/30'
-                      : 'bg-rose-500/10 text-rose-800 dark:text-rose-200 border-rose-500/30'
-                  }`}
-                >
-                  <span className="mt-0.5">{connectionStatus.success ? '✅' : '⚠️'}</span>
-                  <span className="font-medium leading-relaxed">{connectionStatus.message}</span>
-                </div>
-              )}
-
-              <div className="flex items-start space-x-2 text-xs text-[var(--text-secondary)] bg-[var(--surface-secondary)] p-3 rounded-2xl border border-[var(--border-primary)]">
-                <Info className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-[11px] leading-relaxed">
-                  <p>
-                    <strong className="text-[var(--text-primary)]">{isSpanish ? 'Seguridad:' : 'Security:'}</strong> {isSpanish ? 'La clave' : 'The'} <code className="bg-[var(--surface-tertiary)] px-1 py-0.5 rounded border border-[var(--border-primary)] text-rose-600 dark:text-rose-300 font-mono">GROQ_API_KEY</code> {isSpanish ? 'se administra exclusivamente en el servidor backend para proteger tus credenciales.' : 'is managed securely on the backend server.'}
-                  </p>
-                  <p className="text-[var(--text-muted)]">
-                    {isSpanish ? 'Modelo activo:' : 'Active model:'} <code className="font-mono text-rose-600 dark:text-rose-300 font-semibold">openai/gpt-oss-120b</code> {isSpanish ? 'con transcripción Whisper V3.' : 'with Whisper V3 multilingual transcription.'}
-                  </p>
-                </div>
-              </div>
-            </div>
+            </button>
           </div>
         </div>
 
-        {/* SECTION 4: ACCIONES */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <RotateCcw className="w-4 h-4 text-rose-500" />
-            <span>{isSpanish ? 'Acciones' : 'Actions'}</span>
-          </h2>
+        {/* SECTION 2.5: VOCES PARA LLAMADAS (CARTESIA) */}
+        <CallVoiceSettingsSection onPreferencesChange={triggerNotice} />
 
-          <button
-            type="button"
-            onClick={() => {
-              if (onResetChat) onResetChat();
-              triggerNotice();
-            }}
-            className="w-full bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] rounded-2xl p-3.5 flex items-center space-x-3 text-left transition-colors cursor-pointer active:scale-98"
-          >
-            <RotateCcw className="w-4 h-4 text-rose-500 shrink-0" />
-            <div>
-              <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] block">
-                {t('reset_conv')}
-              </span>
-              <span className="text-[11px] text-[var(--text-muted)]">
-                {isSpanish ? 'Reinicia la conversación del chat para el idioma seleccionado' : 'Reset chat conversation for the selected language'}
-              </span>
-            </div>
-          </button>
-        </div>
       </div>
     </div>
   );
