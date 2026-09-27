@@ -28,7 +28,7 @@ import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
 import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
 import { GlobalAudioImportWidget } from './components/audio/GlobalAudioImportWidget.jsx';
-import { recordHabitActivityForToday } from './services/habitTrackerService.js';
+import { HABIT_TRACKER_UPDATED_EVENT, recordHabitActivityForToday } from './services/habitTrackerService.js';
 import { loadActiveDocumentDraft, saveActiveDocumentDraft } from './services/textDocumentService.js';
 
 const SUPPORTED_LANGUAGES = [
@@ -127,6 +127,16 @@ export default function App() {
       stopAutoBackupService();
     }
   }, [user]);
+
+  // Habit tracker persists all updates through one service and emits this event.
+  // Queue its existing incremental resource without duplicating tracker storage.
+  useEffect(() => {
+    const handleHabitTrackerUpdate = () => {
+      requestAutoBackup({ type: 'habit-tracker', reason: 'habit-tracker-updated' });
+    };
+    window.addEventListener(HABIT_TRACKER_UPDATED_EVENT, handleHabitTrackerUpdate);
+    return () => window.removeEventListener(HABIT_TRACKER_UPDATED_EVENT, handleHabitTrackerUpdate);
+  }, []);
 
   const [languages, setLanguages] = useState(SUPPORTED_LANGUAGES);
   const [targetLang, setTargetLang] = useState(() => {
@@ -663,10 +673,12 @@ export default function App() {
     return JSON.parse(JSON.stringify(initialBotMsg));
   }
 
-  // Persist messages whenever conversation changes for current language
+  // Persist messages whenever conversation changes for current language.
+  // The auto-backup queue coalesces this into a single incremental chat-history upload.
   useEffect(() => {
     if (activeLangRef.current === targetLang && messages && messages.length > 0) {
       saveChatToStorage(targetLang, messages);
+      requestAutoBackup({ type: 'chat-history', reason: 'chat-updated' });
     }
   }, [messages, targetLang]);
 
@@ -1173,11 +1185,13 @@ export default function App() {
                 const initialGreeting = getInitialBotMsg(targetLang);
                 setMessages([initialGreeting]);
               }
+              requestAutoBackup({ type: 'chat-history', reason: 'chat-deleted' });
             }}
             onDeleteCallSession={(callId) => {
               if (selectedCallData && selectedCallData.id === callId) {
                 setSelectedCallData(null);
               }
+              requestAutoBackup({ type: 'call-history', reason: 'call-deleted' });
             }}
           />
         </main>
