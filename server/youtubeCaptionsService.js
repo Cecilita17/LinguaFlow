@@ -46,7 +46,10 @@ async function createInnertube(diagnostics) {
       enable_session_cache: true,
       fast_fail: false,
       fetch: async (input, init) => {
-        const requestUrl = new URL(typeof input === 'string' ? input : input.url);
+        const rawUrl = typeof input === 'string'
+          ? input
+          : (input instanceof URL ? input.toString() : input.url);
+        const requestUrl = new URL(rawUrl);
         const source = requestUrl.pathname;
         try {
           const response = await fetch(input, init);
