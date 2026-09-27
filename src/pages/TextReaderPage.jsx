@@ -2345,8 +2345,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       {importStatus || (isSpanish ? 'Procesando archivo...' : 'Processing file...')}
                     </span>
                   </div>
-
-                  </button>
                 </div>
               )}
 
