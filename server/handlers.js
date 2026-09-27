@@ -12,6 +12,7 @@ import {
 import { SUPPORTED_LANGUAGES, computeWordDiff } from './languageData.js';
 import { processDeterministicLinguistics, processSmartConversation } from './conversationEngine.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
+import { fetchYouTubeCaptions } from './youtubeCaptionsService.js';
 
 dotenv.config();
 
@@ -2285,5 +2286,28 @@ INSTRUCTIONS:
   } catch (err) {
     console.error('Server error in /api/image-description:', err);
     res.status(500).json({ error: 'Error interno en el servidor al procesar la imagen.' });
+  }
+}
+
+
+export async function handleYouTubeCaptions(req, res) {
+  setCorsHeaders(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Método no permitido. Use POST.' });
+  }
+
+  const { videoId, preferredLanguage = 'auto' } = req.body || {};
+  if (!/^[A-Za-z0-9_-]{11}$/.test(String(videoId || ''))) {
+    return res.status(400).json({ error: 'El enlace de YouTube no es válido.' });
+  }
+
+  try {
+    const result = await fetchYouTubeCaptions({ videoId, preferredLanguage });
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    const message = error?.message || 'No se pudieron obtener los subtítulos de YouTube.';
+    console.warn('[YouTubeCaptions] beta import failed:', message);
+    return res.status(422).json({ error: message });
   }
 }
