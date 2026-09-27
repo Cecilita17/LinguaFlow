@@ -46,6 +46,27 @@ function extractConfigString(source, key) {
   return match?.[1] || '';
 }
 
+async function fetchEmbeddedPagePlayerResponse(videoId) {
+  const response = await fetchWithTimeout(
+    `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?hl=en&cc_load_policy=1`,
+    {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; LinguaFlow YouTube captions beta)',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.youtube.com/'
+      }
+    }
+  );
+  if (!response.ok) return null;
+
+  const html = await response.text();
+  return (
+    extractJsonObject(html, 'ytInitialPlayerResponse =') ||
+    extractJsonObject(html, 'var ytInitialPlayerResponse =') ||
+    extractJsonObject(html, 'ytInitialPlayerResponse=')
+  );
+}
+
 async function fetchEmbeddedPlayerResponse(videoId) {
   // Some videos omit captions from the watch-page response but expose them to
   // the embedded player, which is the same public player used in webpages.
@@ -268,6 +289,13 @@ export async function fetchYouTubeCaptions({ videoId, preferredLanguage = 'auto'
     extractJsonObject(html, 'ytInitialPlayerResponse=');
 
   let tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+  if (tracks.length === 0) {
+    const embeddedPagePlayerResponse = await fetchEmbeddedPagePlayerResponse(videoId);
+    if (embeddedPagePlayerResponse) {
+      playerResponse = embeddedPagePlayerResponse;
+      tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+    }
+  }
   if (tracks.length === 0) {
     const embeddedPlayerResponse = await fetchEmbeddedPlayerResponse(videoId);
     if (embeddedPlayerResponse) {
