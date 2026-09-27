@@ -332,18 +332,33 @@ export function TextLibraryView({
             const savedLanguages = doc.languageStates ? Object.keys(doc.languageStates) : [doc.targetLang];
             const isConfirming = confirmingDeleteId === doc.id;
             const progressPercent = getDocumentProgress(doc);
+            const isEpubDocument = doc.sourceType === 'epub' || doc.format === 'epub';
 
             return (
               <div
                 key={doc.id}
                 onClick={() => !isConfirming && onSelectDocument(doc)}
-                className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group relative overflow-hidden ${
+                className={`min-h-[112px] p-3 rounded-2xl border transition-all flex gap-3 group relative overflow-hidden ${
                   isCurrent
                     ? 'bg-rose-500/10 border-rose-500/80 shadow-md shadow-rose-950/20'
                     : 'bg-[var(--surface-primary)] border-[var(--border-primary)] hover:bg-[var(--surface-secondary)] hover:border-rose-500/40'
                 } ${isConfirming ? 'ring-2 ring-red-500/50' : 'cursor-pointer'}`}
               >
-                {/* Left side: Information */}
+                {/* Book cover for EPUBs, with a consistent fallback for other documents */}
+                <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-xl overflow-hidden shrink-0 bg-[var(--surface-secondary)] border border-[var(--border-primary)] flex items-center justify-center">
+                  {isEpubDocument && doc.coverImage ? (
+                    <img
+                      src={doc.coverImage}
+                      alt={doc.title || (isSpanish ? 'Portada del libro' : 'Book cover')}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <BookOpen className="w-6 h-6 text-rose-500/60" />
+                  )}
+                </div>
+
+                {/* Document details */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className="text-sm" title={langMeta.name}>
@@ -368,7 +383,7 @@ export function TextLibraryView({
                       </span>
                     )}
 
-                    {(doc.sourceType === 'epub' || doc.format === 'epub') && (
+                    {isEpubDocument && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 font-mono font-bold tracking-wider">
                         EPUB
                       </span>
@@ -387,8 +402,8 @@ export function TextLibraryView({
                     )}
                   </div>
 
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] group-hover:text-rose-500 dark:group-hover:text-rose-300 transition-colors line-clamp-1">
+                  <div className="flex items-baseline gap-2 flex-wrap mt-1">
+                    <h3 className="text-sm sm:text-base font-semibold text-[var(--text-primary)] group-hover:text-rose-500 dark:group-hover:text-rose-300 transition-colors line-clamp-1">
                       {doc.title || (isSpanish ? 'Texto sin título' : 'Untitled text')}
                     </h3>
                     {doc.author && (
@@ -399,21 +414,20 @@ export function TextLibraryView({
                   </div>
 
                   {doc.rawText && (
-                    <p className="text-xs text-[var(--text-muted)] line-clamp-1 mt-1 font-sans">
+                    <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2 min-h-[2.75rem] mt-1.5 leading-relaxed font-sans">
                       {doc.rawText.slice(0, 120)}
                     </p>
                   )}
 
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-[var(--text-muted)] font-mono">
-                    <span>
-                      {paraCount} {isSpanish ? 'párrafos' : 'paragraphs'}
-                    </span>
+                  <div className="flex items-center gap-1.5 mt-2 text-[11px] text-[var(--text-muted)] font-medium">
                     {doc.updatedAt && (
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 opacity-60" />
+                        <Clock className="w-3.5 h-3.5 opacity-70" />
                         {formatDate(doc.updatedAt)}
                       </span>
                     )}
+                    {doc.updatedAt && <span className="opacity-50">•</span>}
+                    <span>{paraCount} {isSpanish ? 'párrafos' : 'paragraphs'}</span>
                   </div>
                 </div>
 
@@ -457,14 +471,14 @@ export function TextLibraryView({
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <div className="flex flex-col sm:flex-row items-center gap-1.5 shrink-0 self-end sm:self-center">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectDocument(doc);
                       }}
-                      className="px-3.5 py-1.5 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shadow-xs"
+                      className="px-3 py-1.5 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shadow-xs"
                     >
                       <span>{isSpanish ? 'Abrir' : 'Open'}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -476,10 +490,10 @@ export function TextLibraryView({
                         e.stopPropagation();
                         setConfirmingDeleteId(doc.id);
                       }}
-                      className="p-2 rounded-xl border border-[var(--border-primary)] hover:border-red-500/70 bg-[var(--surface-secondary)] text-[var(--text-muted)] hover:text-red-500 transition-all cursor-pointer"
+                      className="p-1.5 rounded-xl border border-[var(--border-primary)] hover:border-red-500/70 bg-[var(--surface-secondary)] text-[var(--text-muted)] hover:text-red-500 transition-all cursor-pointer"
                       title={isSpanish ? 'Eliminar texto' : 'Delete text'}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
