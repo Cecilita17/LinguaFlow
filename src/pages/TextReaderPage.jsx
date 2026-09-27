@@ -1773,6 +1773,15 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
 
     const isExistingDoc = Boolean(document && document.id);
     const rawTextChanged = isExistingDoc && document.rawText.trim() !== raw;
+    const isExistingEpubDocument = Boolean(
+      isExistingDoc &&
+      (document.format === 'epub' || document.sourceType === 'epub' || (Array.isArray(document.chapters) && document.chapters.length > 0))
+    );
+    // A pasted text cannot share an EPUB's chapter identities. Reusing the EPUB
+    // document would leave the new paragraphs without chapterId values, making
+    // the chapter reader render an empty page. Preserve the book and save the
+    // pasted content as its own TXT document instead.
+    const shouldCreateIndependentTextDocument = isExistingEpubDocument && rawTextChanged;
     const effectiveParagraphs = (!rawTextChanged && isExistingDoc && Array.isArray(document.paragraphs) && document.paragraphs.length > 0)
       ? document.paragraphs
       : splitTextIntoParagraphs(raw, targetLang, nativeLang);
@@ -1793,21 +1802,21 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     );
 
     const docToSave = createTextDocument({
-      id: isExistingDoc ? document.id : null,
-      title: inputTitle.trim(),
-      author: isExistingDoc ? (document.author || '') : '',
+      id: shouldCreateIndependentTextDocument ? null : (isExistingDoc ? document.id : null),
+      title: shouldCreateIndependentTextDocument && inputTitle.trim() === (document.title || '').trim() ? '' : inputTitle.trim(),
+      author: shouldCreateIndependentTextDocument ? '' : (isExistingDoc ? (document.author || '') : ''),
       sourceType: isExistingAudioDoc
         ? (document.sourceType || 'audio')
-        : (isExistingDoc ? (document.sourceType || 'txt') : 'txt'),
+        : (shouldCreateIndependentTextDocument ? 'txt' : (isExistingDoc ? (document.sourceType || 'txt') : 'txt')),
       format: isExistingAudioDoc
         ? (document.format || 'audio')
-        : (isExistingDoc ? (document.format || 'txt') : 'txt'),
+        : (shouldCreateIndependentTextDocument ? 'txt' : (isExistingDoc ? (document.format || 'txt') : 'txt')),
       rawText: raw,
       targetLang,
       nativeLang,
       paragraphs: effectiveParagraphs,
-      chapters: isExistingDoc ? (document.chapters || null) : null,
-      languageStates: isExistingDoc ? document.languageStates : null,
+      chapters: shouldCreateIndependentTextDocument ? null : (isExistingDoc ? (document.chapters || null) : null),
+      languageStates: shouldCreateIndependentTextDocument ? null : (isExistingDoc ? document.languageStates : null),
       audioPathname: isExistingAudioDoc ? document.audioPathname : null,
       audioUrl: isExistingAudioDoc ? document.audioUrl : null,
       audioBlob: isExistingAudioDoc ? document.audioBlob : null,
@@ -1816,7 +1825,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       audioDuration: isExistingAudioDoc ? document.audioDuration : null,
       audioBookmark: preservedAudioBookmark,
       lastReadingPosition: isExistingDoc ? document.lastReadingPosition : null,
-      createdAt: isExistingDoc ? document.createdAt : null
+      createdAt: shouldCreateIndependentTextDocument ? null : (isExistingDoc ? document.createdAt : null)
     });
 
     const saved = await saveDocument(docToSave);
