@@ -8,7 +8,8 @@ import {
   Sparkles,
   Info,
   Check,
-  Globe
+  Globe,
+  ChevronDown
 } from 'lucide-react';
 import { LANGUAGE_METADATA } from '../../constants/languages.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
@@ -64,6 +65,7 @@ export function CallVoiceSettingsSection({ onPreferencesChange }) {
   const [loadingLang, setLoadingLang] = useState(null);
   const [playingLang, setPlayingLang] = useState(null);
   const [previewError, setPreviewError] = useState(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const currentAudioRef = useRef(null);
   const currentObjectUrlRef = useRef(null);
@@ -204,20 +206,31 @@ export function CallVoiceSettingsSection({ onPreferencesChange }) {
 
   return (
     <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
-      <div className="flex items-center justify-between mb-2">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((expanded) => !expanded)}
+        aria-expanded={isExpanded}
+        className="w-full flex items-center justify-between text-left cursor-pointer"
+      >
         <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
           <Mic className="w-4 h-4 text-rose-500" />
           <span>{isSpanish ? '🎙️ Voces para llamadas' : '🎙️ Call Voices'}</span>
         </h2>
-        {loadingVoices && (
-          <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-            <Loader2 className="w-3 h-3 animate-spin text-rose-500" />
-            <span>{isSpanish ? 'Cargando voces...' : 'Loading voices...'}</span>
-          </div>
-        )}
-      </div>
+        <ChevronDown
+          className={`w-4 h-4 text-rose-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+        />
+      </button>
 
-      <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
+      {isExpanded && (
+        <>
+          {loadingVoices && (
+            <div className="flex items-center gap-1 mt-2 text-[11px] text-[var(--text-muted)]">
+              <Loader2 className="w-3 h-3 animate-spin text-rose-500" />
+              <span>{isSpanish ? 'Cargando voces...' : 'Loading voices...'}</span>
+            </div>
+          )}
+
+          <p className="text-xs text-[var(--text-secondary)] mt-2 mb-4 leading-relaxed">
         {isSpanish
           ? 'Seleccioná la voz de Cartesia que utilizará LinguaFlow AI durante las llamadas de voz. Estas voces afectan únicamente las Live Calls.'
           : 'Choose the Cartesia voice LinguaFlow AI will use during voice calls. These voices affect only Live Calls.'}
@@ -321,20 +334,22 @@ export function CallVoiceSettingsSection({ onPreferencesChange }) {
         })}
       </div>
 
-      <div className="mt-4 flex items-start space-x-2 text-xs text-[var(--text-secondary)] bg-[var(--surface-secondary)] p-3 rounded-2xl border border-[var(--border-primary)]">
-        <Info className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-        <div className="text-[11px] leading-relaxed text-[var(--text-muted)]">
-          {isSpanish ? (
-            <p>
-              Tus preferencias se guardan automáticamente por idioma. Las voces clonadas en tu cuenta de Cartesia aparecen identificadas con estrella (⭐) para fácil selección.
-            </p>
-          ) : (
-            <p>
-              Your preferences are saved automatically per language. Cloned voices on your Cartesia account are marked with a star (⭐) for easy selection.
-            </p>
-          )}
-        </div>
-      </div>
+          <div className="mt-4 flex items-start space-x-2 text-xs text-[var(--text-secondary)] bg-[var(--surface-secondary)] p-3 rounded-2xl border border-[var(--border-primary)]">
+            <Info className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+            <div className="text-[11px] leading-relaxed text-[var(--text-muted)]">
+              {isSpanish ? (
+                <p>
+                  Tus preferencias se guardan automáticamente por idioma. Las voces clonadas en tu cuenta de Cartesia aparecen identificadas con estrella (⭐) para fácil selección.
+                </p>
+              ) : (
+                <p>
+                  Your preferences are saved automatically per language. Cloned voices on your Cartesia account are marked with a star (⭐) for easy selection.
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
