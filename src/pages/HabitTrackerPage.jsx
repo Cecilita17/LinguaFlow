@@ -210,7 +210,7 @@ export function HabitTrackerPage({
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
-  const [isConfigOpen, setIsConfigOpen] = useState(true);
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   const [trackerData, setTrackerData] = useState(() => {
     return loadHabitTrackerData(user, languages);
