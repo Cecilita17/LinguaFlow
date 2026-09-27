@@ -1645,10 +1645,14 @@ export async function handleGenerateText(req, res) {
       targetLang = 'es',
       level = 'B1',
       length = 'medium',
-      apiKey: clientApiKey
+      apiKey: clientApiKey,
+      requiredVocabulary = []
     } = body;
 
     const trimmedTopic = (topic || '').trim();
+    const practiceVocabulary = Array.isArray(requiredVocabulary)
+      ? [...new Set(requiredVocabulary.map((word) => String(word || '').trim()).filter(Boolean))].slice(0, 30)
+      : [];
     if (!trimmedTopic) {
       return res.status(400).json({ error: 'Debes proporcionar un tema o idea para generar el texto.' });
     }
@@ -1685,9 +1689,14 @@ CRITICAL RULES:
 5. Provide a short, captivating title strictly in ${targetName}.
 6. Output format: Return a JSON object with {"title": "Title in ${targetName}", "text": "Paragraph 1...\\n\\nParagraph 2..."} or directly the titled text in ${targetName}.`;
 
+      const vocabularyInstruction = practiceVocabulary.length > 0
+        ? '\nRequired practice vocabulary: ' + practiceVocabulary.map((word) => `"${word}"`).join(', ') +
+          '.\nUse EVERY required item exactly as written at least once, naturally and meaningfully in the text. Do not list the words separately or add translations.'
+        : '';
+
       const userPrompt = `Student requested topic / prompt: "${trimmedTopic}".
 Proficiency level: ${level}.
-Target language: ${targetName} (${targetNativeName}, code: ${targetLang}).
+Target language: ${targetName} (${targetNativeName}, code: ${targetLang}).${vocabularyInstruction}
 
 Write the complete reading text in ${targetName} now.`;
 
@@ -1731,7 +1740,7 @@ Write the complete reading text in ${targetName} now.`;
             durationMs: Date.now() - startTime,
             retry: false,
             streaming: false,
-            extra: `level=${level} length=${length}`
+            extra: `level=${level} length=${length} practice_vocabulary=${practiceVocabulary.length}`
           });
           const rawContent = data?.choices?.[0]?.message?.content || '';
 
