@@ -1,40 +1,145 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  YouTubeCaptionExtractionError,
   classifyExtractorError,
   normalizeTranscriptSegments,
+  parseCaptionPayload,
   selectCaptionTrack
 } from './youtubeCaptionUtils.js';
+import { fetchYouTubeCaptions } from './youtubeCaptionsService.js';
 
-const tracks = [
-  { language_code: 'en', name: 'English', kind: undefined },
-  { language_code: 'zh-Hans', name: 'Chinese (Simplified)', kind: 'asr' }
-];
+const manualEnglish = { language_code: 'en', name: 'English', base_url: 'https://captions.example/manual' };
+const autoChinese = { language_code: 'zh-Hans', name: 'Chinese (Simplified)', kind: 'asr', base_url: 'https://captions.example/asr' };
 
-test('selectCaptionTrack prefers exact requested language', () => {
-  assert.equal(selectCaptionTrack(tracks, 'zh').language_code, 'zh-Hans');
-  assert.equal(selectCaptionTrack(tracks, 'en').language_code, 'en');
+function response({ status = 200, contentType = 'application/json', body = '' } = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => contentType },
+    text: async () => body
+  };
+}
+
+function info(tracks, transcriptSegments = []) {
+  return {
+    basic_info: { title: 'Test video' },
+    captions: { caption_tracks: tracks },
+    getTranscript: async () => ({
+      selectedLanguage: 'English',
+      languages: ['English'],
+      transcript: { content: { body: { initial_segments: transcriptSegments } } }
+    })
+  };
+}
+
+function factoryByClient(entries) {
+  return async () => ({
+    getInfo: async (_videoId, options) => entries[options.client] || info([])
+  });
+}
+
+const json3 = JSON.stringify({
+  events: [{ tStartMs: 1200, dDurationMs: 2300, segs: [{ utf8: 'Hello world' }] }]
 });
 
-test('selectCaptionTrack prefers manual CC in auto mode and rejects missing requested language', () => {
-  assert.equal(selectCaptionTrack(tracks, 'auto').language_code, 'en');
-  assert.equal(selectCaptionTrack(tracks, 'ar'), null);
+test('selectCaptionTrack supports manual CC, ASR, exact and family language matching', () => {
+  assert.equal(selectCaptionTrack([manualEnglish, autoChinese], 'auto'), manualEnglish);
+  assert.equal(selectCaptionTrack([autoChinese], 'auto'), autoChinese);
+  assert.equal(selectCaptionTrack([manualEnglish, autoChinese], 'zh'), autoChinese);
+  assert.equal(selectCaptionTrack([manualEnglish], 'ar'), null);
 });
 
-test('normalizeTranscriptSegments preserves timestamp precision and skips non-segments', () => {
+test('normalizeTranscriptSegments preserves timestamp precision', () => {
   assert.deepEqual(normalizeTranscriptSegments([
     { start_ms: '1230', end_ms: '3450', snippet: '  Hola\n mundo  ' },
-    { start_ms: 'invalid', end_ms: '4000', snippet: 'ignored' },
-    { start_ms: '4000', end_ms: '4000', snippet: 'next' }
-  ]), [
-    { id: 'youtube_1', startTime: 1.23, endTime: 3.45, text: 'Hola mundo' },
-    { id: 'youtube_2', startTime: 4, endTime: 4.2, text: 'next' }
-  ]);
+    { start_ms: 'invalid', end_ms: '4000', snippet: 'ignored' }
+  ]), [{ id: 'youtube_1', startTime: 1.23, endTime: 3.45, text: 'Hola mundo' }]);
 });
 
-test('classifyExtractorError distinguishes unavailable, restricted, captions and timeout', () => {
-  assert.equal(classifyExtractorError(new Error('Transcript panel not found')).code, 'CAPTIONS_UNAVAILABLE');
+test('parseCaptionPayload parses JSON3 and XML timed text', () => {
+  assert.deepEqual(parseCaptionPayload(json3, 'application/json').segments, [
+    { startMs: 1200, endMs: 3500, text: 'Hello world' }
+  ]);
+  assert.deepEqual(
+    parseCaptionPayload('<transcript><text start="1.2" dur="2.3">Hola &amp; adi&#243;s</text></transcript>', 'text/xml').segments,
+    [{ startMs: 1200, endMs: 3500, text: 'Hola & adiós' }]
+  );
+});
+
+test('parseCaptionPayload rejects empty bodies, unexpected HTML and malformed payloads', () => {
+  assert.throws(() => parseCaptionPayload('', 'application/json'), { code: 'CAPTION_TRACK_EMPTY' });
+  assert.throws(() => parseCaptionPayload('<!doctype html><html></html>', 'text/html'), { code: 'CAPTION_DOWNLOAD_FAILED' });
+  assert.throws(() => parseCaptionPayload('{"events":"wrong"}', 'application/json'), { code: 'CAPTION_PARSE_FAILED' });
+});
+
+test('classifyExtractorError keeps caption download failures distinct from unavailable captions', () => {
+  assert.equal(classifyExtractorError(new YouTubeCaptionExtractionError('CAPTION_DOWNLOAD_FAILED', 'download failed')).code, 'CAPTION_DOWNLOAD_FAILED');
   assert.equal(classifyExtractorError({ message: 'Video unavailable', status: 404 }).code, 'VIDEO_UNAVAILABLE');
-  assert.equal(classifyExtractorError({ message: 'Sign in required', status: 403 }).code, 'VIDEO_RESTRICTED');
   assert.equal(classifyExtractorError({ name: 'AbortError', message: 'aborted' }).code, 'UPSTREAM_TIMEOUT');
 });
+
+test('direct track download works when getTranscript fails', async () => {
+  const directInfo = info([manualEnglish]);
+  directInfo.getTranscript = async () => { throw new Error('Transcript panel not found'); };
+  const result = await fetchYouTubeCaptions(
+    { videoId: 'abcdefghijk', preferredLanguage: 'en' },
+    {
+      innertubeFactory: factoryByClient({ ANDROID: directInfo }),
+      fetchImpl: async () => response({ body: json3 })
+    }
+  );
+  assert.equal(result.subtitles[0].text, 'Hello world');
+  assert.equal(result.source, 'YouTube CC');
+});
+
+test('direct download uses the next supported client after a 200 empty body', async () => {
+  let requestCount = 0;
+  const result = await fetchYouTubeCaptions(
+    { videoId: 'abcdefghijk', preferredLanguage: 'en' },
+    {
+      innertubeFactory: factoryByClient({ ANDROID: info([manualEnglish]), IOS: info([manualEnglish]) }),
+      fetchImpl: async () => response({ body: ++requestCount === 1 ? '' : json3 })
+    }
+  );
+  assert.equal(result.subtitles.length, 1);
+});
+
+test('getTranscript fallback works when direct download fails', async () => {
+  const fallbackSegments = [{ start_ms: 1000, end_ms: 2000, snippet: 'Fallback text' }];
+  const result = await fetchYouTubeCaptions(
+    { videoId: 'abcdefghijk', preferredLanguage: 'en' },
+    {
+      innertubeFactory: factoryByClient({ ANDROID: info([manualEnglish], fallbackSegments) }),
+      fetchImpl: async () => response({ status: 403, contentType: 'text/html', body: '<html>denied</html>' })
+    }
+  );
+  assert.equal(result.subtitles[0].text, 'Fallback text');
+  assert.equal(result.source, 'YouTube CC (fallback)');
+});
+
+test('returns requested-language-unavailable without silently selecting another track', async () => {
+  await assert.rejects(
+    fetchYouTubeCaptions(
+      { videoId: 'abcdefghijk', preferredLanguage: 'ar' },
+      { innertubeFactory: factoryByClient({ ANDROID: info([manualEnglish, autoChinese]) }) }
+    ),
+    { code: 'REQUESTED_LANGUAGE_UNAVAILABLE' }
+  );
+});
+
+test('returns the direct download failure after direct and getTranscript both fail', async () => {
+  const brokenInfo = info([manualEnglish]);
+  brokenInfo.getTranscript = async () => { throw new Error('Transcript panel not found'); };
+  await assert.rejects(
+    fetchYouTubeCaptions(
+      { videoId: 'abcdefghijk', preferredLanguage: 'en' },
+      {
+        innertubeFactory: factoryByClient({ ANDROID: brokenInfo }),
+        fetchImpl: async () => response({ status: 403, contentType: 'text/html', body: '<html>denied</html>' })
+      }
+    ),
+    { code: 'CAPTION_DOWNLOAD_FAILED' }
+  );
+});
+

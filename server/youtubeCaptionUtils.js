@@ -67,15 +67,109 @@ export function normalizeTranscriptSegments(segments) {
   }));
 }
 
+function decodeXmlEntities(value) {
+  return String(value || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, decimal) => String.fromCodePoint(parseInt(decimal, 10)))
+    .replace(/&(amp|lt|gt|quot|apos);/g, (_, entity) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" })[entity]);
+}
+
+function attributeValue(attributes, name) {
+  const match = String(attributes || '').match(new RegExp(`\\b${name}=(?:"([^"]*)"|'([^']*)')`, 'i'));
+  return match ? (match[1] ?? match[2] ?? '') : '';
+}
+
+export function parseJson3Captions(payload) {
+  const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  if (!data || !Array.isArray(data.events)) {
+    throw new YouTubeCaptionExtractionError(
+      'CAPTION_PARSE_FAILED',
+      'YouTube devolvió subtítulos JSON3 con una estructura inesperada.',
+      { status: 502 }
+    );
+  }
+
+  return data.events.map((event) => ({
+    startMs: Number(event?.tStartMs),
+    endMs: Number(event?.tStartMs) + Number(event?.dDurationMs || 0),
+    text: (Array.isArray(event?.segs) ? event.segs : []).map((segment) => segment?.utf8 || '').join('')
+  })).filter((segment) => Number.isFinite(segment.startMs) && segment.text.trim());
+}
+
+export function parseTimedTextXml(payload) {
+  const segments = [];
+  const textPattern = /<text\b([^>]*)>([\s\S]*?)<\/text>/gi;
+  let match;
+
+  while ((match = textPattern.exec(String(payload || '')))) {
+    const startSeconds = Number(attributeValue(match[1], 'start'));
+    const durationSeconds = Number(attributeValue(match[1], 'dur'));
+    const text = decodeXmlEntities(match[2]).replace(/<[^>]+>/g, ' ');
+    if (!Number.isFinite(startSeconds) || !text.trim()) continue;
+    segments.push({
+      startMs: startSeconds * 1000,
+      endMs: (startSeconds + (Number.isFinite(durationSeconds) ? durationSeconds : 2)) * 1000,
+      text
+    });
+  }
+
+  if (segments.length === 0) {
+    throw new YouTubeCaptionExtractionError(
+      'CAPTION_PARSE_FAILED',
+      'YouTube devolvió subtítulos XML con una estructura inesperada.',
+      { status: 502 }
+    );
+  }
+
+  return segments;
+}
+
+export function parseCaptionPayload(body, contentType = '') {
+  const normalizedBody = String(body || '').trim();
+  const normalizedType = String(contentType || '').toLowerCase();
+
+  if (!normalizedBody) {
+    throw new YouTubeCaptionExtractionError(
+      'CAPTION_TRACK_EMPTY',
+      'YouTube devolvió una pista de subtítulos vacía.',
+      { status: 502 }
+    );
+  }
+
+  if (normalizedType.includes('text/html') || /^<!doctype html|^<html\b/i.test(normalizedBody)) {
+    throw new YouTubeCaptionExtractionError(
+      'CAPTION_DOWNLOAD_FAILED',
+      'YouTube devolvió una página HTML en lugar de los subtítulos.',
+      { status: 502 }
+    );
+  }
+
+  if (normalizedType.includes('json') || normalizedBody.startsWith('{')) {
+    return { format: 'json3', segments: parseJson3Captions(normalizedBody) };
+  }
+
+  if (normalizedType.includes('xml') || normalizedBody.startsWith('<')) {
+    return { format: 'xml', segments: parseTimedTextXml(normalizedBody) };
+  }
+
+  throw new YouTubeCaptionExtractionError(
+    'CAPTION_PARSE_FAILED',
+    'YouTube devolvió un formato de subtítulos no reconocido.',
+    { status: 502 }
+  );
+}
+
 export function classifyExtractorError(error) {
+  if (error?.code && error instanceof YouTubeCaptionExtractionError) {
+    return { code: error.code, status: error.status, message: error.message };
+  }
+
   const message = String(error?.message || '').toLowerCase();
   const status = Number(error?.status || error?.statusCode || error?.info?.status_code);
 
   if (error?.name === 'AbortError' || message.includes('timeout') || message.includes('timed out')) {
     return { code: 'UPSTREAM_TIMEOUT', status: 504, message: 'YouTube tardó demasiado en responder. Probá nuevamente en unos instantes.' };
-  }
-  if (message.includes('transcript') || message.includes('caption')) {
-    return { code: 'CAPTIONS_UNAVAILABLE', status: 422, message: 'Este vídeo no expone subtítulos CC o autogenerados para importar.' };
   }
   if (status === 404 || message.includes('video unavailable') || message.includes('video not found')) {
     return { code: 'VIDEO_UNAVAILABLE', status: 404, message: 'Este vídeo no existe o ya no está disponible en YouTube.' };
@@ -86,5 +180,9 @@ export function classifyExtractorError(error) {
   if (status === 429 || message.includes('rate limit') || message.includes('too many requests')) {
     return { code: 'YOUTUBE_TEMPORARILY_BLOCKED', status: 429, message: 'YouTube bloqueó temporalmente la consulta. Esperá unos minutos e intentá otra vez.' };
   }
+  if (message.includes('proof of origin') || message.includes('po token') || message.includes('potoken')) {
+    return { code: 'YOUTUBE_POT_REQUIRED', status: 403, message: 'YouTube exige una verificación adicional para obtener estos subtítulos.' };
+  }
   return { code: 'EXTRACTOR_FAILURE', status: 502, message: 'No se pudo consultar YouTube en este momento. Probá nuevamente.' };
 }
+
