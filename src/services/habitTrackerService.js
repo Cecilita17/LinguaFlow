@@ -9,6 +9,7 @@
 
 export const HABIT_TRACKER_STORAGE_PREFIX = 'linguaflow_habit_tracker_';
 export const HABIT_TRACKER_VERSION = 1;
+export const HABIT_TRACKER_UPDATED_EVENT = 'linguaflow:habit-tracker-updated';
 
 export const HABIT_ACTIVITIES = [
   {
@@ -121,6 +122,9 @@ export function saveHabitTrackerData(data, user = null) {
       updatedAt: new Date().toISOString()
     };
     localStorage.setItem(key, JSON.stringify(payload));
+    window.dispatchEvent(new CustomEvent(HABIT_TRACKER_UPDATED_EVENT, {
+      detail: { storageKey: key, data: payload }
+    }));
     return true;
   } catch (e) {
     console.warn('[HabitTrackerService] Error saving data:', e);
