@@ -107,7 +107,7 @@ export function ChatMessage({
             type="button"
             dir="ltr"
             onClick={() => onWordClick(baseWord, token)}
-            className="inline-flex cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors"
+            className="inline-flex text-left cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors"
             title={isSaved ? `Palabra guardada: "${baseWord}"` : `Clic para ver significado de "${baseWord}"`}
           >
             {showTransliteration && cleanTranslit ? (
@@ -142,7 +142,7 @@ export function ChatMessage({
           type="button"
           dir={isArabic ? 'rtl' : 'ltr'}
           onClick={() => onWordClick(word, token)}
-          className="mx-0.5 inline-flex cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors"
+          className={`mx-0.5 inline-flex ${isArabic ? 'text-right' : 'text-left'} cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors`}
           title={isSaved ? `Palabra guardada: "${word}"` : `Clic para ver significado de "${word}"`}
         >
           <ruby className="user-ruby inline-flex flex-col items-center">
@@ -160,7 +160,7 @@ export function ChatMessage({
         type="button"
         dir={isArabic ? 'rtl' : 'ltr'}
         onClick={() => onWordClick(word, token)}
-        className={`cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 shadow-xs' : ''}`}
+        className={`cursor-pointer ${isArabic ? 'text-right' : 'text-left'} rounded px-0.5 hover:bg-white/20 transition-colors ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 shadow-xs' : ''}`}
         title={isSaved ? `Palabra guardada: "${word}"` : `Clic para ver significado de "${word}"`}
       >
         {word}
@@ -313,7 +313,7 @@ export function ChatMessage({
                           type="button"
                           onClick={() => onWordClick(baseWord || cleanWord, token)}
                           dir="ltr"
-                          className="relative inline-block mx-0.5 text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-pointer group/word"
+                          className="relative inline-block mx-0.5 text-left text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-pointer group/word"
                           title={token.original ? `Original: "${token.original}"` : 'Palabra corregida'}
                         >
                           {showTransliteration && cleanTranslit ? (
@@ -348,7 +348,7 @@ export function ChatMessage({
                         type="button"
                         onClick={() => onWordClick(cleanWord, token)}
                         dir={isArabic ? 'rtl' : 'ltr'}
-                        className="relative inline-block mx-0.5 text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-pointer group/word"
+                        className={`relative inline-block mx-0.5 ${isArabic ? 'text-right' : 'text-left'} text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-pointer group/word`}
                         title={token.original ? `Original: "${token.original}"` : 'Palabra corregida'}
                       >
                         {showTransliteration && tokenTranslit ? (
