@@ -47,8 +47,9 @@ const DEFAULT_CALL_HISTORY = [
   }
 ];
 
-export function loadUnifiedHistory(isSpanish) {
+export function loadUnifiedHistory(isSpanish, targetLang = '') {
   const historyItems = [];
+  const selectedLanguage = String(targetLang || '').toLowerCase();
 
   // 1. Gather existing chat conversations
   if (typeof window !== 'undefined') {
@@ -57,6 +58,7 @@ export function loadUnifiedHistory(isSpanish) {
         const key = localStorage.key(i);
         if (key && key.startsWith('linguaflow_chat_')) {
           const langCode = key.replace('linguaflow_chat_', '');
+          if (selectedLanguage && langCode.toLowerCase() !== selectedLanguage) continue;
           try {
             const raw = localStorage.getItem(key);
             if (raw) {
@@ -97,6 +99,7 @@ export function loadUnifiedHistory(isSpanish) {
       }
 
       storedCalls.forEach((call) => {
+        if (selectedLanguage && String(call.lang || '').toLowerCase() !== selectedLanguage) return;
         const langMeta = getLanguageMeta(call.lang);
         historyItems.push({
           id: call.id,
@@ -136,11 +139,11 @@ export function ChatHubView({
   const currentTargetName = getLocalizedLanguageName(targetLang, currentTargetMeta.name || targetLang, isSpanish);
 
   // Maintain local history state to reflect deletions immediately without reload
-  const [historyItems, setHistoryItems] = useState(() => loadUnifiedHistory(isSpanish));
+  const [historyItems, setHistoryItems] = useState(() => loadUnifiedHistory(isSpanish, targetLang));
 
   useEffect(() => {
-    setHistoryItems(loadUnifiedHistory(isSpanish));
-  }, [isSpanish]);
+    setHistoryItems(loadUnifiedHistory(isSpanish, targetLang));
+  }, [isSpanish, targetLang]);
 
   const handleDeleteItem = useCallback((e, item) => {
     e.stopPropagation();
