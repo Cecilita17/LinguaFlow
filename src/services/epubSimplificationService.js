@@ -9,7 +9,8 @@ import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
 import { getLanguageMeta } from '../constants/languages.js';
 
 export const EPUB_SIMPLIFICATION_LEVELS = ['beginner', 'medium'];
-export const EPUB_SIMPLIFICATION_SOURCE_VERSION = 2;
+// Bump when pedagogical instructions change so weak older rewrites are not reused.
+export const EPUB_SIMPLIFICATION_SOURCE_VERSION = 3;
 const TARGET_WORDS_PER_BLOCK = 900;
 const MIN_WORDS_PER_BLOCK = 800;
 const MAX_WORDS_PER_BLOCK = 1200;

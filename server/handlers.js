@@ -1885,8 +1885,8 @@ export async function handleSimplifyEpubBlock(req, res) {
     const langObj = SUPPORTED_LANGUAGES.find((language) => language.code === targetLang) || { name: targetLang, englishName: targetLang };
     const targetName = langObj.englishName || langObj.name;
     const levelInstruction = level === 'beginner'
-      ? 'Adapt for a beginner. Use very frequent everyday vocabulary, short direct sentences, and simple grammar. Replace difficult idioms with clear natural wording in the same language. You may split long sentences, but preserve every detail, event, description, and line of dialogue.'
-      : 'Adapt for an intermediate learner. Use more frequent vocabulary, simplify complex grammar, and split only excessively long sentences when needed. Preserve every detail and event.';
+      ? `This must be a genuine beginner adaptation, roughly A1-A2. Actively replace every low-frequency, literary, formal, abstract, archaic, idiomatic, or advanced word with the most common natural equivalent in ${targetName}. Do not keep difficult wording merely because it is grammatical. Prefer concrete everyday words, familiar verbs, and basic connectors. Use short, direct subject-verb-object sentences. Turn subordinate clauses, passive constructions, and dense noun phrases into two or more simple sentences. Explain an idiom through its plain meaning in the same language. Preserve every fact, action, relationship, name, dialogue, and event in the same order, but make the language clearly easier for a beginner.`
+      : `This must be a genuine intermediate adaptation, roughly B1. Actively replace uncommon, literary, formal, abstract, idiomatic, or advanced vocabulary with common everyday alternatives in ${targetName}. Simplify dense syntax, long clauses, passive constructions, and complex noun phrases; split very long sentences when it improves clarity. Preserve every fact, action, relationship, name, dialogue, and event in the same order, while making the language noticeably easier than the original.`;
     const sourceWordCount = paragraphs.reduce((total, paragraph) => total + (paragraph.text.match(/[\p{L}\p{N}]+/gu) || []).length, 0);
     const minimumReturnedParagraphs = Math.ceil(paragraphs.length * 0.75);
     // Literary Arabic and other non-Latin passages can consume considerably more
@@ -1899,6 +1899,8 @@ export async function handleSimplifyEpubBlock(req, res) {
 THIS IS NOT A SUMMARY. DO NOT SUMMARIZE. Preserve all information, events, characters, dialogue, chronology, descriptions, examples, narrative order, tone, and approximately the same information density. Do not translate the text and do not add explanations, notes, titles, or commentary.
 
 ${levelInstruction}
+
+Do not merely paraphrase the original. Do not copy a difficult sentence unchanged. If a sentence contains uncommon vocabulary or dense grammar, rewrite it at the requested difficulty even when the original is grammatically correct. Reuse an original sentence only when its vocabulary and syntax are already appropriate for the requested level.
 
 Do NOT use JSON. Return only the rewritten paragraphs, in their original order. Put this exact marker alone on one line between every pair of paragraphs:
 <<<LF_PARAGRAPH>>>
@@ -1924,7 +1926,7 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
           body: JSON.stringify({
             model: activeModel,
             messages: [
-              { role: 'system', content: 'You preserve literary content exactly while simplifying language. Return only complete rewritten paragraphs separated by the requested marker.' },
+              { role: 'system', content: 'You preserve literary content exactly while making vocabulary and grammar genuinely appropriate for the requested learner level. Do not merely paraphrase or retain difficult language. Return only complete rewritten paragraphs separated by the requested marker.' },
               { role: 'user', content: buildPrompt(attempt > 0) }
             ],
             // This is a deterministic rewrite, not a reasoning task. Keeping
