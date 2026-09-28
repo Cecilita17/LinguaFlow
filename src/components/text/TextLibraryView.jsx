@@ -174,9 +174,12 @@ export function TextLibraryView({
     }
   };
 
-  // A library is an archive, not a per-language inbox. Filtering here made
-  // intact books appear to disappear whenever the study language changed.
-  const languageFiltered = documents;
+  // Keep the selected-language view. This only controls what is displayed;
+  // documents remain persisted independently of the active study language.
+  const languageFiltered = documents.filter((doc) => {
+    const docLang = doc.targetLang || doc.targetLanguage;
+    return docLang === targetLang;
+  });
 
   const filtered = languageFiltered.filter((doc) => {
     if (!searchQuery.trim()) return true;
