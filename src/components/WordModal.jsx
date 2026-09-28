@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Volume2, Snail, BookA, Star } from 'lucide-react';
+import { Bookmark, Check, Volume2, Snail } from 'lucide-react';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 
@@ -7,118 +7,103 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
   const { isWordSaved, toggleSavedWord } = useSavedWords();
   const { isSpanish } = useSiteLanguage();
   if (!wordData) return null;
-  const { word, meaning, part_of_speech, translit } = wordData;
+
+  const { word, meaning, part_of_speech: partOfSpeech, translit } = wordData;
   const activeLang = targetLang || wordData.targetLang || 'zh';
   const isSaved = isWordSaved(word, activeLang);
-
   const isArabic = /[\u0600-\u06FF]/.test(word || '');
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[2px] animate-fade-in"
       onClick={onClose}
+      role="presentation"
     >
-      <div
-        className="bg-[#fffdfc] dark:bg-stone-900 text-stone-900 dark:text-stone-100 w-full max-w-sm rounded-2xl shadow-2xl border border-stone-200 dark:border-stone-800 p-5 transform transition-all animate-scale-up"
-        onClick={(e) => e.stopPropagation()}
+      <section
+        className="w-full max-w-2xl rounded-t-[1.75rem] border border-b-0 border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-18px_48px_rgba(0,0,0,0.32)] animate-fade-in"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={isSpanish ? 'Definición de palabra' : 'Word definition'}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800">
-          <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400">
-            <BookA className="w-5 h-5" />
-            <span className="text-xs uppercase font-bold tracking-wider text-stone-400 dark:text-stone-500">
-              {isSpanish ? 'Diccionario de palabra completa' : 'Full word dictionary'}
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-stone-400 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--text-muted)]/35" />
 
-        {/* Word Display */}
-        <div className="my-4 text-center">
-          {translit && (
-            <span dir="ltr" className="text-base font-bold text-sky-600 dark:text-sky-400 tracking-wide block mb-1">
-              {translit}
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <span className="mb-1 block text-[10px] font-bold tracking-[0.16em] text-[var(--text-muted)]">
+              {isSpanish ? 'DICCIONARIO' : 'DICTIONARY'}
             </span>
-          )}
-          <h3
-            dir={isArabic ? 'rtl' : 'ltr'}
-            className={`${
-              isArabic
-                ? 'font-arabic text-4xl leading-relaxed font-bold'
-                : 'text-3xl font-extrabold tracking-tight'
-            } text-stone-900 dark:text-stone-50`}
-          >
-            {word}
-          </h3>
-          <div className="flex items-center justify-center gap-2 mt-2">
-            {part_of_speech && (
-              <span className="inline-block text-[11px] font-semibold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/60 border border-transparent dark:border-rose-800/40 px-2.5 py-0.5 rounded-full capitalize">
-                {part_of_speech}
+            {translit && (
+              <span dir="ltr" className="mb-0.5 block text-sm font-semibold tracking-wide text-rose-500 dark:text-rose-300">
+                {translit}
               </span>
             )}
-            {/* Save / Delete Word Button */}
+            <h3
+              dir={isArabic ? 'rtl' : 'ltr'}
+              className={`${isArabic ? 'font-arabic text-4xl leading-relaxed' : 'text-3xl leading-tight'} break-words font-bold tracking-tight text-[var(--text-primary)]`}
+            >
+              {word}
+            </h3>
+            {partOfSpeech && (
+              <span className="mt-2 inline-flex rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-300">
+                {partOfSpeech}
+              </span>
+            )}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2 pt-1">
             <button
               type="button"
               onClick={() => toggleSavedWord(word, activeLang)}
-              className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer border ${
+              className={`flex h-10 w-10 items-center justify-center rounded-full border transition-colors cursor-pointer ${
                 isSaved
-                  ? 'bg-amber-300 dark:bg-amber-400 text-stone-950 border-amber-400 shadow-xs ring-2 ring-amber-400/40'
-                  : 'bg-stone-100 dark:bg-stone-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-stone-700 dark:text-stone-200 hover:text-amber-900 dark:hover:text-amber-300 border-stone-200 dark:border-stone-700 hover:border-amber-300 dark:hover:border-amber-500/50'
+                  ? 'border-amber-400/70 bg-amber-400 text-stone-950'
+                  : 'border-[var(--border-primary)] bg-[var(--surface-secondary)] text-[var(--text-secondary)] hover:border-amber-400/70 hover:text-amber-500'
               }`}
-              title={isSaved ? (isSpanish ? 'Eliminar de palabras guardadas' : 'Remove from saved words') : (isSpanish ? 'Guardar palabra' : 'Save word')}
+              title={isSaved ? (isSpanish ? 'Quitar de palabras guardadas' : 'Remove from saved words') : (isSpanish ? 'Guardar palabra' : 'Save word')}
+              aria-label={isSaved ? (isSpanish ? 'Quitar de palabras guardadas' : 'Remove from saved words') : (isSpanish ? 'Guardar palabra' : 'Save word')}
             >
-              <span>{isSaved ? (isSpanish ? '★ Guardada' : '★ Saved') : (isSpanish ? '☆ Guardar' : '☆ Save')}</span>
+              {isSaved ? <Check className="h-4 w-4 stroke-[2.5]" /> : <Bookmark className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => onPronounceWord(word, 1.0)}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-primary)] bg-[var(--surface-secondary)] text-[var(--text-secondary)] transition-colors hover:border-rose-500/60 hover:text-rose-500 cursor-pointer"
+              title={isSpanish ? 'Escuchar pronunciación' : 'Listen to pronunciation'}
+              aria-label={isSpanish ? 'Escuchar pronunciación' : 'Listen to pronunciation'}
+            >
+              <Volume2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onPronounceWord(word, 0.7)}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-primary)] bg-[var(--surface-secondary)] text-[var(--text-secondary)] transition-colors hover:border-rose-500/60 hover:text-rose-500 cursor-pointer"
+              title={isSpanish ? 'Escuchar lento (0.7×)' : 'Listen slowly (0.7×)'}
+              aria-label={isSpanish ? 'Escuchar lento (0.7×)' : 'Listen slowly (0.7×)'}
+            >
+              <Snail className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* Meaning Box */}
-        <div className={`border rounded-xl p-3.5 mb-4 text-left ${
-          wordData.error
-            ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-300/80 dark:border-amber-800/50'
-            : 'bg-rose-50/70 dark:bg-stone-800/80 border border-rose-200/80 dark:border-stone-700/80'
-        }`}>
-          <span className={`text-[11px] font-bold block uppercase tracking-wider mb-1 ${
-            wordData.error ? 'text-amber-800 dark:text-amber-400' : 'text-rose-800 dark:text-rose-400'
-          }`}>
-            {wordData.error ? (isSpanish ? 'Aviso del diccionario:' : 'Dictionary notice:') : (isSpanish ? 'Significado en tu idioma:' : 'Meaning in your language:')}
-          </span>
-          <p className="text-stone-850 dark:text-stone-100 text-base font-medium leading-snug">
-            {wordData.error ? (
-              <span className="text-xs text-amber-950 dark:text-amber-200 font-normal leading-relaxed block">
-                {wordData.error}
-              </span>
-            ) : (
-              meaning || (isSpanish ? 'Buscando definición...' : 'Looking up definition...')
-            )}
-          </p>
+        <div className="mt-3 text-lg font-semibold leading-snug text-rose-600 dark:text-rose-300">
+          {wordData.error
+            ? <span className="text-sm font-medium text-amber-700 dark:text-amber-300">{wordData.error}</span>
+            : (meaning || (isSpanish ? 'Buscando definición…' : 'Looking up definition…'))}
         </div>
 
-        {/* Pronunciation Controls */}
-        <div className="flex items-center justify-center space-x-3 pt-2">
-          <button
-            onClick={() => onPronounceWord(word, 1.0)}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-semibold shadow-sm transition-all"
-            title={isSpanish ? 'Escuchar velocidad normal' : 'Listen at normal speed'}
-          >
-            <Volume2 className="w-4 h-4" />
-            <span>{isSpanish ? 'Pronunciar' : 'Pronounce'}</span>
-          </button>
-          <button
-            onClick={() => onPronounceWord(word, 0.7)}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-stone-100 dark:bg-stone-800 hover:bg-rose-100 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 hover:text-rose-900 dark:hover:text-rose-300 text-xs font-medium transition-all border border-stone-200 dark:border-stone-700"
-            title={isSpanish ? 'Escuchar velocidad lenta (fácil)' : 'Listen at slow speed (easy)'}
-          >
-            <Snail className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <span>{isSpanish ? 'Lento (0.7x)' : 'Slow (0.7x)'}</span>
-          </button>
-        </div>
-      </div>
+        {wordData.sentence && (
+          <div className="mt-5 border-t border-[var(--border-primary)] pt-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold tracking-[0.14em] text-[var(--text-muted)]">
+                {isSpanish ? 'ORACIÓN' : 'SENTENCE'}
+              </span>
+              <Volume2 className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            </div>
+            <p className="mt-1.5 text-sm italic leading-relaxed text-[var(--text-secondary)]">{wordData.sentence}</p>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
