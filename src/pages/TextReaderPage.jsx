@@ -504,6 +504,8 @@ export function TextReaderPage({
 
   // Create with AI modal state
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  // Vocabulary practice with AI modal state
+  const [isPracticeAiModalOpen, setIsPracticeAiModalOpen] = useState(false);
 
   const handleAiTextGenerated = useCallback(async ({ title, text }) => {
     const raw = (text || '').trim();
@@ -928,6 +930,68 @@ export function TextReaderPage({
     practiceVocabulary.length > 0 &&
     practiceVocabulary.length <= PRACTICE_VOCABULARY_MAX
   );
+
+  const handlePracticeTextGenerated = useCallback(async ({ title, text }) => {
+    const raw = (text || '').trim();
+    if (!raw) return;
+
+    try {
+      audioPlaybackIdRef.current++;
+      clearAudioVisualTimer();
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsAutoGlossing(false);
+      setPlayingParagraphId(null);
+      setActiveAudioCharIndex(-1);
+      setPendingScrollParagraphId(null);
+      previousScrollTopRef.current = 0;
+      setIsHeaderHidden(false);
+
+      const effectiveTitle = (title || '').trim() || (isSpanish ? 'Práctica con IA' : 'AI Practice Story');
+
+      const docToSave = createTextDocument({
+        title: effectiveTitle,
+        rawText: raw,
+        targetLang: activeDocLang,
+        nativeLang,
+        sourceType: 'ai',
+        format: 'txt',
+        createdAt: new Date().toISOString()
+      });
+
+      const saved = await saveDocument(docToSave);
+      setDocument(saved);
+      setInputText(saved.rawText || '');
+      setInputTitle(saved.title || '');
+      await refreshLibraryCount();
+      navigateToView('reader');
+
+      // Auto-glossing is OFF by default:
+      const alreadyComplete = Array.isArray(saved.paragraphs) && saved.paragraphs.every(p => isGlossComplete(p, activeDocLang, nativeLang));
+      const completedCount = Array.isArray(saved.paragraphs) ? saved.paragraphs.filter(p => isGlossComplete(p, activeDocLang, nativeLang)).length : 0;
+
+      setGlossingProgress({
+        total: Array.isArray(saved.paragraphs) ? saved.paragraphs.length : 0,
+        completed: completedCount,
+        isGlossing: false,
+        isPaused: false,
+        isComplete: alreadyComplete,
+        failed: 0
+      });
+    } catch (err) {
+      console.error('Failed to create and save AI practice document:', err);
+      setInputText(text);
+      if (title) {
+        setInputTitle(title);
+      }
+      navigateToView('importer');
+    }
+  }, [activeDocLang, nativeLang, isSpanish, clearAudioVisualTimer, refreshLibraryCount, navigateToView]);
 
   // Count how many paragraphs are completely glossed
   const completedParagraphsCount = useMemo(() => {
@@ -3092,7 +3156,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsAiModalOpen(true)}
+                  onClick={() => setIsPracticeAiModalOpen(true)}
                   className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-rose-950/30 active:scale-95 transition-all cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4" />
@@ -3303,14 +3367,24 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         targetLang={targetLang}
       />
 
-      {/* Create with AI Modal */}
+      {/* Create with AI Modal (General Flow - No required vocabulary) */}
       <CreateWithAiModal
         isOpen={isAiModalOpen}
         onClose={() => setIsAiModalOpen(false)}
         targetLang={targetLang}
         apiKey={apiKey}
-        requiredVocabulary={canCreateVocabularyPractice ? practiceVocabulary : []}
+        requiredVocabulary={[]}
         onTextGenerated={handleAiTextGenerated}
+      />
+
+      {/* Create Vocabulary Practice with AI Modal (Practice Flow) */}
+      <CreateWithAiModal
+        isOpen={isPracticeAiModalOpen}
+        onClose={() => setIsPracticeAiModalOpen(false)}
+        targetLang={activeDocLang}
+        apiKey={apiKey}
+        requiredVocabulary={canCreateVocabularyPractice ? practiceVocabulary : []}
+        onTextGenerated={handlePracticeTextGenerated}
       />
 
       {/* Gloss Notice Toast */}
