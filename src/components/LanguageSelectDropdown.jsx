@@ -2,6 +2,29 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 import { getLanguageMeta, LANGUAGE_FLAGS } from '../constants/languages.js';
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+
+const ENGLISH_LANGUAGE_NAMES = {
+  es: 'Spanish',
+  en: 'English',
+  zh: 'Chinese Mandarin',
+  pl: 'Polish',
+  de: 'German',
+  fr: 'French',
+  it: 'Italian',
+  nl: 'Dutch',
+  ru: 'Russian',
+  ar: 'Arabic',
+  pt: 'Portuguese',
+  ja: 'Japanese',
+  ko: 'Korean',
+  tr: 'Turkish'
+};
+
+function getLocalizedLanguageName(code, fallbackName, isSpanish) {
+  if (isSpanish) return fallbackName || code;
+  return ENGLISH_LANGUAGE_NAMES[String(code || '').toLowerCase()] || fallbackName || code;
+}
 
 export function LanguageSelectDropdown({
   value,
@@ -13,6 +36,7 @@ export function LanguageSelectDropdown({
   align = 'left',
   className = ''
 }) {
+  const { isSpanish } = useSiteLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [popoverCoords, setPopoverCoords] = useState(null);
   const dropdownRef = useRef(null);
@@ -103,13 +127,23 @@ export function LanguageSelectDropdown({
 
   const currentMeta = getLanguageMeta(value);
   const currentFlag = currentMeta.flag || LANGUAGE_FLAGS[typeof value === 'string' ? value : ''] || '🌐';
-  const currentName = currentMeta.name || (typeof value === 'string' ? value : '');
+  const currentName = getLocalizedLanguageName(
+    currentMeta.code || value,
+    currentMeta.name || (typeof value === 'string' ? value : ''),
+    isSpanish
+  );
 
   // Normalize options to ensure every item has { code, name, flag, nativeName }
   const normalizedOptions = (options || []).map((opt) => {
     if (typeof opt === 'string') {
       const meta = getLanguageMeta(opt);
-      return { code: opt, name: meta.name || opt, flag: meta.flag, nativeName: meta.nativeName };
+      return {
+        code: opt,
+        name: meta.name || opt,
+        displayName: getLocalizedLanguageName(opt, meta.name || opt, isSpanish),
+        flag: meta.flag,
+        nativeName: meta.nativeName
+      };
     }
     if (opt && typeof opt === 'object') {
       const code = opt.code || opt.id || opt.value || '';
@@ -118,6 +152,7 @@ export function LanguageSelectDropdown({
         ...opt,
         code,
         name: opt.name || meta.name || code,
+        displayName: getLocalizedLanguageName(code, meta.name || opt.name || code, isSpanish),
         nativeName: opt.nativeName || opt.native || meta.nativeName || '',
         flag: opt.flag || meta.flag || LANGUAGE_FLAGS[code] || '🌐'
       };
@@ -144,7 +179,7 @@ export function LanguageSelectDropdown({
       >
         {normalizedOptions.map((opt) => (
           <option key={opt.code} value={opt.code}>
-            {opt.flag} {opt.name}
+            {opt.flag} {opt.displayName}
           </option>
         ))}
       </select>
@@ -239,7 +274,7 @@ export function LanguageSelectDropdown({
         >
           {/* Header in Popover */}
           <div className="px-3 py-1.5 mb-1 border-b border-black/5 dark:border-white/10 flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-[var(--text-muted)] dropdown-popover-header">
-            <span>{label ? `Elegir ${label}` : 'Seleccionar idioma'}</span>
+            <span>{label ? (isSpanish ? `Elegir ${label}` : `Choose ${label}`) : (isSpanish ? 'Seleccionar idioma' : 'Select language')}</span>
           </div>
 
           {/* Options list */}
@@ -247,7 +282,7 @@ export function LanguageSelectDropdown({
             {normalizedOptions.map((opt) => {
               const isSelected = String(opt.code).toLowerCase() === String(value).toLowerCase();
               const flag = opt.flag || LANGUAGE_FLAGS[opt.code] || '🌐';
-              const name = opt.name || opt.code;
+              const name = opt.displayName || opt.name || opt.code;
               const native = opt.nativeName || '';
 
               return (
