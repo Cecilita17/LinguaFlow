@@ -245,6 +245,12 @@ export function TextReaderPage({
   const documentRef = useRef(document);
   documentRef.current = document;
 
+  // Paragraph translations are an in-memory view cache. Paragraph IDs can be
+  // reused by different documents, so never carry a translation into another text.
+  useEffect(() => {
+    setParagraphTranslations({});
+  }, [document?.id]);
+
   // EPUB Chapter-by-chapter state
   const isEpub = Boolean(
     document &&
@@ -542,6 +548,7 @@ export function TextReaderPage({
       });
 
       const saved = await saveDocument(docToSave);
+      setParagraphTranslations({});
       setDocument(saved);
       setInputText(saved.rawText || '');
       setInputTitle(saved.title || '');
