@@ -68,7 +68,10 @@ export async function restoreBackupData(payload) {
     for (const doc of data.textLibrary) {
       if (doc && doc.id) {
         try {
-          await saveTextDocument(doc);
+          const saved = await saveTextDocument(doc);
+          if (!saved) {
+            throw new Error('IndexedDB no confirmó el guardado del documento restaurado.');
+          }
           summary.textDocumentsRestored++;
         } catch (err) {
           console.warn('[RestoreService] Error restoring text document:', doc.id, err);
@@ -205,9 +208,6 @@ export async function restoreBackupData(payload) {
       }
       if (typeof s.wordHighlightEnabled === 'boolean') {
         localStorage.setItem('linguaflow_word_highlight_v1', s.wordHighlightEnabled ? 'true' : 'false');
-      }
-      if (s.fontSize) {
-        localStorage.setItem('linguaflow_global_font_size', s.fontSize);
       }
 
       // Merge config carefully: preserve existing client apiKey if present in local storage

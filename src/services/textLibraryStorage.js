@@ -18,6 +18,19 @@ const STORE_NAME = 'saved_text_documents';
 
 // In-memory fallback if IndexedDB is unavailable, blocked, or running in testing environment
 const memoryStore = new Map();
+let persistenceRequestStarted = false;
+
+// Browsers can evict best-effort IndexedDB storage under pressure. Request
+// durability once; a refusal is never treated as a successful durable save.
+function requestPersistentStorage() {
+  if (persistenceRequestStarted || typeof navigator === 'undefined' || !navigator.storage?.persist) return;
+  persistenceRequestStarted = true;
+  navigator.storage.persist().then((granted) => {
+    if (!granted) {
+      console.warn('[TextLibraryStorage] Browser did not grant persistent storage; keep a Drive backup enabled.');
+    }
+  }).catch(() => {});
+}
 
 // Track in-flight IndexedDB writes across services
 let activeSaveCount = 0;
@@ -116,6 +129,28 @@ function openDatabase() {
   });
 }
 
+// Unlike the public getter, this verification path deliberately does not fall
+// back to memory. It is used before removing a legacy source of truth.
+async function getPersistedTextDocumentForVerification(id) {
+  if (!id) return null;
+  const db = await openDatabase();
+  if (!db) return null;
+
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction([STORE_NAME], 'readonly');
+      const request = transaction.objectStore(STORE_NAME).get(id);
+      request.onsuccess = (event) => {
+        const result = event.target.result;
+        resolve(result ? normalizeDocument(result) : null);
+      };
+      request.onerror = () => resolve(null);
+    } catch (_) {
+      resolve(null);
+    }
+  });
+}
+
 /**
  * Saves or updates a text document in the persistent IndexedDB library.
  * Preserves stable ID and createdAt, updates updatedAt, and syncs languageStates.
@@ -125,6 +160,8 @@ function openDatabase() {
  */
 export async function saveTextDocument(rawDoc) {
   if (!rawDoc || typeof rawDoc !== 'object') return null;
+
+  requestPersistentStorage();
 
   const now = new Date().toISOString();
   const existing = rawDoc.id ? (await getTextDocumentById(rawDoc.id)) : null;
@@ -361,11 +398,11 @@ export async function saveTextDocument(rawDoc) {
   const db = await openDatabase();
   if (!db) {
     registerSaveEnd();
-    notifyDocumentSaved(toSave);
+    console.warn('[TextLibraryStorage] IndexedDB is unavailable; the document was not durably saved.');
     try {
       requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-updated' });
     } catch (_) {}
-    return toSave;
+    return null;
   }
 
   return new Promise((resolve) => {
@@ -385,12 +422,18 @@ export async function saveTextDocument(rawDoc) {
       request.onerror = (e) => {
         registerSaveEnd();
         console.warn('[TextLibraryStorage] Error saving document to IndexedDB:', e.target.error);
-        resolve(toSave);
+        try {
+          requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-persistence-failed' });
+        } catch (_) {}
+        resolve(null);
       };
     } catch (err) {
       registerSaveEnd();
       console.warn('[TextLibraryStorage] Exception saving document to IndexedDB:', err);
-      resolve(toSave);
+      try {
+        requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-persistence-failed' });
+      } catch (_) {}
+      resolve(null);
     }
   });
 }
@@ -619,11 +662,11 @@ export async function migrateFromLocalStorage() {
         for (const doc of parsed) {
           if (doc && typeof doc === 'object' && doc.id) {
             try {
-              const existing = await getTextDocumentById(doc.id);
+              const existing = await getPersistedTextDocumentForVerification(doc.id);
               if (!existing) {
-                await saveTextDocument(doc);
-                const verified = await getTextDocumentById(doc.id);
-                if (verified) {
+                const saved = await saveTextDocument(doc);
+                const verified = saved ? await getPersistedTextDocumentForVerification(doc.id) : null;
+                if (verified && saved) {
                   migratedCount++;
                 } else {
                   allSuccess = false;
@@ -654,11 +697,20 @@ export async function migrateFromLocalStorage() {
       if (rawActive) {
         const parsedActive = JSON.parse(rawActive);
         if (parsedActive && typeof parsedActive === 'object' && Array.isArray(parsedActive.paragraphs) && parsedActive.paragraphs.length > 0) {
-          // Ensure saved in IndexedDB
-          if (parsedActive.id) {
-            await saveTextDocument(parsedActive);
+          // Only discard the full local draft after IndexedDB confirms the
+          // durable copy. A memory-only fallback must never replace content.
+          const saved = parsedActive.id ? await saveTextDocument(parsedActive) : null;
+          if (!saved) {
+            console.warn('[TextLibraryStorage] Keeping full active draft because persistent storage was not confirmed.');
+            return migratedCount;
           }
-          // Compact to small metadata draft
+          const verified = await getPersistedTextDocumentForVerification(parsedActive.id);
+          if (!verified) {
+            console.warn('[TextLibraryStorage] Keeping full active draft because IndexedDB verification failed.');
+            return migratedCount;
+          }
+
+          // Compact to small metadata draft only after durable verification.
           const minimal = {
             id: parsedActive.id || null,
             title: parsedActive.title || '',
