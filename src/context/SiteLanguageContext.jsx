@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { TRANSLATIONS } from '../constants/translations.js';
+import { requestAutoBackup } from '../services/autoBackupService.js';
 
 const SITE_LANG_STORAGE_KEY = 'linguaflow_site_lang';
 
@@ -26,6 +27,7 @@ export function SiteLanguageProvider({ children }) {
     setSiteLangState(validLang);
     try {
       localStorage.setItem(SITE_LANG_STORAGE_KEY, validLang);
+      requestAutoBackup({ type: 'settings', reason: 'site-language-updated' });
     } catch (e) {}
   }, []);
 
@@ -34,6 +36,7 @@ export function SiteLanguageProvider({ children }) {
       const next = prev === 'es' ? 'en' : 'es';
       try {
         localStorage.setItem(SITE_LANG_STORAGE_KEY, next);
+        requestAutoBackup({ type: 'settings', reason: 'site-language-updated' });
       } catch (e) {}
       return next;
     });

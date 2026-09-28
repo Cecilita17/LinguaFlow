@@ -612,6 +612,7 @@ export function gatherCleanSettings() {
     speechRate: 1.0,
     autoPlayAi: false,
     autoPlayTextReader: false,
+    wordHighlightEnabled: true,
     config: {
       provider: 'groq',
       level: 'A2/B1',
@@ -642,6 +643,9 @@ export function gatherCleanSettings() {
 
     const autoPlayReader = localStorage.getItem('linguaflow_auto_play_text_reader');
     if (autoPlayReader !== null) settings.autoPlayTextReader = autoPlayReader === 'true';
+
+    const wordHighlightEnabled = localStorage.getItem('linguaflow_word_highlight_v1');
+    if (wordHighlightEnabled !== null) settings.wordHighlightEnabled = wordHighlightEnabled === 'true';
 
     const configRaw = localStorage.getItem('linguaflow_config');
     if (configRaw) {
@@ -987,6 +991,7 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
 
   const textLibrary = [];
   const youtubeTranscripts = [];
+  const imageLibrary = [];
   let savedWords = [];
   let chatHistory = {};
   let callHistory = [];
@@ -1006,6 +1011,8 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
         } else if (data) {
           youtubeTranscripts.push(data);
         }
+      } else if (resKey.startsWith('image-document:') && data) {
+        imageLibrary.push(data);
       } else if (resKey === 'saved-words' && Array.isArray(data)) {
         savedWords = data;
       } else if (resKey === 'chat-history' && data) {
@@ -1034,6 +1041,7 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
     counts: {
       textDocumentsCount: textLibrary.length,
       youtubeTranscriptsCount: youtubeTranscripts.length,
+      imageDocumentsCount: imageLibrary.length,
       savedWordsCount: savedWords.length,
       chatConversationsCount: Object.keys(chatHistory).length,
       callSessionsCount: callHistory.length,
@@ -1048,7 +1056,8 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
       activeSessions: { textDraft: null, youtubeSession: null },
       cachedGlosses: {},
       textLibrary,
-      youtubeTranscripts
+      youtubeTranscripts,
+      imageLibrary
     }
   };
 }

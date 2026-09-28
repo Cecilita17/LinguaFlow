@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { requestAutoBackup } from '../services/autoBackupService.js';
 
 export const SPEECH_RATE_OPTIONS = [
   0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00,
@@ -122,6 +123,7 @@ export function AudioSettingsProvider({ children }) {
           parsed.speechRate = rateNum;
           localStorage.setItem('linguaflow_config', JSON.stringify(parsed));
         }
+        requestAutoBackup({ type: 'settings', reason: 'audio-settings-updated' });
       } catch (e) {}
     }
   };
@@ -131,6 +133,7 @@ export function AudioSettingsProvider({ children }) {
       const boolVal = typeof newVal === 'function' ? newVal(prev) : Boolean(newVal);
       try {
         localStorage.setItem(STORAGE_KEY_AUTOPLAY, boolVal ? 'true' : 'false');
+        requestAutoBackup({ type: 'settings', reason: 'audio-settings-updated' });
       } catch (e) {}
       return boolVal;
     });
@@ -141,6 +144,7 @@ export function AudioSettingsProvider({ children }) {
       const boolVal = typeof newVal === 'function' ? newVal(prev) : Boolean(newVal);
       try {
         localStorage.setItem(STORAGE_KEY_AUTOPLAY_READER, boolVal ? 'true' : 'false');
+        requestAutoBackup({ type: 'settings', reason: 'audio-settings-updated' });
       } catch (e) {}
       return boolVal;
     });
@@ -157,6 +161,7 @@ export function AudioSettingsProvider({ children }) {
           parsed.wordHighlightEnabled = boolVal;
           localStorage.setItem('linguaflow_config', JSON.stringify(parsed));
         }
+        requestAutoBackup({ type: 'settings', reason: 'audio-settings-updated' });
       } catch (e) {}
       return boolVal;
     });

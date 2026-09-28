@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { requestAutoBackup } from '../services/autoBackupService.js';
 
 export const THEME_STORAGE_KEY = 'linguaflow-theme';
 
@@ -94,6 +95,7 @@ export function ThemeProvider({ children }) {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+        requestAutoBackup({ type: 'settings', reason: 'theme-updated' });
       }
     } catch (e) {
       console.warn('Failed to save theme preference to localStorage:', e);

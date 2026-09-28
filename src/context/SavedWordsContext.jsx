@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { requestAutoBackup } from '../services/autoBackupService.js';
 
 export const STORAGE_KEY_SAVED_WORDS = 'linguaflow_saved_words';
 
@@ -96,6 +97,7 @@ export function SavedWordsProvider({ children }) {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_SAVED_WORDS, JSON.stringify(savedWords));
+      requestAutoBackup({ type: 'saved-words', reason: 'saved-words-updated' });
     } catch (e) {
       console.warn('Failed to save words to localStorage:', e);
     }

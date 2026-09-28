@@ -259,8 +259,17 @@ export async function saveTranscriptToLibrary(record) {
   // Always update in-memory fallback
   memoryStore.set(id, cleanRecord);
 
+  const queueAutoBackup = () => {
+    try {
+      requestAutoBackup({ type: 'youtube-transcript', id: cleanVideoId, deleted: false, reason: 'transcript-updated' });
+    } catch (_) {}
+  };
+
   const db = await openDatabase();
-  if (!db) return true;
+  if (!db) {
+    queueAutoBackup();
+    return true;
+  }
 
   return new Promise((resolve) => {
     try {
@@ -268,7 +277,10 @@ export async function saveTranscriptToLibrary(record) {
       const store = transaction.objectStore(STORE_NAME);
       const request = store.put(cleanRecord);
 
-      request.onsuccess = () => resolve(true);
+      request.onsuccess = () => {
+        queueAutoBackup();
+        resolve(true);
+      };
       request.onerror = (e) => {
         console.warn('[TranscriptLibrary] Error saving to IndexedDB:', e.target.error);
         resolve(false);

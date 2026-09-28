@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { LANGUAGE_METADATA } from '../../constants/languages.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
+import { requestAutoBackup } from '../../services/autoBackupService.js';
 
 export const CALL_VOICE_STORAGE_KEY = 'linguaflow_call_voice_preferences';
 
@@ -134,6 +135,7 @@ export function CallVoiceSettingsSection({ onPreferencesChange }) {
     }
     setPreferences(next);
     saveStoredCallVoicePreferences(next);
+    requestAutoBackup({ type: 'settings', reason: 'call-voice-preferences-updated' });
     if (onPreferencesChange) {
       onPreferencesChange(next);
     }

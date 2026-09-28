@@ -156,6 +156,9 @@ export function getResourceKey(type, id) {
   if (type === 'youtube-transcript' && id) {
     return `youtube-transcript:${id}`;
   }
+  if (type === 'image-document' && id) {
+    return `image-document:${id}`;
+  }
   return type || 'generic';
 }
 

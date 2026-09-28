@@ -203,6 +203,9 @@ export async function restoreBackupData(payload) {
       if (typeof s.autoPlayTextReader === 'boolean') {
         localStorage.setItem('linguaflow_auto_play_text_reader', s.autoPlayTextReader ? 'true' : 'false');
       }
+      if (typeof s.wordHighlightEnabled === 'boolean') {
+        localStorage.setItem('linguaflow_word_highlight_v1', s.wordHighlightEnabled ? 'true' : 'false');
+      }
 
       // Merge config carefully: preserve existing client apiKey if present in local storage
       if (s.config && typeof s.config === 'object') {

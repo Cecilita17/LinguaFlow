@@ -1,1450 +1,168 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Header } from './components/Header';
-import { ChatMessage } from './components/ChatMessage';
-import { WordModal } from './components/WordModal';
-import { InputBar } from './components/InputBar';
-import { SettingsModal } from './components/SettingsModal';
-import { GrammarBreakdownModal } from './components/GrammarBreakdownModal';
-import { YouTubeReaderPage } from './pages/YouTubeReaderPage';
-import { TextReaderPage } from './pages/TextReaderPage';
-import { ImageReaderPage } from './pages/ImageReaderPage.jsx';
-import { SettingsPage } from './pages/SettingsPage';
-import { HabitTrackerPage } from './pages/HabitTrackerPage.jsx';
-import HomePage from './pages/HomePage';
-import BottomNavBar from './components/BottomNavBar.jsx';
-import { useSpeech } from './hooks/useSpeech';
-import { usePipelineCall } from './hooks/usePipelineCall.js';
-import { Sparkles, RotateCcw, ArrowLeft, ArrowUp, MoreVertical } from 'lucide-react';
-import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
-import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
-import { normalizeChineseTokens, validateChineseTokens } from './services/chineseTokenNormalizer';
-import { translateParagraphTextApi } from './services/textDocumentService.js';
-import { useSiteLanguage } from './context/SiteLanguageContext.jsx';
-import { useAudioSettings } from './context/AudioSettingsContext.jsx';
-import { useAuth } from './context/AuthContext.jsx';
-import { initAutoBackupService, stopAutoBackupService, requestAutoBackup } from './services/autoBackupService.js';
-import { isDriveAuthorized, isDriveConnected, restoreDriveConnectionSilently } from './services/googleDriveService.js';
-import { ChatHubView } from './components/chat/ChatHubView.jsx';
-import { ChatVoicePlaybackMenu } from './components/chat/ChatVoicePlaybackMenu.jsx';
-import { LiveCallView } from './components/chat/LiveCallView.jsx';
-import { CallDetailView } from './components/chat/CallDetailView.jsx';
-import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
-import { GlobalAudioImportWidget } from './components/audio/GlobalAudioImportWidget.jsx';
-import { HABIT_TRACKER_UPDATED_EVENT, recordHabitActivityForToday } from './services/habitTrackerService.js';
-import { loadActiveDocumentDraft, saveActiveDocumentDraft } from './services/textDocumentService.js';
-
-const SUPPORTED_LANGUAGES = [
-  { code: 'es', name: 'EspaÃ±ol', speechCode: 'es-ES', hasTranslit: false },
-  { code: 'en', name: 'InglÃ©s', speechCode: 'en-US', hasTranslit: false },
-  { code: 'nl', name: 'Nederlands', speechCode: 'nl-NL', hasTranslit: false },
-  { code: 'pl', name: 'Polaco', speechCode: 'pl-PL', hasTranslit: false },
-  { code: 'de', name: 'AlemÃ¡n', speechCode: 'de-DE', hasTranslit: false },
-  { code: 'fr', name: 'FrancÃ©s', speechCode: 'fr-FR', hasTranslit: false },
-  { code: 'it', name: 'Italiano', speechCode: 'it-IT', hasTranslit: false },
-  { code: 'ar', name: 'Ãrabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'RomanizaciÃ³n', rtl: true },
-  { code: 'tr', name: 'Turco', speechCode: 'tr-TR', hasTranslit: false },
-  { code: 'zh', name: 'Chino MandarÃ­n', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
-  { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: false }
-];
-
-const STORAGE_PREFIX = 'linguaflow_chat_';
-const TARGET_LANG_KEY = 'linguaflow_target_lang';
-const NATIVE_LANG_KEY = 'linguaflow_native_lang';
-const ACTIVE_TAB_KEY = 'linguaflow_active_tab';
-const CALL_STORAGE_KEY = 'linguaflow_call_history';
-const VALID_TABS = ['home', 'chat', 'youtube', 'text', 'image', 'settings', 'habits'];
-
-function getActiveTabFromLocation() {
-  try {
-    if (typeof window !== 'undefined') {
-      // 1. Primary source of truth: URL Path (e.g. /youtube, /text, /chat, /home)
-      const path = window.location.pathname.replace(/^\/+/, '').split('/')[0].toLowerCase();
-      if (VALID_TABS.includes(path)) {
-        return path;
-      }
-
-      // 2. Secondary source of truth: URL Hash (e.g. #youtube, #/youtube, #text, #chat)
-      const hash = window.location.hash.replace(/^#\/?/, '').split('/')[0].toLowerCase();
-      if (VALID_TABS.includes(hash)) {
-        return hash;
-      }
-
-      // 3. If on root path ('/') without subpath or hash, the URL explicitly indicates Home
-      if (window.location.pathname === '/' || window.location.pathname === '') {
-        return 'home';
-      }
-
-      // 4. LocalStorage persistence fallback if accessed via generic non-matching path
-      const saved = localStorage.getItem(ACTIVE_TAB_KEY);
-      if (saved && VALID_TABS.includes(saved)) {
-        return saved;
-      }
-    }
-  } catch (e) {}
-  return 'home';
-}
-
-function getSavedChat(lang) {
-  try {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}${lang}`);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const valid = parsed.filter(m => m && typeof m === 'object' && (m.text || m.tokens || m.sender));
-        if (valid.length > 0) return valid;
-      }
-    }
-  } catch (e) {
-    console.warn(`Failed to parse saved chat for ${lang}:`, e);
-  }
-  return null;
-}
-
-function saveChatToStorage(lang, messagesList) {
-  try {
-    if (Array.isArray(messagesList)) {
-      if (messagesList.length > 0) {
-        localStorage.setItem(`${STORAGE_PREFIX}${lang}`, JSON.stringify(messagesList));
-      } else {
-        localStorage.removeItem(`${STORAGE_PREFIX}${lang}`);
-      }
-    }
-  } catch (e) {
-    console.warn(`Failed to save chat for ${lang}:`, e);
-  }
-}
-
-export default function App() {
-  const { user } = useAuth();
-  const { t, isSpanish } = useSiteLanguage();
-
-  // Initialize background auto-backup service when user is logged in
-  useEffect(() => {
-    if (user && user.email) {
-      initAutoBackupService(user);
-      if (isDriveAuthorized(user.email) && !isDriveConnected()) {
-        restoreDriveConnectionSilently(user.email).catch(() => {});
-      }
-    } else {
-      stopAutoBackupService();
-    }
-  }, [user]);
-
-  // Habit tracker persists all updates through one service and emits this event.
-  // Queue its existing incremental resource without duplicating tracker storage.
-  useEffect(() => {
-    const handleHabitTrackerUpdate = () => {
-      requestAutoBackup({ type: 'habit-tracker', reason: 'habit-tracker-updated' });
-    };
-    window.addEventListener(HABIT_TRACKER_UPDATED_EVENT, handleHabitTrackerUpdate);
-    return () => window.removeEventListener(HABIT_TRACKER_UPDATED_EVENT, handleHabitTrackerUpdate);
-  }, []);
-
-  const [languages, setLanguages] = useState(SUPPORTED_LANGUAGES);
-  const [targetLang, setTargetLang] = useState(() => {
-    try {
-      return localStorage.getItem(TARGET_LANG_KEY) || 'pl';
-    } catch (e) {
-      return 'pl';
-    }
-  });
-
-  // Fetch supported languages dynamically from Render backend
-  useEffect(() => {
-    async function loadLanguages() {
-      const remoteLangs = await fetchLanguagesApi();
-      if (remoteLangs && Array.isArray(remoteLangs) && remoteLangs.length > 0) {
-        setLanguages(remoteLangs);
-      }
-    }
-    loadLanguages();
-  }, []);
-
-  const [nativeLang, setNativeLang] = useState(() => {
-    try {
-      return localStorage.getItem(NATIVE_LANG_KEY) || 'es';
-    } catch (e) {
-      return 'es';
-    }
-  });
-  const [showTransliteration, setShowTransliteration] = useState(true);
-  const [handsFree, setHandsFree] = useState(false);
-  const [messages, setMessages] = useState(() => {
-    const initialLang = (() => {
-      try {
-        return localStorage.getItem(TARGET_LANG_KEY) || 'pl';
-      } catch (e) {
-        return 'pl';
-      }
-    })();
-    const saved = getSavedChat(initialLang);
-    if (saved) return saved;
-    const initialGreeting = getInitialBotMsg(initialLang);
-    saveChatToStorage(initialLang, [initialGreeting]);
-    return [initialGreeting];
-  });
-  const [selectedWord, setSelectedWord] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => getActiveTabFromLocation());
-  const [chatViewMode, setChatViewMode] = useState('hub'); // 'hub' | 'chat' | 'call' | 'call-detail'
-  const [selectedCallData, setSelectedCallData] = useState(null);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-  const [isChatVoiceMenuOpen, setIsChatVoiceMenuOpen] = useState(false);
-
-  // Synchronize activeTab to URL and localStorage
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(ACTIVE_TAB_KEY, activeTab);
-        const targetPath = activeTab === 'home' ? '/' : `/${activeTab}`;
-        if (window.location.pathname !== targetPath) {
-          window.history.pushState({ tab: activeTab }, '', targetPath);
-        }
-      }
-    } catch (e) {}
-  }, [activeTab]);
-
-  // Trigger auto-backup when navigating away from an active content tab
-  const activeTabRef = useRef(activeTab);
-  useEffect(() => {
-    if (activeTabRef.current !== activeTab) {
-      const prevTab = activeTabRef.current;
-      if (prevTab === 'chat') {
-        requestAutoBackup({ type: 'chat-history', reason: 'tab-change' });
-      } else if (prevTab === 'text') {
-        const draft = loadActiveDocumentDraft();
-        if (draft && draft.id) {
-          requestAutoBackup({ type: 'text-document', id: draft.id, reason: 'tab-change' });
-        }
-      } else if (prevTab === 'youtube') {
-        try {
-          const rawYt = localStorage.getItem('linguaflow_yt_session_v1');
-          if (rawYt) {
-            const parsed = JSON.parse(rawYt);
-            if (parsed && parsed.videoId && parsed.videoId !== 'novideo') {
-              requestAutoBackup({ type: 'youtube-transcript', id: parsed.videoId, reason: 'tab-change' });
-            }
-          }
-        } catch (e) {}
-      }
-    }
-    activeTabRef.current = activeTab;
-  }, [activeTab]);
-
-  // Handle browser Back / Forward buttons and URL changes
-  useEffect(() => {
-    const handleLocationChange = () => {
-      const tab = getActiveTabFromLocation();
-      setActiveTab(tab);
-    };
-    window.addEventListener('popstate', handleLocationChange);
-    window.addEventListener('hashchange', handleLocationChange);
-    return () => {
-      window.removeEventListener('popstate', handleLocationChange);
-      window.removeEventListener('hashchange', handleLocationChange);
-    };
-  }, []);
-
-  const activeLangRef = useRef(targetLang);
-  const isUserScrolledUpRef = useRef(false);
-
-  // Switch target language and persist chat state per language
-  const handleTargetLangChange = (newLangInput) => {
-    const newLang = typeof newLangInput === 'string' ? newLangInput : (newLangInput?.code || newLangInput?.target?.value || 'pl');
-    if (!newLang || newLang === targetLang) return;
-
-    isUserScrolledUpRef.current = false;
-
-    // 1. Save current messages to active language before switching
-    if (messages && messages.length > 0) {
-      saveChatToStorage(activeLangRef.current, messages);
-    }
-
-    // 2. Load saved chat for newLang or initialize greeting
-    const savedForNewLang = getSavedChat(newLang);
-    const nextMessages = savedForNewLang || [getInitialBotMsg(newLang)];
-
-    // 3. Update state & active reference
-    activeLangRef.current = newLang;
-    setTargetLang(newLang);
-    setMessages(nextMessages);
-
-    try {
-      localStorage.setItem(TARGET_LANG_KEY, newLang);
-      if (!savedForNewLang) {
-        saveChatToStorage(newLang, nextMessages);
-      }
-    } catch (e) {}
-
-    stopSpeaking();
-  };
-
-  const handleNativeLangChange = (newLangInput) => {
-    const newLang = typeof newLangInput === 'string' ? newLangInput : (newLangInput?.code || newLangInput?.target?.value || 'es');
-    if (!newLang) return;
-    setNativeLang(newLang);
-    try {
-      localStorage.setItem(NATIVE_LANG_KEY, newLang);
-    } catch (e) {}
-  };
-
-  // Delete message handler
-  const handleDeleteMessage = (messageId) => {
-    if (!messageId) return;
-    setMessages((prev) => {
-      const updated = prev.filter((m) => m && m.id !== messageId);
-      saveChatToStorage(targetLang, updated);
-      return updated;
-    });
-  };
-
-  const [config, setConfig] = useState(() => {
-    const saved = localStorage.getItem('linguaflow_config');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        parsed.provider = 'groq';
-        return parsed;
-      } catch (e) {}
-    }
-    return { provider: 'groq', apiKey: '', level: 'A2/B1', speechRate: 0.95 };
-  });
-  const [apiWarning, setApiWarning] = useState(null);
-  const [lastFailedMessage, setLastFailedMessage] = useState(null);
-
-  const { speechRate, autoPlayAi } = useAudioSettings();
-  const playedBotMsgIdsRef = useRef(new Set());
-  const chatContainerRef = useRef(null);
-  const currentLangObj = (languages && languages.find((l) => l && l.code === targetLang)) || (languages && languages[0]) || SUPPORTED_LANGUAGES[0] || { name: 'EspaÃ±ol', speechCode: 'es-ES' };
-
-  // Speech Hook (Push-to-Talk Press & Hold up to 1 min + TTS)
-  const {
-    isRecording,
-    recordingSeconds,
-    isTranscribingAudio,
-    isSpeaking,
-    speakingCharIndex,
-    speakingText,
-    interimTranscript,
-    startRecording,
-    stopRecording,
-    cancelRecording,
-    speakText,
-    stopSpeaking
-  } = useSpeech({
-    targetLangCode: currentLangObj.speechCode,
-    targetLang,
-    nativeLang,
-    apiKey: config?.apiKey || '',
-    provider: config?.provider || 'groq',
-    handsFree,
-    isProcessing,
-    onSpeechResult: (spokenText) => {
-      handleSendMessage(spokenText);
-    }
-  });
-
-  const handlePlayAudio = (textToSpeak) => {
-    if (!textToSpeak) return;
-    speakText(textToSpeak, currentLangObj.speechCode, speechRate);
-  };
-
-  // Save config
-  const handleSaveConfig = (newConfig) => {
-    setConfig(newConfig);
-    setApiWarning(null);
-    localStorage.setItem('linguaflow_config', JSON.stringify(newConfig));
-  };
-
-  // State for Sentence Grammar Breakdown modal and Re-analysis
-  const [breakdownData, setBreakdownData] = useState(null);
-  const [isBreakdownLoading, setIsBreakdownLoading] = useState(false);
-  const [isReanalyzingId, setIsReanalyzingId] = useState(null);
-
-  // Open Grammar Breakdown modal with instantaneous local preview + deep AI analysis
-  const handleOpenGrammarBreakdown = async (msg) => {
-    const correctedText = msg.correctedText || msg.text;
-    const originalText = msg.originalText || msg.text;
-
-    // 1. Initial fast breakdown so modal opens instantly with zero lag
-    const initialBreakdown = generateSentenceBreakdown(correctedText, originalText, targetLang, nativeLang);
-    setBreakdownData({
-      breakdown: initialBreakdown,
-      originalText,
-      correctedText
-    });
-    setIsBreakdownLoading(true);
-
-    // 2. Fetch authentic deep grammatical analysis from Groq AI
-    try {
-      const fullBreakdown = await getOrFetchSentenceBreakdown({
-        correctedText,
-        originalText,
-        targetLang,
-        nativeLang,
-        apiKey: config?.apiKey || ''
-      });
-      if (fullBreakdown && fullBreakdown.length > 0) {
-        setBreakdownData({
-          breakdown: fullBreakdown,
-          originalText,
-          correctedText
-        });
-      }
-    } catch (e) {
-      console.warn('Grammar breakdown fetch notice:', e);
-    } finally {
-      setIsBreakdownLoading(false);
-    }
-  };
-
-  // Initial greeting helper per target language
-  function getInitialBotMsg(targetLang) {
-    let initialBotMsg;
-    if (targetLang === 'pl') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'CzeÅ›Ä‡! Bardzo siÄ™ cieszÄ™, Å¼e mogÄ™ z tobÄ… rozmawiaÄ‡ po polsku. O czym chcesz dzisiaj pogadaÄ‡?',
-        translation: 'Â¡Hola! Me alegro mucho de poder hablar en polaco contigo. Â¿De quÃ© quieres charlar hoy?',
-        tokens: [
-          { word: 'CzeÅ›Ä‡!', clean_word: 'czeÅ›Ä‡', translit: null },
-          { word: 'Bardzo', clean_word: 'bardzo', translit: null },
-          { word: 'siÄ™', clean_word: 'siÄ™', translit: null },
-          { word: 'cieszÄ™,', clean_word: 'cieszÄ™', translit: null },
-          { word: 'Å¼e', clean_word: 'Å¼e', translit: null },
-          { word: 'mogÄ™', clean_word: 'mogÄ™', translit: null },
-          { word: 'z', clean_word: 'z', translit: null },
-          { word: 'tobÄ…', clean_word: 'tobÄ…', translit: null },
-          { word: 'rozmawiaÄ‡', clean_word: 'rozmawiaÄ‡', translit: null },
-          { word: 'po', clean_word: 'po', translit: null },
-          { word: 'polsku.', clean_word: 'polsku', translit: null },
-          { word: 'O', clean_word: 'o', translit: null },
-          { word: 'czym', clean_word: 'czym', translit: null },
-          { word: 'chcesz', clean_word: 'chcesz', translit: null },
-          { word: 'dzisiaj', clean_word: 'dzisiaj', translit: null },
-          { word: 'pogadaÄ‡?', clean_word: 'pogadaÄ‡', translit: null }
-        ],
-        vocabulary: {
-          'czeÅ›Ä‡': { meaning: 'Hola (saludo habitual)', part_of_speech: 'saludo' },
-          'cieszÄ™ siÄ™': { meaning: 'Me alegro / me da gusto', part_of_speech: 'frase verbal' },
-          'rozmawiaÄ‡': { meaning: 'Hablar o conversar', part_of_speech: 'verbo' },
-          'pogadaÄ‡': { meaning: 'Charlar informalmente', part_of_speech: 'verbo' }
-        }
-      };
-    } else if (targetLang === 'zh') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'ä½ å¥½ï¼å¾ˆé«˜å…´å’Œä½ ç»ƒä¹ ä¸­æ–‡ã€‚ä½ æƒ³èŠäº›ä»€ä¹ˆå‘¢ï¼Ÿ',
-        translation: 'Â¡Hola! QuÃ© gusto practicar chino contigo. Â¿De quÃ© te gustarÃ­a hablar?',
-        tokens: [
-          { word: 'ä½ å¥½ï¼', translit: 'nÇ hÇo!', clean_word: 'ä½ å¥½' },
-          { word: 'å¾ˆé«˜å…´', translit: 'hÄ›n gÄoxÃ¬ng', clean_word: 'é«˜å…´' },
-          { word: 'å’Œä½ ', translit: 'hÃ© nÇ', clean_word: 'ä½ ' },
-          { word: 'ç»ƒä¹ ', translit: 'liÃ nxÃ­', clean_word: 'ç»ƒä¹ ' },
-          { word: 'ä¸­æ–‡ã€‚', translit: 'zhÅngwÃ©n.', clean_word: 'ä¸­æ–‡' },
-          { word: 'ä½ æƒ³', translit: 'nÇ xiÇng', clean_word: 'æƒ³' },
-          { word: 'èŠäº›', translit: 'liÃ¡o xiÄ“', clean_word: 'èŠ' },
-          { word: 'ä»€ä¹ˆå‘¢ï¼Ÿ', translit: 'shÃ©nme ne?', clean_word: 'ä»€ä¹ˆ' }
-        ],
-        vocabulary: {
-          'ä½ å¥½': { meaning: 'Hola (saludo cordial comÃºn)', part_of_speech: 'saludo', translit: 'nÇ hÇo' },
-          'é«˜å…´': { meaning: 'Contento, complacido o alegre', part_of_speech: 'adjetivo', translit: 'gÄoxÃ¬ng' },
-          'ç»ƒä¹ ': { meaning: 'Practicar o ejercitar una lengua o destreza', part_of_speech: 'verbo', translit: 'liÃ nxÃ­' },
-          'ä¸­æ–‡': { meaning: 'Idioma chino mandarÃ­n', part_of_speech: 'sustantivo', translit: 'zhÅngwÃ©n' }
-        }
-      };
-    } else if (targetLang === 'ar') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Ù…ÙØ±Ù’Ø­ÙØ¨Ù‹Ø§ Ø¨ÙÙƒÙ! Ø£ÙÙ†ÙØ§ Ù…ÙØ³Ù’ØªÙØ¹ÙØ¯ÙŒÙ‘ Ù„ÙÙ…ÙÙ…ÙØ§Ø±ÙØ³ÙØ©Ù Ø§Ù„Ù„ÙÙ‘ØºÙØ©Ù Ø§Ù„Ù’Ø¹ÙØ±ÙØ¨ÙÙŠÙÙ‘Ø©Ù Ù…ÙØ¹ÙÙƒÙ. ÙƒÙÙŠÙ’ÙÙ Ø£ÙØ³ÙØ§Ø¹ÙØ¯ÙÙƒÙ Ø§Ù„Ù’ÙŠÙÙˆÙ’Ù…ÙØŸ',
-        translation: 'Â¡Bienvenido! Estoy listo para practicar el idioma Ã¡rabe contigo. Â¿CÃ³mo te ayudo hoy?',
-        tokens: [
-          { word: 'Ù…ÙØ±Ù’Ø­ÙØ¨Ù‹Ø§', translit: 'mará¸¥aban', clean_word: 'Ù…Ø±Ø­Ø¨Ø§' },
-          { word: 'Ø¨ÙÙƒÙ!', translit: 'bika!', clean_word: 'Ø¨Ùƒ' },
-          { word: 'Ø£ÙÙ†ÙØ§', translit: 'anÄ', clean_word: 'Ø£Ù†Ø§' },
-          { word: 'Ù…ÙØ³Ù’ØªÙØ¹ÙØ¯ÙŒÙ‘', translit: 'mustaâ€˜iddun', clean_word: 'Ù…Ø³ØªØ¹Ø¯' },
-          { word: 'Ù„ÙÙ…ÙÙ…ÙØ§Ø±ÙØ³ÙØ©Ù', translit: 'li-mumÄrasati', clean_word: 'Ù„Ù…Ù…Ø§Ø±Ø³Ø©' },
-          { word: 'Ø§Ù„Ù„ÙÙ‘ØºÙØ©Ù', translit: 'al-lughati', clean_word: 'Ø§Ù„Ù„ØºØ©' },
-          { word: 'Ø§Ù„Ù’Ø¹ÙØ±ÙØ¨ÙÙŠÙÙ‘Ø©Ù', translit: 'al-â€˜arabiyyah', clean_word: 'Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©' },
-          { word: 'Ù…ÙØ¹ÙÙƒÙ.', translit: 'maâ€˜aka.', clean_word: 'Ù…Ø¹Ùƒ' },
-          { word: 'ÙƒÙÙŠÙ’ÙÙ', translit: 'kayfa', clean_word: 'ÙƒÙŠÙ' },
-          { word: 'Ø£ÙØ³ÙØ§Ø¹ÙØ¯ÙÙƒÙ', translit: 'usÄâ€˜iduka', clean_word: 'Ø£Ø³Ø§Ø¹Ø¯Ùƒ' },
-          { word: 'Ø§Ù„Ù’ÙŠÙÙˆÙ’Ù…ÙØŸ', translit: 'al-yawma?', clean_word: 'Ø§Ù„ÙŠÙˆÙ…' }
-        ],
-        vocabulary: {
-          'Ù…Ø±Ø­Ø¨Ø§': { meaning: 'Hola / Bienvenido (saludo cordial)', part_of_speech: 'saludo', translit: 'mará¸¥aban' },
-          'Ù…Ø³ØªØ¹Ø¯': { meaning: 'Preparado o listo para una actividad', part_of_speech: 'adjetivo', translit: 'mustaâ€˜idd' },
-          'Ø£Ø³Ø§Ø¹Ø¯Ùƒ': { meaning: 'Te ayudo o te asisto', part_of_speech: 'verbo', translit: 'usÄâ€˜iduk' },
-          'Ø§Ù„ÙŠÙˆÙ…': { meaning: 'Hoy (el dÃ­a de hoy)', part_of_speech: 'sustantivo / adverbio', translit: 'al-yawm' }
-        }
-      };
-    } else if (targetLang === 'ru') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'ĞŸÑ€Ğ¸Ğ²ĞµÑ‚! Ğ¯ Ñ€Ğ°Ğ´ Ğ¿Ñ€Ğ°ĞºÑ‚Ğ¸ĞºĞ¾Ğ²Ğ°Ñ‚ÑŒ Ñ€ÑƒÑÑĞºĞ¸Ğ¹ ÑĞ·Ñ‹Ğº Ñ Ñ‚Ğ¾Ğ±Ğ¾Ğ¹. Ğ Ñ‡Ñ‘Ğ¼ Ñ‚Ñ‹ Ñ…Ğ¾Ñ‡ĞµÑˆÑŒ Ğ¿Ğ¾Ğ³Ğ¾Ğ²Ğ¾Ñ€Ğ¸Ñ‚ÑŒ?',
-        translation: 'Â¡Hola! Me alegra practicar ruso contigo. Â¿De quÃ© quieres hablar?',
-        tokens: [
-          { word: 'ĞŸÑ€Ğ¸Ğ²ĞµÑ‚!', translit: null, clean_word: 'Ğ¿Ñ€Ğ¸Ğ²ĞµÑ‚' },
-          { word: 'Ğ¯', translit: null, clean_word: 'Ñ' },
-          { word: 'Ñ€Ğ°Ğ´', translit: null, clean_word: 'Ñ€Ğ°Ğ´' },
-          { word: 'Ğ¿Ñ€Ğ°ĞºÑ‚Ğ¸ĞºĞ¾Ğ²Ğ°Ñ‚ÑŒ', translit: null, clean_word: 'Ğ¿Ñ€Ğ°ĞºÑ‚Ğ¸ĞºĞ¾Ğ²Ğ°Ñ‚ÑŒ' },
-          { word: 'Ñ€ÑƒÑÑĞºĞ¸Ğ¹', translit: null, clean_word: 'Ñ€ÑƒÑÑĞºĞ¸Ğ¹' },
-          { word: 'ÑĞ·Ñ‹Ğº', translit: null, clean_word: 'ÑĞ·Ñ‹Ğº' }
-        ],
-        vocabulary: {
-          'Ğ¿Ñ€Ğ¸Ğ²ĞµÑ‚': { meaning: 'Hola (saludo cordial e informal)', part_of_speech: 'saludo', translit: null },
-          'Ñ€Ğ°Ğ´': { meaning: 'Contento o complacido', part_of_speech: 'adjetivo breve', translit: null }
-        }
-      };
-    } else if (targetLang === 'nl') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Hallo! Leuk om Nederlands met je te oefenen. Waar wil je het over hebben?',
-        translation: 'Â¡Hola! QuÃ© bien practicar neerlandÃ©s contigo. Â¿De quÃ© quieres hablar?',
-        tokens: [
-          { word: 'Hallo!', translit: null, clean_word: 'hallo' },
-          { word: 'Leuk', translit: null, clean_word: 'leuk' },
-          { word: 'om', translit: null, clean_word: 'om' },
-          { word: 'Nederlands', translit: null, clean_word: 'nederlands' },
-          { word: 'te', translit: null, clean_word: 'te' },
-          { word: 'oefenen.', translit: null, clean_word: 'oefenen' }
-        ],
-        vocabulary: {
-          'leuk': { meaning: 'Agradable, divertido o simpÃ¡tico', part_of_speech: 'adjetivo' },
-          'oefenen': { meaning: 'Practicar o ensayar', part_of_speech: 'verbo' }
-        }
-      };
-    } else if (targetLang === 'de') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Hallo! Ich freue mich, mit dir Deutsch zu Ã¼ben. WorÃ¼ber mÃ¶chtest du heute sprechen?',
-        translation: 'Â¡Hola! Me alegra practicar alemÃ¡n contigo. Â¿De quÃ© te gustarÃ­a hablar hoy?',
-        tokens: [
-          { word: 'Hallo!', translit: null, clean_word: 'hallo' },
-          { word: 'Ich', translit: null, clean_word: 'ich' },
-          { word: 'freue', translit: null, clean_word: 'freue' },
-          { word: 'mich,', translit: null, clean_word: 'mich' },
-          { word: 'mit', translit: null, clean_word: 'mit' },
-          { word: 'dir', translit: null, clean_word: 'dir' },
-          { word: 'Deutsch', translit: null, clean_word: 'deutsch' },
-          { word: 'zu', translit: null, clean_word: 'zu' },
-          { word: 'Ã¼ben.', translit: null, clean_word: 'Ã¼ben' }
-        ],
-        vocabulary: {
-          'freuen': { meaning: 'Alegrarse o sentir satisfacciÃ³n', part_of_speech: 'verbo reflexivo' },
-          'Ã¼ben': { meaning: 'Practicar o ejercitarse', part_of_speech: 'verbo' }
-        }
-      };
-    } else if (targetLang === 'fr') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Bonjour ! Je suis ravi de pratiquer le franÃ§ais avec toi. De quoi aimerais-tu parler ?',
-        translation: 'Â¡Hola! Estoy encantado de practicar francÃ©s contigo. Â¿De quÃ© te gustarÃ­a hablar?',
-        tokens: [
-          { word: 'Bonjour', translit: null, clean_word: 'bonjour' },
-          { word: '!', translit: null, clean_word: '!' },
-          { word: 'Je', translit: null, clean_word: 'je' },
-          { word: 'suis', translit: null, clean_word: 'suis' },
-          { word: 'ravi', translit: null, clean_word: 'ravi' },
-          { word: 'de', translit: null, clean_word: 'de' },
-          { word: 'pratiquer', translit: null, clean_word: 'pratiquer' }
-        ],
-        vocabulary: {
-          'ravi': { meaning: 'Encantado o muy complacido', part_of_speech: 'adjectif' },
-          'pratiquer': { meaning: 'Practicar una lengua', part_of_speech: 'verbe' }
-        }
-      };
-    } else if (targetLang === 'it') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Ciao! Sono felice di fare conversazione in italiano con te. Di cosa vorresti parlare?',
-        translation: 'Â¡Hola! Me alegro de conversar en italiano contigo. Â¿De quÃ© te gustarÃ­a hablar?',
-        tokens: [
-          { word: 'Ciao!', translit: null, clean_word: 'ciao' },
-          { word: 'Sono', translit: null, clean_word: 'sono' },
-          { word: 'felice', translit: null, clean_word: 'felice' },
-          { word: 'di', translit: null, clean_word: 'di' },
-          { word: 'fare', translit: null, clean_word: 'fare' },
-          { word: 'conversazione', translit: null, clean_word: 'conversazione' }
-        ],
-        vocabulary: {
-          'felice': { meaning: 'Feliz o contento', part_of_speech: 'aggettivo' },
-          'conversazione': { meaning: 'PlÃ¡tica o conversaciÃ³n', part_of_speech: 'sostantivo' }
-        }
-      };
-    } else if (targetLang === 'es') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Â¡Hola! QuÃ© alegrÃ­a poder conversar contigo en espaÃ±ol. Â¿De quÃ© te gustarÃ­a hablar hoy?',
-        translation: 'Hello! What a joy to practice Spanish together. What would you like to talk about today?',
-        tokens: [
-          { word: 'Â¡Hola!', translit: null, clean_word: 'hola' },
-          { word: 'QuÃ©', translit: null, clean_word: 'quÃ©' },
-          { word: 'alegrÃ­a', translit: null, clean_word: 'alegrÃ­a' },
-          { word: 'conversar', translit: null, clean_word: 'conversar' }
-        ],
-        vocabulary: {
-          'alegrÃ­a': { meaning: 'Gozo o placer', part_of_speech: 'sustantivo' },
-          'conversar': { meaning: 'Platicar o hablar mutuamente', part_of_speech: 'verbo' }
-        }
-      };
-    } else if (targetLang === 'en') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: "Hello! I'm really excited to practice English with you today. What would you like to talk about?",
-        translation: 'Â¡Hola! Estoy muy emocionado de practicar inglÃ©s contigo hoy. Â¿De quÃ© te gustarÃ­a hablar?',
-        tokens: [
-          { word: 'Hello!', translit: null, clean_word: 'hello' },
-          { word: 'excited', translit: null, clean_word: 'excited' },
-          { word: 'practice', translit: null, clean_word: 'practice' }
-        ],
-        vocabulary: {
-          'excited': { meaning: 'Emocionado / entusiasmado', part_of_speech: 'adjective' },
-          'practice': { meaning: 'Practicar o ejercitar', part_of_speech: 'verb' }
-        }
-      };
-    } else if (targetLang === 'nl') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Hallo! Wat leuk om samen Nederlands te oefenen. Hoe gaat het met jou vandaag?',
-        translation: 'Â¡Hola! QuÃ© lindo practicar holandÃ©s juntos. Â¿CÃ³mo estÃ¡s hoy?',
-        tokens: [
-          { word: 'Hallo!', translit: null, clean_word: 'hallo' },
-          { word: 'Wat', translit: null, clean_word: 'wat' },
-          { word: 'leuk', translit: null, clean_word: 'leuk' },
-          { word: 'oefenen', translit: null, clean_word: 'oefenen' }
-        ],
-        vocabulary: {
-          'oefenen': { meaning: 'Practicar o ejercitar', part_of_speech: 'werkwoord' },
-          'leuk': { meaning: 'Lindo o agradable', part_of_speech: 'adjectief' }
-        }
-      };
-    } else if (targetLang === 'tr') {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Merhaba! Seninle TÃ¼rkÃ§e pratik yapmaktan Ã§ok mutluyum. BugÃ¼n ne hakkÄ±nda konuÅŸmak istersin?',
-        translation: 'Â¡Hola! Me alegro mucho de practicar turco contigo. Â¿De quÃ© te gustarÃ­a hablar hoy?',
-        tokens: [
-          { word: 'Merhaba!', clean_word: 'merhaba', translit: null },
-          { word: 'Seninle', clean_word: 'seninle', translit: null },
-          { word: 'TÃ¼rkÃ§e', clean_word: 'tÃ¼rkÃ§e', translit: null },
-          { word: 'pratik', clean_word: 'pratik', translit: null },
-          { word: 'yapmaktan', clean_word: 'yapmaktan', translit: null },
-          { word: 'Ã§ok', clean_word: 'Ã§ok', translit: null },
-          { word: 'mutluyum.', clean_word: 'mutluyum', translit: null },
-          { word: 'BugÃ¼n', clean_word: 'bugÃ¼n', translit: null },
-          { word: 'ne', clean_word: 'ne', translit: null },
-          { word: 'hakkÄ±nda', clean_word: 'hakkÄ±nda', translit: null },
-          { word: 'konuÅŸmak', clean_word: 'konuÅŸmak', translit: null },
-          { word: 'istersin?', clean_word: 'istersin', translit: null }
-        ],
-        vocabulary: {
-          'merhaba': { meaning: 'Hola (saludo cordial)', part_of_speech: 'saludo' },
-          'pratik': { meaning: 'PrÃ¡ctica o ejercicio', part_of_speech: 'sustantivo' },
-          'mutlu': { meaning: 'Feliz o contento', part_of_speech: 'adjetivo' },
-          'konuÅŸmak': { meaning: 'Hablar o conversar', part_of_speech: 'verbo' }
-        }
-      };
-    } else {
-      initialBotMsg = {
-        id: 'msg-init',
-        sender: 'bot',
-        text: 'Hello! I am ready to practice conversation with you. What would you like to chat about?',
-        translation: 'Â¡Hola! Estoy listo para practicar conversaciÃ³n contigo. Â¿De quÃ© te gustarÃ­a hablar?',
-        tokens: [
-          { word: 'Hello!', clean_word: 'hello', translit: null },
-          { word: 'ready', clean_word: 'ready', translit: null }
-        ],
-        vocabulary: {
-          'ready': { meaning: 'Listo o preparado', part_of_speech: 'adjective' }
-        }
-      };
-    }
-    return JSON.parse(JSON.stringify(initialBotMsg));
-  }
-
-  // Persist messages whenever conversation changes for current language.
-  // The auto-backup queue coalesces this into a single incremental chat-history upload.
-  useEffect(() => {
-    if (activeLangRef.current === targetLang && messages && messages.length > 0) {
-      saveChatToStorage(targetLang, messages);
-      requestAutoBackup({ type: 'chat-history', reason: 'chat-updated' });
-    }
-  }, [messages, targetLang]);
-
-  const handleChatScroll = () => {
-    const container = chatContainerRef.current;
-    if (!container) return;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    // Mark as user scrolled up if more than 100px from the bottom
-    isUserScrolledUpRef.current = distanceFromBottom > 100;
-    // Show floating scroll to top button when scrolled down more than 300px
-    setShowScrollTop(container.scrollTop > 300);
-  };
-
-  const handleScrollToTop = () => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  // Robust chat auto-scroll on mount / tab switch to chat / language switch / conversation restoration:
-  // Immediately and across sequential animation frames, plus ResizeObserver to wait for async elements
-  // (Chinese tokens, Pinyin ruby annotations, translations, audio controls) to fully layout.
-  useEffect(() => {
-    if (activeTab !== 'chat' || chatViewMode !== 'chat') return;
-    const container = chatContainerRef.current;
-    if (!container) return;
-
-    // Reset manual scroll-up flag when entering chat or changing language to guarantee viewing latest message
-    isUserScrolledUpRef.current = false;
-
-    const syncBottom = () => {
-      if (!isUserScrolledUpRef.current && chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-      }
-    };
-
-    syncBottom();
-    let frameId1, frameId2;
-    frameId1 = requestAnimationFrame(() => {
-      syncBottom();
-      frameId2 = requestAnimationFrame(() => {
-        syncBottom();
-      });
-    });
-
-    let resizeObserver = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => {
-        if (!isUserScrolledUpRef.current) {
-          syncBottom();
-        }
-      });
-      resizeObserver.observe(container);
-      Array.from(container.children).slice(-15).forEach((el) => {
-        resizeObserver.observe(el);
-      });
-    }
-
-    return () => {
-      if (frameId1) cancelAnimationFrame(frameId1);
-      if (frameId2) cancelAnimationFrame(frameId2);
-      if (resizeObserver) resizeObserver.disconnect();
-    };
-  }, [activeTab, targetLang]);
-
-  // Smooth scroll to bottom when new messages arrive or processing state changes during active chat
-  useEffect(() => {
-    if (activeTab !== 'chat' || chatViewMode !== 'chat') return;
-    if (!isUserScrolledUpRef.current && chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  }, [messages, isProcessing, activeTab, chatViewMode]);
-
-  // Send message flow (supports normal send and non-duplicating retry)
-  const handleSendMessage = async (text, retryMsgId = null) => {
-    if (!text || !text.trim() || isProcessing) return;
-
-    isUserScrolledUpRef.current = false;
-
-    const tempUserId = retryMsgId || `user-${Date.now()}`;
-    const cleanText = text.trim();
-
-    if (!retryMsgId) {
-      const rawUserMsg = {
-        id: tempUserId,
-        sender: 'user',
-        text: cleanText,
-        originalText: cleanText,
-        correctedText: cleanText,
-        hasCorrection: false,
-        diffTokens: [{ text: cleanText, changed: false, original: null }]
-      };
-      setMessages(prev => [...prev, rawUserMsg]);
-    }
-
-    setIsProcessing(true);
-
-    try {
-      const result = await sendChatMessage({
-        message: cleanText,
-        targetLang,
-        nativeLang,
-        level: config.level,
-        apiKey: config.apiKey,
-        provider: config.provider || 'groq',
-        history: messages.filter(m => m && m.id !== tempUserId).slice(-6)
-      });
-
-      if (result && result.data && result.data.bot_response) {
-        setApiWarning(null);
-        setLastFailedMessage(null);
-        const { user_correction, bot_response } = result.data;
-
-        // Update user message with corrected text and amber-gold diffs
-        setMessages(prev =>
-          prev.map(m => {
-            if (m.id === tempUserId) {
-              return {
-                ...m,
-                originalText: cleanText,
-                correctedText: user_correction.corrected_text || m.text,
-                hasCorrection: user_correction.has_errors || user_correction.diff_tokens?.some(t => t.changed),
-                diffTokens: user_correction.diff_tokens || m.diffTokens
-              };
-            }
-            return m;
-          })
-        );
-
-        // Normalize Chinese tokens if target language is Chinese
-        let normalizedTokens = bot_response.tokens || [];
-        if (targetLang === 'zh' && normalizedTokens.length > 0) {
-          const validation = validateChineseTokens(bot_response.text, normalizedTokens);
-          if (!validation.isValid) {
-            console.warn('ğŸ”§ Normalizing problematic Chinese tokens:', validation.issues);
-            normalizedTokens = normalizeChineseTokens(bot_response.text, normalizedTokens);
-          }
-        }
-
-        // Append bot response (exclusively generated by Groq AI)
-        const botMsg = {
-          id: `bot-${Date.now()}`,
-          sender: 'bot',
-          text: bot_response.text,
-          translation: bot_response.translation,
-          tokens: normalizedTokens,
-          vocabulary: bot_response.vocabulary
-        };
-
-        setMessages(prev => [...prev, botMsg]);
-
-        // Auto-speak if autoPlayAi or hands-free is enabled (runs only once per bot message)
-        if ((autoPlayAi || handsFree) && bot_response.text) {
-          if (!playedBotMsgIdsRef.current.has(botMsg.id)) {
-            playedBotMsgIdsRef.current.add(botMsg.id);
-            speakText(bot_response.text, currentLangObj.speechCode, speechRate);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Chat service notice:', err.message);
-      setApiWarning(err.message || 'Error al comunicarse con el servidor de Groq AI.');
-      setLastFailedMessage({ text: cleanText, msgId: tempUserId });
-
-      // Retain pedagogical feedback: update user message with deterministic correction if available
-      if (err.user_correction) {
-        const cor = err.user_correction;
-        setMessages(prev =>
-          prev.map(m => {
-            if (m.id === tempUserId) {
-              return {
-                ...m,
-                originalText: cleanText,
-                correctedText: cor.corrected_text || m.text,
-                hasCorrection: cor.has_errors || cor.diff_tokens?.some(t => t.changed),
-                diffTokens: cor.diff_tokens || m.diffTokens
-              };
-            }
-            return m;
-          })
-        );
-      }
-      // ZERO canned/fake bot replies appended
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleTranslateChatMessage = async (message) => {
-    if (message?.translation) return message.translation;
-
-    const sourceText = (message?.sender === 'user'
-      ? message.correctedText || message.text
-      : message?.text || '').trim();
-    if (!sourceText) throw new Error('No hay texto para traducir.');
-
-    const result = await translateParagraphTextApi({
-      text: sourceText,
-      targetLang,
-      nativeLang,
-      apiKey: config?.apiKey || ''
-    });
-
-    setMessages((currentMessages) => currentMessages.map((currentMessage) => (
-      currentMessage.id === message.id
-        ? { ...currentMessage, translation: result.translation }
-        : currentMessage
-    )));
-
-    return result.translation;
-  };
-
-  // Word lookup on-click: Works independently for YouTube Reader, Text Reader, and Chat
-  const handleWordClick = async (rawWord, tokenOrVocab) => {
-    if (!rawWord && !tokenOrVocab) return;
-
-    // 1. Clean the word for lookup, removing leading/trailing punctuation while preserving Unicode letters, marks, and numbers
-    const wordStr = String(rawWord || tokenOrVocab?.word || '').trim();
-    const cleanWord = wordStr.replace(/^[^\p{L}\p{N}\p{M}]+|[^\p{L}\p{N}\p{M}]+$/gu, '').trim() || wordStr;
-
-    // 2. Extract any pre-existing transliteration/pinyin from token if available
-    const existingTranslit = tokenOrVocab?.translit || tokenOrVocab?.auxiliary || null;
-
-    // 3. If a pre-computed dictionary definition with meaning is already available (e.g. Chat message vocabulary):
-    if (tokenOrVocab && typeof tokenOrVocab.meaning === 'string' && tokenOrVocab.meaning.trim()) {
-      setSelectedWord({
-        word: cleanWord,
-        meaning: tokenOrVocab.meaning,
-        part_of_speech: tokenOrVocab.part_of_speech || null,
-        translit: tokenOrVocab.translit || existingTranslit,
-        targetLang
-      });
-      return;
-    }
-
-    // 4. Open WordModal immediately with loading state so user gets instantaneous visual feedback
-    setSelectedWord({
-      word: cleanWord,
-      meaning: null,
-      part_of_speech: null,
-      translit: existingTranslit,
-      isLoading: true,
-      targetLang
-    });
-
-    // 5. Query the backend definition lookup API independently of paragraph gloss
-    try {
-      const lookupResult = await lookupWordApi(cleanWord, targetLang, nativeLang, config?.apiKey);
-      if (lookupResult) {
-        if (lookupResult.error) {
-          setSelectedWord({
-            word: cleanWord,
-            meaning: null,
-            error: lookupResult.error,
-            part_of_speech: null,
-            translit: existingTranslit,
-            targetLang
-          });
-          return;
-        }
-
-        setSelectedWord({
-          word: lookupResult.word || cleanWord,
-          meaning: lookupResult.meaning,
-          part_of_speech: lookupResult.part_of_speech || null,
-          translit: lookupResult.translit || existingTranslit,
-          targetLang
-        });
-        return;
-      }
-    } catch (err) {
-      console.warn('Word lookup error:', err);
-    }
-
-    // 6. If lookup returned nothing or failed, show clear error state inside modal
-    setSelectedWord({
-      word: cleanWord,
-      meaning: null,
-      error: 'No se pudo obtener la definiciÃ³n en este momento. Verifica tu conexiÃ³n o clave de API.',
-      part_of_speech: null,
-      translit: existingTranslit,
-      targetLang
-    });
-  };
-
-
-  // Pronounce single word helper (normal or slow)
-  const handlePronounceWord = (word, rate = 1.0) => {
-    speakText(word, currentLangObj.speechCode, rate);
-  };
-
-  // Reset conversation for CURRENT language only
-  const handleResetChat = () => {
-    isUserScrolledUpRef.current = false;
-    const initialMsg = getInitialBotMsg(targetLang);
-    setMessages([initialMsg]);
-    saveChatToStorage(targetLang, [initialMsg]);
-    stopSpeaking();
-  };
-
-  // Handle saving completed voice call to unified history
-  const handleEndCall = (sessionData) => {
-    if (sessionData && sessionData.transcript && sessionData.transcript.length > 0) {
-      try {
-        let storedCalls = [];
-        const raw = localStorage.getItem(CALL_STORAGE_KEY);
-        if (raw) {
-          storedCalls = JSON.parse(raw);
-        }
-        storedCalls.unshift(sessionData);
-        localStorage.setItem(CALL_STORAGE_KEY, JSON.stringify(storedCalls));
-      } catch (e) {
-        console.warn('Failed to save call session to history:', e);
-      }
-    }
-    setChatViewMode('hub');
-    requestAutoBackup({ type: 'call-history', reason: 'live-call-end' });
-  };
-
-  const handleReturnToChatHub = () => {
-    setChatViewMode('hub');
-    requestAutoBackup({ type: 'chat-history', reason: 'chat-exit' });
-  };
-
-  // Get call voice preference for active target language
-  const getCallVoiceForTargetLang = () => {
-    try {
-      const raw = localStorage.getItem('linguaflow_call_voice_preferences');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && parsed[targetLang]) {
-          return parsed[targetLang];
-        }
-      }
-    } catch (e) {}
-    return '';
-  };
-
-  const selectedCallVoice = getCallVoiceForTargetLang();
-
-  // Lifted Live Call hook to guarantee SpeechRecognition starts directly in the user click event loop
-  const pipelineCall = usePipelineCall({
-    targetLang,
-    nativeLang,
-    level: config?.level || 'A2/B1',
-    apiKey: config?.apiKey || '',
-    voice: selectedCallVoice,
-    isSpanish
-  });
-
-  const handleStartCall = () => {
-    // Synchronously initiate SpeechRecognition in direct response to user gesture
-    pipelineCall.startCall();
-    setChatViewMode('call');
-  };
-
-  const handleOpenAudioDocument = (doc) => {
-    if (doc) {
-      saveActiveDocumentDraft(doc);
-      if (doc.targetLang && doc.targetLang !== targetLang) {
-        handleTargetLangChange(doc.targetLang);
-      }
-      try {
-        window.location.hash = '#reader';
-      } catch (e) {}
-      setActiveTab('text');
-    }
-  };
-
-  return (
-    <div className="flex flex-col h-screen font-sans text-[var(--text-primary)] transition-colors">
-      {/* Global Header â€” hidden where a dedicated reader, call, or conversation navbar owns the top area */}
-      {activeTab !== 'text' && activeTab !== 'youtube' && activeTab !== 'image' && !(activeTab === 'chat' && (chatViewMode === 'call' || chatViewMode === 'chat')) && (
-        <Header
-          languages={languages}
-          targetLang={targetLang}
-          setTargetLang={handleTargetLangChange}
-          nativeLang={nativeLang}
-          setNativeLang={handleNativeLangChange}
-          showTransliteration={showTransliteration}
-          setShowTransliteration={setShowTransliteration}
-          handsFree={handsFree}
-          setHandsFree={setHandsFree}
-          onOpenSettings={() => setActiveTab('settings')}
-          onResetChat={handleResetChat}
-          isListening={isRecording}
-          isSpeaking={isSpeaking}
-          hasApiKey={Boolean(config?.apiKey)}
-          apiWarning={apiWarning}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-        />
-      )}
-
-      {activeTab === 'home' ? (
-        <HomePage
-          onSelectMode={setActiveTab}
-          targetLang={targetLang}
-          setTargetLang={handleTargetLangChange}
-          nativeLang={nativeLang}
-          setNativeLang={handleNativeLangChange}
-          languages={languages}
-          apiWarning={apiWarning}
-        />
-      ) : activeTab === 'habits' ? (
-        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <HabitTrackerPage
-            onBack={() => setActiveTab('home')}
-            targetLang={targetLang}
-            languages={languages}
-            apiKey={config?.apiKey}
-          />
-        </main>
-      ) : activeTab === 'settings' ? (
-        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <SettingsPage
-            onBack={() => setActiveTab('home')}
-            config={config}
-            onSaveConfig={handleSaveConfig}
-            targetLang={targetLang}
-            setTargetLang={handleTargetLangChange}
-            nativeLang={nativeLang}
-            setNativeLang={handleNativeLangChange}
-            languages={languages}
-            showTransliteration={showTransliteration}
-            setShowTransliteration={setShowTransliteration}
-            handsFree={handsFree}
-            setHandsFree={setHandsFree}
-            onResetChat={handleResetChat}
-          />
-        </main>
-      ) : activeTab === 'youtube' ? (
-        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <YouTubeReaderPage
-            targetLang={targetLang}
-            setTargetLang={handleTargetLangChange}
-            languages={languages}
-            nativeLang={nativeLang}
-            apiKey={config?.apiKey}
-            onWordClick={handleWordClick}
-            setActiveTab={setActiveTab}
-          />
-        </main>
-      ) : activeTab === 'text' ? (
-        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <TextReaderPage
-            targetLang={targetLang}
-            setTargetLang={handleTargetLangChange}
-            nativeLang={nativeLang}
-            languages={languages}
-            apiKey={config?.apiKey}
-            onWordClick={handleWordClick}
-            setActiveTab={setActiveTab}
-          />
-        </main>
-      ) : activeTab === 'image' ? (
-        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <ImageReaderPage
-            targetLang={targetLang}
-            setTargetLang={handleTargetLangChange}
-            nativeLang={nativeLang}
-            languages={languages}
-            apiKey={config?.apiKey}
-            onWordClick={handleWordClick}
-            setActiveTab={setActiveTab}
-          />
-        </main>
-      ) : chatViewMode === 'call' ? (
-        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
-          <LiveCallView
-            targetLang={targetLang}
-            nativeLang={nativeLang}
-            level={config?.level || 'A2/B1'}
-            apiKey={config?.apiKey || ''}
-            onEndCall={handleEndCall}
-            activeCall={pipelineCall}
-            onWordClick={handleWordClick}
-          />
-        </main>
-      ) : chatViewMode === 'call-detail' ? (
-        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
-          <CallDetailView
-            callData={selectedCallData}
-            nativeLang={nativeLang}
-            onBack={() => {
-              setSelectedCallData(null);
-              setChatViewMode('hub');
-            }}
-            onWordClick={handleWordClick}
-          />
-        </main>
-      ) : chatViewMode === 'hub' ? (
-        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
-          <ChatHubView
-            targetLang={targetLang}
-            setTargetLang={handleTargetLangChange}
-            languages={languages}
-            onStartChat={() => {
-              recordHabitActivityForToday({
-                user,
-                langCode: targetLang,
-                activityKey: 'conversation'
-              });
-              setChatViewMode('chat');
-            }}
-            onStartCall={handleStartCall}
-            onOpenChatSession={(langCode) => {
-              const effectiveLang = langCode || targetLang;
-              if (langCode && langCode !== targetLang) {
-                handleTargetLangChange(langCode);
-              }
-              recordHabitActivityForToday({
-                user,
-                langCode: effectiveLang,
-                activityKey: 'conversation'
-              });
-              setChatViewMode('chat');
-            }}
-            onOpenCallDetail={(callData) => {
-              setSelectedCallData(callData);
-              setChatViewMode('call-detail');
-            }}
-            onDeleteChatSession={(deletedLang) => {
-              if (deletedLang === targetLang) {
-                const initialGreeting = getInitialBotMsg(targetLang);
-                setMessages([initialGreeting]);
-              }
-              requestAutoBackup({ type: 'chat-history', reason: 'chat-deleted' });
-            }}
-            onDeleteCallSession={(callId) => {
-              if (selectedCallData && selectedCallData.id === callId) {
-                setSelectedCallData(null);
-              }
-              requestAutoBackup({ type: 'call-history', reason: 'call-deleted' });
-            }}
-          />
-        </main>
-      ) : (
-        <>
-          <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
-            {/* Conversation-specific navbar */}
-            <div className="shrink-0 z-30 border-b border-[var(--border-primary)] bg-[var(--app-bg)]/95 backdrop-blur-xl shadow-xs">
-              <div className="flex items-center justify-between max-w-4xl w-full mx-auto px-4 py-3">
-                <button
-                  type="button"
-                  onClick={handleReturnToChatHub}
-                  className="px-3.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs font-semibold shadow-xs active:scale-95"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>{t('back_to_hub')}</span>
-                </button>
-
-                <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
-                  <span className="text-sm">{currentLangObj.flag || 'ğŸ’¬'}</span>
-                  <span>{currentLangObj.name}</span>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setIsChatVoiceMenuOpen((isOpen) => !isOpen)}
-                      className="ml-1 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer active:scale-95"
-                      aria-label={isSpanish ? 'Abrir ajustes de voz y reproducciÃ³n' : 'Open voice and playback settings'}
-                      aria-expanded={isChatVoiceMenuOpen}
-                      title={isSpanish ? 'Voz y reproducciÃ³n' : 'Voice & Playback'}
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                    {isChatVoiceMenuOpen && (
-                      <ChatVoicePlaybackMenu onClose={() => setIsChatVoiceMenuOpen(false)} />
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Main Chat Scroll Area */}
-            <main
-              ref={chatContainerRef}
-              onScroll={handleChatScroll}
-              className="flex-1 overflow-y-auto px-4 py-6 max-w-4xl w-full mx-auto"
-            >
-              {/* API Error Warning Banner */}
-              {apiWarning && (
-                <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs flex items-center justify-between shadow-lg shadow-black/30 animate-fade-in gap-3">
-                  <div className="flex items-start space-x-2.5 min-w-0">
-                    <span className="text-base leading-none mt-0.5 flex-shrink-0">âš ï¸</span>
-                    <div className="min-w-0">
-                      <p className="font-bold text-amber-100">
-                        Aviso de Groq AI: {apiWarning}
-                      </p>
-                      <p className="text-[11px] text-amber-200/80 mt-0.5">
-                        Haz clic en{' '}
-                        <button
-                          onClick={() => setActiveTab('settings')}
-                          className="underline font-bold text-white hover:text-amber-300 cursor-pointer"
-                        >
-                          Ajustes âš™ï¸
-                        </button>{' '}
-                        para verificar el estado del backend y la configuraciÃ³n de GROQ_API_KEY.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {lastFailedMessage && (
-                      <button
-                        type="button"
-                        onClick={() => handleSendMessage(lastFailedMessage.text, lastFailedMessage.msgId)}
-                        disabled={isProcessing}
-                        className="px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer transition-all"
-                        title="Reintentar respuesta de IA"
-                      >
-                        <RotateCcw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
-                        <span>Reintentar</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        setApiWarning(null);
-                        setLastFailedMessage(null);
-                      }}
-                      className="p-1 text-amber-300/70 hover:text-white rounded-lg transition-colors cursor-pointer"
-                      title="Cerrar aviso"
-                    >
-                      âœ•
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Helper Banner on top in Chocolate & Rose theme */}
-              <div className="mb-6 p-4 rounded-2xl bg-[#32170f]/90 border border-[#52271a] shadow-md shadow-black/30 flex items-start justify-between">
-                <div className="flex items-start space-x-3">
-                  <div className="p-2 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-md shadow-rose-950 mt-0.5">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-rose-200">
-                      {t('practicing_banner_title', { lang: currentLangObj.name })}
-                    </h2>
-                    {isSpanish ? (
-                      <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
-                        Habla o escribe con total libertad. Cada mensaje se analiza y corrige dinÃ¡micamente con las palabras modificadas con fuente en <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">dorado</span>.
-                      </p>
-                    ) : (
-                      <p className="text-xs text-rose-100/70 mt-0.5 leading-relaxed">
-                        Speak or write freely. Every message is dynamically analyzed and corrected with modified words highlighted in <span className="text-amber-300 font-extrabold underline decoration-amber-400/60 decoration-2 underline-offset-2">gold</span>.
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={handleResetChat}
-                  title={t('restart_tooltip')}
-                  className="p-1.5 text-rose-300/50 hover:text-rose-200 hover:bg-[#482216] rounded-lg transition-colors flex-shrink-0 cursor-pointer"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Message Bubbles */}
-              {messages.filter(Boolean).map((msg) => (
-                <ChatMessage
-                  key={msg.id || `msg-${Math.random()}`}
-                  message={msg}
-                  targetLang={targetLang}
-                  nativeLang={nativeLang}
-                  showTransliteration={showTransliteration}
-                  onWordClick={handleWordClick}
-                  onPlayAudio={handlePlayAudio}
-                  isAudioPlaying={isSpeaking}
-                  speakingCharIndex={speakingCharIndex}
-                  speakingText={speakingText}
-                  onOpenGrammarBreakdown={handleOpenGrammarBreakdown}
-                  onDeleteMessage={handleDeleteMessage}
-                  onTranslateMessage={handleTranslateChatMessage}
-                />
-              ))}
-
-              {/* Processing indicator */}
-              {isProcessing && (
-                <div className="flex items-center space-x-2 my-4 px-2 animate-fade-in text-xs text-rose-300/60">
-                  <div className="w-4 h-4 rounded-full bg-rose-500 animate-pulse flex items-center justify-center text-[9px] text-white font-bold shadow-xs">
-                    L
-                  </div>
-                  <span className="font-medium">{t('bot_thinking')}</span>
-                </div>
-              )}
-            </main>
-
-            {/* Floating Scroll-to-Top Button */}
-            {showScrollTop && (
-              <button
-                type="button"
-                onClick={handleScrollToTop}
-                className="absolute bottom-4 right-4 sm:right-6 w-10 h-10 rounded-full bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] hover:text-rose-500 border border-[var(--border-primary)] shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 z-30 cursor-pointer active:scale-90 animate-fade-in"
-                title={t('scroll_to_top') || (isSpanish ? 'Volver arriba' : 'Scroll to top')}
-                aria-label={t('scroll_to_top') || (isSpanish ? 'Volver arriba' : 'Scroll to top')}
-              >
-                <ArrowUp className="w-5 h-5" />
-              </button>
-            )}
-          </div>
-
-          {/* Input Bar */}
-          <InputBar
-            targetLang={targetLang}
-            nativeLang={nativeLang}
-            onSendMessage={handleSendMessage}
-            isRecording={isRecording}
-            recordingSeconds={recordingSeconds}
-            isTranscribingAudio={isTranscribingAudio}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            onCancelRecording={cancelRecording}
-            interimTranscript={interimTranscript}
-            isProcessing={isProcessing}
-          />
-        </>
-      )}
-
-      {/* Word Definition Modal */}
-      <WordModal
-        wordData={selectedWord}
-        targetLang={targetLang}
-        onClose={() => setSelectedWord(null)}
-        onPronounceWord={handlePronounceWord}
-      />
-
-      {/* Sentence Grammar Breakdown Modal */}
-      <GrammarBreakdownModal
-        isOpen={Boolean(breakdownData)}
-        onClose={() => setBreakdownData(null)}
-        sentenceBreakdown={breakdownData?.breakdown || []}
-        originalText={breakdownData?.originalText || ''}
-        correctedText={breakdownData?.correctedText || ''}
-        targetLang={targetLang}
-        onPronounceWord={(word) => speakText(word, currentLangObj.speechCode, speechRate)}
-        isLoading={isBreakdownLoading}
-      />
-
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        config={config}
-        onSaveConfig={handleSaveConfig}
-      />
-
-      {/* Global Background Audio Import Widget (Expanded & Minimized) */}
-      <GlobalAudioImportWidget onOpenDocument={handleOpenAudioDocument} />
-
-      {/* Global Background Auto-Backup Toast */}
-      <AutoBackupToast />
-
-      {/* Persistent Bottom Navigation Bar for Home, Habits (Progress), and Settings */}
-      {['home', 'habits', 'settings'].includes(activeTab) && (
-        <BottomNavBar
-          activeTab={activeTab}
-          onSelectTab={setActiveTab}
-        />
-      )}
-    </div>
-  );
-}
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíÛN¹í:-jZ.¶›­–)Ş³V–×÷'B&V7BÂ²W6U7FFRÂW6TVffV7BÂW6U&VbÒg&öÒw&V7Bs°¦–×÷'B²†VFW"Òg&öÒrâö6ö×öæVçG2ô†VFW"s°¦–×÷'B²6†DÖW76vRÒg&öÒrâö6ö×öæVçG2ô6†DÖW76vRs°¦–×÷'B²v÷&DÖöFÂÒg&öÒrâö6ö×öæVçG2õv÷&DÖöFÂs°¦–×÷'B²–çWD&"Òg&öÒrâö6ö×öæVçG2ô–çWD&"s°¦–×÷'B²6WGF–æw4ÖöFÂÒg&öÒrâö6ö×öæVçG2õ6WGF–æw4ÖöFÂs°¦–×÷'B²w&ÖÖ$'&V¶F÷väÖöFÂÒg&öÒrâö6ö×öæVçG2ôw&ÖÖ$'&V¶F÷väÖöFÂs°¦–×÷'B²–÷UGV&U&VFW%vRÒg&öÒrâ÷vW2õ–÷UGV&U&VFW%vRs°¦–×÷'B²FW‡E&VFW%vRÒg&öÒrâ÷vW2õFW‡E&VFW%vRs°¦–×÷'B²–ÖvU&VFW%vRÒg&öÒrâ÷vW2ô–ÖvU&VFW%vRæ§7‚s°¦–×÷'B²6WGF–æw5vRÒg&öÒrâ÷vW2õ6WGF–æw5vRs°¦–×÷'B²†&—EG&6¶W%vRÒg&öÒrâ÷vW2ô†&—EG&6¶W%vRæ§7‚s°¦–×÷'B†öÖUvRg&öÒrâ÷vW2ô†öÖUvRs°¦–×÷'B&÷GFöÔæd&"g&öÒrâö6ö×öæVçG2ô&÷GFöÔæd&"æ§7‚s°¦–×÷'B²W6U7VV6‚Òg&öÒrâö†öö·2÷W6U7VV6‚s°¦–×÷'B²W6U—VÆ–æT6ÆÂÒg&öÒrâö†öö·2÷W6U—VÆ–æT6ÆÂæ§2s°¦–×÷'B²7&¶ÆW2Â&÷FFT67rÂ'&÷tÆVgBÂ'&÷uWÂÖ÷&UfW'F–6ÂÒg&öÒvÇV6–FR×&V7Bs°¦–×÷'B²•ô$4UõU$ÂÂ6VæD6†DÖW76vRÂÆöö·Wv÷&D’ÂfWF6„ÆæwVvW4’Òg&öÒrâ÷6W'f–6W2ö6†E6W'f–6Rs°¦–×÷'B²vVæW&FU6VçFVæ6T'&V¶F÷vâÂvWD÷$fWF6…6VçFVæ6T'&V¶F÷vâÒg&öÒrâ÷6W'f–6W2÷6VçFVæ6T'&V¶F÷väVæv–æRs°¦–×÷'B²æ÷&ÖÆ—¦T6†–æW6UFö¶Vç2ÂfÆ–FFT6†–æW6UFö¶Vç2Òg&öÒrâ÷6W'f–6W2ö6†–æW6UFö¶Väæ÷&ÖÆ—¦W"s°¦–×÷'B²G&ç6ÆFU&w&…FW‡D’Òg&öÒrâ÷6W'f–6W2÷FW‡DFö7VÖVçE6W'f–6Ræ§2s°¦–×÷'B²W6U6—FTÆæwVvRÒg&öÒrâö6öçFW‡Bõ6—FTÆæwVvT6öçFW‡Bæ§7‚s°¦–×÷'B²W6TVF–õ6WGF–æw2Òg&öÒrâö6öçFW‡BôVF–õ6WGF–æw46öçFW‡Bæ§7‚s°¦–×÷'B²W6TWF‚Òg&öÒrâö6öçFW‡BôWF„6öçFW‡Bæ§7‚s°¦–×÷'B²–æ—DWFô&6·W6W'f–6RÂ7F÷WFô&6·W6W'f–6RÂ&WVW7DWFô&6·WÒg&öÒrâ÷6W'f–6W2öWFô&6·W6W'f–6Ræ§2s°¦–×÷'B²—4G&—fTWF†÷&—¦VBÂ—4G&—fT6öææV7FVBÂ&W7F÷&TG&—fT6öææV7F–öå6–ÆVçFÇ’Òg&öÒrâ÷6W'f–6W2övöövÆTG&—fU6W'f–6Ræ§2s°¦–×÷'B²6†D‡V%f–WrÒg&öÒrâö6ö×öæVçG2ö6†Bô6†D‡V%f–Wræ§7‚s°¦–×÷'B²6†Efö–6UÆ–&6´ÖVçRÒg&öÒrâö6ö×öæVçG2ö6†Bô6†Efö–6UÆ–&6´ÖVçRæ§7‚s°¦–×÷'B²Æ—fT6ÆÅf–WrÒg&öÒrâö6ö×öæVçG2ö6†BôÆ—fT6ÆÅf–Wræ§7‚s°¦–×÷'B²6ÆÄFWF–Åf–WrÒg&öÒrâö6ö×öæVçG2ö6†Bô6ÆÄFWF–Åf–Wræ§7‚s°¦–×÷'B²WFô&6·WFö7BÒg&öÒrâö6ö×öæVçG2ö6öÖÖöâôWFô&6·WFö7Bæ§7‚s°¦–×÷'B²vÆö&ÄVF–ô–×÷'Ev–FvWBÒg&öÒrâö6ö×öæVçG2öVF–òôvÆö&ÄVF–ô–×÷'Ev–FvWBæ§7‚s°¦–×÷'B²„$•EõE$4´U%õUDDTEôUdTåBÂ&V6÷&D†&—D7F—f—G”f÷%FöF’Òg&öÒrâ÷6W'f–6W2ö†&—EG&6¶W%6W'f–6Ræ§2s°¦–×÷'B²ÆöD7F—fTFö7VÖVçDG&gBÂ6fT7F—fTFö7VÖVçDG&gBÒg&öÒrâ÷6W'f–6W2÷FW‡DFö7VÖVçE6W'f–6Ræ§2s° ¦6öç7B5Uõ%DTEôÄäuTtU2Ò°¢²6öFS¢vW2rÂæÖS¢tW7;öÂrÂ7VV6„6öFS¢vW2ÔU2rÂ†5G&ç6Æ—C¢fÇ6RÒÀ¢²6öFS¢vVârÂæÖS¢t–ævÌ:—2rÂ7VV6„6öFS¢vVâÕU2rÂ†5G&ç6Æ—C¢fÇ6RÒÀ¢²6öFS¢væÂrÂæÖS¢tæVFW&ÆæG2rÂ7VV6„6öFS¢væÂÔäÂrÂ†5G&ç6Æ—C¢fÇ6RÒÀ¢²6öFS¢wÂrÂæÖS¢uöÆ6òrÂ7VV6„6öFS¢wÂÕÂrÂ†5G&ç6Æ—C¢fÇ6RÒÀ¢²6öFS¢vFRrÂæÖS¢tÆVÜ:ârÂ7VV6„6öFS¢vFRÔDRrÂ†5G&ç6Æ—C¢fÇ6RÒÀ¢²6öFS¢vg"rÂæÖS¢tg&æ<:—2rÂ7VV6„6öFS¢vg"Ôe"rÂ†5G&ç6Æ—C¢fÇ6RÒÀ¢²6öFS¢v—BrÂæÖS¢t—FÆ–æòrÂ7VV6„6öFS¢v—BÔ•BrÂ†5G&ç6Æ—C¢fÇ6RÒÀ¢²6öFS¢v"rÂæÖS¢|8&&RrÂ7VV6„6öFS¢v"Õ4rÂ†5G&ç6Æ—C¢G'VRÂG&ç6Æ—DæÖS¢u&öÖæ—¦6œ;6ârÂ'FÃ¢G'VRÒÀ¢²6öFS¢wG"rÂæÖS¢uGW&6òrÂ7VV6„6öFS¢wG"ÕE"rÂ†5G&ç6Æ—C¢fÇ6RÒÀ¢²6öFS¢w¦‚rÂæÖS¢t6†–æòÖæF,:ÖârÂ7VV6„6öFS¢w¦‚Ô4ârÂ†5G&ç6Æ—C¢G'VRÂG&ç6Æ—DæÖS¢u–ç––ârÒÀ¢²6öFS¢w'RrÂæÖS¢u'W6òrÂ7VV6„6öFS¢w'RÕ%RrÂ†5G&ç6Æ—C¢fÇ6RĞ¥Ó° ¦6öç7B5Dõ$tUõ$Td•‚ÒvÆ–æwVfÆ÷uö6†Eòs°¦6öç7BD$tUEôÄäuô´U’ÒvÆ–æwVfÆ÷u÷F&vWEöÆærs°¦6öç7BäD•dUôÄäuô´U’ÒvÆ–æwVfÆ÷uöæF—fUöÆærs°¦6öç7B5D•dUõD%ô´U’ÒvÆ–æwVfÆ÷uö7F—fU÷F"s°¦6öç7B4ÄÅõ5Dõ$tUô´U’ÒvÆ–æwVfÆ÷uö6ÆÅö†—7F÷'’s°¦6öç7BdÄ”EõD%2Ò²v†öÖRrÂv6†BrÂw–÷WGV&RrÂwFW‡BrÂv–ÖvRrÂw6WGF–æw2rÂv†&—G2uÓ° ¦gVæ7F–öâvWD7F—fUF$g&öÔÆö6F–öâ‚’°¢G'’°¢–b‡G—Vöbv–æF÷rÓÒwVæFVf–æVBr’°¢òòâ&–Ö'’6÷W&6RöbG'WFƒ¢U$ÂF‚†Rærâ÷–÷WGV&RÂ÷FW‡BÂö6†BÂö†öÖR¢6öç7BF‚Òv–æF÷ræÆö6F–öâçF†æÖRç&WÆ6R‚õåÂò²òÂrr’ç7Æ—B‚ròr•³ÒçFôÆ÷vW$66R‚“°¢–b…dÄ”EõD%2æ–æ6ÇVFW2‡F‚’’°¢&WGW&âFƒ°¢Ğ ¢òò"â6V6öæF'’6÷W&6RöbG'WFƒ¢U$Â†6‚†Rærâ7–÷WGV&RÂ2÷–÷WGV&RÂ7FW‡BÂ66†B¢6öç7B†6‚Òv–æF÷ræÆö6F–öâæ†6‚ç&WÆ6R‚õâ5ÂóòòÂrr’ç7Æ—B‚ròr•³ÒçFôÆ÷vW$66R‚“°¢–b…dÄ”EõD%2æ–æ6ÇVFW2††6‚’’°¢&WGW&â†6ƒ°¢Ğ ¢òò2â–böâ&ö÷BF‚‚ròr’v—F†÷WB7V'F‚÷"†6‚ÂF†RU$ÂW‡Æ–6—FÇ’–æF–6FW2†öÖP¢–b‡v–æF÷ræÆö6F–öâçF†æÖRÓÓÒròrÇÂv–æF÷ræÆö6F–öâçF†æÖRÓÓÒrr’°¢&WGW&âv†öÖRs°¢Ğ ¢òòBâÆö6Å7F÷&vRW'6—7FVæ6RfÆÆ&6²–b66W76VBf–vVæW&–2æöâÖÖF6†–ærF€¢6öç7B6fVBÒÆö6Å7F÷&vRævWD—FVÒ„5D•dUõD%ô´U’“°¢–b‡6fVBbbdÄ”EõD%2æ–æ6ÇVFW2‡6fVB’’°¢&WGW&â6fVC°¢Ğ¢Ğ¢Ò6F6‚†R’·Ğ¢&WGW&âv†öÖRs°§Ğ ¦gVæ7F–öâvWE6fVD6†B†Æær’°¢G'’°¢6öç7B6fVBÒÆö6Å7F÷&vRævWD—FVÒ†Gµ5Dõ$tUõ$Td•‡ÒG¶ÆæwÖ“°¢–b‡6fVB’°¢6öç7B'6VBÒ¥4ôâç'6R‡6fVB“°¢–b„'&’æ—4'&’‡'6VB’bb'6VBæÆVæwF‚â’°¢6öç7BfÆ–BÒ'6VBæf–ÇFW"†ÒÓâÒbbG—VöbÒÓÓÒvö&¦V7Brbb†ÒçFW‡BÇÂÒçFö¶Vç2ÇÂÒç6VæFW"’“°¢–b‡fÆ–BæÆVæwF‚â’&WGW&âfÆ–C°¢Ğ¢Ğ¢Ò6F6‚†R’°¢6öç6öÆRçv&â†f–ÆVBFò'6R6fVB6†Bf÷"G¶ÆæwÓ¦ÂR“°¢Ğ¢&WGW&âçVÆÃ°§Ğ ¦gVæ7F–öâ6fT6†EFõ7F÷&vR†ÆærÂÖW76vW4Æ—7B’°¢G'’°¢–b„'&’æ—4'&’†ÖW76vW4Æ—7B’’°¢–b†ÖW76vW4Æ—7BæÆVæwF‚â’°¢Æö6Å7F÷&vRç6WD—FVÒ†Gµ5Dõ$tUõ$Td•‡ÒG¶ÆæwÖÂ¥4ôâç7G&–æv–g’†ÖW76vW4Æ—7B’“°¢ÒVÇ6R°¢Æö6Å7F÷&vRç&VÖ÷fT—FVÒ†Gµ5Dõ$tUõ$Td•‡ÒG¶ÆæwÖ“°¢Ğ¢Ğ¢Ò6F6‚†R’°¢6öç6öÆRçv&â†f–ÆVBFò6fR6†Bf÷"G¶ÆæwÓ¦ÂR“°¢Ğ§Ğ ¦W‡÷'BFVfVÇBgVæ7F–öâ‚’°¢6öç7B²W6W"ÒÒW6TWF‚‚“°¢6öç7B²BÂ—57æ—6‚ÒÒW6U6—FTÆæwVvR‚“° ¢òò–æ—F–Æ—¦R&6¶w&÷VæBWFòÖ&6·W6W'f–6Rv†VâW6W"—2ÆövvVB–à¢W6TVffV7B‚‚’Óâ°¢–b‡W6W"bbW6W"æVÖ–Â’°¢–æ—DWFô&6·W6W'f–6R‡W6W"“°¢–b†—4G&—fTWF†÷&—¦VB‡W6W"æVÖ–Â’bb—4G&—fT6öææV7FVB‚’’°¢&W7F÷&TG&—fT6öææV7F–öå6–ÆVçFÇ’‡W6W"æVÖ–Â’æ6F6‚‚‚’Óâ·Ò“°¢Ğ¢ÒVÇ6R°¢7F÷WFô&6·W6W'f–6R‚“°¢Ğ¢ÒÂ·W6W%Ò“° ¢òò†&—BG&6¶W"W'6—7G2ÆÂWFFW2F‡&÷Vv‚öæR6W'f–6RæBVÖ—G2F†—2WfVçBà¢òòVWVR—G2W†—7F–ær–æ7&VÖVçFÂ&W6÷W&6Rv—F†÷WBGWÆ–6F–ærG&6¶W"7F÷&vRà¢W6TVffV7B‚‚’Óâ°¢6öç7B†æFÆT†&—EG&6¶W%WFFRÒ‚’Óâ°¢&WVW7DWFô&6·W‡²G—S¢v†&—B×G&6¶W"rÂ&V6öã¢v†&—B×G&6¶W"×WFFVBrÒ“°¢Ó°¢v–æF÷ræFDWfVçDÆ—7FVæW"„„$•EõE$4´U%õUDDTEôUdTåBÂ†æFÆT†&—EG&6¶W%WFFR“°¢&WGW&â‚’Óâv–æF÷rç&VÖ÷fTWfVçDÆ—7FVæW"„„$•EõE$4´U%õUDDTEôUdTåBÂ†æFÆT†&—EG&6¶W%WFFR“°¢ÒÂµÒ“° ¢6öç7B¶ÆæwVvW2Â6WDÆæwVvW5ÒÒW6U7FFR…5Uõ%DTEôÄäuTtU2“°¢6öç7B·F&vWDÆærÂ6WEF&vWDÆæuÒÒW6U7FFR‚‚’Óâ°¢G'’°¢&WGW&âÆö6Å7F÷&vRævWD—FVÒ…D$tUEôÄäuô´U’’ÇÂwÂs°¢Ò6F6‚†R’°¢&WGW&âwÂs°¢Ğ¢Ò“° ¢òòfWF6‚7W÷'FVBÆæwVvW2G–æÖ–6ÆÇ’g&öÒ&VæFW"&6¶Væ@¢W6TVffV7B‚‚’Óâ°¢7–æ2gVæ7F–öâÆöDÆæwVvW2‚’°¢6öç7B&VÖ÷FTÆæw2Òv—BfWF6„ÆæwVvW4’‚“°¢–b‡&VÖ÷FTÆæw2bb'&’æ—4'&’‡&VÖ÷FTÆæw2’bb&VÖ÷FTÆæw2æÆVæwF‚â’°¢6WDÆæwVvW2‡&VÖ÷FTÆæw2“°¢Ğ¢Ğ¢ÆöDÆæwVvW2‚“°¢ÒÂµÒ“° ¢6öç7B¶æF—fTÆærÂ6WDæF—fTÆæuÒÒW6U7FFR‚‚’Óâ°¢G'’°¢&WGW&âÆö6Å7F÷&vRævWD—FVÒ„äD•dUôÄäuô´U’’ÇÂvW2s°¢Ò6F6‚†R’°¢&WGW&âvW2s°¢Ğ¢Ò“°¢6öç7B·6†÷uG&ç6Æ—FW&F–öâÂ6WE6†÷uG&ç6Æ—FW&F–öåÒÒW6U7FFR‡G'VR“°¢6öç7B¶†æG4g&VRÂ6WD†æG4g&VUÒÒW6U7FFR†fÇ6R“°¢6öç7B¶ÖW76vW2Â6WDÖW76vW5ÒÒW6U7FFR‚‚’Óâ°¢6öç7B–æ—F–ÄÆærÒ‚‚’Óâ°¢G'’°¢&WGW&âÆö6Å7F÷&vRævWD—FVÒ…D$tUEôÄäuô´U’’ÇÂwÂs°¢Ò6F6‚†R’°¢&WGW&âwÂs°¢Ğ¢Ò’‚“°¢6öç7B6fVBÒvWE6fVD6†B†–æ—F–ÄÆær“°¢–b‡6fVB’&WGW&â6fVC°¢6öç7B–æ—F–Äw&VWF–ærÒvWD–æ—F–Ä&÷D×6r†–æ—F–ÄÆær“°¢6fT6†EFõ7F÷&vR†–æ—F–ÄÆærÂ¶–æ—F–Äw&VWF–æuÒ“°¢&WGW&â¶–æ—F–Äw&VWF–æuÓ°¢Ò“°¢6öç7B·6VÆV7FVEv÷&BÂ6WE6VÆV7FVEv÷&EÒÒW6U7FFR†çVÆÂ“°¢6öç7B¶—5&ö6W76–ærÂ6WD—5&ö6W76–æuÒÒW6U7FFR†fÇ6R“°¢6öç7B¶—56WGF–æw4÷VâÂ6WD—56WGF–æw4÷VåÒÒW6U7FFR†fÇ6R“°¢6öç7B¶7F—fUF"Â6WD7F—fUF%ÒÒW6U7FFR‚‚’ÓâvWD7F—fUF$g&öÔÆö6F–öâ‚’“°¢6öç7B¶6†Ef–WtÖöFRÂ6WD6†Ef–WtÖöFUÒÒW6U7FFR‚v‡V"r“²òòv‡V"rÂv6†BrÂv6ÆÂrÂv6ÆÂÖFWF–Âp¢6öç7B·6VÆV7FVD6ÆÄFFÂ6WE6VÆV7FVD6ÆÄFFÒÒW6U7FFR†çVÆÂ“°¢6öç7B·6†÷u67&öÆÅF÷Â6WE6†÷u67&öÆÅF÷ÒÒW6U7FFR†fÇ6R“°¢6öç7B¶—46†Efö–6TÖVçT÷VâÂ6WD—46†Efö–6TÖVçT÷VåÒÒW6U7FFR†fÇ6R“° ¢òò7–æ6‡&öæ—¦R7F—fUF"FòU$ÂæBÆö6Å7F÷&vP¢W6TVffV7B‚‚’Óâ°¢G'’°¢–b‡G—Vöbv–æF÷rÓÒwVæFVf–æVBr’°¢Æö6Å7F÷&vRç6WD—FVÒ„5D•dUõD%ô´U’Â7F—fUF"“°¢6öç7BF&vWEF‚Ò7F—fUF"ÓÓÒv†öÖRròròr¢òG¶7F—fUF'Ö°¢–b‡v–æF÷ræÆö6F–öâçF†æÖRÓÒF&vWEF‚’°¢v–æF÷ræ†—7F÷'’çW6…7FFR‡²F#¢7F—fUF"ÒÂrrÂF&vWEF‚“°¢Ğ¢Ğ¢Ò6F6‚†R’·Ğ¢ÒÂ¶7F—fUF%Ò“° ¢òòG&–vvW"WFòÖ&6·Wv†Vâæf–vF–ærv’g&öÒâ7F—fR6öçFVçBF ¢6öç7B7F—fUF%&VbÒW6U&Vb†7F—fUF"“°¢W6TVffV7B‚‚’Óâ°¢–b†7F—fUF%&Vbæ7W'&VçBÓÒ7F—fUF"’°¢6öç7B&WeF"Ò7F—fUF%&Vbæ7W'&VçC°¢–b‡&WeF"ÓÓÒv6†Br’°¢&WVW7DWFô&6·W‡²G—S¢v6†BÖ†—7F÷'’rÂ&V6öã¢wF"Ö6†ævRrÒ“°¢ÒVÇ6R–b‡&WeF"ÓÓÒwFW‡Br’°¢6öç7BG&gBÒÆöD7F—fTFö7VÖVçDG&gB‚“°¢–b†G&gBbbG&gBæ–B’°¢&WVW7DWFô&6·W‡²G—S¢wFW‡BÖFö7VÖVçBrÂ–C¢G&gBæ–BÂ&V6öã¢wF"Ö6†ævRrÒ“°¢Ğ¢ÒVÇ6R–b‡&WeF"ÓÓÒw–÷WGV&Rr’°¢G'’°¢6öç7B&u—BÒÆö6Å7F÷&vRævWD—FVÒ‚vÆ–æwVfÆ÷u÷—E÷6W76–öå÷cr“°¢–b‡&u—B’°¢6öç7B'6VBÒ¥4ôâç'6R‡&u—B“°¢–b‡'6VBbb'6VBçf–FVô–Bbb'6VBçf–FVô–BÓÒvæ÷f–FVòr’°¢&WVW7DWFô&6·W‡²G—S¢w–÷WGV&R×G&ç67&—BrÂ–C¢'6VBçf–FVô–BÂ&V6öã¢wF"Ö6†ævRrÒ“°¢Ğ¢Ğ¢Ò6F6‚†R’·Ğ¢Ğ¢Ğ¢7F—fUF%&Vbæ7W'&VçBÒ7F—fUF#°¢ÒÂ¶7F—fUF%Ò“° ¢òò†æFÆR'&÷w6W"&6²òf÷'v&B'WGFöç2æBU$Â6†ævW0¢W6TVffV7B‚‚’Óâ°¢6öç7B†æFÆTÆö6F–öä6†ævRÒ‚’Óâ°¢6öç7BF"ÒvWD7F—fUF$g&öÔÆö6F–öâ‚“°¢6WD7F—fUF"‡F"“°¢Ó°¢v–æF÷ræFDWfVçDÆ—7FVæW"‚w÷7FFRrÂ†æFÆTÆö6F–öä6†ævR“°¢v–æF÷ræFDWfVçDÆ—7FVæW"‚v†6†6†ævRrÂ†æFÆTÆö6F–öä6†ævR“°¢&WGW&â‚’Óâ°¢v–æF÷rç&VÖ÷fTWfVçDÆ—7FVæW"‚w÷7FFRrÂ†æFÆTÆö6F–öä6†ævR“°¢v–æF÷rç&VÖ÷fTWfVçDÆ—7FVæW"‚v†6†6†ævRrÂ†æFÆTÆö6F–öä6†ævR“°¢Ó°¢ÒÂµÒ“° ¢6öç7B7F—fTÆæu&VbÒW6U&Vb‡F&vWDÆær“°¢6öç7B—5W6W%67&öÆÆVEW&VbÒW6U&Vb†fÇ6R“° ¢òò7v—F6‚F&vWBÆæwVvRæBW'6—7B6†B7FFRW"ÆæwVvP¢6öç7B†æFÆUF&vWDÆæt6†ævRÒ†æWtÆæt–çWB’Óâ°¢6öç7BæWtÆærÒG—VöbæWtÆæt–çWBÓÓÒw7G&–ærròæWtÆæt–çWB¢†æWtÆæt–çWCòæ6öFRÇÂæWtÆæt–çWCòçF&vWCòçfÇVRÇÂwÂr“°¢–b‚æWtÆærÇÂæWtÆærÓÓÒF&vWDÆær’&WGW&ã° ¢—5W6W%67&öÆÆVEW&Vbæ7W'&VçBÒfÇ6S° ¢òòâ6fR7W'&VçBÖW76vW2Fò7F—fRÆæwVvR&Vf÷&R7v—F6†–æp¢–b†ÖW76vW2bbÖW76vW2æÆVæwF‚â’°¢6fT6†EFõ7F÷&vR†7F—fTÆæu&Vbæ7W'&VçBÂÖW76vW2“°¢Ğ ¢òò"âÆöB6fVB6†Bf÷"æWtÆær÷"–æ—F–Æ—¦Rw&VWF–æp¢6öç7B6fVDf÷$æWtÆærÒvWE6fVD6†B†æWtÆær“°¢6öç7BæW‡DÖW76vW2Ò6fVDf÷$æWtÆærÇÂ¶vWD–æ—F–Ä&÷D×6r†æWtÆær•Ó° ¢òò2âWFFR7FFRb7F—fR&VfW&Væ6P¢7F—fTÆæu&Vbæ7W'&VçBÒæWtÆæs°¢6WEF&vWDÆær†æWtÆær“°¢6WDÖW76vW2†æW‡DÖW76vW2“° ¢G'’°¢Æö6Å7F÷&vRç6WD—FVÒ…D$tUEôÄäuô´U’ÂæWtÆær“°¢–b‚6fVDf÷$æWtÆær’°¢6fT6†EFõ7F÷&vR†æWtÆærÂæW‡DÖW76vW2“°¢Ğ¢&WVW7DWFô&6·W‡²G—S¢w6WGF–æw2rÂ&V6öã¢wF&vWBÖÆæwVvR×WFFVBrÒ“°¢Ò6F6‚†R’·Ğ ¢7F÷7V¶–ær‚“°¢Ó° ¢6öç7B†æFÆTæF—fTÆæt6†ævRÒ†æWtÆæt–çWB’Óâ°¢6öç7BæWtÆærÒG—VöbæWtÆæt–çWBÓÓÒw7G&–ærròæWtÆæt–çWB¢†æWtÆæt–çWCòæ6öFRÇÂæWtÆæt–çWCòçF&vWCòçfÇVRÇÂvW2r“°¢–b‚æWtÆær’&WGW&ã°¢6WDæF—fTÆær†æWtÆær“°¢G'’°¢Æö6Å7F÷&vRç6WD—FVÒ„äD•dUôÄäuô´U’ÂæWtÆær“°¢&WVW7DWFô&6·W‡²G—S¢w6WGF–æw2rÂ&V6öã¢væF—fRÖÆæwVvR×WFFVBrÒ“°¢Ò6F6‚†R’·Ğ¢Ó° ¢òòFVÆWFRÖW76vR†æFÆW ¢6öç7B†æFÆTFVÆWFTÖW76vRÒ†ÖW76vT–B’Óâ°¢–b‚ÖW76vT–B’&WGW&ã°¢6WDÖW76vW2‚‡&Wb’Óâ°¢6öç7BWFFVBÒ&Wbæf–ÇFW"‚†Ò’ÓâÒbbÒæ–BÓÒÖW76vT–B“°¢6fT6†EFõ7F÷&vR‡F&vWDÆærÂWFFVB“°¢&WGW&âWFFVC°¢Ò“°¢Ó° ¢6öç7B¶6öæf–rÂ6WD6öæf–uÒÒW6U7FFR‚‚’Óâ°¢6öç7B6fVBÒÆö6Å7F÷&vRævWD—FVÒ‚vÆ–æwVfÆ÷uö6öæf–rr“°¢–b‡6fVB’°¢G'’°¢6öç7B'6VBÒ¥4ôâç'6R‡6fVB“°¢'6VBç&÷f–FW"Òvw&÷s°¢&WGW&â'6VC°¢Ò6F6‚†R’·Ğ¢Ğ¢&WGW&â²&÷f–FW#¢vw&÷rÂ”¶W“¢rrÂÆWfVÃ¢t"ô#rÂ7VV6…&FS¢ã“RÓ°¢Ò“°¢6öç7B¶•v&æ–ærÂ6WD•v&æ–æuÒÒW6U7FFR†çVÆÂ“°¢6öç7B¶Æ7Df–ÆVDÖW76vRÂ6WDÆ7Df–ÆVDÖW76vUÒÒW6U7FFR†çVÆÂ“° ¢6öç7B²7VV6…&FRÂWFõÆ”’ÒÒW6TVF–õ6WGF–æw2‚“°¢6öç7BÆ–VD&÷D×6t–G5&VbÒW6U&Vb†æWr6WB‚’“°¢6öç7B6†D6öçF–æW%&VbÒW6U&Vb†çVÆÂ“°¢6öç7B7W'&VçDÆætö&¢Ò†ÆæwVvW2bbÆæwVvW2æf–æB‚†Â’ÓâÂbbÂæ6öFRÓÓÒF&vWDÆær’’ÇÂ†ÆæwVvW2bbÆæwVvW5³Ò’ÇÂ5Uõ%DTEôÄäuTtU5³ÒÇÂ²æÖS¢tW7;öÂrÂ7VV6„6öFS¢vW2ÔU2rÓ° ¢òò7VV6‚†öö²…W6‚×FòÕFÆ²&W72b†öÆBWFòÖ–â²EE2¢6öç7B°¢—5&V6÷&F–ærÀ¢&V6÷&F–æu6V6öæG2À¢—5G&ç67&–&–ætVF–òÀ¢—57V¶–ærÀ¢7V¶–æt6†$–æFW‚À¢7V¶–æuFW‡BÀ¢–çFW&–ÕG&ç67&—BÀ¢7F'E&V6÷&F–ærÀ¢7F÷&V6÷&F–ærÀ¢6æ6VÅ&V6÷&F–ærÀ¢7VµFW‡BÀ¢7F÷7V¶–æp¢ÒÒW6U7VV6‚‡°¢F&vWDÆæt6öFS¢7W'&VçDÆætö&¢ç7VV6„6öFRÀ¢F&vWDÆærÀ¢æF—fTÆærÀ¢”¶W“¢6öæf–sòæ”¶W’ÇÂrrÀ¢&÷f–FW#¢6öæf–sòç&÷f–FW"ÇÂvw&÷rÀ¢†æG4g&VRÀ¢—5&ö6W76–ærÀ¢öå7VV6…&W7VÇC¢‡7ö¶VåFW‡B’Óâ°¢†æFÆU6VæDÖW76vR‡7ö¶VåFW‡B“°¢Ğ¢Ò“° ¢6öç7B†æFÆUÆ”VF–òÒ‡FW‡EFõ7V²’Óâ°¢–b‚FW‡EFõ7V²’&WGW&ã°¢7VµFW‡B‡FW‡EFõ7V²Â7W'&VçDÆætö&¢ç7VV6„6öFRÂ7VV6…&FR“°¢Ó° ¢òò6fR6öæf–p¢6öç7B†æFÆU6fT6öæf–rÒ†æWt6öæf–r’Óâ°¢6WD6öæf–r†æWt6öæf–r“°¢6WD•v&æ–ær†çVÆÂ“°¢Æö6Å7F÷&vRç6WD—FVÒ‚vÆ–æwVfÆ÷uö6öæf–rrÂ¥4ôâç7G&–æv–g’†æWt6öæf–r’“°¢&WVW7DWFô&6·W‡²G—S¢w6WGF–æw2rÂ&V6öã¢v6öæf–wW&F–öâ×WFFVBrÒ“°¢Ó° ¢òò7FFRf÷"6VçFVæ6Rw&ÖÖ"'&V¶F÷vâÖöFÂæB&RÖæÇ—6—0¢6öç7B¶'&V¶F÷väFFÂ6WD'&V¶F÷väFFÒÒW6U7FFR†çVÆÂ“°¢6öç7B¶—4'&V¶F÷väÆöF–ærÂ6WD—4'&V¶F÷väÆöF–æuÒÒW6U7FFR†fÇ6R“°¢6öç7B¶—5&VæÇ—¦–æt–BÂ6WD—5&VæÇ—¦–æt–EÒÒW6U7FFR†çVÆÂ“° ¢òò÷Vâw&ÖÖ"'&V¶F÷vâÖöFÂv—F‚–ç7FçFæV÷W2Æö6Â&Wf–Wr²FVW’æÇ—6—0¢6öç7B†æFÆT÷Väw&ÖÖ$'&V¶F÷vâÒ7–æ2†×6r’Óâ°¢6öç7B6÷'&V7FVEFW‡BÒ×6ræ6÷'&V7FVEFW‡BÇÂ×6rçFW‡C°¢6öç7B÷&–v–æÅFW‡BÒ×6ræ÷&–v–æÅFW‡BÇÂ×6rçFW‡C° ¢òòâ–æ—F–Âf7B'&V¶F÷vâ6òÖöFÂ÷Vç2–ç7FçFÇ’v—F‚¦W&òÆp¢6öç7B–æ—F–Ä'&V¶F÷vâÒvVæW&FU6VçFVæ6T'&V¶F÷vâ†6÷'&V7FVEFW‡BÂ÷&–v–æÅFW‡BÂF&vWDÆærÂæF—fTÆær“°¢6WD'&V¶F÷väFF‡°¢'&V¶F÷vã¢–æ—F–Ä'&V¶F÷vâÀ¢÷&–v–æÅFW‡BÀ¢6÷'&V7FVEFW‡@¢Ò“°¢6WD—4'&V¶F÷väÆöF–ær‡G'VR“° ¢òò"âfWF6‚WF†VçF–2FVWw&ÖÖF–6ÂæÇ—6—2g&öÒw&÷¢G'’°¢6öç7BgVÆÄ'&V¶F÷vâÒv—BvWD÷$fWF6…6VçFVæ6T'&V¶F÷vâ‡°¢6÷'&V7FVEFW‡BÀ¢÷&–v–æÅFW‡BÀ¢F&vWDÆærÀ¢æF—fTÆærÀ¢”¶W“¢6öæf–sòæ”¶W’ÇÂrp¢Ò“°¢–b†gVÆÄ'&V¶F÷vâbbgVÆÄ'&V¶F÷vâæÆVæwF‚â’°¢6WD'&V¶F÷väFF‡°¢'&V¶F÷vã¢gVÆÄ'&V¶F÷vâÀ¢÷&–v–æÅFW‡BÀ¢6÷'&V7FVEFW‡@¢Ò“°¢Ğ¢Ò6F6‚†R’°¢6öç6öÆRçv&â‚tw&ÖÖ"'&V¶F÷vâfWF6‚æ÷F–6S¢rÂR“°¢Òf–æÆÇ’°¢6WD—4'&V¶F÷väÆöF–ær†fÇ6R“°¢Ğ¢Ó° ¢òò–æ—F–Âw&VWF–ær†VÇW"W"F&vWBÆæwVvP¢gVæ7F–öâvWD–æ—F–Ä&÷D×6r‡F&vWDÆær’°¢ÆWB–æ—F–Ä&÷D×6s°¢–b‡F&vWDÆærÓÓÒwÂr’°¢–æ—F–Ä&÷D×6rÒ°¢–C¢v×6rÖ–æ—BrÀ¢6VæFW#¢v&÷BrÀ¢FW‡C¢t7¦\Y¼Hr&&G¦ò6œI’6–W7¬I’Â[ÆRÖö|I’¢Fö,HR&÷¦Öv–HròöÇ6·Râò7§–Ò6†6W7¢G¦—6–¢övFHsòrÀ¢G&ç6ÆF–öã¢|*†öÆÖRÆVw&ò×V6†òFRöFW"†&Æ"VâöÆ6ò6öçF–vòâ+ôFR\:’V–W&W26†&Æ"†÷“òrÀ¢Fö¶Vç3¢°¢²v÷&C¢t7¦\Y¼HrrÂ6ÆVå÷v÷&C¢v7¦\Y¼HrrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢t&&G¦òrÂ6ÆVå÷v÷&C¢v&&G¦òrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢w6œI’rÂ6ÆVå÷v÷&C¢w6œI’rÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢v6–W7¬I’ÂrÂ6ÆVå÷v÷&C¢v6–W7¬I’rÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢|[ÆRrÂ6ÆVå÷v÷&C¢|[ÆRrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢vÖö|I’rÂ6ÆVå÷v÷&C¢vÖö|I’rÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢w¢rÂ6ÆVå÷v÷&C¢w¢rÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢wFö,HRrÂ6ÆVå÷v÷&C¢wFö,HRrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢w&÷¦Öv–HrrÂ6ÆVå÷v÷&C¢w&÷¦Öv–HrrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢wòrÂ6ÆVå÷v÷&C¢wòrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢wöÇ6·RârÂ6ÆVå÷v÷&C¢wöÇ6·RrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢tòrÂ6ÆVå÷v÷&C¢vòrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢v7§–ÒrÂ6ÆVå÷v÷&C¢v7§–ÒrÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢v6†6W7¢rÂ6ÆVå÷v÷&C¢v6†6W7¢rÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢vG¦—6–¢rÂ6ÆVå÷v÷&C¢vG¦—6–¢rÂG&ç6Æ—C¢çVÆÂÒÀ¢²v÷&C¢wövFHsòrÂ6ÆVå÷v÷&C¢wövFHrrÂG&ç6Æ—C¢çVÆÂĞ¢ÒÀ¢fö6'VÆ'“¢°¢v7¦\Y¼Hrs¢²ÖVæ–æs¢t†öÆ‡6ÇVFò†&—GVÂ’rÂ'Eööe÷7VV6ƒ¢w6ÇVFòrÒÀ¢v6–W7¬I’6œI’s¢²ÖVæ–æs¢tÖRÆVw&òòÖRFwW7FòrÂ'Eööe÷7VV6ƒ¢vg&6RfW&&ÂrÒÀ¢w&÷¦Öv–Hrs¢²ÖVæ–æs¢t†&Æ"ò6öçfW'6"rÂ'Eööe÷7VV6ƒ¢wfW&&òrÒÀ¢wövFHrs¢²ÖVæ–æs¢t6†&Æ"–æf÷&ÖÆÖVçFRrÂ'Eööe÷7VV6ƒ¢wfW&&òrĞ¢Ğ¢Ó°¢ÒVÇ6R–b‡F&vWDÆærÓÓÒw¦‚r’°¢–æ—F–Ä&÷D×6rÒ°¢–C¢v×6rÖ–æ—BrÀ¢6VæFW#¢v&÷BrÀ¢FW‡C¢~KÚZ[ŞûÈ[èš¹X[NY(ÎKÚ{¸>KšKŠŞih~8.KÚh;>ˆ®K©¾K¸K˜Y.ûÉòrÀ¢G&ç6ÆF–öã¢|*†öÆ\:’wW7Fò&7F–6"6†–æò6öçF–vòâ+ôFR\:’FRwW7F,:Ö†&Æ#òrÀ¢Fö¶Vç3¢°¢²v÷&C¢~KÚZ[ŞûÈrÂG&ç6Æ—C¢vìyŒxæòrÂ6ÆVå÷v÷&C¢~KÚZ[ÒrÒÀ¢²v÷&C¢~[èš¹X[BrÂG&ç6Æ—C¢vŒI¶â|H÷Œ:ÆærrÂ6ÆVå÷v÷&C¢~š¹X[BrÒÀ¢²v÷&C¢~Y(ÎKÚrÂG&ç6Æ—C¢vŒ:’ìyrÂ6ÆVå÷v÷&C¢~KÚrÒÀ¢²v÷&C¢~{¸>KšrÂG&ç6Æ—C¢vÆœ:çŒ:ÒrÂ6ÆVå÷v÷&C¢~{¸>KšrÒÀ¢²v÷&C¢~KŠŞih~8"rÂG&ç6Æ—C¢w¦ŒXÖæw|:–âârÂ6ÆVå÷v÷&C¢~KŠŞihrrÒÀ¢²v÷&C¢~KÚh;2rÂG&ç6Æ—C¢vìy†œxæærrÂ6ÆVå÷v÷&C¢~h;2rÒÀ¢²v÷&C¢~ˆ®K©²rÂG&ç6Æ—C¢vÆœ:ò†œI2rÂ6ÆVå÷v÷&C¢~ˆ¢rÒÀ¢²v÷&C¢~K¸K˜Y.ûÉòrÂG&ç6Æ—C¢w6Œ:–æÖRæSòrÂ6ÆVå÷v÷&C¢~K¸K˜‚rĞ¢ÒÀ¢fö6'VÆ'“¢°¢~KÚZ[Òs¢²ÖVæ–æs¢t†öÆ‡6ÇVFò6÷&F–Â6öÜ;¦â’rÂ'Eööe÷7VV6ƒ¢w6ÇVFòrÂG&ç6Æ—C¢vìyŒxæòrÒÀ¢~š¹X[Bs¢²ÖVæ–æs¢t6öçFVçFòÂ6ö×Æ6–FòòÆVw&RrÂ'Eööe÷7VV6ƒ¢vF¦WF—fòrÂG&ç6Æ—C¢v|H÷Œ:ÆærrÒÀ¢~{¸>Kšs¢²ÖVæ–æs¢u&7F–6"òV¦W&6—F"VæÆVæwVòFW7G&W¦rÂ'Eööe÷7VV6ƒ¢wfW&&òrÂG&ç6Æ—C¢vÆœ:çŒ:ÒrÒÀ¢~KŠŞihrs¢²ÖVæ–æs¢t–F–öÖ6†–æòÖæF,:ÖârÂ'Eööe÷7VV6ƒ¢w7W7FçF—fòrÂG&ç6Æ—C¢w¦ŒXÖæw|:–ârĞ¢Ğ¢Ó°¢ÒVÇ6R–b‡F&vWDÆærÓÓÒv"r’°¢–æ—F–Ä&÷D×6rÒ°¢–C¢v×6rÖ–æ—BrÀ¢6VæFW#¢v&÷BrÀ¢FW‡C¢}˜]˜í‹™-Šİ˜íŠ˜½ŠrŠ™˜=˜âŠ=˜í˜m˜íŠr˜]˜ı‹=™-Š­˜í‹™Šı˜Í™˜M™˜]˜ı˜]˜íŠ}‹˜í‹=˜íŠ™Š}˜M˜M˜ı™‹­˜íŠ™Š}˜M™-‹˜í‹˜íŠ™˜­˜í™Š™˜]˜í‹˜í˜=˜ââ˜=˜í˜­™-˜˜âŠ=˜ı‹=˜íŠ}‹™Šı˜ı˜=˜âŠ}˜M™-˜­˜í˜™-˜]˜í‰òrÀ¢G&ç6ÆF–öã¢|*&–VçfVæ–FòW7F÷’Æ—7Fò&&7F–6"VÂ–F–öÖ:&&R6öçF–vòâ+ô<;6ÖòFR—VFò†÷“òrÀ¢Fö¶Vç3¢°¢²v÷&C¢}˜]˜í‹™-Šİ˜íŠ˜½ŠrrÂG&ç6Æ—C¢vÖ.ŠV&ârÂ6ÆVå÷v÷&C¢}˜]‹ŠİŠŠrrÒÀ¢²v÷&C¢}Š™˜=˜ârÂG&ç6Æ—C¢v&–¶rÂ6ÆVå÷v÷&C¢}Š˜2rÒÀ¢²v÷&C¢}Š=˜í˜m˜íŠrrÂG&ç6Æ—C¢vìHrÂ6ÆVå÷v÷&C¢}Š=˜mŠrrÒÀ¢²v÷&C¢}˜]˜ı‹=™-Š­˜í‹™Šı˜Í™rÂG&ç6Æ—C¢v×W7F(	†–FGVârÂ6ÆVå÷v÷&C¢}˜]‹=Š­‹ŠòrÒÀ¢²v÷&C¢}˜M™˜]˜ı˜]˜íŠ}‹˜í‹=˜íŠ™rÂG&ç6Æ—C¢vÆ’Ö×VÜH&6F’rÂ6ÆVå÷v÷&C¢}˜M˜]˜]Š}‹‹=Š’rÒÀ¢²v÷&C¢}Š}˜M˜M˜ı™‹­˜íŠ™rÂG&ç6Æ—C¢vÂÖÇVv†F’rÂ6ÆVå÷v÷&C¢}Š}˜M˜M‹­Š’rÒÀ¢²v÷&C¢}Š}˜M™-‹˜í‹˜íŠ™˜­˜í™Š™rÂG&ç6Æ—C¢vÂŞ(	†&&——–‚rÂ6ÆVå÷v÷&C¢}Š}˜M‹‹Š˜­Š’rÒÀ¢²v÷&C¢}˜]˜í‹˜í˜=˜âârÂG&ç6Æ—C¢vÖ(	†¶ârÂ6ÆVå÷v÷&C¢}˜]‹˜2rÒÀ¢²v÷&C¢}˜=˜í˜­™-˜˜ârÂG&ç6Æ—C¢v¶–frÂ6ÆVå÷v÷&C¢}˜=˜­˜rÒÀ¢²v÷&C¢}Š=˜ı‹=˜íŠ}‹™Šı˜ı˜=˜ârÂG&ç6Æ—C¢wW<H(	†–GV¶rÂ6ÆVå÷v÷&C¢}Š=‹=Š}‹Šı˜2rÒÀ¢²v÷&C¢}Š}˜M™-˜­˜í˜™-˜]˜í‰òrÂG&ç6Æ—C¢vÂ×–vÖòrÂ6ÆVå÷v÷&C¢}Š}˜M˜­˜˜RrĞ¢ÒÀ¢fö6'VÆ'“¢°¢}˜]‹ŠİŠŠrs¢²ÖVæ–æs¢t†öÆò&–VçfVæ–Fò‡6ÇVFò6÷&F–Â’rÂ'Eööe÷7VV6ƒ¢w6ÇVFòrÂG&ç6Æ—C¢vÖ.ŠV&ârÒÀ¢}˜]‹=Š­‹Šòs¢²ÖVæ–æs¢u&W&FòòÆ—7Fò&Væ7F—f–FBrÂ'Eööe÷7VV6ƒ¢vF¦WF—fòrÂG&ç6Æ—C¢v×W7F(	†–FBrÒÀ¢}Š=‹=Š}‹Šı˜2s¢²ÖVæ–æs¢uFR—VFòòFR6—7FòrÂ'Eööe÷7VV6ƒ¢wfW&&òrÂG&ç6Æ—C¢wW<H(	†–GV²rÒÀ¢}Š}˜M˜­˜˜Rs¢²ÖVæ–æs¢t†÷’†VÂL:ÖFR†÷’’rÂ'Eööe÷7VV6ƒ¢w7W7FçF—fòòGfW&&–òrÂG&ç6Æ—C¢vÂ×–vÒrĞ¢Ğ¢Ó°¢ÒVÇ6R–b‡F&vWDÆærÓÓÒw'Rr’°¢–æ—F–Ä&÷D×6rÒ°¢–C¢v×6rÖ–æ—BrÀ¢6VæFW#¢v&÷BrÀ¢FW‡C¢}	ı-]"
+òBı­-­í--Â=­’ı}½¢-íí’â	â}Â-²]í}]Âıí=í-í-ÃòrÀ¢G&ç6ÆF–öã¢|*†öÆÖRÆVw&&7F–6"'W6ò6öçF–vòâ+ôFR\:’V–W&W2†&Æ#òrÀ¢Fö¶Vç3¢°¢²v÷&C¢}	ı-]"rÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢}ı-]"rÒÀ¢²v÷&C¢}
+òrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢}òrÒÀ¢²v÷&C¢}BrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢}BrÒÀ¢²v÷&C¢}ı­-­í--ÂrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢}ı­-­í--ÂrÒÀ¢²v÷&C¢}=­’rÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢}=­’rÒÀ¢²v÷&C¢}ı}½¢rÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢}ı}½¢rĞ¢ÒÀ¢fö6'VÆ'“¢°¢}ı-]"s¢²ÖVæ–æs¢t†öÆ‡6ÇVFò6÷&F–ÂR–æf÷&ÖÂ’rÂ'Eööe÷7VV6ƒ¢w6ÇVFòrÂG&ç6Æ—C¢çVÆÂÒÀ¢}Bs¢²ÖVæ–æs¢t6öçFVçFòò6ö×Æ6–FòrÂ'Eööe÷7VV6ƒ¢vF¦WF—fò'&WfRrÂG&ç6Æ—C¢çVÆÂĞ¢Ğ¢Ó°¢ÒVÇ6R–b‡F&vWDÆærÓÓÒvæÂr’°¢–æ—F–Ä&÷D×6rÒ°¢–C¢v×6rÖ–æ—BrÀ¢6VæFW#¢v&÷BrÀ¢FW‡C¢t†ÆÆòÆWV²öÒæVFW&ÆæG2ÖWB¦RFRöVfVæVââv"v–Â¦R†WB÷fW"†V&&VãòrÀ¢G&ç6ÆF–öã¢|*†öÆ\:’&–Vâ&7F–6"æVW&ÆæL:—26öçF–vòâ+ôFR\:’V–W&W2†&Æ#òrÀ¢Fö¶Vç3¢°¢²v÷&C¢t†ÆÆòrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢v†ÆÆòrÒÀ¢²v÷&C¢tÆWV²rÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢vÆWV²rÒÀ¢²v÷&C¢vöÒrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢vöÒrÒÀ¢²v÷&C¢tæVFW&ÆæG2rÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢væVFW&ÆæG2rÒÀ¢²v÷&C¢wFRrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢wFRrÒÀ¢²v÷&C¢vöVfVæVâârÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢vöVfVæVârĞ¢ÒÀ¢fö6'VÆ'“¢°¢vÆWV²s¢²ÖVæ–æs¢tw&F&ÆRÂF—fW'F–Fòò6–×:F–6òrÂ'Eööe÷7VV6ƒ¢vF¦WF—fòrÒÀ¢vöVfVæVâs¢²ÖVæ–æs¢u&7F–6"òVç6–"rÂ'Eööe÷7VV6ƒ¢wfW&&òrĞ¢Ğ¢Ó°¢ÒVÇ6R–b‡F&vWDÆærÓÓÒvFRr’°¢–æ—F–Ä&÷D×6rÒ°¢–C¢v×6rÖ–æ—BrÀ¢6VæFW#¢v&÷BrÀ¢FW‡C¢t†ÆÆò–6‚g&WVRÖ–6‚ÂÖ—BF—"FWWG66‚§R;Æ&Vââv÷,;Æ&W"Ü;f6‡FW7BGR†WWFR7&V6†VãòrÀ¢G&ç6ÆF–öã¢|*†öÆÖRÆVw&&7F–6"ÆVÜ:â6öçF–vòâ+ôFR\:’FRwW7F,:Ö†&Æ"†÷“òrÀ¢Fö¶Vç3¢°¢²v÷&C¢t†ÆÆòrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢v†ÆÆòrÒÀ¢²v÷&C¢t–6‚rÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢v–6‚rÒÀ¢²v÷&C¢vg&WVRrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢vg&WVRrÒÀ¢²v÷&C¢vÖ–6‚ÂrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢vÖ–6‚rÒÀ¢²v÷&C¢vÖ—BrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢vÖ—BrÒÀ¢²v÷&C¢vF—"rÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢vF—"rÒÀ¢²v÷&C¢tFWWG66‚rÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢vFWWG66‚rÒÀ¢²v÷&C¢w§RrÂG&ç6Æ—C¢çVÆÂÂ6ÆVå÷v÷&C¢w§^:ç»h‘éì¶»§q«^vÙ[œÂˆNÂˆBˆ™]\›ˆNÂˆJBˆ
+NÂˆBˆËÈ‘T“ÈØ[›™YÙ˜ZÙH›İ™\Y\È\[™YˆHš[˜[HÂˆÙ]\Ô›ØÙ\ÜÚ[™Ê˜[ÙJNÂˆBˆNÂ‚ˆÛÛœİ[™U˜[œÛ]PÚ]Y\ÜØYÙHH\Ş[˜È
+Y\ÜØYÙJHOˆÂˆYˆ
+Y\ÜØYÙOË˜[œÛ][ÛŠH™]\›ˆY\ÜØYÙK˜[œÛ][ÛÂ‚ˆÛÛœİÛİ\˜ÙU^H
+Y\ÜØYÙOËœÙ[™\ˆOOH	İ\Ù\‰ÂˆÈY\ÜØYÙK˜ÛÜœ™XİY^Y\ÜØYÙK^ˆˆY\ÜØYÙOË^	ÉÊKš[J
+NÂˆYˆ
+\Ûİ\˜ÙU^
+H›İÈ™]È\œ›ÜŠ	Ó›È^H^È\˜H˜YXÚ\‹‰ÊNÂ‚ˆÛÛœİ™\İ[H]ØZ]˜[œÛ]T\˜YÜ˜\^\JÂˆ^ˆÛİ\˜ÙU^ˆ\™Ù][™Ëˆ˜]]™S[™Ëˆ\RÙ^NˆÛÛ™šYÏË˜\RÙ^H	ÉÂˆJNÂ‚ˆÙ]Y\ÜØYÙ\Ê
+İ\œ™[Y\ÜØYÙ\ÊHOˆİ\œ™[Y\ÜØYÙ\Ë›X\
+
+İ\œ™[Y\ÜØYÙJHOˆ
+ˆİ\œ™[Y\ÜØYÙKšYOOHY\ÜØYÙKšYˆÈÈ‹‹˜İ\œ™[Y\ÜØYÙK˜[œÛ][Ûˆ™\İ[˜[œÛ][ÛˆBˆˆİ\œ™[Y\ÜØYÙBˆ
+JJNÂ‚ˆ™]\›ˆ™\İ[˜[œÛ][ÛÂˆNÂ‚ˆËÈÛÜ™ÛÚİ\Û‹XÛXÚÎˆÛÜšÜÈ[™\[™[H›Üˆ[İUX™H™XY\‹^™XY\‹[™Ú]ˆÛÛœİ[™UÛÜ™ÛXÚÈH\Ş[˜È
+˜]ÕÛÜ™ÚÙ[“Ü•›ØØXŠHOˆÂˆYˆ
+\˜]ÕÛÜ™	‰ˆ]ÚÙ[“Ü•›ØØXŠH™]\›Â‚ˆËÈKˆÛX[ˆHÛÜ™›ÜˆÛÚİ\™[[İš[™ÈXY[™Ëİ˜Z[[™È[˜İX][ÛˆÚ[H™\Ù\š[™È[šXÛÙH]\œËX\šÜË[™[X™\œÂˆÛÛœİÛÜ™İˆHİš[™Ê˜]ÕÛÜ™ÚÙ[“Ü•›ØØXËÛÜ™	ÉÊKš[J
+NÂˆÛÛœİÛX[•ÛÜ™HÛÜ™İ‹œ™\XÙJ×–×—ÓWÓŸWÓ_WJß×—ÓWÓŸWÓ_WJÉÙİK	ÉÊKš[J
+HÛÜ™İÂ‚ˆËÈ‹ˆ^˜Xİ[H™KY^\İ[™È˜[œÛ]\˜][Û‹Ü[Z[ˆœ›ÛHÚÙ[ˆYˆ]˜Z[X›BˆÛÛœİ^\İ[™Õ˜[œÛ]HÚÙ[“Ü•›ØØXË˜[œÛ]ÚÙ[“Ü•›ØØXË˜]^[X\H[Â‚ˆËÈËˆYˆH™KXÛÛ\]YXİ[Û˜\HYš[š][ÛˆÚ]YX[š[™È\È[™XYH]˜Z[X›H
+K™ËˆÚ]Y\ÜØYÙH›ØØX[\JN‚ˆYˆ
+ÚÙ[“Ü•›ØØXˆ	‰ˆ\[ÙˆÚÙ[“Ü•›ØØX‹›YX[š[™ÈOOH	Üİš[™ÉÈ	‰ˆÚÙ[“Ü•›ØØX‹›YX[š[™Ëš[J
+JHÂˆÙ]Ù[XİYÛÜ™
+ÂˆÛÜ™ˆÛX[•ÛÜ™ˆYX[š[™ÎˆÚÙ[“Ü•›ØØX‹›YX[š[™Ëˆ\ÛÙ—ÜÜYXÚˆÚÙ[“Ü•›ØØX‹œ\ÛÙ—ÜÜYXÚ[ˆ˜[œÛ]ˆÚÙ[“Ü•›ØØX‹˜[œÛ]^\İ[™Õ˜[œÛ]ˆ\™Ù][™ÂˆJNÂˆ™]\›ÂˆB‚ˆËÈˆÜ[ˆÛÜ™[Ù[[[YYX][HÚ]ØY[™Èİ]HÛÈ\Ù\ˆÙ]È[œİ[[™[İ\Èš\İX[™YY˜XÚÂˆÙ]Ù[XİYÛÜ™
+ÂˆÛÜ™ˆÛX[•ÛÜ™ˆYX[š[™Îˆ[ˆ\ÛÙ—ÜÜYXÚˆ[ˆ˜[œÛ]ˆ^\İ[™Õ˜[œÛ]ˆ\ÓØY[™ÎˆYKˆ\™Ù][™ÂˆJNÂ‚ˆËÈKˆ]Y\HH˜XÚÙ[™Yš[š][ÛˆÛÚİ\TH[™\[™[HÙˆ\˜YÜ˜\ÛÜÜÂˆHÂˆÛÛœİÛÚİ\™\İ[H]ØZ]ÛÚİ\ÛÜ™\JÛX[•ÛÜ™\™Ù][™Ë˜]]™S[™ËÛÛ™šYÏË˜\RÙ^JNÂˆYˆ
+ÛÚİ\™\İ[
+HÂˆYˆ
+ÛÚİ\™\İ[™\œ›ÜŠHÂˆÙ]Ù[XİYÛÜ™
+ÂˆÛÜ™ˆÛX[•ÛÜ™ˆYX[š[™Îˆ[ˆ\œ›ÜˆÛÚİ\™\İ[™\œ›Ü‹ˆ\ÛÙ—ÜÜYXÚˆ[ˆ˜[œÛ]ˆ^\İ[™Õ˜[œÛ]ˆ\™Ù][™ÂˆJNÂˆ™]\›ÂˆB‚ˆÙ]Ù[XİYÛÜ™
+ÂˆÛÜ™ˆÛÚİ\™\İ[ÛÜ™ÛX[•ÛÜ™ˆYX[š[™ÎˆÛÚİ\™\İ[›YX[š[™Ëˆ\ÛÙ—ÜÜYXÚˆÛÚİ\™\İ[œ\ÛÙ—ÜÜYXÚ[ˆ˜[œÛ]ˆÛÚİ\™\İ[˜[œÛ]^\İ[™Õ˜[œÛ]ˆ\™Ù][™ÂˆJNÂˆ™]\›ÂˆBˆHØ]Ú
+\œŠHÂˆÛÛœÛÛKØ\›Š	ÕÛÜ™ÛÚİ\\œ›Ü‰Ë\œŠNÂˆB‚ˆËÈ‹ˆYˆÛÚİ\™]\›™Y›İ[™ÈÜˆ˜Z[YÚİÈÛX\ˆ\œ›Üˆİ]H[œÚYH[Ù[ˆÙ]Ù[XİYÛÜ™
+ÂˆÛÜ™ˆÛX[•ÛÜ™ˆYX[š[™Îˆ[ˆ\œ›Üˆ	Ó›ÈÙHYÈØ[™\ˆHYš[šXÚpìÛˆ[ˆ\İH[ÛY[Ëˆ™\šYšXØHHÛÛ™^pìÛˆÈÛ]™HHTK‰Ëˆ\ÛÙ—ÜÜYXÚˆ[ˆ˜[œÛ]ˆ^\İ[™Õ˜[œÛ]ˆ\™Ù][™ÂˆJNÂˆNÂ‚‚ˆËÈ›Û›İ[˜ÙHÚ[™ÛHÛÜ™[\ˆ
+›Ü›X[ÜˆÛİÊBˆÛÛœİ[™T›Û›İ[˜ÙUÛÜ™H
+ÛÜ™˜]HHKŒ
+HOˆÂˆÜXZÕ^
+ÛÜ™İ\œ™[[™ÓØš‹œÜYXÚÛÙK˜]JNÂˆNÂ‚ˆËÈ™\Ù]ÛÛ™\œØ][Ûˆ›ÜˆÕT”‘S•[™İXYÙHÛ›BˆÛÛœİ[™T™\Ù]Ú]H
+
+HOˆÂˆ\Õ\Ù\”ØÜ›ÛY\™Y‹˜İ\œ™[H˜[ÙNÂˆÛÛœİ[š]X[\ÙÈHÙ][š]X[›İ\ÙÊ\™Ù][™ÊNÂˆÙ]Y\ÜØYÙ\ÊÚ[š]X[\Ù×JNÂˆØ]™PÚ]ÔİÜ˜YÙJ\™Ù][™ËÚ[š]X[\Ù×JNÂˆİÜÜXZÚ[™Ê
+NÂˆNÂ‚ˆËÈ[™HØ]š[™ÈÛÛ\]Y›ÚXÙHØ[È[šYšYY\İÜBˆÛÛœİ[™Q[™Ø[H
+Ù\ÜÚ[Û‘]JHOˆÂˆYˆ
+Ù\ÜÚ[Û‘]H	‰ˆÙ\ÜÚ[Û‘]K˜[œØÜš\	‰ˆÙ\ÜÚ[Û‘]K˜[œØÜš\›[™İˆ
+HÂˆHÂˆ]İÜ™YØ[ÈH×NÂˆÛÛœİ˜]ÈHØØ[İÜ˜YÙK™Ù]][JĞSÔÕÔQÑWÒÑVJNÂˆYˆ
+˜]ÊHÂˆİÜ™YØ[ÈH”ÓÓ‹œ\œÙJ˜]ÊNÂˆBˆİÜ™YØ[Ë[œÚY
+Ù\ÜÚ[Û‘]JNÂˆØØ[İÜ˜YÙKœÙ]][JĞSÔÕÔQÑWÒÑVK”ÓÓ‹œİš[™ÚYJİÜ™YØ[ÊJNÂˆHØ]Ú
+JHÂˆÛÛœÛÛKØ\›Š	Ñ˜Z[YÈØ]™HØ[Ù\ÜÚ[ÛˆÈ\İÜN‰ËJNÂˆBˆBˆÙ]Ú]šY]Ó[ÙJ	ÚX‰ÊNÂˆ™\]Y\İ]]Ğ˜XÚİ\
+È\Nˆ	ØØ[Z\İÜIË™X\ÛÛˆ	Û]™KXØ[Y[™	ÈJNÂˆNÂ‚ˆÛÛœİ[™T™]\›•ĞÚ]XˆH
+
+HOˆÂˆÙ]Ú]šY]Ó[ÙJ	ÚX‰ÊNÂˆ™\]Y\İ]]Ğ˜XÚİ\
+È\Nˆ	ØÚ]Z\İÜIË™X\ÛÛˆ	ØÚ]Y^]	ÈJNÂˆNÂ‚ˆËÈÙ]Ø[›ÚXÙH™Y™\™[˜ÙH›ÜˆXİ]™H\™Ù][™İXYÙBˆÛÛœİÙ]Ø[›ÚXÙQ›Ü•\™Ù][™ÈH
+
+HOˆÂˆHÂˆÛÛœİ˜]ÈHØØ[İÜ˜YÙK™Ù]][J	Û[™İXY›İ×ØØ[İ›ÚXÙWÜ™Y™\™[˜Ù\ÉÊNÂˆYˆ
+˜]ÊHÂˆÛÛœİ\œÙYH”ÓÓ‹œ\œÙJ˜]ÊNÂˆYˆ
+\œÙY	‰ˆ\[Ùˆ\œÙYOOH	ÛØš™Xİ	È	‰ˆ\œÙYİ\™Ù][™×JHÂˆ™]\›ˆ\œÙYİ\™Ù][™×NÂˆBˆBˆHØ]Ú
+JHßBˆ™]\›ˆ	ÉÎÂˆNÂ‚ˆÛÛœİÙ[XİYØ[›ÚXÙHHÙ]Ø[›ÚXÙQ›Ü•\™Ù][™Ê
+NÂ‚ˆËÈYY]™HØ[ÛÚÈÈİX\˜[YHÜYXÚ™XÛÙÛš][Ûˆİ\È\™XİH[ˆH\Ù\ˆÛXÚÈ]™[ÛÜˆÛÛœİ\[[™PØ[H\ÙT\[[™PØ[
+Âˆ\™Ù][™Ëˆ˜]]™S[™Ëˆ]™[ˆÛÛ™šYÏË›]™[	ĞL‹ĞŒIËˆ\RÙ^NˆÛÛ™šYÏË˜\RÙ^H	ÉËˆ›ÚXÙNˆÙ[XİYØ[›ÚXÙKˆ\ÔÜ[š\ÚˆJNÂ‚ˆÛÛœİ[™Tİ\Ø[H
+
+HOˆÂˆËÈŞ[˜Ú›Û›İ\ÛH[š]X]HÜYXÚ™XÛÙÛš][Ûˆ[ˆ\™Xİ™\ÜÛœÙHÈ\Ù\ˆÙ\İ\™Bˆ\[[™PØ[œİ\Ø[
+
+NÂˆÙ]Ú]šY]Ó[ÙJ	ØØ[	ÊNÂˆNÂ‚ˆÛÛœİ[™SÜ[]Y[ÑØİ[Y[H
+ØÊHOˆÂˆYˆ
+ØÊHÂˆØ]™PXİ]™QØİ[Y[˜Y
+ØÊNÂˆYˆ
+ØË\™Ù][™È	‰ˆØË\™Ù][™ÈOOH\™Ù][™ÊHÂˆ[™U\™Ù][™ĞÚ[™ÙJØË\™Ù][™ÊNÂˆBˆHÂˆÚ[™İË›ØØ][Û‹š\ÚH	ÈÜ™XY\‰ÎÂˆHØ]Ú
+JHßBˆÙ]Xİ]™UXŠ	İ^	ÊNÂˆBˆNÂ‚ˆ™]\›ˆ
+ˆ]ˆÛ\ÜÓ˜[YOH™›^›^XÛÛ\ØÜ™Y[ˆ›Û\Ø[œÈ^Vİ˜\ŠK]^\š[X\JWH˜[œÚ][Û‹XÛÛÜœÈ‚ˆËÊˆÛØ˜[XY\ˆ8 %Y[ˆÚ\™HHYXØ]Y™XY\‹Ø[ÜˆÛÛ™\œØ][Ûˆ˜]˜˜\ˆİÛœÈHÜ\™XH
+‹ßBˆØXİ]™UXˆOOH	İ^	È	‰ˆXİ]™UXˆOOH	Ş[İ]X™IÈ	‰ˆXİ]™UXˆOOH	Ú[XYÙIÈ	‰ˆJXİ]™UXˆOOH	ØÚ]	È	‰ˆ
+Ú]šY]Ó[ÙHOOH	ØØ[	ÈÚ]šY]Ó[ÙHOOH	ØÚ]	ÊJH	‰ˆ
+ˆXY\‚ˆ[™İXYÙ\Ï^Û[™İXYÙ\ßBˆ\™Ù][™Ï^İ\™Ù][™ßBˆÙ]\™Ù][™Ï^Ú[™U\™Ù][™ĞÚ[™Ù_Bˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆÙ]˜]]™S[™Ï^Ú[™S˜]]™S[™ĞÚ[™Ù_BˆÚİÕ˜[œÛ]\˜][Û^ÜÚİÕ˜[œÛ]\˜][ÛŸBˆÙ]ÚİÕ˜[œÛ]\˜][Û^ÜÙ]ÚİÕ˜[œÛ]\˜][ÛŸBˆ[™Ñœ™YO^Ú[™Ñœ™Y_BˆÙ][™Ñœ™YO^ÜÙ][™Ñœ™Y_BˆÛ“Ü[”Ù][™ÜÏ^Ê
+HOˆÙ]Xİ]™UXŠ	ÜÙ][™ÜÉÊ_BˆÛ”™\Ù]Ú]^Ú[™T™\Ù]Ú]Bˆ\Ó\İ[š[™Ï^Ú\Ô™XÛÜ™[™ßBˆ\ÔÜXZÚ[™Ï^Ú\ÔÜXZÚ[™ßBˆ\Ğ\RÙ^O^Ğ›ÛÛX[ŠÛÛ™šYÏË˜\RÙ^J_Bˆ\UØ\›š[™Ï^Ø\UØ\›š[™ßBˆXİ]™UX^ØXİ]™UXŸBˆÙ]Xİ]™UX^ÜÙ]Xİ]™UXŸBˆÏ‚ˆ
+_B‚ˆØXİ]™UXˆOOH	ÚÛYIÈÈ
+ˆÛYTYÙBˆÛ”Ù[Xİ[ÙO^ÜÙ]Xİ]™UXŸBˆ\™Ù][™Ï^İ\™Ù][™ßBˆÙ]\™Ù][™Ï^Ú[™U\™Ù][™ĞÚ[™Ù_Bˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆÙ]˜]]™S[™Ï^Ú[™S˜]]™S[™ĞÚ[™Ù_Bˆ[™İXYÙ\Ï^Û[™İXYÙ\ßBˆ\UØ\›š[™Ï^Ø\UØ\›š[™ßBˆÏ‚ˆ
+HˆXİ]™UXˆOOH	ÚXš]ÉÈÈ
+ˆXZ[ˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İËZY[ˆËY[›^›^XÛÛZ[‹ZL‚ˆXš]˜XÚÙ\”YÙBˆÛ˜XÚÏ^Ê
+HOˆÙ]Xİ]™UXŠ	ÚÛYIÊ_Bˆ\™Ù][™Ï^İ\™Ù][™ßBˆ[™İXYÙ\Ï^Û[™İXYÙ\ßBˆ\RÙ^O^ØÛÛ™šYÏË˜\RÙ^_BˆÏ‚ˆÛXZ[‚ˆ
+HˆXİ]™UXˆOOH	ÜÙ][™ÜÉÈÈ
+ˆXZ[ˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İËZY[ˆËY[›^›^XÛÛZ[‹ZL‚ˆÙ][™ÜÔYÙBˆÛ˜XÚÏ^Ê
+HOˆÙ]Xİ]™UXŠ	ÚÛYIÊ_BˆÛÛ™šYÏ^ØÛÛ™šYßBˆÛ”Ø]™PÛÛ™šYÏ^Ú[™TØ]™PÛÛ™šYßBˆ\™Ù][™Ï^İ\™Ù][™ßBˆÙ]\™Ù][™Ï^Ú[™U\™Ù][™ĞÚ[™Ù_Bˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆÙ]˜]]™S[™Ï^Ú[™S˜]]™S[™ĞÚ[™Ù_Bˆ[™İXYÙ\Ï^Û[™İXYÙ\ßBˆÚİÕ˜[œÛ]\˜][Û^ÜÚİÕ˜[œÛ]\˜][ÛŸBˆÙ]ÚİÕ˜[œÛ]\˜][Û^ÜÙ]ÚİÕ˜[œÛ]\˜][ÛŸBˆ[™Ñœ™YO^Ú[™Ñœ™Y_BˆÙ][™Ñœ™YO^ÜÙ][™Ñœ™Y_BˆÛ”™\Ù]Ú]^Ú[™T™\Ù]Ú]BˆÏ‚ˆÛXZ[‚ˆ
+HˆXİ]™UXˆOOH	Ş[İ]X™IÈÈ
+ˆXZ[ˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İËZY[ˆËY[›^›^XÛÛZ[‹ZL‚ˆ[İUX™T™XY\”YÙBˆ\™Ù][™Ï^İ\™Ù][™ßBˆÙ]\™Ù][™Ï^Ú[™U\™Ù][™ĞÚ[™Ù_Bˆ[™İXYÙ\Ï^Û[™İXYÙ\ßBˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆ\RÙ^O^ØÛÛ™šYÏË˜\RÙ^_BˆÛ•ÛÜ™ÛXÚÏ^Ú[™UÛÜ™ÛXÚßBˆÙ]Xİ]™UX^ÜÙ]Xİ]™UXŸBˆÏ‚ˆÛXZ[‚ˆ
+HˆXİ]™UXˆOOH	İ^	ÈÈ
+ˆXZ[ˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İËZY[ˆËY[›^›^XÛÛZ[‹ZL‚ˆ^™XY\”YÙBˆ\™Ù][™Ï^İ\™Ù][™ßBˆÙ]\™Ù][™Ï^Ú[™U\™Ù][™ĞÚ[™Ù_Bˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆ[™İXYÙ\Ï^Û[™İXYÙ\ßBˆ\RÙ^O^ØÛÛ™šYÏË˜\RÙ^_BˆÛ•ÛÜ™ÛXÚÏ^Ú[™UÛÜ™ÛXÚßBˆÙ]Xİ]™UX^ÜÙ]Xİ]™UXŸBˆÏ‚ˆÛXZ[‚ˆ
+HˆXİ]™UXˆOOH	Ú[XYÙIÈÈ
+ˆXZ[ˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İËZY[ˆËY[›^›^XÛÛZ[‹ZL‚ˆ[XYÙT™XY\”YÙBˆ\™Ù][™Ï^İ\™Ù][™ßBˆÙ]\™Ù][™Ï^Ú[™U\™Ù][™ĞÚ[™Ù_Bˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆ[™İXYÙ\Ï^Û[™İXYÙ\ßBˆ\RÙ^O^ØÛÛ™šYÏË˜\RÙ^_BˆÛ•ÛÜ™ÛXÚÏ^Ú[™UÛÜ™ÛXÚßBˆÙ]Xİ]™UX^ÜÙ]Xİ]™UXŸBˆÏ‚ˆÛXZ[‚ˆ
+HˆÚ]šY]Ó[ÙHOOH	ØØ[	ÈÈ
+ˆXZ[ˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İËZY[ˆËY[›^›^XÛÛZ[‹ZL™ËVİ˜\ŠKX\X™ÊWH‚ˆ]™PØ[šY]Âˆ\™Ù][™Ï^İ\™Ù][™ßBˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆ]™[^ØÛÛ™šYÏË›]™[	ĞL‹ĞŒIßBˆ\RÙ^O^ØÛÛ™šYÏË˜\RÙ^H	ÉßBˆÛ‘[™Ø[^Ú[™Q[™Ø[BˆXİ]™PØ[^Ü\[[™PØ[BˆÛ•ÛÜ™ÛXÚÏ^Ú[™UÛÜ™ÛXÚßBˆÏ‚ˆÛXZ[‚ˆ
+HˆÚ]šY]Ó[ÙHOOH	ØØ[Y]Z[	ÈÈ
+ˆXZ[ˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İËZY[ˆËY[›^›^XÛÛZ[‹ZL™ËVİ˜\ŠKX\X™ÊWH‚ˆØ[]Z[šY]ÂˆØ[]O^ÜÙ[XİYØ[]_Bˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆÛ˜XÚÏ^Ê
+HOˆÂˆÙ]Ù[XİYØ[]J[
+NÂˆÙ]Ú]šY]Ó[ÙJ	ÚX‰ÊNÂˆ_BˆÛ•ÛÜ™ÛXÚÏ^Ú[™UÛÜ™ÛXÚßBˆÏ‚ˆÛXZ[‚ˆ
+HˆÚ]šY]Ó[ÙHOOH	ÚX‰ÈÈ
+ˆXZ[ˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İËZY[ˆËY[›^›^XÛÛZ[‹ZL™ËVİ˜\ŠKX\X™ÊWH‚ˆÚ]X•šY]Âˆ\™Ù][™Ï^İ\™Ù][™ßBˆÙ]\™Ù][™Ï^Ú[™U\™Ù][™ĞÚ[™Ù_Bˆ[™İXYÙ\Ï^Û[™İXYÙ\ßBˆÛ”İ\Ú]^Ê
+HOˆÂˆ™XÛÜ™Xš]Xİ]š]Q›Ü•Ù^JÂˆ\Ù\‹ˆ[™ĞÛÙNˆ\™Ù][™ËˆXİ]š]RÙ^Nˆ	ØÛÛ™\œØ][Û‰ÂˆJNÂˆÙ]Ú]šY]Ó[ÙJ	ØÚ]	ÊNÂˆ_BˆÛ”İ\Ø[^Ú[™Tİ\Ø[BˆÛ“Ü[Ú]Ù\ÜÚ[Û^Ê[™ĞÛÙJHOˆÂˆÛÛœİY™™Xİ]™S[™ÈH[™ĞÛÙH\™Ù][™ÎÂˆYˆ
+[™ĞÛÙH	‰ˆ[™ĞÛÙHOOH\™Ù][™ÊHÂˆ[™U\™Ù][™ĞÚ[™ÙJ[™ĞÛÙJNÂˆBˆ™XÛÜ™Xš]Xİ]š]Q›Ü•Ù^JÂˆ\Ù\‹ˆ[™ĞÛÙNˆY™™Xİ]™S[™ËˆXİ]š]RÙ^Nˆ	ØÛÛ™\œØ][Û‰ÂˆJNÂˆÙ]Ú]šY]Ó[ÙJ	ØÚ]	ÊNÂˆ_BˆÛ“Ü[Ø[]Z[^ÊØ[]JHOˆÂˆÙ]Ù[XİYØ[]JØ[]JNÂˆÙ]Ú]šY]Ó[ÙJ	ØØ[Y]Z[	ÊNÂˆ_BˆÛ‘[]PÚ]Ù\ÜÚ[Û^Ê[]Y[™ÊHOˆÂˆYˆ
+[]Y[™ÈOOH\™Ù][™ÊHÂˆÛÛœİ[š]X[Ü™Y][™ÈHÙ][š]X[›İ\ÙÊ\™Ù][™ÊNÂˆÙ]Y\ÜØYÙ\ÊÚ[š]X[Ü™Y][™×JNÂˆBˆ™\]Y\İ]]Ğ˜XÚİ\
+È\Nˆ	ØÚ]Z\İÜIË™X\ÛÛˆ	ØÚ]Y[]Y	ÈJNÂˆ_BˆÛ‘[]PØ[Ù\ÜÚ[Û^ÊØ[Y
+HOˆÂˆYˆ
+Ù[XİYØ[]H	‰ˆÙ[XİYØ[]KšYOOHØ[Y
+HÂˆÙ]Ù[XİYØ[]J[
+NÂˆBˆ™\]Y\İ]]Ğ˜XÚİ\
+È\Nˆ	ØØ[Z\İÜIË™X\ÛÛˆ	ØØ[Y[]Y	ÈJNÂˆ_BˆÏ‚ˆÛXZ[‚ˆ
+Hˆ
+ˆ‚ˆ]ˆÛ\ÜÓ˜[YOHœ™[]]™H›^LH›^›^XÛÛZ[‹ZLİ™\™›İËZY[ˆ‚ˆËÊˆÛÛ™\œØ][Û‹\ÜXÚYšXÈ˜]˜˜\ˆ
+‹ßBˆ]ˆÛ\ÜÓ˜[YOHœÚš[šËL‹LÌ›Ü™\‹Xˆ›Ü™\‹Vİ˜\ŠKX›Ü™\‹\š[X\JWH™ËVİ˜\ŠKX\X™ÊWKÎMH˜XÚÙ›ÜX›\‹^ÚYİË^È‚ˆ]ˆÛ\ÜÓ˜[YOH™›^][\ËXÙ[\ˆ\İYKX™]ÙY[ˆX^]ËMËY[^X]]ÈMKLÈ‚ˆ]Û‚ˆ\OH˜]Ûˆ‚ˆÛÛXÚÏ^Ú[™T™]\›•ĞÚ]XŸBˆÛ\ÜÓ˜[YOHœLËHKLKH›İ[™Y^™ËVİ˜\ŠK\İ\™˜XÙK\ÙXÛÛ™\JWHİ™\˜™ËVİ˜\ŠK\İ\™˜XÙKZİ™\ŠWH›Ü™\ˆ›Ü™\‹Vİ˜\ŠKX›Ü™\‹\š[X\JWH^Vİ˜\ŠK]^\ÙXÛÛ™\JWHİ™\^Vİ˜\ŠK]^\š[X\JWH˜[œÚ][Û‹XÛÛÜœÈİ\œÛÜ‹\Ú[\ˆ›^][\ËXÙ[\ˆØ\Lˆ^^È›Û\Ù[ZX›ÛÚYİË^ÈXİ]™NœØØ[KNMH‚ˆ‚ˆ\œ›İÓYÛ\ÜÓ˜[YOHËLËHLËHˆÏ‚ˆÜ[İ
+	Ø˜XÚ×İ×ÚX‰Ê_OÜÜ[‚ˆØ]Û‚‚ˆ]ˆÛ\ÜÓ˜[YOH™›^][\ËXÙ[\ˆÜXÙK^Lˆ^^È›ÛX›Û^Vİ˜\ŠK]^\ÙXÛÛ™\JWH‚ˆÜ[ˆÛ\ÜÓ˜[YOH^\ÛHØİ\œ™[[™ÓØš‹™›YÈ	ü'ä«	ßOÜÜ[‚ˆÜ[Øİ\œ™[[™ÓØš‹›˜[Y_OÜÜ[‚ˆ]ˆÛ\ÜÓ˜[YOHœ™[]]™H‚ˆ]Û‚ˆ\OH˜]Ûˆ‚ˆÛÛXÚÏ^Ê
+HOˆÙ]\ĞÚ]›ÚXÙSY[SÜ[Š
+\ÓÜ[ŠHOˆZ\ÓÜ[Š_BˆÛ\ÜÓ˜[YOH›[LH›İ[™Y[ÈLKH^Vİ˜\ŠK]^[]]Y
+WHİ™\˜™ËVİ˜\ŠK\İ\™˜XÙKZİ™\ŠWHİ™\^Vİ˜\ŠK]^\š[X\JWH˜[œÚ][Û‹XÛÛÜœÈİ\œÛÜ‹\Ú[\ˆXİ]™NœØØ[KNMH‚ˆ\šXK[X™[^Ú\ÔÜ[š\ÚÈ	ĞXœš\ˆZ\İ\ÈH›ŞˆH™\›ÙXØÚpìÛ‰Èˆ	ÓÜ[ˆ›ÚXÙH[™^X˜XÚÈÙ][™ÜÉßBˆ\šXKY^[™Y^Ú\ĞÚ]›ÚXÙSY[SÜ[ŸBˆ]O^Ú\ÔÜ[š\ÚÈ	Õ›ŞˆH™\›ÙXØÚpìÛ‰Èˆ	Õ›ÚXÙH	ˆ^X˜XÚÉßBˆ‚ˆ[Ü™U™\XØ[Û\ÜÓ˜[YOHËMMˆÏ‚ˆØ]Û‚ˆÚ\ĞÚ]›ÚXÙSY[SÜ[ˆ	‰ˆ
+ˆÚ]›ÚXÙT^X˜XÚÓY[HÛÛÜÙO^Ê
+HOˆÙ]\ĞÚ]›ÚXÙSY[SÜ[Š˜[ÙJ_HÏ‚ˆ
+_BˆÙ]‚ˆÙ]‚ˆÙ]‚ˆÙ]‚‚ˆËÊˆXZ[ˆÚ]ØÜ›Û\™XH
+‹ßBˆXZ[‚ˆ™Y^ØÚ]ÛÛZ[™\”™YŸBˆÛ”ØÜ›Û^Ú[™PÚ]ØÜ›ÛBˆÛ\ÜÓ˜[YOH™›^LHİ™\™›İË^KX]]ÈMKMˆX^]ËMËY[^X]]È‚ˆ‚ˆËÊˆTH\œ›ÜˆØ\›š[™È˜[›™\ˆ
+‹ßBˆØ\UØ\›š[™È	‰ˆ
+ˆ]ˆÛ\ÜÓ˜[YOH›X‹MLËH›İ[™YL™ËX[X™\‹NMLÎL›Ü™\ˆ›Ü™\‹X[X™\‹MLÎ^X[X™\‹LŒ^^È›^][\ËXÙ[\ˆ\İYKX™]ÙY[ˆÚYİË[ÈÚYİËX›XÚËÌÌ[š[X]KY˜YKZ[ˆØ\LÈ‚ˆ]ˆÛ\ÜÓ˜[YOH™›^][\Ë\İ\ÜXÙK^L‹HZ[‹]ËL‚ˆÜ[ˆÛ\ÜÓ˜[YOH^X˜\ÙHXY[™Ë[›Û™H]LH›^\Úš[šËL¸¦¨;î#ÏÜÜ[‚ˆ]ˆÛ\ÜÓ˜[YOH›Z[‹]ËL‚ˆÛ\ÜÓ˜[YOH™›ÛX›Û^X[X™\‹LL‚ˆ]š\ÛÈHÜ›ÜHRNˆØ\UØ\›š[™ßBˆÜ‚ˆÛ\ÜÓ˜[YOH^VÌL\H^X[X™\‹LŒÎ]LH‚ˆ^ˆÛXÈ[ÉÈ	ßBˆ]Û‚ˆÛÛXÚÏ^Ê
+HOˆÙ]Xİ]™UXŠ	ÜÙ][™ÜÉÊ_BˆÛ\ÜÓ˜[YOH[™\›[™H›ÛX›Û^]Ú]Hİ™\^X[X™\‹LÌİ\œÛÜ‹\Ú[\ˆ‚ˆ‚ˆZ\İ\È8¦¦{î#ÂˆØ]ÛÉÈ	ßBˆ\˜H™\šYšXØ\ˆ[\İYÈ[˜XÚÙ[™HHÛÛ™šYİ\˜XÚpìÛˆHÔ“ÔWĞTWÒÑVK‚ˆÜ‚ˆÙ]‚ˆÙ]‚ˆ]ˆÛ\ÜÓ˜[YOH™›^][\ËXÙ[\ˆØ\Lˆ›^\Úš[šËL‚ˆÛ\İ˜Z[YY\ÜØYÙH	‰ˆ
+ˆ]Û‚ˆ\OH˜]Ûˆ‚ˆÛÛXÚÏ^Ê
+HOˆ[™TÙ[™Y\ÜØYÙJ\İ˜Z[YY\ÜØYÙK^\İ˜Z[YY\ÜØYÙK›\ÙÒY
+_Bˆ\ØX›Y^Ú\Ô›ØÙ\ÜÚ[™ßBˆÛ\ÜÓ˜[YOHœL‹HKLKH›İ[™Y^™ËX[X™\‹MŒİ™\˜™ËX[X™\‹ML^]Ú]H›ÛX›Û^^È›^][\ËXÙ[\ˆØ\LKHÚYİË\ÛHXİ]™NœØØ[KNMH\ØX›Y›ÜXÚ]KMLİ\œÛÜ‹\Ú[\ˆ˜[œÚ][Û‹X[‚ˆ]OH”™Z[[\ˆ™\ÜY\İHHPH‚ˆ‚ˆ›İ]PØİÈÛ\ÜÓ˜[YO^ØËLËHLËH	Ú\Ô›ØÙ\ÜÚ[™ÈÈ	Ø[š[X]K\Ü[‰Èˆ	ÉßXHÏ‚ˆÜ[”™Z[[\ÜÜ[‚ˆØ]Û‚ˆ
+_Bˆ]Û‚ˆÛÛXÚÏ^Ê
+HOˆÂˆÙ]\UØ\›š[™Ê[
+NÂˆÙ]\İ˜Z[YY\ÜØYÙJ[
+NÂˆ_BˆÛ\ÜÓ˜[YOHœLH^X[X™\‹LÌÍÌİ™\^]Ú]H›İ[™Y[È˜[œÚ][Û‹XÛÛÜœÈİ\œÛÜ‹\Ú[\ˆ‚ˆ]OHÙ\œ˜\ˆ]š\ÛÈ‚ˆ‚ˆ8§%BˆØ]Û‚ˆÙ]‚ˆÙ]‚ˆ
+_B‚ˆËÊˆ[\ˆ˜[›™\ˆÛˆÜ[ˆÚØÛÛ]H	ˆ›ÜÙH[YH
+‹ßBˆ]ˆÛ\ÜÓ˜[YOH›X‹MˆM›İ[™YL™ËVÈÌÌŒMÌ—KÎL›Ü™\ˆ›Ü™\‹VÈÍLŒÌXWHÚYİË[YÚYİËX›XÚËÌÌ›^][\Ë\İ\\İYKX™]ÙY[ˆ‚ˆ]ˆÛ\ÜÓ˜[YOH™›^][\Ë\İ\ÜXÙK^LÈ‚ˆ]ˆÛ\ÜÓ˜[YOHœLˆ›İ[™Y^™ËYÜ˜YY[]Ë]ˆœ›ÛK\›ÜÙKMLË\[šËML^]Ú]HÚYİË[YÚYİË\›ÜÙKNML]LH‚ˆÜ\šÛ\ÈÛ\ÜÓ˜[YOHËMMˆÏ‚ˆÙ]‚ˆ]‚ˆˆÛ\ÜÓ˜[YOH^\ÛH›ÛX›Û^\›ÜÙKLŒ‚ˆİ
+	Ü˜XİXÚ[™×Ø˜[›™\—İ]IËÈ[™Îˆİ\œ™[[™ÓØš‹›˜[YHJ_BˆÚ‚ˆÚ\ÔÜ[š\ÚÈ
+ˆÛ\ÜÓ˜[YOH^^È^\›ÜÙKLLÍÌ]LHXY[™Ë\™[^Y‚ˆX›HÈ\ØÜšX™HÛÛˆİ[X™\YˆØYHY[œØZ™HÙH[˜[^˜HHÛÜœšYÙH[°è[ZXØ[Y[HÛÛˆ\È[Xœ˜\È[ÙYšXØY\ÈÛÛˆY[H[ˆÜ[ˆÛ\ÜÓ˜[YOH^X[X™\‹LÌ›ÛY^˜X›Û[™\›[™HXÛÜ˜][Û‹X[X™\‹MÍŒXÛÜ˜][Û‹Lˆ[™\›[™K[Ù™œÙ]Lˆ™Ü˜YÏÜÜ[‹‚ˆÜ‚ˆ
+Hˆ
+ˆÛ\ÜÓ˜[YOH^^È^\›ÜÙKLLÍÌ]LHXY[™Ë\™[^Y‚ˆÜXZÈÜˆÜš]Hœ™Y[Kˆ]™\HY\ÜØYÙH\È[˜[ZXØ[H[˜[^™Y[™ÛÜœ™XİYÚ][ÙYšYYÛÜ™ÈYÚYÚY[ˆÜ[ˆÛ\ÜÓ˜[YOH^X[X™\‹LÌ›ÛY^˜X›Û[™\›[™HXÛÜ˜][Û‹X[X™\‹MÍŒXÛÜ˜][Û‹Lˆ[™\›[™K[Ù™œÙ]Lˆ™ÛÛÜÜ[‹‚ˆÜ‚ˆ
+_BˆÙ]‚ˆÙ]‚ˆ]Û‚ˆÛÛXÚÏ^Ú[™T™\Ù]Ú]Bˆ]O^İ
+	Ü™\İ\İÛÛ\	Ê_BˆÛ\ÜÓ˜[YOHœLKH^\›ÜÙKLÌÍLİ™\^\›ÜÙKLŒİ™\˜™ËVÈÍŒŒM—H›İ[™Y[È˜[œÚ][Û‹XÛÛÜœÈ›^\Úš[šËLİ\œÛÜ‹\Ú[\ˆ‚ˆ‚ˆ›İ]PØİÈÛ\ÜÓ˜[YOHËMMˆÏ‚ˆØ]Û‚ˆÙ]‚‚ˆËÊˆY\ÜØYÙHX˜›\È
+‹ßBˆÛY\ÜØYÙ\Ë™š[\Š›ÛÛX[ŠK›X\
+
+\ÙÊHOˆ
+ˆÚ]Y\ÜØYÙBˆÙ^O^Û\ÙËšY\ÙËIÓX]œ˜[™ÛJ
+_XBˆY\ÜØYÙO^Û\ÙßBˆ\™Ù][™Ï^İ\™Ù][™ßBˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆÚİÕ˜[œÛ]\˜][Û^ÜÚİÕ˜[œÛ]\˜][ÛŸBˆÛ•ÛÜ™ÛXÚÏ^Ú[™UÛÜ™ÛXÚßBˆÛ”^P]Y[Ï^Ú[™T^P]Y[ßBˆ\Ğ]Y[Ô^Z[™Ï^Ú\ÔÜXZÚ[™ßBˆÜXZÚ[™ĞÚ\’[™^^ÜÜXZÚ[™ĞÚ\’[™^BˆÜXZÚ[™Õ^^ÜÜXZÚ[™Õ^BˆÛ“Ü[‘Ü˜[[X\œ™XZÙİÛ^Ú[™SÜ[‘Ü˜[[X\œ™XZÙİÛŸBˆÛ‘[]SY\ÜØYÙO^Ú[™Q[]SY\ÜØYÙ_BˆÛ•˜[œÛ]SY\ÜØYÙO^Ú[™U˜[œÛ]PÚ]Y\ÜØYÙ_BˆÏ‚ˆ
+J_B‚ˆËÊˆ›ØÙ\ÜÚ[™È[™XØ]Üˆ
+‹ßBˆÚ\Ô›ØÙ\ÜÚ[™È	‰ˆ
+ˆ]ˆÛ\ÜÓ˜[YOH™›^][\ËXÙ[\ˆÜXÙK^Lˆ^KMLˆ[š[X]KY˜YKZ[ˆ^^È^\›ÜÙKLÌÍŒ‚ˆ]ˆÛ\ÜÓ˜[YOHËMM›İ[™YY[™Ë\›ÜÙKML[š[X]K\[ÙH›^][\ËXÙ[\ˆ\İYKXÙ[\ˆ^VÎ\H^]Ú]H›ÛX›ÛÚYİË^È‚ˆˆÙ]‚ˆÜ[ˆÛ\ÜÓ˜[YOH™›Û[YY][Hİ
+	Ø›İİ[šÚ[™ÉÊ_OÜÜ[‚ˆÙ]‚ˆ
+_BˆÛXZ[‚‚ˆËÊˆ›Ø][™ÈØÜ›Û]ËUÜ]Ûˆ
+‹ßBˆÜÚİÔØÜ›ÛÜ	‰ˆ
+ˆ]Û‚ˆ\OH˜]Ûˆ‚ˆÛÛXÚÏ^Ú[™TØÜ›ÛÕÜBˆÛ\ÜÓ˜[YOH˜XœÛÛ]H›İÛKMšYÚMÛNœšYÚMˆËLLLL›İ[™YY[™ËVİ˜\ŠK\İ\™˜XÙK\š[X\JWHİ™\˜™ËVİ˜\ŠK\İ\™˜XÙKZİ™\ŠWH^Vİ˜\ŠK]^\š[X\JWHİ™\^\›ÜÙKML›Ü™\ˆ›Ü™\‹Vİ˜\ŠKX›Ü™\‹\š[X\JWHÚYİË[Èİ™\œÚYİË^›^][\ËXÙ[\ˆ\İYKXÙ[\ˆ˜[œÚ][Û‹X[\˜][Û‹LÌ‹LÌİ\œÛÜ‹\Ú[\ˆXİ]™NœØØ[KNL[š[X]KY˜YKZ[ˆ‚ˆ]O^İ
+	ÜØÜ›Ûİ×İÜ	ÊH
+\ÔÜ[š\ÚÈ	Õ›Û™\ˆ\œšX˜IÈˆ	ÔØÜ›ÛÈÜ	Ê_Bˆ\šXK[X™[^İ
+	ÜØÜ›Ûİ×İÜ	ÊH
+\ÔÜ[š\ÚÈ	Õ›Û™\ˆ\œšX˜IÈˆ	ÔØÜ›ÛÈÜ	Ê_Bˆ‚ˆ\œ›İÕ\Û\ÜÓ˜[YOHËMHMHˆÏ‚ˆØ]Û‚ˆ
+_BˆÙ]‚‚ˆËÊˆ[œ]˜\ˆ
+‹ßBˆ[œ]˜\‚ˆ\™Ù][™Ï^İ\™Ù][™ßBˆ˜]]™S[™Ï^Û˜]]™S[™ßBˆÛ”Ù[™Y\ÜØYÙO^Ú[™TÙ[™Y\ÜØYÙ_Bˆ\Ô™XÛÜ™[™Ï^Ú\Ô™XÛÜ™[™ßBˆ™XÛÜ™[™ÔÙXÛÛ™Ï^Ü™XÛÜ™[™ÔÙXÛÛ™ßBˆ\Õ˜[œØÜšXš[™Ğ]Y[Ï^Ú\Õ˜[œØÜšXš[™Ğ]Y[ßBˆÛ”İ\™XÛÜ™[™Ï^Üİ\™XÛÜ™[™ßBˆÛ”İÜ™XÛÜ™[™Ï^ÜİÜ™XÛÜ™[™ßBˆÛØ[˜Ù[™XÛÜ™[™Ï^ØØ[˜Ù[™XÛÜ™[™ßBˆ[\š[U˜[œØÜš\^Ú[\š[U˜[œØÜš\Bˆ\Ô›ØÙ\ÜÚ[™Ï^Ú\Ô›ØÙ\ÜÚ[™ßBˆÏ‚ˆÏ‚ˆ
+_B‚ˆËÊˆÛÜ™Yš[š][Ûˆ[Ù[
+‹ßBˆÛÜ™[Ù[ˆÛÜ™]O^ÜÙ[XİYÛÜ™Bˆ\™Ù][™Ï^İ\™Ù][™ßBˆÛÛÜÙO^Ê
+HOˆÙ]Ù[XİYÛÜ™
+[
+_BˆÛ”›Û›İ[˜ÙUÛÜ™^Ú[™T›Û›İ[˜ÙUÛÜ™BˆÏ‚‚ˆËÊˆÙ[[˜ÙHÜ˜[[X\ˆœ™XZÙİÛˆ[Ù[
+‹ßBˆÜ˜[[X\œ™XZÙİÛ“[Ù[ˆ\ÓÜ[^Ğ›ÛÛX[Šœ™XZÙİÛ‘]J_BˆÛÛÜÙO^Ê
+HOˆÙ]œ™XZÙİÛ‘]J[
+_BˆÙ[[˜ÙPœ™XZÙİÛ^Øœ™XZÙİÛ‘]OË˜œ™XZÙİÛˆ×_BˆÜšYÚ[˜[^^Øœ™XZÙİÛ‘]OË›ÜšYÚ[˜[^	ÉßBˆÛÜœ™XİY^^Øœ™XZÙİÛ‘]OË˜ÛÜœ™XİY^	ÉßBˆ\™Ù][™Ï^İ\™Ù][™ßBˆÛ”›Û›İ[˜ÙUÛÜ™^ÊÛÜ™
+HOˆÜXZÕ^
+ÛÜ™İ\œ™[[™ÓØš‹œÜYXÚÛÙKÜYXÚ˜]J_Bˆ\ÓØY[™Ï^Ú\Ğœ™XZÙİÛ“ØY[™ßBˆÏ‚‚ˆËÊˆÙ][™ÜÈ[Ù[
+‹ßBˆÙ][™ÜÓ[Ù[ˆ\ÓÜ[^Ú\ÔÙ][™ÜÓÜ[ŸBˆÛÛÜÙO^Ê
+HOˆÙ]\ÔÙ][™ÜÓÜ[Š˜[ÙJ_BˆÛÛ™šYÏ^ØÛÛ™šYßBˆÛ”Ø]™PÛÛ™šYÏ^Ú[™TØ]™PÛÛ™šYßBˆÏ‚‚ˆËÊˆÛØ˜[˜XÚÙÜ›İ[™]Y[È[\ÜÚYÙ]
+^[™Y	ˆZ[š[Z^™Y
+H
+‹ßBˆÛØ˜[]Y[Ò[\ÜÚYÙ]Û“Ü[‘Øİ[Y[^Ú[™SÜ[]Y[ÑØİ[Y[HÏ‚‚ˆËÊˆÛØ˜[˜XÚÙÜ›İ[™]]ËP˜XÚİ\Ø\İ
+‹ßBˆ]]Ğ˜XÚİ\Ø\İÏ‚‚ˆËÊˆ\œÚ\İ[›İÛH˜]šYØ][Ûˆ˜\ˆ›ÜˆÛYKXš]È
+›ÙÜ™\ÜÊK[™Ù][™ÜÈ
+‹ßBˆÖÉÚÛYIË	ÚXš]ÉË	ÜÙ][™ÜÉ×Kš[˜ÛY\ÊXİ]™UXŠH	‰ˆ
+ˆ›İÛS˜]˜\‚ˆXİ]™UX^ØXİ]™UXŸBˆÛ”Ù[XİX^ÜÙ]Xİ]™UXŸBˆÏ‚ˆ
+_BˆÙ]‚ˆ
+NÂŸB
