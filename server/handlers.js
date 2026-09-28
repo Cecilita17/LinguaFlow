@@ -2139,6 +2139,7 @@ INSTRUCTIONS:
    - Prioritize useful, natural vocabulary that a language learner can immediately apply.
    - Do NOT hallucinate or invent specific details that cannot be observed.
    - Organize into 2 to 3 cohesive paragraphs of natural prose. Avoid bulleted lists or dry inventories of items.
+   - Keep the description concise enough to finish. Never end a sentence or paragraph mid-phrase.
 4. Output Format:
    Respond ONLY with valid JSON with the following exact keys:
    {
@@ -2179,7 +2180,7 @@ INSTRUCTIONS:
             }
           ],
           temperature: 0.5,
-          max_tokens: 1200,
+          max_tokens: 1800,
           reasoning_effort: 'none',
           response_format: {
             type: 'json_schema',
@@ -2211,6 +2212,7 @@ INSTRUCTIONS:
       if (response.ok) {
         const data = await response.json();
         const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
+        const finishReason = data?.choices?.[0]?.finish_reason || 'unknown';
 
         logCostAudit({
           provider: 'groq',
@@ -2224,8 +2226,15 @@ INSTRUCTIONS:
           durationMs: Date.now() - startTime,
           retry: false,
           streaming: false,
-          extra: `targetLang=${targetLang} level=${level}`
+          extra: `targetLang=${targetLang} level=${level} finish_reason=${finishReason}`
         });
+
+        if (finishReason === 'length') {
+          console.warn(`[ImageDescription] Vision response reached its output limit (model=${activeModel}).`);
+          return res.status(502).json({
+            error: 'La descripción de la imagen no se pudo completar. Inténtalo nuevamente.'
+          });
+        }
 
         const rawContent = data?.choices?.[0]?.message?.content || '';
         const parsed = cleanAndParseJSON(rawContent);
