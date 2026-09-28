@@ -20,6 +20,7 @@ import {
 } from '../../services/textDocumentService.js';
 import { saveTextDocument } from '../../services/textLibraryStorage.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
+import { DocumentCover } from './DocumentCover.jsx';
 
 const LANGUAGE_META = {
   zh: { name: 'Chino Mandarín', flag: '🇨🇳' },
@@ -416,38 +417,12 @@ export function TextLibraryView({
                     : 'bg-[var(--surface-primary)] border-[var(--border-primary)] hover:bg-[var(--surface-secondary)] hover:border-rose-500/40'
                 } ${isConfirming ? 'ring-2 ring-red-500/50' : 'cursor-pointer'}`}
               >
-                {/* Book cover for EPUBs, with a consistent fallback for other documents */}
-                <div className="w-24 sm:w-28 aspect-[3/4] self-center rounded-xl overflow-hidden shrink-0 bg-[var(--surface-secondary)] border border-[var(--border-primary)] flex items-center justify-center">
-                  {isEpubDocument && doc.coverImage ? (
-                    <img
-                      src={doc.coverImage}
-                      alt={doc.title || (isSpanish ? 'Portada del libro' : 'Book cover')}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : isEpubDocument ? (
-                    <button
-                      type="button"
-                      onClick={(event) => handleAddCover(doc, event)}
-                      disabled={coverUploadingId === doc.id}
-                      title={isSpanish ? 'Agregar portada' : 'Add cover'}
-                      className="w-full h-full flex flex-col items-center justify-center gap-1 text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:cursor-wait"
-                    >
-                      {coverUploadingId === doc.id ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <BookOpen className="w-6 h-6" />
-                      )}
-                      <span className="text-[9px] font-semibold">
-                        {coverUploadingId === doc.id
-                          ? (isSpanish ? 'Guardando...' : 'Saving...')
-                          : (isSpanish ? 'Agregar portada' : 'Add cover')}
-                      </span>
-                    </button>
-                  ) : (
-                    <BookOpen className="w-6 h-6 text-rose-500/60" />
-                  )}
-                </div>
+                <DocumentCover
+                  document={doc}
+                  isSpanish={isSpanish}
+                  onAddManualCover={isEpubDocument ? (event) => handleAddCover(doc, event) : null}
+                  isUploading={coverUploadingId === doc.id}
+                />
 
                 {/* Document details */}
                 <div className="flex-1 min-w-0">
