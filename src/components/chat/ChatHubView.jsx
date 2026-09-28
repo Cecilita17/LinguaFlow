@@ -206,31 +206,31 @@ export function ChatHubView({
         </p>
       </div>
 
-      {/* 2. MAIN 2 ACTIONS WITH EQUAL VISUAL PROMINENCE */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+      {/* 2. MAIN 2 ACTIONS WITH EQUAL VISUAL PROMINENCE (Side-by-side on all screen sizes) */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full">
         {/* ACTION 1: INICIAR CHAT */}
         <button
           type="button"
           onClick={onStartChat}
-          className="group relative p-5 sm:p-6 rounded-3xl bg-white/70 dark:bg-white/[0.04] hover:bg-white/90 dark:hover:bg-white/[0.07] backdrop-blur-xl border border-black/5 dark:border-white/10 hover:border-rose-500/30 dark:hover:border-rose-500/30 text-left transition-all duration-300 shadow-sm hover:shadow-lg sm:hover:-translate-y-0.5 cursor-pointer active:scale-[0.99] overflow-hidden flex flex-col justify-between min-h-[160px] sm:min-h-[180px]"
+          className="group relative p-4 sm:p-6 rounded-3xl bg-white/70 dark:bg-white/[0.04] hover:bg-white/90 dark:hover:bg-white/[0.07] backdrop-blur-xl border border-black/5 dark:border-white/10 hover:border-rose-500/30 dark:hover:border-rose-500/30 text-left transition-all duration-300 shadow-sm hover:shadow-lg sm:hover:-translate-y-0.5 cursor-pointer active:scale-[0.99] overflow-hidden flex flex-col justify-between min-h-[150px] sm:min-h-[180px]"
         >
           {/* Subtle Ambient Glow */}
           <div className="absolute -top-10 -left-10 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl pointer-events-none group-hover:bg-rose-500/20 transition-all duration-500" />
 
           {/* Top Row: Icon & Subtle Arrow */}
           <div className="relative flex items-center justify-between w-full">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-xs group-hover:scale-105 transition-transform duration-300">
-              <MessageSquare className="w-7 h-7 sm:w-8 sm:h-8" />
+            <div className="w-11 h-11 sm:w-16 sm:h-16 rounded-2xl bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-xs group-hover:scale-105 transition-transform duration-300 shrink-0">
+              <MessageSquare className="w-5 h-5 sm:w-8 sm:h-8" />
             </div>
 
-            <div className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 flex items-center justify-center text-[var(--text-muted)] group-hover:text-rose-600 dark:group-hover:text-rose-400 group-hover:border-rose-500/30 group-hover:bg-rose-500/10 transition-all duration-300">
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-300" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 flex items-center justify-center text-[var(--text-muted)] group-hover:text-rose-600 dark:group-hover:text-rose-400 group-hover:border-rose-500/30 group-hover:bg-rose-500/10 transition-all duration-300 shrink-0">
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-0.5 transition-transform duration-300" />
             </div>
           </div>
 
           {/* Typography */}
-          <div className="relative mt-4 sm:mt-5 space-y-1">
-            <h2 className="text-base sm:text-lg font-bold sm:font-extrabold text-[var(--text-primary)] group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+          <div className="relative mt-3 sm:mt-5 space-y-1">
+            <h2 className="text-sm sm:text-lg font-bold sm:font-extrabold text-[var(--text-primary)] group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors leading-snug">
               {t('start_chat_action')}
             </h2>
             <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
@@ -243,25 +243,25 @@ export function ChatHubView({
         <button
           type="button"
           onClick={onStartCall}
-          className="group relative p-5 sm:p-6 rounded-3xl bg-white/70 dark:bg-white/[0.04] hover:bg-white/90 dark:hover:bg-white/[0.07] backdrop-blur-xl border border-black/5 dark:border-white/10 hover:border-emerald-500/30 dark:hover:border-emerald-500/30 text-left transition-all duration-300 shadow-sm hover:shadow-lg sm:hover:-translate-y-0.5 cursor-pointer active:scale-[0.99] overflow-hidden flex flex-col justify-between min-h-[160px] sm:min-h-[180px]"
+          className="group relative p-4 sm:p-6 rounded-3xl bg-white/70 dark:bg-white/[0.04] hover:bg-white/90 dark:hover:bg-white/[0.07] backdrop-blur-xl border border-black/5 dark:border-white/10 hover:border-emerald-500/30 dark:hover:border-emerald-500/30 text-left transition-all duration-300 shadow-sm hover:shadow-lg sm:hover:-translate-y-0.5 cursor-pointer active:scale-[0.99] overflow-hidden flex flex-col justify-between min-h-[150px] sm:min-h-[180px]"
         >
           {/* Subtle Ambient Glow */}
           <div className="absolute -top-10 -left-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none group-hover:bg-emerald-500/20 transition-all duration-500" />
 
           {/* Top Row: Icon & Subtle Arrow */}
           <div className="relative flex items-center justify-between w-full">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-xs group-hover:scale-105 transition-transform duration-300">
-              <Mic className="w-7 h-7 sm:w-8 sm:h-8" />
+            <div className="w-11 h-11 sm:w-16 sm:h-16 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-xs group-hover:scale-105 transition-transform duration-300 shrink-0">
+              <Mic className="w-5 h-5 sm:w-8 sm:h-8" />
             </div>
 
-            <div className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 flex items-center justify-center text-[var(--text-muted)] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:border-emerald-500/30 group-hover:bg-emerald-500/10 transition-all duration-300">
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-300" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 flex items-center justify-center text-[var(--text-muted)] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:border-emerald-500/30 group-hover:bg-emerald-500/10 transition-all duration-300 shrink-0">
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-0.5 transition-transform duration-300" />
             </div>
           </div>
 
           {/* Typography */}
-          <div className="relative mt-4 sm:mt-5 space-y-1">
-            <h2 className="text-base sm:text-lg font-bold sm:font-extrabold text-[var(--text-primary)] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+          <div className="relative mt-3 sm:mt-5 space-y-1">
+            <h2 className="text-sm sm:text-lg font-bold sm:font-extrabold text-[var(--text-primary)] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-snug">
               {t('start_call_action')}
             </h2>
             <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
