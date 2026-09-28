@@ -40,6 +40,7 @@ function TextParagraphItemComponent({
   translationError = null,
   onPlay = null,
   onStop = null,
+  onParagraphClick = null,
   onWordClick = null,
   onGloss = null,
   onGlossParagraph = null,
@@ -74,6 +75,10 @@ function TextParagraphItemComponent({
     } else {
       if (onPlay) onPlay(paragraph);
     }
+  };
+
+  const handleParagraphClick = () => {
+    if (onParagraphClick) onParagraphClick(paragraph);
   };
 
   const tokenCharRanges = React.useMemo(() => {
@@ -141,6 +146,7 @@ function TextParagraphItemComponent({
   return (
     <div
       data-paragraph-id={paragraph.id}
+      onClick={handleParagraphClick}
       className={`group/para relative p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl transition-all border select-text ${
         isPlaying
           ? 'bg-gradient-to-r from-rose-950/80 via-[#3a180e]/90 to-[#2c120a] border-rose-500/80 shadow-lg shadow-rose-950/40 ring-2 ring-rose-500/30 text-white'
@@ -216,8 +222,9 @@ function TextParagraphItemComponent({
                     key={idx}
                     dir={textDirection}
                     onClick={(e) => {
+                      e.stopPropagation();
+                      if (onParagraphClick) onParagraphClick(paragraph);
                       if (onWordClick) {
-                        e.stopPropagation();
                         onWordClick(word, { word, auxiliary, gloss: cleanGloss });
                       }
                     }}
@@ -306,8 +313,9 @@ function TextParagraphItemComponent({
                   <span
                     key={cIdx}
                     onClick={(e) => {
+                      e.stopPropagation();
+                      if (onParagraphClick) onParagraphClick(paragraph);
                       if (onWordClick) {
-                        e.stopPropagation();
                         onWordClick(cleanWord, { word: cleanWord });
                       }
                     }}
