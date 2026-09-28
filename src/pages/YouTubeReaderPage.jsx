@@ -319,7 +319,7 @@ export function YouTubeReaderPage({
     });
 
     const needsTokenizing = initialItems.some((s, idx) => idx >= INITIAL_SYNC_LIMIT && (!s.tokens || s.tokens.length === 0));
-    if (!needsTokenizing) return;
+    if (!needsTokenizing) return initialItems;
 
     const abortCtrl = { aborted: false };
     progressiveTokenizeRef.current = {
@@ -366,6 +366,7 @@ export function YouTubeReaderPage({
     };
 
     setTimeout(processNextChunk, 32);
+    return initialItems;
   }, [nativeLang]);
 
   // Safe reset reader action (e.g. on ErrorBoundary recovery or complete clear)
@@ -680,11 +681,11 @@ export function YouTubeReaderPage({
 
       if (videoId && Array.isArray(subtitles) && subtitles.length > 0) {
         const subHash = computeSubtitleHash(subtitles);
-        const newRecId = getLibraryKey(videoId, subHash, targetLang);
+        const newRecId = getLibraryKey(videoId, subHash, targetLang, nativeLang);
         setCurrentRecordId(newRecId);
 
         // Check if a saved transcript already exists for the new target language ($0 Groq reuse)
-        getTranscriptFromLibrary(videoId, subHash, targetLang).then((existing) => {
+        getTranscriptFromLibrary(videoId, subHash, targetLang, nativeLang).then((existing) => {
           if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
             setSubtitles(existing.subtitles);
             const actualCompleted = existing.subtitles.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
@@ -989,12 +990,12 @@ export function YouTubeReaderPage({
     }
 
     const subHash = computeSubtitleHash(normalized);
-    const recId = getLibraryKey(importVideoId, subHash, targetLang);
+    const recId = getLibraryKey(importVideoId, subHash, targetLang, nativeLang);
     setCurrentRecordId(recId);
 
     // Check if transcript already exists in library ($0 Groq cost reuse)
     try {
-      const existing = await getTranscriptFromLibrary(importVideoId, subHash, targetLang);
+      const existing = await getTranscriptFromLibrary(importVideoId, subHash, targetLang, nativeLang);
       if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
         handleLoadFromLibrary(existing);
         return;
@@ -1004,7 +1005,7 @@ export function YouTubeReaderPage({
     }
 
     // Launch progressive non-blocking tokenization
-    launchProgressiveTokenization(normalized, targetLang);
+    const initiallyTokenized = launchProgressiveTokenization(normalized, targetLang);
 
     // Persist initial record in library with position (uses shared position if existing)
     try {
@@ -1030,7 +1031,7 @@ export function YouTubeReaderPage({
         completedLinesCount: 0,
         isComplete: false,
         format: format || 'srt',
-        subtitles: normalized,
+        subtitles: initiallyTokenized,
         lastPlaybackTime: initialTime,
         lastSubtitleId: initialSubId
       });
@@ -1106,7 +1107,7 @@ export function YouTubeReaderPage({
     }
 
     const subHash = record.subtitleHash || (Array.isArray(record.subtitles) ? computeSubtitleHash(record.subtitles) : '');
-    const recId = record.id || getLibraryKey(record.videoId, subHash, targetLang);
+    const recId = record.id || getLibraryKey(record.videoId, subHash, targetLang, nativeLang);
 
     // Restore saved playback position and subtitle marker from record or shared video position
     const sharedPos = record.videoId ? getSharedPlaybackPosition(record.videoId) : null;
