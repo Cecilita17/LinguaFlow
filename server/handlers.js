@@ -1818,7 +1818,7 @@ export async function handleSimplifyEpubBlock(req, res) {
       level = 'medium',
       apiKey: clientApiKey
     } = body;
-    const acceptedLevels = ['medium'];
+    const acceptedLevels = ['beginner', 'medium'];
     const paragraphs = Array.isArray(sourceParagraphs)
       ? sourceParagraphs
         .map((paragraph) => ({
@@ -1844,13 +1844,16 @@ export async function handleSimplifyEpubBlock(req, res) {
     const activeModel = getSanitizedGroqModel();
     const langObj = SUPPORTED_LANGUAGES.find((language) => language.code === targetLang) || { name: targetLang, englishName: targetLang };
     const targetName = langObj.englishName || langObj.name;
-    const levelInstruction = 'Use more frequent vocabulary, simplify complex grammar, and split only excessively long sentences when needed. Preserve every detail and event.';
+    const levelInstruction = level === 'beginner'
+      ? 'Adapt for a beginner. Use very frequent everyday vocabulary, short direct sentences, and simple grammar. Replace difficult idioms with clear natural wording in the same language. You may split long sentences, but preserve every detail, event, description, and line of dialogue.'
+      : 'Adapt for an intermediate learner. Use more frequent vocabulary, simplify complex grammar, and split only excessively long sentences when needed. Preserve every detail and event.';
     const sourceWordCount = paragraphs.reduce((total, paragraph) => total + (paragraph.text.match(/[\p{L}\p{N}]+/gu) || []).length, 0);
     // Literary Arabic and other non-Latin passages can consume considerably more
     // output tokens than their word count suggests. Reserve enough room to avoid
     // truncating a faithful rewrite and accidentally accepting a summary.
     const maxOutputTokens = Math.min(8000, Math.max(6000, Math.ceil(sourceWordCount * 4.5)));
-    const buildPrompt = (strictRetry) => `You are a literary language-learning editor. Rewrite the supplied EPUB passage in ${targetName} (language code: ${targetLang}) at a medium simplification level.
+    const levelLabel = level === 'beginner' ? 'beginner' : 'intermediate';
+    const buildPrompt = (strictRetry) => `You are a literary language-learning editor. Rewrite the supplied EPUB passage in ${targetName} (language code: ${targetLang}) at a ${levelLabel} simplification level.
 
 THIS IS NOT A SUMMARY. DO NOT SUMMARIZE. Preserve all information, events, characters, dialogue, chronology, descriptions, examples, narrative order, tone, and approximately the same information density. Do not translate the text and do not add explanations, notes, titles, or commentary.
 
@@ -1893,9 +1896,8 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
         clearTimeout(timeoutId);
         if (!response.ok) {
           const errorText = await response.text();
-          // Groq occasionally rejects long otherwise-valid JSON generations at
-          // its own response-format validator. Retry once without that upstream
-          // validator; the server still parses and validates the same contract.
+          // Groq can transiently reject a long structured generation before it
+          // reaches our parser. Retry once; the server still validates the full contract.
           if (attempt === 0 && /json_validate_failed|failed_generation/i.test(errorText)) {
             console.warn('[EpubSimplification] Groq JSON validation failed; retrying with server-side JSON validation.');
             continue;

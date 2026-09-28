@@ -8,7 +8,7 @@ import { API_BASE_URL } from './chatService.js';
 import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
 import { getLanguageMeta } from '../constants/languages.js';
 
-export const EPUB_SIMPLIFICATION_LEVELS = ['medium'];
+export const EPUB_SIMPLIFICATION_LEVELS = ['beginner', 'medium'];
 export const EPUB_SIMPLIFICATION_SOURCE_VERSION = 2;
 const TARGET_WORDS_PER_BLOCK = 900;
 const MIN_WORDS_PER_BLOCK = 800;

@@ -2713,7 +2713,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                   className="max-w-[118px] sm:max-w-[160px] h-8 sm:h-9 appearance-none rounded-xl border border-black/5 dark:border-white/10 bg-black/5 dark:bg-white/10 pl-2 pr-6 text-[10px] sm:text-xs font-semibold text-[var(--text-primary)] cursor-pointer focus:outline-none focus:ring-1 focus:ring-rose-500 disabled:cursor-wait disabled:opacity-70"
                 >
                   <option value="original">{isSpanish ? 'Original' : 'Original'}</option>
-                  <option value="medium">✨ {isSpanish ? 'Simplificado' : 'Simplified'}</option>
+                  <option value="beginner">✨ {isSpanish ? 'Simplificado — Principiantes' : 'Simplified — Beginner'}</option>
+                  <option value="medium">✨ {isSpanish ? 'Simplificado — Intermedio' : 'Simplified — Intermediate'}</option>
                 </select>
                 {simplificationStatus.isLoading ? (
                   <Loader2 className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-rose-500" />
