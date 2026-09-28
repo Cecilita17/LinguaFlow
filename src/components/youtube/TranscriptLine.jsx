@@ -256,8 +256,8 @@ export function TranscriptLine({
                         key={idx}
                         dir={textDirection}
                         className={`text-stone-400 font-medium ${
-                          isChinese ? 'px-0 text-sm sm:text-base -ml-0.5 mt-3 sm:mt-3.5' : 'px-0.5 text-base sm:text-lg mt-0.5 sm:mt-1'
-                        } select-text self-start isolate [unicode-bidi:isolate]`}
+                          isChinese ? 'px-0 text-sm sm:text-base -ml-0.5 mt-3 sm:mt-3.5 self-start' : 'px-0.5 text-base sm:text-lg self-center'
+                        } select-text isolate [unicode-bidi:isolate]`}
                       >
                         {word}
                       </span>
@@ -316,6 +316,14 @@ export function TranscriptLine({
                           isChinese={isChinese}
                           nativeLang={nativeLang}
                         />
+                      )}
+                      {interlinearMode && auxiliary && !cleanGloss && (
+                        <span
+                          aria-hidden="true"
+                          className="invisible mt-1 text-[14px] sm:text-[15px] leading-tight"
+                        >
+                          &nbsp;
+                        </span>
                       )}
                     </div>
                   );
