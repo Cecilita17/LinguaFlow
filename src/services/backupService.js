@@ -647,6 +647,9 @@ export function gatherCleanSettings() {
     const wordHighlightEnabled = localStorage.getItem('linguaflow_word_highlight_v1');
     if (wordHighlightEnabled !== null) settings.wordHighlightEnabled = wordHighlightEnabled === 'true';
 
+    const fontSize = localStorage.getItem('linguaflow_global_font_size');
+    if (fontSize) settings.fontSize = fontSize;
+
     const configRaw = localStorage.getItem('linguaflow_config');
     if (configRaw) {
       try {

@@ -34,6 +34,7 @@ import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSavedWords, getSavedWordsInParagraphs } from '../context/SavedWordsContext.jsx';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
+import { useReaderSettings } from '../context/ReaderSettingsContext.jsx';
 import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
 import { getLanguageMeta, isRtlLanguage, getTextDirection } from '../constants/languages.js';
 import { createAudioWordSynchronizer } from '../utils/audioWordSync.js';
@@ -220,14 +221,7 @@ export function ImageReaderPage({
 
   // Linguistic UI preferences
   const [interlinearMode, setInterlinearMode] = useState(true);
-  const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl' | '2xl'
-
-  // Same font-size cycle used by Text Reader.
-  const cycleFontSize = () => {
-    const order = ['sm', 'base', 'lg', 'xl', '2xl'];
-    const nextIdx = (order.indexOf(fontSize) + 1) % order.length;
-    setFontSize(order[nextIdx]);
-  };
+  const { fontSize, setFontSize, cycleFontSize } = useReaderSettings();
 
   // Paragraph translations state: { [paraId]: { text, isTranslating, isVisible, error } }
   const [paragraphTranslations, setParagraphTranslations] = useState({});

@@ -56,6 +56,7 @@ import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx
 import { ErrorBoundary } from '../components/common/ErrorBoundary.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAudioSettings } from '../context/AudioSettingsContext.jsx';
+import { useReaderSettings } from '../context/ReaderSettingsContext.jsx';
 import { requestAutoBackup } from '../services/autoBackupService.js';
 
 const SESSION_STORAGE_KEY = 'linguaflow_youtube_reader_session';
@@ -150,7 +151,7 @@ export function YouTubeReaderPage({
 
   // Transcript view preferences
   const [autoScroll, setAutoScroll] = useState(true);
-  const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl' | '2xl'
+  const { fontSize, setFontSize, cycleFontSize } = useReaderSettings();
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [interlinearMode, setInterlinearMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -219,14 +220,6 @@ export function YouTubeReaderPage({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActionsMenuOpen]);
-
-  // Helper to cycle font size
-  const fontSizes = ['sm', 'base', 'lg', 'xl', '2xl'];
-  const cycleFontSize = () => {
-    const currentIndex = fontSizes.indexOf(fontSize);
-    const nextIndex = (currentIndex + 1) % fontSizes.length;
-    setFontSize(fontSizes[nextIndex]);
-  };
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -653,9 +646,6 @@ export function YouTubeReaderPage({
         if (parsed.preferences) {
           if (typeof parsed.preferences.autoScroll === 'boolean') {
             setAutoScroll(parsed.preferences.autoScroll);
-          }
-          if (parsed.preferences.fontSize) {
-            setFontSize(parsed.preferences.fontSize);
           }
           if (typeof parsed.preferences.showTimestamps === 'boolean') {
             setShowTimestamps(parsed.preferences.showTimestamps);

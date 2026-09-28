@@ -41,6 +41,7 @@ import { getLanguageMeta } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSavedWords, getSavedWordsInParagraphs } from '../context/SavedWordsContext.jsx';
+import { useReaderSettings } from '../context/ReaderSettingsContext.jsx';
 import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
 import {
   splitTextIntoParagraphs,
@@ -496,7 +497,7 @@ export function TextReaderPage({
     setInputTitle('');
     navigateToView('importer');
   }, [clearAudioVisualTimer, navigateToView]);
-  const [fontSize, setFontSize] = useState('base'); // 'sm' | 'base' | 'lg' | 'xl' | '2xl'
+  const { fontSize, setFontSize, cycleFontSize } = useReaderSettings();
   const [interlinearMode, setInterlinearMode] = useState(true);
 
   // Saved documents library modal
@@ -2278,14 +2279,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       failed: 0
     });
   };
-
-  // Font size cycle
-  const cycleFontSize = () => {
-    const order = ['sm', 'base', 'lg', 'xl', '2xl'];
-    const nextIdx = (order.indexOf(fontSize) + 1) % order.length;
-    setFontSize(order[nextIdx]);
-  };
-
 
   // Toggle menu visibility
   const toggleActionsMenu = useCallback((e) => {
