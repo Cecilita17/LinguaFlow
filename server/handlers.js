@@ -1863,7 +1863,7 @@ ${levelInstructions[level]}
 Return STRICT JSON only in this exact shape:
 {"paragraphs":[{"text":"rewritten paragraph in the original language"}]}
 
-Return exactly one rewritten paragraph for every input paragraph, in the same order. Do not include paragraph IDs or indexes in your response; the server restores their stable identities. Keep paragraph boundaries whenever practical. Your combined output must remain at least 78% as long as the source (${sourceWordCount} words); preserve details rather than shortening. ${strictRetry ? 'Your previous attempt was too short. This time preserve the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
+Return exactly one rewritten paragraph for every input paragraph, in the same order. Do not include paragraph IDs or indexes in your response; the server restores their stable identities. Keep paragraph boundaries whenever practical. Your combined output must remain at least 78% as long as the source (${sourceWordCount} words); preserve details rather than shortening. ${strictRetry ? 'Your previous output could not be validated. Return only complete, strictly valid JSON while preserving the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
 
 Input paragraphs:
 ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.text })))}`;
@@ -1887,7 +1887,7 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
               { role: 'system', content: 'You preserve literary content exactly while simplifying language. You return only valid JSON.' },
               { role: 'user', content: buildPrompt(attempt > 0) }
             ],
-            response_format: { type: 'json_object' },
+            ...(attempt === 0 ? { response_format: { type: 'json_object' } } : {}),
             // This is a deterministic rewrite, not a reasoning task. Keeping
             // reasoning low leaves the completion budget for the full passage.
             reasoning_effort: 'low',
@@ -1898,6 +1898,13 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
         clearTimeout(timeoutId);
         if (!response.ok) {
           const errorText = await response.text();
+          // Groq occasionally rejects long otherwise-valid JSON generations at
+          // its own response-format validator. Retry once without that upstream
+          // validator; the server still parses and validates the same contract.
+          if (attempt === 0 && /json_validate_failed|failed_generation/i.test(errorText)) {
+            console.warn('[EpubSimplification] Groq JSON validation failed; retrying with server-side JSON validation.');
+            continue;
+          }
           const categorized = categorizeGroqError(response.status, errorText);
           return res.status(response.status).json({ error: categorized.userMessage, error_type: categorized.type });
         }
