@@ -495,74 +495,74 @@ export function TextLibraryView({
                     {doc.updatedAt && <span className="opacity-50">•</span>}
                     <span>{paraCount} {isSpanish ? 'párrafos' : 'paragraphs'}</span>
                   </div>
-                </div>
+                  <div className="mt-3 flex justify-end">
+                    {isConfirming ? (
+                      <div
+                        className="flex items-center gap-2 bg-red-500/10 border border-red-500/50 rounded-xl px-3 py-2 animate-fade-in text-xs"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="text-red-600 dark:text-red-300 font-bold">
+                          {isSpanish ? '¿Eliminar?' : 'Delete?'}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={Boolean(deletingId)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingDeleteId(null);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-primary)] text-xs font-semibold cursor-pointer transition-colors"
+                        >
+                          {isSpanish ? 'Cancelar' : 'Cancel'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(deletingId)}
+                          onClick={(e) => handleConfirmDelete(doc.id, e)}
+                          className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs disabled:opacity-50"
+                        >
+                          {deletingId === doc.id ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>{isSpanish ? 'Eliminando...' : 'Deleting...'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>{isSpanish ? 'Eliminar' : 'Delete'}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectDocument(doc);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shadow-xs"
+                        >
+                          <span>{isSpanish ? 'Abrir' : 'Open'}</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
 
-                {/* Right side: Actions / Delete confirmation */}
-                {isConfirming ? (
-                  <div
-                    className="flex items-center gap-2 bg-red-500/10 border border-red-500/50 rounded-xl px-3 py-2 animate-fade-in text-xs shrink-0 self-end sm:self-center"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <span className="text-red-600 dark:text-red-300 font-bold">
-                      {isSpanish ? '¿Eliminar?' : 'Delete?'}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={Boolean(deletingId)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmingDeleteId(null);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-primary)] text-xs font-semibold cursor-pointer transition-colors"
-                    >
-                      {isSpanish ? 'Cancelar' : 'Cancel'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={Boolean(deletingId)}
-                      onClick={(e) => handleConfirmDelete(doc.id, e)}
-                      className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs disabled:opacity-50"
-                    >
-                      {deletingId === doc.id ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>{isSpanish ? 'Eliminando...' : 'Deleting...'}</span>
-                        </>
-                      ) : (
-                        <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingDeleteId(doc.id);
+                          }}
+                          className="p-1.5 rounded-xl border border-[var(--border-primary)] hover:border-red-500/70 bg-[var(--surface-secondary)] text-[var(--text-muted)] hover:text-red-500 transition-all cursor-pointer"
+                          title={isSpanish ? 'Eliminar texto' : 'Delete text'}
+                        >
                           <Trash2 className="w-3.5 h-3.5" />
-                          <span>{isSpanish ? 'Eliminar' : 'Delete'}</span>
-                        </>
-                      )}
-                    </button>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="flex flex-col sm:flex-row items-center gap-1.5 shrink-0 self-end sm:self-center">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectDocument(doc);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shadow-xs"
-                    >
-                      <span>{isSpanish ? 'Abrir' : 'Open'}</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmingDeleteId(doc.id);
-                      }}
-                      className="p-1.5 rounded-xl border border-[var(--border-primary)] hover:border-red-500/70 bg-[var(--surface-secondary)] text-[var(--text-muted)] hover:text-red-500 transition-all cursor-pointer"
-                      title={isSpanish ? 'Eliminar texto' : 'Delete text'}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+                </div>
 
                 {/* Reading Progress Bar */}
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--border-primary)]/40 overflow-hidden">
