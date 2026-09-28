@@ -2536,19 +2536,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
               </div>
               </div>
 
-              {/* Timestamped audio import — Whisper engine choices are intentionally hidden. */}
-              <div className="mb-4 p-3 sm:p-4 rounded-2xl bg-emerald-500/[0.045] border border-emerald-500/20">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
-                    <Headphones className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>{isSpanish ? 'Audio con timestamps' : 'Timestamped audio'}</span>
-                  </span>
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)] leading-snug">
-                  {isSpanish ? 'Carga un audio y una transcripción SRT o VTT con sus tiempos. No se realizará transcripción automática.' : 'Upload audio and an SRT or VTT transcript with timing. No automatic transcription will run.'}
-                </p>
-              </div>
-
               {/* Textarea for raw text */}
               <div className="mb-4 p-3 sm:p-4 rounded-2xl bg-[var(--surface-secondary)]/55 border border-[var(--border-primary)]">
                 <div className="flex items-center justify-between mb-1.5">
