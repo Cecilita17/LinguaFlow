@@ -1859,10 +1859,10 @@ THIS IS NOT A SUMMARY. DO NOT SUMMARIZE. Preserve all information, events, chara
 
 ${levelInstruction}
 
-Return STRICT JSON only in this exact shape:
-{"paragraphs":["rewritten paragraph in the original language"]}
+Do NOT use JSON. Return only the rewritten paragraphs, in their original order. Put this exact marker alone on one line between every pair of paragraphs:
+<<<LF_PARAGRAPH>>>
 
-Return exactly one rewritten paragraph for every input paragraph, in the same order. Do not include paragraph IDs or indexes in your response; the server restores their stable identities. Keep paragraph boundaries whenever practical. Your combined output must remain at least 78% as long as the source (${sourceWordCount} words); preserve details rather than shortening. ${strictRetry ? 'Your previous output could not be validated. Return only complete, strictly valid JSON while preserving the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
+Return exactly ${paragraphs.length} rewritten paragraphs, with exactly ${Math.max(0, paragraphs.length - 1)} markers. Do not include paragraph IDs, indexes, Markdown, commentary, or any text outside the rewritten paragraphs. The server restores stable identities. Keep paragraph boundaries whenever practical. Your combined output must remain at least 78% as long as the source (${sourceWordCount} words); preserve details rather than shortening. ${strictRetry ? 'Your previous output could not be validated. Return all complete paragraphs and exactly the requested markers while preserving the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
 
 Input paragraphs:
 ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.text })))}`;
@@ -1883,7 +1883,7 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
           body: JSON.stringify({
             model: activeModel,
             messages: [
-              { role: 'system', content: 'You preserve literary content exactly while simplifying language. You return only valid JSON.' },
+              { role: 'system', content: 'You preserve literary content exactly while simplifying language. Return only complete rewritten paragraphs separated by the requested marker.' },
               { role: 'user', content: buildPrompt(attempt > 0) }
             ],
             // This is a deterministic rewrite, not a reasoning task. Keeping
@@ -1896,8 +1896,8 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
         clearTimeout(timeoutId);
         if (!response.ok) {
           const errorText = await response.text();
-          // Groq can transiently reject a long structured generation before it
-          // reaches our parser. Retry once; the server still validates the full contract.
+          // Groq can transiently reject a long generation. Retry once; the
+          // server still validates every paragraph and the output length.
           if (attempt === 0 && /json_validate_failed|failed_generation/i.test(errorText)) {
             console.warn('[EpubSimplification] Groq JSON validation failed; retrying with server-side JSON validation.');
             continue;
@@ -1906,8 +1906,17 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
           return res.status(response.status).json({ error: categorized.userMessage, error_type: categorized.type });
         }
         const data = await response.json();
-        const parsed = cleanAndParseJSON(data?.choices?.[0]?.message?.content || '');
-        const rewritten = Array.isArray(parsed?.paragraphs) ? parsed.paragraphs : [];
+        const rawContent = String(data?.choices?.[0]?.message?.content || '').trim();
+        const parsed = cleanAndParseJSON(rawContent);
+        // Delimited plain text avoids a large JSON response with one structure
+        // per short EPUB paragraph. Keep JSON support for a compliant legacy
+        // response, but prefer the much smaller marker protocol.
+        const rewritten = rawContent.includes('<<<LF_PARAGRAPH>>>')
+          ? rawContent
+            .split(/\r?\n?<<<LF_PARAGRAPH>>>\r?\n?/)
+            .map((paragraph) => paragraph.trim())
+            .filter(Boolean)
+          : (Array.isArray(parsed?.paragraphs) ? parsed.paragraphs : []);
         // The model only needs to preserve order. Reattach stable source IDs here
         // instead of requiring it to copy opaque EPUB paragraph IDs verbatim.
         const normalizedRewritten = rewritten.map((paragraph, index) => ({
