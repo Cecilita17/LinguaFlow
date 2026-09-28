@@ -20,6 +20,28 @@ export const LANGUAGE_FLAGS = {
   tr: '🇹🇷'
 };
 
+export const ENGLISH_LANGUAGE_NAMES = {
+  es: 'Spanish',
+  en: 'English',
+  zh: 'Chinese Mandarin',
+  pl: 'Polish',
+  de: 'German',
+  fr: 'French',
+  it: 'Italian',
+  nl: 'Dutch',
+  ru: 'Russian',
+  ar: 'Arabic',
+  pt: 'Portuguese',
+  ja: 'Japanese',
+  ko: 'Korean',
+  tr: 'Turkish'
+};
+
+export function getLocalizedLanguageName(code, fallbackName = '', isSpanish = true) {
+  if (isSpanish) return fallbackName || code;
+  return ENGLISH_LANGUAGE_NAMES[String(code || '').toLowerCase()] || fallbackName || code;
+}
+
 export const LANGUAGE_METADATA = {
   es: {
     code: 'es',

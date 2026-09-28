@@ -1,30 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
-import { getLanguageMeta, LANGUAGE_FLAGS } from '../constants/languages.js';
+import { getLanguageMeta, getLocalizedLanguageName, LANGUAGE_FLAGS } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
-
-const ENGLISH_LANGUAGE_NAMES = {
-  es: 'Spanish',
-  en: 'English',
-  zh: 'Chinese Mandarin',
-  pl: 'Polish',
-  de: 'German',
-  fr: 'French',
-  it: 'Italian',
-  nl: 'Dutch',
-  ru: 'Russian',
-  ar: 'Arabic',
-  pt: 'Portuguese',
-  ja: 'Japanese',
-  ko: 'Korean',
-  tr: 'Turkish'
-};
-
-function getLocalizedLanguageName(code, fallbackName, isSpanish) {
-  if (isSpanish) return fallbackName || code;
-  return ENGLISH_LANGUAGE_NAMES[String(code || '').toLowerCase()] || fallbackName || code;
-}
 
 export function LanguageSelectDropdown({
   value,

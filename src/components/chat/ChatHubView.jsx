@@ -13,7 +13,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
-import { getLanguageMeta, LANGUAGE_FLAGS } from '../../constants/languages.js';
+import { getLanguageMeta, getLocalizedLanguageName, LANGUAGE_FLAGS } from '../../constants/languages.js';
 
 const CALL_STORAGE_KEY = 'linguaflow_call_history';
 
@@ -70,7 +70,7 @@ export function loadUnifiedHistory(isSpanish) {
                   id: `chat-${langCode}`,
                   type: 'chat',
                   lang: langCode,
-                  langName: langMeta.name || langCode.toUpperCase(),
+                  langName: getLocalizedLanguageName(langCode, langMeta.name || langCode.toUpperCase(), isSpanish),
                   flag: langMeta.flag || LANGUAGE_FLAGS[langCode] || '🌐',
                   lastMessage: lastMsg?.text || (isSpanish ? 'Conversación activa' : 'Active conversation'),
                   date: isSpanish ? 'Conversación guardada' : 'Saved conversation',
@@ -102,7 +102,7 @@ export function loadUnifiedHistory(isSpanish) {
           id: call.id,
           type: 'call',
           lang: call.lang,
-          langName: langMeta.name || call.lang.toUpperCase(),
+          langName: getLocalizedLanguageName(call.lang, langMeta.name || call.lang.toUpperCase(), isSpanish),
           flag: langMeta.flag || LANGUAGE_FLAGS[call.lang] || '🌐',
           lastMessage: call.summary || (isSpanish ? `Llamada de voz (${call.duration})` : `Voice call (${call.duration})`),
           date: call.date || (isSpanish ? 'Llamada reciente' : 'Recent call'),
@@ -133,6 +133,7 @@ export function ChatHubView({
 }) {
   const { t, isSpanish } = useSiteLanguage();
   const currentTargetMeta = getLanguageMeta(targetLang);
+  const currentTargetName = getLocalizedLanguageName(targetLang, currentTargetMeta.name || targetLang, isSpanish);
 
   // Maintain local history state to reflect deletions immediately without reload
   const [historyItems, setHistoryItems] = useState(() => loadUnifiedHistory(isSpanish));
@@ -190,7 +191,7 @@ export function ChatHubView({
 
           <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
             <span className="text-base">{currentTargetMeta.flag}</span>
-            <span>{currentTargetMeta.name}</span>
+            <span>{currentTargetName}</span>
           </div>
         </div>
 
