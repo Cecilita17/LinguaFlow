@@ -1815,10 +1815,10 @@ export async function handleSimplifyEpubBlock(req, res) {
     const {
       sourceParagraphs = [],
       targetLang = 'es',
-      level = 'light',
+      level = 'medium',
       apiKey: clientApiKey
     } = body;
-    const acceptedLevels = ['light', 'medium', 'strong'];
+    const acceptedLevels = ['medium'];
     const paragraphs = Array.isArray(sourceParagraphs)
       ? sourceParagraphs
         .map((paragraph) => ({
@@ -1844,24 +1844,20 @@ export async function handleSimplifyEpubBlock(req, res) {
     const activeModel = getSanitizedGroqModel();
     const langObj = SUPPORTED_LANGUAGES.find((language) => language.code === targetLang) || { name: targetLang, englishName: targetLang };
     const targetName = langObj.englishName || langObj.name;
-    const levelInstructions = {
-      light: 'Make conservative vocabulary substitutions, clarify hard idioms, and simplify only unusually complex constructions. Preserve nearly the same wording, structure, tone, and length.',
-      medium: 'Use more frequent vocabulary, simplify complex grammar, and split only excessively long sentences when needed. Preserve every detail and event.',
-      strong: 'Adapt vocabulary and syntax substantially for a lower-level learner, while preserving every detail, scene, dialogue, example, and event.'
-    };
+    const levelInstruction = 'Use more frequent vocabulary, simplify complex grammar, and split only excessively long sentences when needed. Preserve every detail and event.';
     const sourceWordCount = paragraphs.reduce((total, paragraph) => total + (paragraph.text.match(/[\p{L}\p{N}]+/gu) || []).length, 0);
     // Literary Arabic and other non-Latin passages can consume considerably more
     // output tokens than their word count suggests. Reserve enough room to avoid
     // truncating a faithful rewrite and accidentally accepting a summary.
-    const maxOutputTokens = Math.min(8000, Math.max(4000, Math.ceil(sourceWordCount * 4.5)));
-    const buildPrompt = (strictRetry) => `You are a literary language-learning editor. Rewrite the supplied EPUB passage in ${targetName} (language code: ${targetLang}) at the requested ${level} simplification level.
+    const maxOutputTokens = Math.min(8000, Math.max(6000, Math.ceil(sourceWordCount * 4.5)));
+    const buildPrompt = (strictRetry) => `You are a literary language-learning editor. Rewrite the supplied EPUB passage in ${targetName} (language code: ${targetLang}) at a medium simplification level.
 
 THIS IS NOT A SUMMARY. DO NOT SUMMARIZE. Preserve all information, events, characters, dialogue, chronology, descriptions, examples, narrative order, tone, and approximately the same information density. Do not translate the text and do not add explanations, notes, titles, or commentary.
 
-${levelInstructions[level]}
+${levelInstruction}
 
 Return STRICT JSON only in this exact shape:
-{"paragraphs":[{"text":"rewritten paragraph in the original language"}]}
+{"paragraphs":["rewritten paragraph in the original language"]}
 
 Return exactly one rewritten paragraph for every input paragraph, in the same order. Do not include paragraph IDs or indexes in your response; the server restores their stable identities. Keep paragraph boundaries whenever practical. Your combined output must remain at least 78% as long as the source (${sourceWordCount} words); preserve details rather than shortening. ${strictRetry ? 'Your previous output could not be validated. Return only complete, strictly valid JSON while preserving the full amount of information and a closely comparable length (at least 80% of the source word count); omission or condensation is unacceptable.' : ''}
 
@@ -1887,7 +1883,6 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
               { role: 'system', content: 'You preserve literary content exactly while simplifying language. You return only valid JSON.' },
               { role: 'user', content: buildPrompt(attempt > 0) }
             ],
-            ...(attempt === 0 ? { response_format: { type: 'json_object' } } : {}),
             // This is a deterministic rewrite, not a reasoning task. Keeping
             // reasoning low leaves the completion budget for the full passage.
             reasoning_effort: 'low',
@@ -1915,7 +1910,7 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
         // instead of requiring it to copy opaque EPUB paragraph IDs verbatim.
         const normalizedRewritten = rewritten.map((paragraph, index) => ({
           sourceParagraphId: paragraphs[index]?.sourceParagraphId,
-          text: String(paragraph?.text || '').trim()
+          text: String(typeof paragraph === 'string' ? paragraph : paragraph?.text || '').trim()
         }));
         const valid = normalizedRewritten.length === paragraphs.length
           && normalizedRewritten.every((paragraph) => paragraph.sourceParagraphId && paragraph.text);
