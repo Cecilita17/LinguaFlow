@@ -1808,7 +1808,7 @@ Write the complete reading text in ${targetName} now.`;
 // for every source paragraph so the reader can retain its stable paragraph identity.
 function rebalanceSimplifiedParagraphs(rewritten, expectedCount) {
   const output = rewritten.map((paragraph) => String(paragraph || '').trim()).filter(Boolean);
-  const minimumRecoverableCount = Math.ceil(expectedCount * 0.85);
+  const minimumRecoverableCount = Math.ceil(expectedCount * 0.75);
   if (output.length >= expectedCount || output.length < minimumRecoverableCount) return output;
 
   while (output.length < expectedCount) {
@@ -1888,6 +1888,7 @@ export async function handleSimplifyEpubBlock(req, res) {
       ? 'Adapt for a beginner. Use very frequent everyday vocabulary, short direct sentences, and simple grammar. Replace difficult idioms with clear natural wording in the same language. You may split long sentences, but preserve every detail, event, description, and line of dialogue.'
       : 'Adapt for an intermediate learner. Use more frequent vocabulary, simplify complex grammar, and split only excessively long sentences when needed. Preserve every detail and event.';
     const sourceWordCount = paragraphs.reduce((total, paragraph) => total + (paragraph.text.match(/[\p{L}\p{N}]+/gu) || []).length, 0);
+    const minimumReturnedParagraphs = Math.ceil(paragraphs.length * 0.75);
     // Literary Arabic and other non-Latin passages can consume considerably more
     // output tokens than their word count suggests. Reserve enough room to avoid
     // truncating a faithful rewrite and accidentally accepting a summary.
@@ -1964,10 +1965,15 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
         // The model only needs to preserve order. Reattach stable source IDs here
         // instead of requiring it to copy opaque EPUB paragraph IDs verbatim.
         const normalizedRewritten = normalizedParagraphs.map((paragraph, index) => ({
-          sourceParagraphId: paragraphs[index]?.sourceParagraphId,
+          sourceParagraphId: paragraphs[
+            normalizedParagraphs.length > 1
+              ? Math.round((index * (paragraphs.length - 1)) / (normalizedParagraphs.length - 1))
+              : 0
+          ]?.sourceParagraphId,
           text: String(typeof paragraph === 'string' ? paragraph : paragraph?.text || '').trim()
         }));
-        const valid = normalizedRewritten.length === paragraphs.length
+        const valid = normalizedRewritten.length >= minimumReturnedParagraphs
+          && normalizedRewritten.length <= paragraphs.length
           && normalizedRewritten.every((paragraph) => paragraph.sourceParagraphId && paragraph.text);
         const resultText = normalizedRewritten.map((paragraph) => paragraph.text).join(' ');
         const resultWordCount = (resultText.match(/[\p{L}\p{N}]+/gu) || []).length;

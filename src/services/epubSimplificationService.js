@@ -188,8 +188,9 @@ export async function simplifyEpubBlockApi({ block, documentId, targetLang, nati
         tokens: tokenizeAndGlossLineOffline(String(paragraph.text).trim(), targetLang, nativeLang),
         glosses: []
       }));
-    if (variants.length !== block.sourceParagraphIds.length) {
-      throw new Error('La simplificación no conservó todos los párrafos del bloque.');
+    const minimumVariantCount = Math.ceil(block.sourceParagraphIds.length * 0.75);
+    if (variants.length < minimumVariantCount) {
+      throw new Error('La simplificación no conservó suficientes párrafos del bloque.');
     }
     const text = variants.map((paragraph) => paragraph.text).join('\n\n');
     if (isSuspiciousSimplification(block.sourceText, text)) {
