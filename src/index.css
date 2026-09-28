@@ -132,6 +132,7 @@ rt {
 [data-theme="dark"] .audio-word-active.bg-amber-400,
 .dark .audio-word-active.bg-amber-400 {
   background-color: #fcd34d !important;
+  color: #1c1917 !important;
   box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.8) !important;
 }
 
