@@ -362,6 +362,9 @@ export async function saveTextDocument(rawDoc) {
   if (!db) {
     registerSaveEnd();
     notifyDocumentSaved(toSave);
+    try {
+      requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-updated' });
+    } catch (_) {}
     return toSave;
   }
 
@@ -374,6 +377,9 @@ export async function saveTextDocument(rawDoc) {
       request.onsuccess = () => {
         registerSaveEnd();
         notifyDocumentSaved(toSave);
+        try {
+          requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-updated' });
+        } catch (_) {}
         resolve(toSave);
       };
       request.onerror = (e) => {
