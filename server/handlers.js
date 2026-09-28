@@ -1806,6 +1806,46 @@ Write the complete reading text in ${targetName} now.`;
 
 // EPUB pedagogical simplification. This intentionally preserves one output paragraph
 // for every source paragraph so the reader can retain its stable paragraph identity.
+function rebalanceSimplifiedParagraphs(rewritten, expectedCount) {
+  const output = rewritten.map((paragraph) => String(paragraph || '').trim()).filter(Boolean);
+  const minimumRecoverableCount = Math.ceil(expectedCount * 0.85);
+  if (output.length >= expectedCount || output.length < minimumRecoverableCount) return output;
+
+  while (output.length < expectedCount) {
+    let bestSplit = null;
+
+    output.forEach((paragraph, paragraphIndex) => {
+      const sentenceBreaks = [];
+      const matcher = /[.!?…。！？؟]+(?:["'”’»）\]])*\s+/gu;
+      let match;
+      while ((match = matcher.exec(paragraph))) {
+        const splitAt = match.index + match[0].length;
+        const before = paragraph.slice(0, splitAt).trim();
+        const after = paragraph.slice(splitAt).trim();
+        if (before.length < 24 || after.length < 24) continue;
+        const balance = Math.abs(before.length - after.length);
+        sentenceBreaks.push({ paragraphIndex, splitAt, balance });
+      }
+
+      sentenceBreaks.forEach((candidate) => {
+        if (!bestSplit || candidate.balance < bestSplit.balance) bestSplit = candidate;
+      });
+    });
+
+    // Never fabricate a paragraph count by cutting a sentence in half.
+    if (!bestSplit) return rewritten;
+    const original = output[bestSplit.paragraphIndex];
+    output.splice(
+      bestSplit.paragraphIndex,
+      1,
+      original.slice(0, bestSplit.splitAt).trim(),
+      original.slice(bestSplit.splitAt).trim()
+    );
+  }
+
+  return output;
+}
+
 export async function handleSimplifyEpubBlock(req, res) {
   setCorsHeaders(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -1917,9 +1957,13 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
             .map((paragraph) => paragraph.trim())
             .filter(Boolean)
           : (Array.isArray(parsed?.paragraphs) ? parsed.paragraphs : []);
+        const normalizedParagraphs = rebalanceSimplifiedParagraphs(rewritten, paragraphs.length);
+        if (normalizedParagraphs.length !== rewritten.length) {
+          console.warn(`[EpubSimplification] Recovered ${paragraphs.length - rewritten.length} missing paragraph boundaries using sentence endings.`);
+        }
         // The model only needs to preserve order. Reattach stable source IDs here
         // instead of requiring it to copy opaque EPUB paragraph IDs verbatim.
-        const normalizedRewritten = rewritten.map((paragraph, index) => ({
+        const normalizedRewritten = normalizedParagraphs.map((paragraph, index) => ({
           sourceParagraphId: paragraphs[index]?.sourceParagraphId,
           text: String(typeof paragraph === 'string' ? paragraph : paragraph?.text || '').trim()
         }));
