@@ -548,6 +548,11 @@ export function TextReaderPage({
       });
 
       const saved = await saveDocument(docToSave);
+      recordHabitActivityForToday({
+        user,
+        langCode: saved.targetLang || targetLang,
+        activityKey: 'reading'
+      });
       setParagraphTranslations({});
       setDocument(saved);
       setInputText(saved.rawText || '');
@@ -575,7 +580,7 @@ export function TextReaderPage({
       }
       navigateToView('importer');
     }
-  }, [targetLang, nativeLang, isSpanish, clearAudioVisualTimer, refreshLibraryCount, navigateToView]);
+  }, [targetLang, nativeLang, isSpanish, user, clearAudioVisualTimer, refreshLibraryCount, navigateToView]);
 
 
 
