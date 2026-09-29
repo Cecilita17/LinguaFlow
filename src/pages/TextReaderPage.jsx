@@ -1021,11 +1021,12 @@ export function TextReaderPage({
       setIsHeaderHidden(false);
 
       const effectiveTitle = (title || '').trim() || (isSpanish ? 'Práctica con IA' : 'AI Practice Story');
+      const generatedTargetLang = sourceContext?.targetLang || activeDocLang;
 
       const docToSave = createTextDocument({
         title: effectiveTitle,
         rawText: raw,
-        targetLang: sourceContext?.targetLang || activeDocLang,
+        targetLang: generatedTargetLang,
         nativeLang,
         sourceType: 'ai',
         format: 'txt',
@@ -1053,8 +1054,8 @@ export function TextReaderPage({
       navigateToView('reader');
 
       // Auto-glossing is OFF by default:
-      const alreadyComplete = Array.isArray(saved.paragraphs) && saved.paragraphs.every(p => isGlossComplete(p, activeDocLang, nativeLang));
-      const completedCount = Array.isArray(saved.paragraphs) ? saved.paragraphs.filter(p => isGlossComplete(p, activeDocLang, nativeLang)).length : 0;
+      const alreadyComplete = Array.isArray(saved.paragraphs) && saved.paragraphs.every(p => isGlossComplete(p, generatedTargetLang, nativeLang));
+      const completedCount = Array.isArray(saved.paragraphs) ? saved.paragraphs.filter(p => isGlossComplete(p, generatedTargetLang, nativeLang)).length : 0;
 
       setGlossingProgress({
         total: Array.isArray(saved.paragraphs) ? saved.paragraphs.length : 0,
@@ -1072,7 +1073,7 @@ export function TextReaderPage({
       }
       navigateToView('importer');
     }
-  }, [activeDocLang, nativeLang, isSpanish, clearAudioVisualTimer, refreshLibraryCount, navigateToView]);
+  }, [activeDocLang, nativeLang, isSpanish, clearAudioVisualTimer, refreshLibraryCount, navigateToView, document?.id, practiceVocabulary]);
 
   // Count how many paragraphs are completely glossed
   const completedParagraphsCount = useMemo(() => {
