@@ -289,6 +289,7 @@ export function TextReaderPage({
     setIsSettingsSubmenuOpen(false);
     setIsAiModalOpen(false);
     setIsPracticeAiModalOpen(false);
+    setPracticeSourceContext(null);
     clearAudioVisualTimer();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -530,8 +531,10 @@ export function TextReaderPage({
 
   // Create with AI modal state
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  // Vocabulary practice with AI modal state
+  // Vocabulary practice with AI modal state. The optional page context is
+  // captured when a paginated EPUB action is opened, never inferred later.
   const [isPracticeAiModalOpen, setIsPracticeAiModalOpen] = useState(false);
+  const [practiceSourceContext, setPracticeSourceContext] = useState(null);
 
   const handleAiTextGenerated = useCallback(async ({ title, text }) => {
     const raw = (text || '').trim();
@@ -958,7 +961,45 @@ export function TextReaderPage({
     practiceVocabulary.length <= PRACTICE_VOCABULARY_MAX
   );
 
-  const handlePracticeTextGenerated = useCallback(async ({ title, text, requiredVocabulary }) => {
+  // EPUB practice is intentionally page-scoped: only words that appear in the
+  // current visual page are offered, never all saved words from the full book.
+  const pagePracticeVocabulary = useMemo(
+    () => isEpub ? getSavedWordsInParagraphs(savedWords, visibleParagraphs, activeDocLang) : [],
+    [isEpub, savedWords, visibleParagraphs, activeDocLang]
+  );
+  const canCreateEpubPagePractice = Boolean(
+    isEpub &&
+    document?.id &&
+    visibleParagraphs.length > 0 &&
+    pagePracticeVocabulary.length > 0 &&
+    pagePracticeVocabulary.length <= PRACTICE_VOCABULARY_MAX
+  );
+
+  const handleOpenEpubPagePractice = useCallback(() => {
+    if (!canCreateEpubPagePractice || !document?.id) return;
+
+    setPracticeSourceContext({
+      documentId: document.id,
+      targetLang: activeDocLang,
+      chapterId: currentChapter?.id || null,
+      chapterIndex: currentChapterIndex,
+      pageIndex: currentParagraphPage,
+      paragraphIds: visibleParagraphs.map((paragraph) => paragraph.sourceParagraphId || paragraph.id),
+      vocabulary: pagePracticeVocabulary.map((item) => typeof item === 'string' ? item : item.word).filter(Boolean)
+    });
+    setIsPracticeAiModalOpen(true);
+  }, [
+    canCreateEpubPagePractice,
+    document?.id,
+    activeDocLang,
+    currentChapter?.id,
+    currentChapterIndex,
+    currentParagraphPage,
+    visibleParagraphs,
+    pagePracticeVocabulary
+  ]);
+
+  const handlePracticeTextGenerated = useCallback(async ({ title, text, requiredVocabulary }, sourceContext = null) => {
     const raw = (text || '').trim();
     if (!raw) return;
 
@@ -984,16 +1025,22 @@ export function TextReaderPage({
       const docToSave = createTextDocument({
         title: effectiveTitle,
         rawText: raw,
-        targetLang: activeDocLang,
+        targetLang: sourceContext?.targetLang || activeDocLang,
         nativeLang,
         sourceType: 'ai',
         format: 'txt',
         generation: {
           type: 'vocabulary-practice',
-          sourceType: 'text-document',
-          sourceId: document?.id || null,
-          parentDocumentId: document?.id || null,
-          requiredVocabulary: Array.isArray(requiredVocabulary) ? requiredVocabulary : practiceVocabulary.map(v => typeof v === 'string' ? v : v.word)
+          sourceType: sourceContext?.chapterId ? 'epub-page' : 'text-document',
+          sourceId: sourceContext?.documentId || document?.id || null,
+          parentDocumentId: sourceContext?.documentId || document?.id || null,
+          chapterId: sourceContext?.chapterId || null,
+          chapterIndex: Number.isInteger(sourceContext?.chapterIndex) ? sourceContext.chapterIndex : null,
+          pageIndex: Number.isInteger(sourceContext?.pageIndex) ? sourceContext.pageIndex : null,
+          sourceParagraphIds: Array.isArray(sourceContext?.paragraphIds) ? [...sourceContext.paragraphIds] : null,
+          requiredVocabulary: Array.isArray(requiredVocabulary)
+            ? requiredVocabulary
+            : (sourceContext?.vocabulary || practiceVocabulary.map(v => typeof v === 'string' ? v : v.word))
         },
         createdAt: new Date().toISOString()
       });
@@ -3168,7 +3215,36 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsPracticeAiModalOpen(true)}
+                  onClick={() => {
+                    setPracticeSourceContext(null);
+                    setIsPracticeAiModalOpen(true);
+                  }}
+                  className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-rose-950/30 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{isSpanish ? 'Crear práctica con IA' : 'Create AI practice'}</span>
+                </button>
+              </section>
+            )}
+
+            {canCreateEpubPagePractice && (
+              <section className="mt-8 p-4 sm:p-5 rounded-3xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                    <Sparkles className="w-4 h-4 shrink-0" />
+                    <h3 className="text-sm font-bold">
+                      {isSpanish ? '¿Practicar las palabras de esta página?' : 'Practice this page’s words?'}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
+                    {isSpanish
+                      ? `La IA incluirá tus ${pagePracticeVocabulary.length} palabras guardadas visibles en esta página.`
+                      : `AI will include the ${pagePracticeVocabulary.length} saved words visible on this page.`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenEpubPagePractice}
                   className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-rose-950/30 active:scale-95 transition-all cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4" />
@@ -3392,11 +3468,14 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       {/* Create Vocabulary Practice with AI Modal (Practice Flow) */}
       <CreateWithAiModal
         isOpen={isPracticeAiModalOpen}
-        onClose={() => setIsPracticeAiModalOpen(false)}
-        targetLang={activeDocLang}
+        onClose={() => {
+          setIsPracticeAiModalOpen(false);
+          setPracticeSourceContext(null);
+        }}
+        targetLang={practiceSourceContext?.targetLang || activeDocLang}
         apiKey={apiKey}
-        requiredVocabulary={canCreateVocabularyPractice ? practiceVocabulary : []}
-        onTextGenerated={handlePracticeTextGenerated}
+        requiredVocabulary={practiceSourceContext?.vocabulary || (canCreateVocabularyPractice ? practiceVocabulary : [])}
+        onTextGenerated={(payload) => handlePracticeTextGenerated(payload, practiceSourceContext)}
       />
 
       {/* Gloss Notice Toast */}
