@@ -7,6 +7,83 @@
 
 export const STORAGE_KEY_CHAT_SESSION_HISTORY = 'linguaflow_chat_session_history';
 
+const DURABLE_DB_NAME = 'linguaflow_completed_chat_sessions';
+const DURABLE_STORE_NAME = 'sessions';
+const DURABLE_DB_VERSION = 1;
+
+function openDurableSessionDatabase() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DURABLE_DB_NAME, DURABLE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DURABLE_STORE_NAME)) {
+        db.createObjectStore(DURABLE_STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveDurableChatSession(session) {
+  if (!session?.id) return false;
+  try {
+    const db = await openDurableSessionDatabase();
+    if (!db) return false;
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(DURABLE_STORE_NAME, 'readwrite');
+      transaction.objectStore(DURABLE_STORE_NAME).put(session);
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+    db.close();
+    return true;
+  } catch (error) {
+    console.warn('[ChatSessionStorage] Failed to save durable session:', error);
+    return false;
+  }
+}
+
+export async function getDurableChatSessions() {
+  try {
+    const db = await openDurableSessionDatabase();
+    if (!db) return [];
+    const sessions = await new Promise((resolve, reject) => {
+      const transaction = db.transaction(DURABLE_STORE_NAME, 'readonly');
+      const request = transaction.objectStore(DURABLE_STORE_NAME).getAll();
+      request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return sessions.sort((a, b) => new Date(b.endedAt || 0) - new Date(a.endedAt || 0));
+  } catch (error) {
+    console.warn('[ChatSessionStorage] Failed to read durable sessions:', error);
+    return [];
+  }
+}
+
+export async function deleteDurableChatSession(sessionId) {
+  if (!sessionId) return false;
+  try {
+    const db = await openDurableSessionDatabase();
+    if (!db) return false;
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(DURABLE_STORE_NAME, 'readwrite');
+      transaction.objectStore(DURABLE_STORE_NAME).delete(sessionId);
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+    db.close();
+    return true;
+  } catch (error) {
+    console.warn('[ChatSessionStorage] Failed to delete durable session:', error);
+    return false;
+  }
+}
+
 /**
  * Deep clones messages array to guarantee an immutable snapshot.
  */
@@ -95,6 +172,7 @@ export function saveChatSession(session) {
  */
 export function deleteChatSession(sessionId) {
   if (!sessionId) return false;
+  void deleteDurableChatSession(sessionId);
   const history = getChatSessionHistory();
   const filtered = history.filter(s => s.id !== sessionId);
   if (filtered.length !== history.length) {

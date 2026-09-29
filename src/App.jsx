@@ -29,7 +29,7 @@ import { ChatVoicePlaybackMenu } from './components/chat/ChatVoicePlaybackMenu.j
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
 import { ChatSessionDetailView } from './components/chat/ChatSessionDetailView.jsx';
-import { saveChatSession, deleteChatSession } from './services/chatSessionHistoryStorage.js';
+import { saveChatSession, deleteChatSession, saveDurableChatSession } from './services/chatSessionHistoryStorage.js';
 import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
 import { GlobalAudioImportWidget } from './components/audio/GlobalAudioImportWidget.jsx';
 import { HABIT_TRACKER_UPDATED_EVENT, recordHabitActivityForToday } from './services/habitTrackerService.js';
@@ -1116,8 +1116,9 @@ export default function App() {
 
       const endedAt = new Date().toISOString();
 
-      // 1. Save completed session in dedicated persistent storage
-      saveChatSession({
+      // 1. Persist the completed session before clearing its active thread.
+      // IndexedDB is the durable source; localStorage remains a fast mirror.
+      const completedSession = saveChatSession({
         targetLang,
         nativeLang,
         startedAt,
@@ -1127,6 +1128,10 @@ export default function App() {
           level: config?.level || 'A2/B1'
         }
       });
+      const durableSaved = await saveDurableChatSession(completedSession);
+      if (!durableSaved) {
+        throw new Error('The completed conversation could not be stored safely.');
+      }
 
       // 2. Clear start timestamp
       try {

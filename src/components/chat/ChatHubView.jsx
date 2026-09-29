@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLanguageMeta, getLocalizedLanguageName, LANGUAGE_FLAGS } from '../../constants/languages.js';
-import { getChatSessionHistory, deleteChatSession } from '../../services/chatSessionHistoryStorage.js';
+import { getChatSessionHistory, getDurableChatSessions, deleteChatSession } from '../../services/chatSessionHistoryStorage.js';
 import { getDurableChatHistory } from '../../services/chatHistoryStorage.js';
 
 const CALL_STORAGE_KEY = 'linguaflow_call_history';
@@ -75,7 +75,7 @@ function formatSessionDate(isoStringOrTimestamp, isSpanish) {
   }
 }
 
-export function loadUnifiedHistory(isSpanish, targetLang = '') {
+export function loadUnifiedHistory(isSpanish, targetLang = '', durableSessions = []) {
   const historyItems = [];
   const selectedLanguage = String(targetLang || '').toLowerCase().split('-')[0];
 
@@ -155,7 +155,14 @@ export function loadUnifiedHistory(isSpanish, targetLang = '') {
 
     // 2. Gather completed chat sessions from dedicated session history storage
     try {
-      const chatSessions = getChatSessionHistory();
+      const sessionsById = new Map();
+      getChatSessionHistory().forEach((session) => {
+        if (session?.id) sessionsById.set(session.id, session);
+      });
+      durableSessions.forEach((session) => {
+        if (session?.id) sessionsById.set(session.id, session);
+      });
+      const chatSessions = [...sessionsById.values()];
       chatSessions.forEach((session) => {
         if (!session || !session.id) return;
         const sessionLang = String(session.targetLang || '').toLowerCase().split('-')[0];
@@ -248,16 +255,32 @@ export function ChatHubView({
   const currentTargetMeta = getLanguageMeta(targetLang);
   const currentTargetName = getLocalizedLanguageName(targetLang, currentTargetMeta.name || targetLang, isSpanish);
 
+  // Completed conversations have a durable IndexedDB copy in addition to the
+  // local mirror, so ending a chat never depends on a localStorage write.
+  const [durableSessions, setDurableSessions] = useState([]);
+
   // Maintain local history state to reflect additions/deletions immediately
-  const [historyItems, setHistoryItems] = useState(() => loadUnifiedHistory(isSpanish, targetLang));
+  const [historyItems, setHistoryItems] = useState(() => loadUnifiedHistory(isSpanish, targetLang, []));
 
   const refreshHistory = useCallback(() => {
-    setHistoryItems(loadUnifiedHistory(isSpanish, targetLang));
-  }, [isSpanish, targetLang]);
+    setHistoryItems(loadUnifiedHistory(isSpanish, targetLang, durableSessions));
+  }, [isSpanish, targetLang, durableSessions]);
 
   useEffect(() => {
     refreshHistory();
   }, [refreshHistory]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadDurableSessions = async () => {
+      const sessions = await getDurableChatSessions();
+      if (!cancelled) setDurableSessions(sessions);
+    };
+    void loadDurableSessions();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetLang]);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,6 +347,7 @@ export function ChatHubView({
         }
       } else if (item.type === 'chat') {
         deleteChatSession(item.id);
+        setDurableSessions((sessions) => sessions.filter((session) => session.id !== item.id));
         if (onDeleteChatSession) {
           onDeleteChatSession(item.id);
         }
