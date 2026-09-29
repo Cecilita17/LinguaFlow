@@ -220,6 +220,8 @@ export const CHINESE_OFFLINE_DICT = {
 
   // Common Nouns
   '朋友': { pinyin: 'péngyou', gloss: 'amigo' },
+  '老公': { pinyin: 'lǎogōng', gloss: 'marido' },
+  '借口': { pinyin: 'jièkǒu', gloss: 'excusa / pretexto' },
   '老师': { pinyin: 'lǎoshī', gloss: 'profesor' },
   '学生': { pinyin: 'xuésheng', gloss: 'estudiante' },
   '人': { pinyin: 'rén', gloss: 'persona' },
