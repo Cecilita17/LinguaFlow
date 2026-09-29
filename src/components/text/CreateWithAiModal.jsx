@@ -35,9 +35,41 @@ export function CreateWithAiModal({
     nativeName: targetLang.toUpperCase(),
     flag: '🌐'
   };
-  const practiceVocabulary = Array.isArray(requiredVocabulary)
-    ? requiredVocabulary.map((item) => typeof item === 'string' ? item : item?.word).filter(Boolean)
-    : [];
+  const practiceVocabulary = React.useMemo(() => {
+    if (!Array.isArray(requiredVocabulary)) return [];
+    return requiredVocabulary.map((item) => typeof item === 'string' ? item : item?.word).filter(Boolean);
+  }, [requiredVocabulary]);
+
+  const [selectedWords, setSelectedWords] = useState(() => new Set(practiceVocabulary));
+
+  // Keep selectedWords synchronized whenever practiceVocabulary changes or modal opens
+  React.useEffect(() => {
+    setSelectedWords(new Set(practiceVocabulary));
+  }, [practiceVocabulary, isOpen]);
+
+  const toggleWordSelection = (word) => {
+    setSelectedWords((prev) => {
+      const next = new Set(prev);
+      if (next.has(word)) {
+        next.delete(word);
+      } else {
+        next.add(word);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedWords(new Set(practiceVocabulary));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedWords(new Set());
+  };
+
+  const selectedCount = selectedWords.size;
+  const totalCount = practiceVocabulary.length;
+  const activeSelectedVocabulary = practiceVocabulary.filter((w) => selectedWords.has(w));
 
   const handleGenerate = async (e) => {
     if (e) e.preventDefault();
@@ -57,7 +89,7 @@ export function CreateWithAiModal({
         level,
         length,
         apiKey,
-        requiredVocabulary: practiceVocabulary
+        requiredVocabulary: activeSelectedVocabulary
       });
 
       if (result && result.text) {
@@ -65,7 +97,7 @@ export function CreateWithAiModal({
           await onTextGenerated({
             title: result.title || trimmedTopic,
             text: result.text,
-            requiredVocabulary: practiceVocabulary
+            requiredVocabulary: activeSelectedVocabulary
           });
         }
         onClose();
@@ -115,7 +147,7 @@ export function CreateWithAiModal({
           </div>
           <div>
             <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
-<span>{practiceVocabulary.length > 0
+              <span>{practiceVocabulary.length > 0
                 ? (isSpanish ? 'Crear práctica con IA' : 'Create AI practice')
                 : (isSpanish ? 'Crear texto con IA' : 'Create text with AI')}</span>
             </h3>
@@ -130,16 +162,58 @@ export function CreateWithAiModal({
         </div>
 
         {practiceVocabulary.length > 0 && (
-          <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-2">
-              {isSpanish ? 'Palabras guardadas que se incluirán' : 'Saved words to include'}
-            </p>
-            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar pr-1">
-              {practiceVocabulary.map((word) => (
-                <span key={word} className="px-2 py-0.5 rounded-md bg-amber-300 text-stone-950 text-[11px] font-bold">
-                  {word}
-                </span>
-              ))}
+          <div className="mb-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                {isSpanish
+                  ? `Palabras guardadas (${selectedCount}/${totalCount})`
+                  : `Saved words (${selectedCount}/${totalCount})`}
+              </p>
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  disabled={selectedCount === totalCount || isLoading}
+                  className="font-semibold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isSpanish ? 'Seleccionar todas' : 'Select all'}
+                </button>
+                <span className="text-amber-400 dark:text-amber-600">•</span>
+                <button
+                  type="button"
+                  onClick={handleDeselectAll}
+                  disabled={selectedCount === 0 || isLoading}
+                  className="font-semibold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isSpanish ? 'Deseleccionar todas' : 'Deselect all'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto custom-scrollbar pr-1">
+              {practiceVocabulary.map((word) => {
+                const isSelected = selectedWords.has(word);
+                return (
+                  <button
+                    key={word}
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => toggleWordSelection(word)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer active:scale-95 ${
+                      isSelected
+                        ? 'bg-amber-300 hover:bg-amber-400 text-stone-950 shadow-xs border border-amber-400'
+                        : 'bg-[var(--surface-secondary)] text-[var(--text-muted)] line-through opacity-60 hover:opacity-100 border border-[var(--border-primary)]'
+                    }`}
+                    title={
+                      isSelected
+                        ? (isSpanish ? `Clic para desmarcar "${word}"` : `Click to unselect "${word}"`)
+                        : (isSpanish ? `Clic para incluir "${word}"` : `Click to select "${word}"`)
+                    }
+                  >
+                    {word}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

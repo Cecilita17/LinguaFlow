@@ -68,6 +68,84 @@ export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targ
   });
 }
 
+/**
+ * Returns only the user's saved vocabulary that actually appears in a historical chat session.
+ * Checks message tokens, vocabulary keys, diffTokens, and raw text representations across all messages.
+ * Deduplicated strictly by getSavedWordKey identity.
+ *
+ * @param {Array} savedWords - Active saved words list from SavedWordsContext
+ * @param {object} session - Chat session object
+ * @param {string} targetLang - Language code of the session
+ * @returns {Array} Matching saved word objects
+ */
+export function getSavedWordsInChatSession(savedWords = [], session = null, targetLang = '') {
+  const language = String(targetLang || session?.targetLang || '').toLowerCase().split('-')[0];
+  if (!language || !Array.isArray(savedWords) || !session) return [];
+
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  if (messages.length === 0) return [];
+
+  const tokenKeys = new Set();
+  const textChunks = [];
+
+  messages.forEach((msg) => {
+    if (!msg) return;
+
+    // 1. Check tokens
+    if (Array.isArray(msg.tokens)) {
+      msg.tokens.forEach((t) => {
+        const clean = t?.clean_word || (typeof t === 'string' ? t : (t?.word || t?.text));
+        if (clean) tokenKeys.add(getSavedWordKey(clean, language));
+        if (t?.word && t.word !== clean) tokenKeys.add(getSavedWordKey(t.word, language));
+        if (t?.text && t.text !== clean && t.text !== t?.word) tokenKeys.add(getSavedWordKey(t.text, language));
+      });
+    }
+
+    // 2. Check vocabulary dictionary keys
+    if (msg.vocabulary && typeof msg.vocabulary === 'object') {
+      Object.keys(msg.vocabulary).forEach((vocabWord) => {
+        if (vocabWord) tokenKeys.add(getSavedWordKey(vocabWord, language));
+      });
+    }
+
+    // 3. Check diffTokens (user message corrections)
+    if (Array.isArray(msg.diffTokens)) {
+      msg.diffTokens.forEach((dt) => {
+        if (dt?.text) textChunks.push(dt.text);
+        if (dt?.original) textChunks.push(dt.original);
+      });
+    }
+
+    // 4. Collect raw text strings for word boundary regex & CJK matching
+    if (msg.text) textChunks.push(msg.text);
+    if (msg.correctedText && msg.correctedText !== msg.text) textChunks.push(msg.correctedText);
+    if (msg.originalText && msg.originalText !== msg.text) textChunks.push(msg.originalText);
+  });
+
+  const fullText = textChunks.join('\n');
+
+  const escapeRegExp = (value) => Array.from(String(value)).map((char) =>
+    '\\^$.*+?()[]{}|/'.includes(char) ? '\\' + char : char
+  ).join('');
+
+  const containsWord = (word) => {
+    const cleanWord = String(word || '').trim();
+    if (!cleanWord) return false;
+    if (language === 'zh' || language === 'ja') return fullText.includes(cleanWord);
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(cleanWord)}(?=$|[^\\p{L}\\p{N}])`, 'iu').test(fullText);
+  };
+
+  const seen = new Set();
+  return savedWords.filter((item) => {
+    if (!item?.word || String(item.lang || '').toLowerCase().split('-')[0] !== language) return false;
+    const key = getSavedWordKey(item.word, language);
+    if (seen.has(key)) return false;
+    if (!tokenKeys.has(key) && !containsWord(item.word)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function persistSavedWords(words) {
   try {
     localStorage.setItem(STORAGE_KEY_SAVED_WORDS, JSON.stringify(words));

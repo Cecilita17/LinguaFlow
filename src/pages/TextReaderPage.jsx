@@ -990,6 +990,8 @@ export function TextReaderPage({
         format: 'txt',
         generation: {
           type: 'vocabulary-practice',
+          sourceType: 'text-document',
+          sourceId: document?.id || null,
           parentDocumentId: document?.id || null,
           requiredVocabulary: Array.isArray(requiredVocabulary) ? requiredVocabulary : practiceVocabulary.map(v => typeof v === 'string' ? v : v.word)
         },
