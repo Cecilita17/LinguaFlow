@@ -8,7 +8,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
   const { isSpanish } = useSiteLanguage();
   if (!wordData) return null;
 
-  const { word, meaning, part_of_speech: partOfSpeech, translit } = wordData;
+  const { word, meaning, translit } = wordData;
   const activeLang = wordData?.targetLang || wordData?.lang || targetLang || 'zh';
   const isSaved = isWordSaved(word, activeLang);
   const isArabic = /[\u0600-\u06FF]/.test(word || '');
@@ -44,11 +44,6 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
             >
               {word}
             </h3>
-            {partOfSpeech && (
-              <span className="mt-2 inline-flex rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-300">
-                {partOfSpeech}
-              </span>
-            )}
           </div>
 
           <div className="flex shrink-0 items-center gap-2 pt-1">
@@ -92,17 +87,6 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
             : (meaning || (isSpanish ? 'Buscando definición…' : 'Looking up definition…'))}
         </div>
 
-        {wordData.sentence && (
-          <div className="mt-5 border-t border-[var(--border-primary)] pt-4">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold tracking-[0.14em] text-[var(--text-muted)]">
-                {isSpanish ? 'ORACIÓN' : 'SENTENCE'}
-              </span>
-              <Volume2 className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-            </div>
-            <p className="mt-1.5 text-sm italic leading-relaxed text-[var(--text-secondary)]">{wordData.sentence}</p>
-          </div>
-        )}
       </section>
     </div>
   );
