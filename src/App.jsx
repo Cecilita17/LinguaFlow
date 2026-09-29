@@ -114,13 +114,6 @@ function saveChatToStorage(lang, messagesList) {
   }
 }
 
-function updateStoredChat(lang, updater) {
-  const current = getSavedChat(lang) || [];
-  const next = updater(current);
-  saveChatToStorage(lang, next);
-  return next;
-}
-
 export default function App() {
   const { user } = useAuth();
   const { t, isSpanish } = useSiteLanguage();
@@ -312,9 +305,8 @@ export default function App() {
   // Delete message handler
   const handleDeleteMessage = (messageId) => {
     if (!messageId) return;
-    const updated = updateStoredChat(activeLangRef.current, (previous) => (
-      previous.filter((message) => message && message.id !== messageId)
-    ));
+    const updated = messagesRef.current.filter((message) => message && message.id !== messageId);
+    saveChatToStorage(activeLangRef.current, updated);
     messagesRef.current = updated;
     setMessages(updated);
   };
@@ -794,7 +786,14 @@ export default function App() {
     const conversationNativeLang = nativeLang;
     const conversationConfig = config;
     const updateConversation = (updater) => {
-      const next = updateStoredChat(conversationLang, updater);
+      // For the visible conversation, the ref is the newest source of truth.
+      // Reading localStorage here can be one render behind and would erase the
+      // preceding AI response when a learner sends the next message.
+      const current = activeLangRef.current === conversationLang
+        ? messagesRef.current
+        : (getSavedChat(conversationLang) || []);
+      const next = updater(current);
+      saveChatToStorage(conversationLang, next);
       if (activeLangRef.current === conversationLang) {
         messagesRef.current = next;
         setMessages(next);
@@ -819,7 +818,9 @@ export default function App() {
     setIsProcessing(true);
 
     try {
-      const conversationMessages = getSavedChat(conversationLang) || messagesRef.current;
+      const conversationMessages = activeLangRef.current === conversationLang
+        ? messagesRef.current
+        : (getSavedChat(conversationLang) || []);
       const result = await sendChatMessage({
         message: cleanText,
         targetLang: conversationLang,
