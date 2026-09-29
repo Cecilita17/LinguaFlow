@@ -259,12 +259,12 @@ function resegmentOversizedToken(text) {
  * @param {Array} groqTokens - Tokens returned by Groq
  * @returns {Array} Normalized, reliable tokens
  */
-export function normalizeChineseTokens(originalText, sourceTokens) {
+export function normalizeChineseTokens(originalText, groqTokens) {
   if (!originalText || typeof originalText !== 'string') {
     return [];
   }
 
-  const sourceTokens = Array.isArray(sourceTokens) ? sourceTokens : [];
+  const sourceTokens = Array.isArray(groqTokens) ? groqTokens : [];
 
   // A chat response can arrive without its optional token array. Build a
   // deterministic word-level representation instead of falling back to bare
