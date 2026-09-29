@@ -8,6 +8,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
   const { isSpanish } = useSiteLanguage();
   const [optimisticSaved, setOptimisticSaved] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
   const word = wordData?.word || '';
   const meaning = wordData?.meaning || null;
   const translit = wordData?.translit || null;
@@ -23,6 +24,10 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
     setIsSaving(false);
   }, [word, activeLang, isSaved]);
 
+  useEffect(() => {
+    setIsDismissed(false);
+  }, [wordData]);
+
   const handleToggleSavedWord = () => {
     if (isSaving || !wordData) return;
     const nextSaved = !displayedSaved;
@@ -35,12 +40,20 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
     });
   };
 
+  const handleClose = () => {
+    if (isDismissed) return;
+    // Hide locally before App re-renders the full reader tree. The actual
+    // state cleanup runs on the next frame and preserves the existing API.
+    setIsDismissed(true);
+    requestAnimationFrame(onClose);
+  };
+
   if (!wordData) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[2px] animate-fade-in"
-      onClick={onClose}
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[2px] animate-fade-in transition-none ${isDismissed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+      onClick={handleClose}
       role="presentation"
     >
       <section
