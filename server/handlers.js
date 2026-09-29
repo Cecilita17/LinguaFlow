@@ -499,6 +499,12 @@ export async function handleChat(req, res) {
       history
     });
 
+    // The primary prompt asks for richly annotated tokens. If the model returns
+    // malformed JSON, the retry deliberately reduces that surface area: the
+    // reader can safely reconstruct missing tokens client-side, but it cannot
+    // recover an invalid conversation response.
+    const compactJsonRetryInstruction = `The previous attempt did not produce parseable JSON. Return a NEW, compact JSON object only — no markdown, no analysis, no <think> tags. Keep "bot_response.text" to at most two short sentences. Include exactly: {"user_correction":{"original_text":"...","corrected_text":"...","has_errors":false,"diff_tokens":[]},"bot_response":{"text":"...","translation":"...","tokens":[],"vocabulary":{}}}. If detailed tokens or vocabulary could make the JSON invalid, leave those arrays/objects empty.`;
+
     // Effective API Key is kept in backend/server environment (GROQ_API_KEY)
     const effectiveApiKey = (
       process.env.GROQ_API_KEY ||
@@ -541,11 +547,12 @@ export async function handleChat(req, res) {
               model: activeModel,
               messages: [
                 { role: 'system', content: systemInstruction },
+                ...(isRetry ? [{ role: 'system', content: compactJsonRetryInstruction }] : []),
                 { role: 'user', content: dataPrompt }
               ],
               response_format: { type: 'json_object' },
-              temperature: 0.6,
-              max_tokens: 4000
+              temperature: isRetry ? 0.2 : 0.6,
+              max_tokens: isRetry ? 1800 : 4000
             })
           });
 
@@ -582,7 +589,10 @@ export async function handleChat(req, res) {
                 data: enrichedData
               });
             } else {
-              groqErrorMessage = `La respuesta de Groq no tuvo el formato JSON esperado: ${rawText.slice(0, 120)}`;
+              // Do not echo model content to logs: it may contain learner text.
+              // The next attempt uses the compact JSON-only recovery instruction.
+              groqErrorMessage = `La respuesta de Groq no tuvo un objeto de conversación parseable (respuesta de ${rawText.length} caracteres).`;
+              console.warn(`[Groq Chat] Invalid structured response on attempt ${attempts}/${maxAttempts}; using compact JSON retry when available.`);
             }
           } else {
             const err = await response.json().catch(() => ({}));
