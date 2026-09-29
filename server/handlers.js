@@ -732,12 +732,13 @@ Format strictly as valid JSON matching this schema:
           });
           const rawText = data?.choices?.[0]?.message?.content;
           const parsed = cleanAndParseJSON(rawText);
-          if (parsed && (parsed.meaning || parsed.definition)) {
+          const translation = parsed?.meaning || parsed?.translation || parsed?.gloss || parsed?.definition;
+          if (parsed && typeof translation === 'string' && translation.trim()) {
             return res.status(200).json({
               success: true,
               data: {
                 word: parsed.word || word,
-                meaning: parsed.meaning || parsed.definition,
+                meaning: translation.trim(),
                 part_of_speech: parsed.part_of_speech || parsed.pos || null,
                 translit: parsed.translit || parsed.pinyin || null
               }
@@ -755,7 +756,7 @@ Format strictly as valid JSON matching this schema:
     if (!effectiveApiKey) {
       return res.status(200).json({
         success: false,
-        error: 'Para consultar la definición con IA, configura tu clave de Groq en Ajustes ⚙️.',
+        error: 'Para consultar la traducción con IA, configura tu clave de Groq en Ajustes ⚙️.',
         data: null
       });
     }
@@ -763,7 +764,7 @@ Format strictly as valid JSON matching this schema:
     // Default error response if Groq failed
     res.status(200).json({
       success: false,
-      error: 'No se pudo obtener la definición en este momento. Inténtalo de nuevo.',
+      error: 'No se pudo obtener la traducción en este momento. Inténtalo de nuevo.',
       data: null
     });
   } catch (err) {
