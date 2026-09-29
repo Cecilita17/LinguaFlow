@@ -703,7 +703,8 @@ Format strictly as valid JSON with ONLY these fields:
               },
               { role: 'user', content: prompt }
             ],
-            response_format: { type: 'json_object' },
+            // A direct translation is also accepted as plain text below.
+            // Avoid strict JSON validation failures from the upstream model.
             temperature: 0.1,
             max_tokens: 120
           })
