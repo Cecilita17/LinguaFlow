@@ -32,6 +32,7 @@ import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
 import { GlobalAudioImportWidget } from './components/audio/GlobalAudioImportWidget.jsx';
 import { HABIT_TRACKER_UPDATED_EVENT, recordHabitActivityForToday } from './services/habitTrackerService.js';
 import { loadActiveDocumentDraft, saveActiveDocumentDraft } from './services/textDocumentService.js';
+import { deleteDurableChatHistory, getDurableChatHistory, saveDurableChatHistory } from './services/chatHistoryStorage.js';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -48,6 +49,7 @@ const SUPPORTED_LANGUAGES = [
 ];
 
 const STORAGE_PREFIX = 'linguaflow_chat_';
+const SESSION_STORAGE_PREFIX = 'linguaflow_chat_session_';
 const TARGET_LANG_KEY = 'linguaflow_target_lang';
 const NATIVE_LANG_KEY = 'linguaflow_native_lang';
 const ACTIVE_TAB_KEY = 'linguaflow_active_tab';
@@ -85,29 +87,57 @@ function getActiveTabFromLocation() {
 }
 
 function getSavedChat(lang) {
+  const readMessages = (storage, key) => {
+    const saved = storage?.getItem(key);
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const valid = parsed.filter(m => m && typeof m === 'object' && (m.text || m.tokens || m.sender));
+    return valid.length > 0 ? valid : null;
+  };
+
   try {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}${lang}`);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const valid = parsed.filter(m => m && typeof m === 'object' && (m.text || m.tokens || m.sender));
-        if (valid.length > 0) return valid;
-      }
+    let local = null;
+    let session = null;
+    try {
+      local = readMessages(localStorage, `${STORAGE_PREFIX}${lang}`);
+    } catch (e) {
+      console.warn(`Failed to parse saved chat for ${lang}:`, e);
     }
-  } catch (e) {
-    console.warn(`Failed to parse saved chat for ${lang}:`, e);
-  }
+    try {
+      session = typeof sessionStorage !== 'undefined'
+        ? readMessages(sessionStorage, `${SESSION_STORAGE_PREFIX}${lang}`)
+        : null;
+    } catch (_) {}
+    // The session mirror protects a currently open tab if localStorage rejects
+    // a large write. It survives a refresh but never replaces a longer copy.
+    return session && (!local || session.length > local.length) ? session : (local || session);
+  } catch (_) {}
   return null;
 }
 
-function saveChatToStorage(lang, messagesList) {
+function saveChatToStorage(lang, messagesList, { replaceDurable = false } = {}) {
+  if (!Array.isArray(messagesList)) return;
   try {
-    if (Array.isArray(messagesList)) {
-      if (messagesList.length > 0) {
+    if (messagesList.length > 0) {
+      try {
         localStorage.setItem(`${STORAGE_PREFIX}${lang}`, JSON.stringify(messagesList));
-      } else {
-        localStorage.removeItem(`${STORAGE_PREFIX}${lang}`);
+      } catch (e) {
+        console.warn(`Failed to save chat for ${lang} in localStorage:`, e);
       }
+      try {
+        sessionStorage.setItem(`${SESSION_STORAGE_PREFIX}${lang}`, JSON.stringify(messagesList));
+      } catch (_) {}
+      saveDurableChatHistory(lang, messagesList, { replace: replaceDurable }).then((saved) => {
+        if (!saved) console.warn(`Failed to durably save chat for ${lang}.`);
+      }).catch(() => {});
+    } else {
+      try {
+        localStorage.removeItem(`${STORAGE_PREFIX}${lang}`);
+      } catch (_) {}
+      try {
+        sessionStorage.removeItem(`${SESSION_STORAGE_PREFIX}${lang}`);
+      } catch (_) {}
     }
   } catch (e) {
     console.warn(`Failed to save chat for ${lang}:`, e);
@@ -249,10 +279,31 @@ export default function App() {
 
   const activeLangRef = useRef(targetLang);
   const isUserScrolledUpRef = useRef(false);
+  const durableRecoveryRef = useRef(0);
 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  const recoverDurableConversation = async (lang) => {
+    const recoveryId = ++durableRecoveryRef.current;
+    const durable = await getDurableChatHistory(lang);
+    if (recoveryId !== durableRecoveryRef.current || !durable?.messages?.length) return;
+
+    const stored = getSavedChat(lang) || [];
+    const visible = activeLangRef.current === lang ? messagesRef.current : stored;
+    const current = visible.length >= stored.length ? visible : stored;
+    // A durable record is only a recovery source when it contains more of the
+    // conversation. This prevents an old backup from undoing a deliberate
+    // message deletion or reset.
+    if (durable.messages.length <= current.length) return;
+
+    saveChatToStorage(lang, durable.messages);
+    if (activeLangRef.current === lang) {
+      messagesRef.current = durable.messages;
+      setMessages(durable.messages);
+    }
+  };
 
   // The conversation list is a view over persisted per-language histories.
   // Always hydrate from that source when a learner opens a chat; never reuse a
@@ -264,8 +315,13 @@ export default function App() {
     activeLangRef.current = lang;
     messagesRef.current = next;
     setMessages(next);
+    void recoverDurableConversation(lang);
     return next;
   };
+
+  useEffect(() => {
+    void recoverDurableConversation(activeLangRef.current);
+  }, []);
 
   // Switch target language and persist chat state per language
   const handleTargetLangChange = (newLangInput) => {
@@ -306,7 +362,7 @@ export default function App() {
   const handleDeleteMessage = (messageId) => {
     if (!messageId) return;
     const updated = messagesRef.current.filter((message) => message && message.id !== messageId);
-    saveChatToStorage(activeLangRef.current, updated);
+    saveChatToStorage(activeLangRef.current, updated, { replaceDurable: true });
     messagesRef.current = updated;
     setMessages(updated);
   };
@@ -1019,7 +1075,7 @@ export default function App() {
     isUserScrolledUpRef.current = false;
     const initialMsg = getInitialBotMsg(targetLang);
     setMessages([initialMsg]);
-    saveChatToStorage(targetLang, [initialMsg]);
+    saveChatToStorage(targetLang, [initialMsg], { replaceDurable: true });
     stopSpeaking();
   };
 
@@ -1251,9 +1307,16 @@ export default function App() {
               setChatViewMode('call-detail');
             }}
             onDeleteChatSession={(deletedLang) => {
+              try {
+                sessionStorage.removeItem(`${SESSION_STORAGE_PREFIX}${deletedLang}`);
+              } catch (_) {}
               if (deletedLang === targetLang) {
                 const initialGreeting = getInitialBotMsg(targetLang);
+                messagesRef.current = [initialGreeting];
                 setMessages([initialGreeting]);
+                saveChatToStorage(targetLang, [initialGreeting], { replaceDurable: true });
+              } else {
+                void deleteDurableChatHistory(deletedLang);
               }
               requestAutoBackup({ type: 'chat-history', reason: 'chat-deleted' });
             }}
