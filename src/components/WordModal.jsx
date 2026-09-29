@@ -108,7 +108,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
         <div className="mt-3 text-lg font-semibold leading-snug text-rose-600 dark:text-rose-300">
           {wordData.error
             ? <span className="text-sm font-medium text-amber-700 dark:text-amber-300">{wordData.error}</span>
-            : (meaning || (isSpanish ? 'Buscando definición…' : 'Looking up definition…'))}
+            : (meaning || (isSpanish ? 'Buscando traducción…' : 'Looking up translation…'))}
         </div>
 
       </section>
