@@ -64,7 +64,8 @@ export function CreateWithAiModal({
         if (onTextGenerated) {
           await onTextGenerated({
             title: result.title || trimmedTopic,
-            text: result.text
+            text: result.text,
+            requiredVocabulary: practiceVocabulary
           });
         }
         onClose();

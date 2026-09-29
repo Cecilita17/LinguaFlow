@@ -142,7 +142,8 @@ export function CallDetailView({
                     meaning: (tokenObj && typeof tokenObj === 'object' && tokenObj.meaning) || cleanGloss || null,
                     part_of_speech: (tokenObj && typeof tokenObj === 'object' && tokenObj.part_of_speech) || null,
                     changed: isChanged,
-                    original: (tokenObj && typeof tokenObj === 'object' && tokenObj.original) || null
+                    original: (tokenObj && typeof tokenObj === 'object' && tokenObj.original) || null,
+                    targetLang: call?.lang || targetLang
                   });
                 }
               }}

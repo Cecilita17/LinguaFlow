@@ -276,6 +276,25 @@ export function TextReaderPage({
   });
   currentParagraphPageRef.current = currentParagraphPage;
 
+  // Reset all document-scoped ephemeral states when switching documents
+  useEffect(() => {
+    setParagraphTranslations({});
+    setPlayingParagraphId(null);
+    playingParagraphIdRef.current = null;
+    setActiveAudioCharIndex(-1);
+    setAudioErrorId(null);
+    setGlossingParagraphIds(new Set());
+    setSimplificationStatus({ isLoading: false, error: null, blockId: null });
+    setIsActionsMenuOpen(false);
+    setIsSettingsSubmenuOpen(false);
+    setIsAiModalOpen(false);
+    setIsPracticeAiModalOpen(false);
+    clearAudioVisualTimer();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }, [document?.id, clearAudioVisualTimer]);
+
   // Synchronize chapter and page index when switching documents or after EPUB import
   useEffect(() => {
     if (document && isEpub && chapters.length > 0) {
@@ -939,7 +958,7 @@ export function TextReaderPage({
     practiceVocabulary.length <= PRACTICE_VOCABULARY_MAX
   );
 
-  const handlePracticeTextGenerated = useCallback(async ({ title, text }) => {
+  const handlePracticeTextGenerated = useCallback(async ({ title, text, requiredVocabulary }) => {
     const raw = (text || '').trim();
     if (!raw) return;
 
@@ -969,6 +988,11 @@ export function TextReaderPage({
         nativeLang,
         sourceType: 'ai',
         format: 'txt',
+        generation: {
+          type: 'vocabulary-practice',
+          parentDocumentId: document?.id || null,
+          requiredVocabulary: Array.isArray(requiredVocabulary) ? requiredVocabulary : practiceVocabulary.map(v => typeof v === 'string' ? v : v.word)
+        },
         createdAt: new Date().toISOString()
       });
 

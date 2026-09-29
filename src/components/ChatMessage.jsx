@@ -106,7 +106,7 @@ export function ChatMessage({
           <button
             type="button"
             dir="ltr"
-            onClick={() => onWordClick(baseWord, token)}
+            onClick={() => onWordClick(baseWord, { ...(token || {}), word: baseWord, targetLang })}
             className="inline-flex text-left cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors"
             title={isSaved ? `Palabra guardada: "${baseWord}"` : `Clic para ver significado de "${baseWord}"`}
           >
@@ -141,7 +141,7 @@ export function ChatMessage({
           key={key}
           type="button"
           dir={isArabic ? 'rtl' : 'ltr'}
-          onClick={() => onWordClick(word, token)}
+          onClick={() => onWordClick(word, { ...(token || {}), word, targetLang })}
           className={`mx-0.5 inline-flex ${isArabic ? 'text-right' : 'text-left'} cursor-pointer rounded px-0.5 hover:bg-white/20 transition-colors`}
           title={isSaved ? `Palabra guardada: "${word}"` : `Clic para ver significado de "${word}"`}
         >
@@ -159,7 +159,7 @@ export function ChatMessage({
         key={key}
         type="button"
         dir={isArabic ? 'rtl' : 'ltr'}
-        onClick={() => onWordClick(word, token)}
+        onClick={() => onWordClick(word, { ...(token || {}), word, targetLang })}
         className={`cursor-pointer ${isArabic ? 'text-right' : 'text-left'} rounded px-0.5 hover:bg-white/20 transition-colors ${isSaved ? 'bg-amber-300 text-stone-950 font-bold px-1 shadow-xs' : ''}`}
         title={isSaved ? `Palabra guardada: "${word}"` : `Clic para ver significado de "${word}"`}
       >
@@ -311,7 +311,7 @@ export function ChatMessage({
                         {needsSpace && ' '}
                         <button
                           type="button"
-                          onClick={() => onWordClick(baseWord || cleanWord, token)}
+                          onClick={() => onWordClick(baseWord || cleanWord, { ...(token || {}), word: baseWord || cleanWord, targetLang })}
                           dir="ltr"
                           className="relative inline-block mx-0.5 text-left text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-pointer group/word"
                           title={token.original ? `Original: "${token.original}"` : 'Palabra corregida'}
@@ -346,7 +346,7 @@ export function ChatMessage({
                       {needsSpace && ' '}
                       <button
                         type="button"
-                        onClick={() => onWordClick(cleanWord, token)}
+                        onClick={() => onWordClick(cleanWord, { ...(token || {}), word: cleanWord, targetLang })}
                         dir={isArabic ? 'rtl' : 'ltr'}
                         className={`relative inline-block mx-0.5 ${isArabic ? 'text-right' : 'text-left'} text-amber-300 font-extrabold tracking-wide underline decoration-amber-400/70 decoration-2 underline-offset-4 cursor-pointer group/word`}
                         title={token.original ? `Original: "${token.original}"` : 'Palabra corregida'}
@@ -747,7 +747,7 @@ export function ChatMessage({
                     <button
                       type="button"
                       dir="ltr"
-                      onClick={() => onWordClick(cleanForLookup, message.vocabulary?.[cleanForLookup] || null)}
+                      onClick={() => onWordClick(cleanForLookup, { ...(message.vocabulary?.[cleanForLookup] || tokenObj || {}), word: cleanForLookup, targetLang })}
                       className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 transition-all cursor-pointer group/item text-left"
                       title={isSaved ? `Palabra guardada: "${cleanForLookup}"` : `Clic para ver significado de "${cleanForLookup}"`}
                     >
@@ -798,7 +798,7 @@ export function ChatMessage({
                 key={idx}
                 type="button"
                 dir={isArabic ? 'rtl' : 'ltr'}
-                onClick={() => onWordClick(clean, message.vocabulary?.[clean] || null)}
+                onClick={() => onWordClick(clean, { ...(message.vocabulary?.[clean] || tokenObj || {}), word: clean, targetLang })}
                 className="inline-flex items-baseline px-0.5 py-0 rounded hover:bg-rose-100/70 hover:text-rose-950 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 transition-all cursor-pointer group/item"
                 title={isSaved ? `Palabra guardada: "${clean}"` : `Clic para ver significado de "${clean}"`}
               >

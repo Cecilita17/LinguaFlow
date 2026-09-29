@@ -179,9 +179,9 @@ function splitLongSegment(segment, maxLen = 170, minLen = 50) {
  * 2. Splits into natural sentence units using punctuation (. 。 ! ！ ? ؟ ; ؛ and : when appropriate).
  *    Crucially preserves punctuation attached to the preceding segment.
  * 3. Soft 120-180 char boundary for overly long sentences, splitting at commas or spaces without cutting words.
- * 
+ *
  * Shared between Text Reader and YouTube transcript importers.
- * 
+ *
  * @param {string} rawText
  * @param {string} [targetLang='zh']
  * @returns {string[]}
@@ -215,7 +215,7 @@ export function splitTextIntoNaturalSegments(rawText, targetLang = 'zh') {
 
 /**
  * Splits raw input text into natural paragraph units.
- * 
+ *
  * @param {string} rawText
  * @param {string} targetLang
  * @returns {Array<{ id: string, index: number, text: string, tokens: Array, glosses: Array, tts: object }>}
@@ -416,7 +416,7 @@ export function alignParagraphsWithAudioSegments(paragraphs, audioSegments) {
  *   paragraph.audioStart = firstWord.start
  *   paragraph.audioEnd   = lastWord.end
  *   paragraph.audioSegments = words in this paragraph
- * 
+ *
  * Absolutely NO subsequent text searching (indexOf) or character-level time interpolation.
  *
  * @param {Array<object>} audioWords - Array of { id, start, end, text } from Whisper
@@ -544,7 +544,7 @@ export function buildParagraphsFromAudioWords(audioWords, targetLang = 'zh', nat
  * Normalizes a document object to guarantee all required properties exist,
  * including id, title, rawText, targetLang, nativeLang, paragraphs, languageStates,
  * createdAt, and updatedAt.
- * 
+ *
  * @param {object} rawDoc
  * @returns {object|null}
  */
@@ -620,6 +620,7 @@ export function normalizeDocument(rawDoc) {
   }
 
   const author = typeof rawDoc.author === 'string' ? rawDoc.author.trim() : '';
+  const generation = (rawDoc.generation && typeof rawDoc.generation === 'object') ? rawDoc.generation : null;
   const chapters = Array.isArray(rawDoc.chapters) ? rawDoc.chapters : [];
   const coverImage = typeof rawDoc.coverImage === 'string' && rawDoc.coverImage.startsWith('data:image/')
     ? rawDoc.coverImage
@@ -647,6 +648,7 @@ export function normalizeDocument(rawDoc) {
     paragraphsCount: paragraphs.length,
     paragraphs,
     chapters,
+    generation,
     epubSimplifications: (rawDoc.epubSimplifications && typeof rawDoc.epubSimplifications === 'object')
       ? rawDoc.epubSimplifications
       : {},
@@ -707,7 +709,7 @@ export function resolveAudioBookmark(doc) {
 
 /**
  * Creates a normalized text document structure.
- * 
+ *
  * @param {object} params
  * @param {string} [params.id]
  * @param {string} params.title
@@ -750,6 +752,7 @@ export function createTextDocument({
   lastAudioParagraphId = null,
   lastAudioPositionUpdatedAt = null,
   lastReadingPosition = null,
+  generation = null,
   createdAt = null
 }) {
   const now = new Date().toISOString();
@@ -814,6 +817,7 @@ export function createTextDocument({
     paragraphsCount: effectiveParagraphs.length,
     paragraphs: effectiveParagraphs,
     chapters: Array.isArray(chapters) ? chapters : [],
+    generation: (generation && typeof generation === 'object') ? generation : null,
     coverImage: typeof coverImage === 'string' && coverImage.startsWith('data:image/') ? coverImage : null,
     languageStates: initialStates,
     audioPathname: audioPathname || null,
@@ -839,7 +843,7 @@ export function createTextDocument({
 /**
  * Retrieves all saved text documents from IndexedDB.
  * Delegates directly to textLibraryStorage.js (Single Source of Truth).
- * 
+ *
  * @returns {Promise<Array<object>>}
  */
 export async function getAllDocuments() {
@@ -849,7 +853,7 @@ export async function getAllDocuments() {
 /**
  * Retrieves a single document by its unique id from IndexedDB.
  * Delegates directly to textLibraryStorage.js.
- * 
+ *
  * @param {string} id
  * @returns {Promise<object|null>}
  */
@@ -860,7 +864,7 @@ export async function getDocumentById(id) {
 /**
  * Saves or updates a document in the persistent IndexedDB library.
  * Delegates directly to textLibraryStorage.js and updates active draft in localStorage.
- * 
+ *
  * @param {object} doc
  * @returns {Promise<object>} Saved normalized document
  */
@@ -876,7 +880,7 @@ export async function saveDocument(doc) {
 /**
  * Deletes a document by id from IndexedDB. If it matches the active draft,
  * the draft is cleared from localStorage as well.
- * 
+ *
  * @param {string} id
  * @returns {Promise<boolean>}
  */
@@ -930,7 +934,7 @@ export function extractMinimalDraft(doc) {
  * Save active document draft.
  * - Stores the full document in memory (memoryActiveDraft) for immediate same-session access.
  * - Stores ONLY lightweight session metadata in localStorage to prevent QuotaExceededError.
- * 
+ *
  * @param {object|null} doc
  */
 export function saveActiveDocumentDraft(doc) {
@@ -966,7 +970,7 @@ export function saveActiveDocumentDraft(doc) {
 /**
  * Load active document draft (synchronous).
  * Returns memoryActiveDraft if populated, or the parsed localStorage metadata.
- * 
+ *
  * @returns {object|null}
  */
 export function loadActiveDocumentDraft() {
@@ -1002,7 +1006,7 @@ export function loadActiveDocumentDraft() {
 
 /**
  * Loads the complete active document with all paragraphs and glosses from IndexedDB.
- * 
+ *
  * @returns {Promise<object|null>}
  */
 export async function loadActiveDocumentFull() {

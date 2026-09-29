@@ -1513,7 +1513,7 @@ export default function App() {
       {/* Word Definition Modal */}
       <WordModal
         wordData={selectedWord}
-        targetLang={targetLang}
+        targetLang={selectedWord?.targetLang || targetLang}
         onClose={() => setSelectedWord(null)}
         onPronounceWord={handlePronounceWord}
       />

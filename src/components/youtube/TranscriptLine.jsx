@@ -271,7 +271,7 @@ export function TranscriptLine({
                       onClick={(e) => {
                         if (onWordClick) {
                           e.stopPropagation();
-                          onWordClick(word, { word, auxiliary, gloss: cleanGloss });
+                          onWordClick(word, { word, auxiliary, gloss: cleanGloss, targetLang });
                         }
                       }}
                       role={onWordClick ? 'button' : undefined}
@@ -366,7 +366,7 @@ export function TranscriptLine({
                   onClick={(e) => {
                     if (onWordClick) {
                       e.stopPropagation();
-                      onWordClick(cleanWord, { word: cleanWord });
+                      onWordClick(cleanWord, { word: cleanWord, targetLang });
                     }
                   }}
                   role={onWordClick ? 'button' : undefined}

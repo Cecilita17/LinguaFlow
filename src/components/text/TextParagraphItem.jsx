@@ -225,7 +225,7 @@ function TextParagraphItemComponent({
                       e.stopPropagation();
                       if (onParagraphClick) onParagraphClick(paragraph);
                       if (onWordClick) {
-                        onWordClick(word, { word, auxiliary, gloss: cleanGloss });
+                        onWordClick(word, { word, auxiliary, gloss: cleanGloss, targetLang });
                       }
                     }}
                     role={onWordClick ? 'button' : undefined}
@@ -316,7 +316,7 @@ function TextParagraphItemComponent({
                       e.stopPropagation();
                       if (onParagraphClick) onParagraphClick(paragraph);
                       if (onWordClick) {
-                        onWordClick(cleanWord, { word: cleanWord });
+                        onWordClick(cleanWord, { word: cleanWord, targetLang });
                       }
                     }}
                     role={onWordClick ? 'button' : undefined}

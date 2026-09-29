@@ -18,7 +18,7 @@ const SavedWordsContext = createContext({
  */
 export function getSavedWordKey(word = '', lang = '') {
   const cleanWord = String(word || '').trim();
-  const cleanLang = String(lang || '').toLowerCase().trim();
+  const cleanLang = String(lang || '').toLowerCase().split('-')[0].trim();
   if (!cleanWord) return '';
 
   if (cleanLang === 'zh') {
@@ -68,6 +68,15 @@ export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targ
   });
 }
 
+function persistSavedWords(words) {
+  try {
+    localStorage.setItem(STORAGE_KEY_SAVED_WORDS, JSON.stringify(words));
+    requestAutoBackup({ type: 'saved-words', reason: 'saved-words-updated' });
+  } catch (e) {
+    console.warn('Failed to save words to localStorage:', e);
+  }
+}
+
 export function SavedWordsProvider({ children }) {
   const [savedWords, setSavedWords] = useState(() => {
     try {
@@ -93,15 +102,35 @@ export function SavedWordsProvider({ children }) {
     return set;
   }, [savedWords]);
 
-  // Persist to localStorage whenever savedWords changes
+  // Listen to storage events and backup restoration for cross-tab sync
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_SAVED_WORDS, JSON.stringify(savedWords));
-      requestAutoBackup({ type: 'saved-words', reason: 'saved-words-updated' });
-    } catch (e) {
-      console.warn('Failed to save words to localStorage:', e);
-    }
-  }, [savedWords]);
+    const handleStorageChange = (e) => {
+      if (e.key === STORAGE_KEY_SAVED_WORDS && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setSavedWords(parsed);
+          }
+        } catch (err) {}
+      }
+    };
+    const handleSyncEvent = () => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_SAVED_WORDS);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) setSavedWords(parsed);
+        }
+      } catch (err) {}
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('linguaflow-saved-words-sync', handleSyncEvent);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('linguaflow-saved-words-sync', handleSyncEvent);
+    };
+  }, []);
 
   const isWordSaved = useCallback((word, lang) => {
     if (!word || !lang) return false;
@@ -112,14 +141,14 @@ export function SavedWordsProvider({ children }) {
   const saveWord = useCallback((word, lang) => {
     if (!word || !lang) return;
     const trimmedWord = String(word).trim();
-    const cleanLang = String(lang).toLowerCase().trim();
-    if (!trimmedWord) return;
+    const cleanLang = String(lang).toLowerCase().split('-')[0].trim();
+    if (!trimmedWord || !cleanLang) return;
 
     setSavedWords((prev) => {
       const key = getSavedWordKey(trimmedWord, cleanLang);
       const exists = prev.some((item) => getSavedWordKey(item.word, item.lang) === key);
       if (exists) return prev;
-      return [
+      const next = [
         ...prev,
         {
           word: trimmedWord,
@@ -127,13 +156,21 @@ export function SavedWordsProvider({ children }) {
           addedAt: Date.now()
         }
       ];
+      persistSavedWords(next);
+      return next;
     });
   }, []);
 
   const removeWord = useCallback((word, lang) => {
     if (!word || !lang) return;
     const key = getSavedWordKey(word, lang);
-    setSavedWords((prev) => prev.filter((item) => getSavedWordKey(item.word, item.lang) !== key));
+    setSavedWords((prev) => {
+      const next = prev.filter((item) => getSavedWordKey(item.word, item.lang) !== key);
+      if (next.length !== prev.length) {
+        persistSavedWords(next);
+      }
+      return next;
+    });
   }, []);
 
   const toggleSavedWord = useCallback((word, lang) => {

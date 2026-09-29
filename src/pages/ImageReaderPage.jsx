@@ -522,7 +522,7 @@ export function ImageReaderPage({
     practiceVocabulary.length <= 30
   );
 
-  const handlePracticeTextGenerated = useCallback(async ({ title, text }) => {
+  const handlePracticeTextGenerated = useCallback(async ({ title, text, requiredVocabulary }) => {
     const rawText = String(text || '').trim();
     if (!rawText) throw new Error(isSpanish ? 'La IA no generó un texto.' : 'AI did not generate a text.');
 
@@ -533,13 +533,18 @@ export function ImageReaderPage({
       nativeLang,
       sourceType: 'ai',
       format: 'txt',
+      generation: {
+        type: 'vocabulary-practice',
+        parentDocumentId: currentDocIdRef.current || null,
+        requiredVocabulary: Array.isArray(requiredVocabulary) ? requiredVocabulary : practiceVocabulary.map(v => typeof v === 'string' ? v : v.word)
+      },
       createdAt: new Date().toISOString()
     });
     const saved = await saveDocument(practiceDoc);
     if (!saved) throw new Error(isSpanish ? 'No se pudo guardar el texto de práctica.' : 'Could not save the practice text.');
 
     if (setActiveTab) setActiveTab('text');
-  }, [targetLang, nativeLang, isSpanish, setActiveTab]);
+  }, [targetLang, nativeLang, isSpanish, practiceVocabulary, setActiveTab]);
 
   // Main generation trigger
   const handleGenerateDescription = async () => {

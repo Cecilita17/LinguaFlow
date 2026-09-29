@@ -9,7 +9,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
   if (!wordData) return null;
 
   const { word, meaning, part_of_speech: partOfSpeech, translit } = wordData;
-  const activeLang = targetLang || wordData.targetLang || 'zh';
+  const activeLang = wordData?.targetLang || wordData?.lang || targetLang || 'zh';
   const isSaved = isWordSaved(word, activeLang);
   const isArabic = /[\u0600-\u06FF]/.test(word || '');
 
@@ -67,7 +67,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
             </button>
             <button
               type="button"
-              onClick={() => onPronounceWord(word, 1.0)}
+              onClick={() => onPronounceWord(word, 1.0, activeLang)}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-primary)] bg-[var(--surface-secondary)] text-[var(--text-secondary)] transition-colors hover:border-rose-500/60 hover:text-rose-500 cursor-pointer"
               title={isSpanish ? 'Escuchar pronunciación' : 'Listen to pronunciation'}
               aria-label={isSpanish ? 'Escuchar pronunciación' : 'Listen to pronunciation'}
@@ -76,7 +76,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
             </button>
             <button
               type="button"
-              onClick={() => onPronounceWord(word, 0.7)}
+              onClick={() => onPronounceWord(word, 0.7, activeLang)}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-primary)] bg-[var(--surface-secondary)] text-[var(--text-secondary)] transition-colors hover:border-rose-500/60 hover:text-rose-500 cursor-pointer"
               title={isSpanish ? 'Escuchar lento (0.7×)' : 'Listen slowly (0.7×)'}
               aria-label={isSpanish ? 'Escuchar lento (0.7×)' : 'Listen slowly (0.7×)'}

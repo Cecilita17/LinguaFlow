@@ -1,12 +1,12 @@
 /**
  * src/services/restoreService.js
- * 
+ *
  * Validates and restores LinguaFlow backups from portable JSON payloads.
  * Restores:
  * - IndexedDB Text Documents via saveTextDocument()
  * - IndexedDB YouTube Transcripts via saveTranscriptToLibrary()
  * - localStorage user learning data & settings
- * 
+ *
  * ATOMIC INTEGRITY GUARANTEE:
  * If a backup is invalid, malformed, or has an incompatible version,
  * validation fails immediately and ZERO local data is touched or removed.
@@ -20,7 +20,7 @@ import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION } from './backupService.js';
 /**
  * Validates the backup payload structure and version.
  * Throws a descriptive error if invalid or incompatible.
- * 
+ *
  * @param {object} payload - Parsed backup JSON
  * @returns {boolean} True if valid
  */
@@ -46,7 +46,7 @@ export function validateBackupPayload(payload) {
 
 /**
  * Restores all components from a verified backup payload into their corresponding stores.
- * 
+ *
  * @param {object} payload - Verified backup object
  * @returns {Promise<object>} Summary of restored items
  */
@@ -112,6 +112,7 @@ export async function restoreBackupData(payload) {
   if (Array.isArray(data.savedWords)) {
     try {
       localStorage.setItem('linguaflow_saved_words', JSON.stringify(data.savedWords));
+      window.dispatchEvent(new CustomEvent('linguaflow-saved-words-sync'));
       summary.savedWordsRestored = data.savedWords.length;
     } catch (e) {}
   }
