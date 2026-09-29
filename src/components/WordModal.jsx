@@ -6,15 +6,15 @@ import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWord }) {
   const { isWordSaved, toggleSavedWord } = useSavedWords();
   const { isSpanish } = useSiteLanguage();
-  if (!wordData) return null;
-
-  const { word, meaning, translit } = wordData;
-  const activeLang = wordData?.targetLang || wordData?.lang || targetLang || 'zh';
-  const isSaved = isWordSaved(word, activeLang);
   const [optimisticSaved, setOptimisticSaved] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const word = wordData?.word || '';
+  const meaning = wordData?.meaning || null;
+  const translit = wordData?.translit || null;
+  const activeLang = wordData?.targetLang || wordData?.lang || targetLang || 'zh';
+  const isSaved = isWordSaved(word, activeLang);
   const displayedSaved = optimisticSaved === null ? isSaved : optimisticSaved;
-  const isArabic = /[\u0600-\u06FF]/.test(word || '');
+  const isArabic = /[\u0600-\u06FF]/.test(word);
 
   // The shared saved-words state can trigger a broad reader re-render. Keep
   // this control responsive while that update is propagated in the next frame.
@@ -24,7 +24,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
   }, [word, activeLang, isSaved]);
 
   const handleToggleSavedWord = () => {
-    if (isSaving) return;
+    if (isSaving || !wordData) return;
     const nextSaved = !displayedSaved;
     setOptimisticSaved(nextSaved);
     setIsSaving(true);
@@ -34,6 +34,8 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
       setIsSaving(false);
     });
   };
+
+  if (!wordData) return null;
 
   return (
     <div
