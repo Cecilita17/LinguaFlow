@@ -1022,11 +1022,13 @@ export default function App() {
     // 2. Extract any pre-existing transliteration/pinyin from token if available
     const existingTranslit = tokenOrVocab?.translit || tokenOrVocab?.auxiliary || null;
 
-    // 3. If a pre-computed dictionary definition with meaning is already available (e.g. Chat message vocabulary):
-    if (tokenOrVocab && typeof tokenOrVocab.meaning === 'string' && tokenOrVocab.meaning.trim()) {
+    // 3. Reuse the concise translation already present in a gloss/token. This
+    // keeps word taps instant and avoids an unnecessary dictionary request.
+    const existingTranslation = tokenOrVocab?.meaning || tokenOrVocab?.gloss || tokenOrVocab?.translation || null;
+    if (typeof existingTranslation === 'string' && existingTranslation.trim()) {
       setSelectedWord({
         word: cleanWord,
-        meaning: tokenOrVocab.meaning,
+        meaning: existingTranslation.trim(),
         part_of_speech: tokenOrVocab.part_of_speech || null,
         translit: tokenOrVocab.translit || existingTranslit,
         targetLang: effectiveTargetLang
@@ -1044,7 +1046,7 @@ export default function App() {
       targetLang: effectiveTargetLang
     });
 
-    // 5. Query the backend definition lookup API independently of paragraph gloss
+    // 5. Query the backend translation lookup API only when the token has no gloss
     try {
       const lookupResult = await lookupWordApi(cleanWord, effectiveTargetLang, nativeLang, config?.apiKey);
       if (lookupResult) {
@@ -1077,7 +1079,7 @@ export default function App() {
     setSelectedWord({
       word: cleanWord,
       meaning: null,
-      error: 'No se pudo obtener la definición en este momento. Verifica tu conexión o clave de API.',
+      error: 'No se pudo obtener la traducción en este momento. Verifica tu conexión o clave de API.',
       part_of_speech: null,
       translit: existingTranslit,
       targetLang: effectiveTargetLang
