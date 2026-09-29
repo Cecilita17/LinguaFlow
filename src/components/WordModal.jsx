@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Bookmark, Check, Volume2, Snail } from 'lucide-react';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
@@ -11,7 +11,29 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
   const { word, meaning, translit } = wordData;
   const activeLang = wordData?.targetLang || wordData?.lang || targetLang || 'zh';
   const isSaved = isWordSaved(word, activeLang);
+  const [optimisticSaved, setOptimisticSaved] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const displayedSaved = optimisticSaved === null ? isSaved : optimisticSaved;
   const isArabic = /[\u0600-\u06FF]/.test(word || '');
+
+  // The shared saved-words state can trigger a broad reader re-render. Keep
+  // this control responsive while that update is propagated in the next frame.
+  useEffect(() => {
+    setOptimisticSaved(null);
+    setIsSaving(false);
+  }, [word, activeLang, isSaved]);
+
+  const handleToggleSavedWord = () => {
+    if (isSaving) return;
+    const nextSaved = !displayedSaved;
+    setOptimisticSaved(nextSaved);
+    setIsSaving(true);
+
+    requestAnimationFrame(() => {
+      toggleSavedWord(word, activeLang);
+      setIsSaving(false);
+    });
+  };
 
   return (
     <div
@@ -49,16 +71,16 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
           <div className="flex shrink-0 items-center gap-2 pt-1">
             <button
               type="button"
-              onClick={() => toggleSavedWord(word, activeLang)}
+              onClick={handleToggleSavedWord}
               className={`flex h-10 w-10 items-center justify-center rounded-full border transition-colors cursor-pointer ${
-                isSaved
+                displayedSaved
                   ? 'border-amber-400/70 bg-amber-400 text-stone-950'
                   : 'border-[var(--border-primary)] bg-[var(--surface-secondary)] text-[var(--text-secondary)] hover:border-amber-400/70 hover:text-amber-500'
               }`}
-              title={isSaved ? (isSpanish ? 'Quitar de palabras guardadas' : 'Remove from saved words') : (isSpanish ? 'Guardar palabra' : 'Save word')}
-              aria-label={isSaved ? (isSpanish ? 'Quitar de palabras guardadas' : 'Remove from saved words') : (isSpanish ? 'Guardar palabra' : 'Save word')}
+              title={displayedSaved ? (isSpanish ? 'Quitar de palabras guardadas' : 'Remove from saved words') : (isSpanish ? 'Guardar palabra' : 'Save word')}
+              aria-label={displayedSaved ? (isSpanish ? 'Quitar de palabras guardadas' : 'Remove from saved words') : (isSpanish ? 'Guardar palabra' : 'Save word')}
             >
-              {isSaved ? <Check className="h-4 w-4 stroke-[2.5]" /> : <Bookmark className="h-4 w-4" />}
+              {displayedSaved ? <Check className="h-4 w-4 stroke-[2.5]" /> : <Bookmark className="h-4 w-4" />}
             </button>
             <button
               type="button"
