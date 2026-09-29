@@ -671,8 +671,9 @@ export async function handleLookupWord(req, res) {
     if (word && effectiveApiKey) {
       console.log(`Groq model selected: ${activeModel}`);
       try {
-        const prompt = `You are an expert bilingual dictionary lexicographer.
-Provide a clear, precise definition for the word "${word}" (in language "${targetLang}") translated to the student's native language "${nativeLang}".
+        const prompt = `You are a bilingual dictionary translation service.
+Return ONLY the most natural, direct translation equivalent of the word "${word}" from "${targetLang}" into the student's native language "${nativeLang}".
+Do NOT define, explain, give examples, list senses, or write full sentences. Prefer one short everyday translation; use at most 8 words only when a multi-word translation is essential.
 ${isChinese ? 'Provide the standard Pinyin with tone marks for this COMPLETE word in "translit" (e.g. "hěn gāoxìng", "nǐ hǎo").' : ''}
 ${isArabic ? 'Provide Latin romanization in "translit" or null.' : ''}
 ${!hasTranslit ? 'Set "translit" to null.' : ''}
@@ -680,7 +681,7 @@ ${!hasTranslit ? 'Set "translit" to null.' : ''}
 Format strictly as valid JSON matching this schema:
 {
   "word": "${word}",
-  "meaning": "concise clear definition in ${nativeLang}",
+  "meaning": "short direct translation in ${nativeLang}",
   "part_of_speech": "grammatical category in ${nativeLang} (e.g. sustantivo, verbo, adjetivo, adverbio)",
   "translit": ${hasTranslit ? '"phonetic pronunciation / Pinyin"' : 'null'}
 }`;
@@ -700,13 +701,13 @@ Format strictly as valid JSON matching this schema:
             messages: [
               {
                 role: 'system',
-                content: 'You are an authoritative multilingual dictionary. Provide concise definitions in the requested native language with accurate grammatical part of speech and phonetic transliteration when appropriate. Always return strictly valid JSON.'
+                content: 'You provide only direct, short vocabulary translations in the requested native language. Never provide dictionary definitions, explanations, examples, or lists. Keep the translation natural and concise. Always return strictly valid JSON.'
               },
               { role: 'user', content: prompt }
             ],
             response_format: { type: 'json_object' },
             temperature: 0.1,
-            max_tokens: 350
+            max_tokens: 120
           })
         });
 
