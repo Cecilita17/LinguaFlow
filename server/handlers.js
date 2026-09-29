@@ -157,18 +157,23 @@ export function normalizeChatPayload(parsed, rawUserText = '', targetLang = 'es'
       ? rawCor.diff_tokens
       : (Array.isArray(rawCor.diffTokens) ? rawCor.diffTokens : (Array.isArray(rawCor.tokens) ? rawCor.tokens : null));
 
-    let diffTokens = rawDiffTokens && rawDiffTokens.length > 0
-      ? rawDiffTokens.map(t => {
-          if (!t) return null;
-          if (typeof t === 'string') return { text: t, changed: false, original: null, translit: null };
-          return {
-            text: String(t.text || t.word || '').trim(),
-            changed: Boolean(t.changed ?? t.isChanged ?? t.is_changed),
-            original: t.original ? String(t.original).trim() : null,
-            translit: t.translit || t.pinyin || null
-          };
-        }).filter(Boolean)
-      : computeWordDiff(origText, corrText);
+    // Chinese model diffs are occasionally returned as one whole sentence marked
+    // changed. Recompute them locally at character granularity, then let the
+    // reader regroup them into natural words with pinyin.
+    let diffTokens = targetLang === 'zh'
+      ? computeWordDiff(origText, corrText)
+      : (rawDiffTokens && rawDiffTokens.length > 0
+          ? rawDiffTokens.map(t => {
+              if (!t) return null;
+              if (typeof t === 'string') return { text: t, changed: false, original: null, translit: null };
+              return {
+                text: String(t.text || t.word || '').trim(),
+                changed: Boolean(t.changed ?? t.isChanged ?? t.is_changed),
+                original: t.original ? String(t.original).trim() : null,
+                translit: t.translit || t.pinyin || null
+              };
+            }).filter(Boolean)
+          : computeWordDiff(origText, corrText));
 
     const hasErrors = Boolean(rawCor.has_errors ?? rawCor.hasErrors ?? diffTokens.some(t => t.changed) ?? (corrText.toLowerCase() !== origText.toLowerCase()));
 

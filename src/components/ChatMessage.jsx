@@ -248,9 +248,43 @@ export function ChatMessage({
     return null;
   };
 
+  const normalizedUserDiffTokens = useMemo(() => {
+    const rawTokens = Array.isArray(message.diffTokens) ? message.diffTokens : [];
+    if (targetLang !== 'zh') return rawTokens;
+
+    const displayText = message.correctedText || message.text || '';
+    const normalized = normalizeChineseMessageTokens(displayText, rawTokens.map((token) => ({
+      word: token?.text || token?.word || '',
+      text: token?.text || token?.word || '',
+      translit: token?.translit || token?.pinyin || null,
+      pinyin: token?.pinyin || token?.translit || null
+    })));
+
+    if (!normalized.length) return rawTokens;
+
+    const changedCharacters = new Set(
+      rawTokens
+        .filter((token) => token?.changed)
+        .flatMap((token) => Array.from(token.text || token.word || '').filter((char) => /[\u4E00-\u9FFF]/.test(char)))
+    );
+
+    return normalized.map((token) => {
+      const text = token.word || token.text || '';
+      const changed = Array.from(text).some((char) => changedCharacters.has(char));
+      const source = rawTokens.find((item) => item?.changed && Array.from(text).some((char) => (item.text || item.word || '').includes(char)));
+      return {
+        ...token,
+        text,
+        changed,
+        original: changed ? (source?.original || null) : null,
+        translit: token.translit || token.pinyin || null
+      };
+    });
+  }, [message.diffTokens, message.correctedText, message.text, targetLang]);
+
   // USER MESSAGE BUBBLE
   if (isUser) {
-    const diffTokens = message.diffTokens || [];
+    const diffTokens = normalizedUserDiffTokens;
     const hasCorrection = message.hasCorrection || diffTokens.some(t => t.changed);
     const isChinese = targetLang === 'zh';
 

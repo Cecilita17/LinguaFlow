@@ -20,9 +20,19 @@ export const SUPPORTED_LANGUAGES = [
  * Intelligent LCS (Longest Common Subsequence) diffing algorithm
  * between original learner text and grammatically corrected text.
  */
+function splitForDiff(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return [];
+  if (!/[\u4E00-\u9FFF]/.test(trimmed)) return trimmed.split(/\s+/).filter(Boolean);
+
+  // Chinese has no spaces. Keep characters distinct for the LCS comparison;
+  // the UI subsequently joins them into natural dictionary words for display.
+  return Array.from(trimmed).filter(char => !/\s/.test(char));
+}
+
 export function computeWordDiff(original, corrected) {
-  const orig = original.trim().split(/\s+/).filter(Boolean);
-  const corr = corrected.trim().split(/\s+/).filter(Boolean);
+  const orig = splitForDiff(original);
+  const corr = splitForDiff(corrected);
 
   const clean = w => (w || '').toLowerCase().replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
 
