@@ -114,6 +114,13 @@ function saveChatToStorage(lang, messagesList) {
   }
 }
 
+function updateStoredChat(lang, updater) {
+  const current = getSavedChat(lang) || [];
+  const next = updater(current);
+  saveChatToStorage(lang, next);
+  return next;
+}
+
 export default function App() {
   const { user } = useAuth();
   const { t, isSpanish } = useSiteLanguage();
@@ -183,6 +190,7 @@ export default function App() {
     saveChatToStorage(initialLang, [initialGreeting]);
     return [initialGreeting];
   });
+  const messagesRef = useRef(messages);
   const [selectedWord, setSelectedWord] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -249,6 +257,10 @@ export default function App() {
   const activeLangRef = useRef(targetLang);
   const isUserScrolledUpRef = useRef(false);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   // Switch target language and persist chat state per language
   const handleTargetLangChange = (newLangInput) => {
     const newLang = typeof newLangInput === 'string' ? newLangInput : (newLangInput?.code || newLangInput?.target?.value || 'pl');
@@ -257,8 +269,8 @@ export default function App() {
     isUserScrolledUpRef.current = false;
 
     // 1. Save current messages to active language before switching
-    if (messages && messages.length > 0) {
-      saveChatToStorage(activeLangRef.current, messages);
+    if (messagesRef.current && messagesRef.current.length > 0) {
+      saveChatToStorage(activeLangRef.current, messagesRef.current);
     }
 
     // 2. Load saved chat for newLang or initialize greeting
@@ -769,6 +781,21 @@ export default function App() {
 
     const tempUserId = retryMsgId || `user-${Date.now()}`;
     const cleanText = text.trim();
+    // A request may finish after the learner switches languages. Keep every
+    // mutation tied to the language that started this conversation instead of
+    // appending it to whichever chat happens to be visible later.
+    const conversationLang = activeLangRef.current;
+    const conversationNativeLang = nativeLang;
+    const conversationConfig = config;
+    const updateConversation = (updater) => {
+      const next = updateStoredChat(conversationLang, updater);
+      if (activeLangRef.current === conversationLang) {
+        messagesRef.current = next;
+        setMessages(next);
+      }
+      requestAutoBackup({ type: 'chat-history', reason: 'chat-updated' });
+      return next;
+    };
 
     if (!retryMsgId) {
       const rawUserMsg = {
@@ -780,20 +807,21 @@ export default function App() {
         hasCorrection: false,
         diffTokens: [{ text: cleanText, changed: false, original: null }]
       };
-      setMessages(prev => [...prev, rawUserMsg]);
+      updateConversation((previous) => [...previous, rawUserMsg]);
     }
 
     setIsProcessing(true);
 
     try {
+      const conversationMessages = getSavedChat(conversationLang) || messagesRef.current;
       const result = await sendChatMessage({
         message: cleanText,
-        targetLang,
-        nativeLang,
-        level: config.level,
-        apiKey: config.apiKey,
-        provider: config.provider || 'groq',
-        history: messages.filter(m => m && m.id !== tempUserId).slice(-6)
+        targetLang: conversationLang,
+        nativeLang: conversationNativeLang,
+        level: conversationConfig.level,
+        apiKey: conversationConfig.apiKey,
+        provider: conversationConfig.provider || 'groq',
+        history: conversationMessages.filter(m => m && m.id !== tempUserId).slice(-6)
       });
 
       if (result && result.data && result.data.bot_response) {
@@ -802,8 +830,8 @@ export default function App() {
         const { user_correction, bot_response } = result.data;
 
         // Update user message with corrected text and amber-gold diffs
-        setMessages(prev =>
-          prev.map(m => {
+        updateConversation((previous) =>
+          previous.map(m => {
             if (m.id === tempUserId) {
               return {
                 ...m,
@@ -819,7 +847,7 @@ export default function App() {
 
         // Normalize Chinese tokens if target language is Chinese
         let normalizedTokens = bot_response.tokens || [];
-        if (targetLang === 'zh' && normalizedTokens.length > 0) {
+        if (conversationLang === 'zh' && normalizedTokens.length > 0) {
           const validation = validateChineseTokens(bot_response.text, normalizedTokens);
           if (!validation.isValid) {
             console.warn('🔧 Normalizing problematic Chinese tokens:', validation.issues);
@@ -837,10 +865,10 @@ export default function App() {
           vocabulary: bot_response.vocabulary
         };
 
-        setMessages(prev => [...prev, botMsg]);
+        updateConversation((previous) => [...previous, botMsg]);
 
         // Auto-speak if autoPlayAi or hands-free is enabled (runs only once per bot message)
-        if ((autoPlayAi || handsFree) && bot_response.text) {
+        if (activeLangRef.current === conversationLang && (autoPlayAi || handsFree) && bot_response.text) {
           if (!playedBotMsgIdsRef.current.has(botMsg.id)) {
             playedBotMsgIdsRef.current.add(botMsg.id);
             speakText(bot_response.text, currentLangObj.speechCode, speechRate);
@@ -855,8 +883,8 @@ export default function App() {
       // Retain pedagogical feedback: update user message with deterministic correction if available
       if (err.user_correction) {
         const cor = err.user_correction;
-        setMessages(prev =>
-          prev.map(m => {
+        updateConversation((previous) =>
+          previous.map(m => {
             if (m.id === tempUserId) {
               return {
                 ...m,
