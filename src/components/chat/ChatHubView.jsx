@@ -15,10 +15,38 @@ import {
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLanguageMeta, getLocalizedLanguageName, LANGUAGE_FLAGS } from '../../constants/languages.js';
 import { getChatSessionHistory, deleteChatSession } from '../../services/chatSessionHistoryStorage.js';
+import { getDurableChatHistory } from '../../services/chatHistoryStorage.js';
 
 const CALL_STORAGE_KEY = 'linguaflow_call_history';
 const STORAGE_PREFIX = 'linguaflow_chat_';
 const SESSION_STORAGE_PREFIX = 'linguaflow_chat_session_';
+
+function parseActiveChatMessages(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const messages = parsed.filter((message) => message && typeof message === 'object' && (message.text || message.tokens || message.sender));
+    return messages.length ? messages : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getMostCompleteActiveChat(language) {
+  const candidates = [];
+  try {
+    const local = parseActiveChatMessages(localStorage.getItem(`${STORAGE_PREFIX}${language}`));
+    if (local) candidates.push(local);
+  } catch (_) {}
+  try {
+    const session = parseActiveChatMessages(sessionStorage.getItem(`${SESSION_STORAGE_PREFIX}${language}`));
+    if (session) candidates.push(session);
+  } catch (_) {}
+  return candidates.reduce((longest, messages) => (
+    !longest || messages.length > longest.length ? messages : longest
+  ), null);
+}
 
 function formatSessionDate(isoStringOrTimestamp, isSpanish) {
   if (!isoStringOrTimestamp) return isSpanish ? 'Reciente' : 'Recent';
@@ -71,14 +99,8 @@ export function loadUnifiedHistory(isSpanish, targetLang = '') {
         if (selectedLanguage && cleanLang !== selectedLanguage) return;
 
         try {
-          let raw = localStorage.getItem(`${STORAGE_PREFIX}${cleanLang}`);
-          if (!raw && typeof sessionStorage !== 'undefined') {
-            raw = sessionStorage.getItem(`${SESSION_STORAGE_PREFIX}${cleanLang}`);
-          }
-          if (!raw) return;
-
-          const parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed) || parsed.length === 0) return;
+          const parsed = getMostCompleteActiveChat(cleanLang);
+          if (!parsed) return;
 
           // Only show active chat if the learner has actually sent at least one message
           const hasRealUserActivity = parsed.some(
@@ -236,6 +258,37 @@ export function ChatHubView({
   useEffect(() => {
     refreshHistory();
   }, [refreshHistory]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const recoverDurableActiveChat = async () => {
+      const language = String(targetLang || '').toLowerCase().split('-')[0];
+      if (!language) return;
+
+      const durable = await getDurableChatHistory(language);
+      if (cancelled || !durable?.messages?.length) return;
+
+      const current = getMostCompleteActiveChat(language) || [];
+      if (durable.messages.length <= current.length) return;
+
+      try {
+        const serialized = JSON.stringify(durable.messages);
+        localStorage.setItem(`${STORAGE_PREFIX}${language}`, serialized);
+        sessionStorage.setItem(`${SESSION_STORAGE_PREFIX}${language}`, serialized);
+        window.dispatchEvent(new CustomEvent('linguaflow-chat-sync'));
+      } catch (_) {
+        return;
+      }
+
+      if (!cancelled) refreshHistory();
+    };
+
+    void recoverDurableActiveChat();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetLang, refreshHistory]);
 
   // Listen to session synchronization, chat synchronization, and storage events
   useEffect(() => {
