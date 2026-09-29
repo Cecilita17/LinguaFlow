@@ -1085,14 +1085,11 @@ export default function App() {
   };
 
 
-  // End active conversation and archive as a completed session
-  const handleEndActiveChatSession = async () => {
-    if (isEndingSessionRef.current) return;
-    const currentMsgs = messagesRef.current || messages;
+  // Take an immutable, durable snapshot before replacing an active thread.
+  // A conversation may only be removed through the explicit delete controls.
+  const archiveActiveChatSession = async (currentMsgs) => {
     const hasUserActivity = Array.isArray(currentMsgs) && currentMsgs.some(m => m && m.sender === 'user' && m.text?.trim());
-    if (!hasUserActivity) return;
-
-    isEndingSessionRef.current = true;
+    if (!hasUserActivity) return false;
 
     try {
       const startKey = `linguaflow_chat_start_${targetLang}`;
@@ -1116,7 +1113,7 @@ export default function App() {
 
       const endedAt = new Date().toISOString();
 
-      // 1. Persist the completed session before clearing its active thread.
+      // Persist the completed session before clearing its active thread.
       // IndexedDB is the durable source; localStorage remains a fast mirror.
       const completedSession = saveChatSession({
         targetLang,
@@ -1133,23 +1130,48 @@ export default function App() {
         throw new Error('The completed conversation could not be stored safely.');
       }
 
-      // 2. Clear start timestamp
-      try {
-        localStorage.removeItem(startKey);
-      } catch (_) {}
+      return true;
+    } catch (err) {
+      console.error('Failed to archive chat session:', err);
+      return false;
+    }
+  };
 
-      // 3. Reset active conversation for THIS language
-      const initialMsg = getInitialBotMsg(targetLang);
-      messagesRef.current = [initialMsg];
-      setMessages([initialMsg]);
-      saveChatToStorage(targetLang, [initialMsg], { replaceDurable: true });
-      stopSpeaking();
+  const resetActiveChatThread = () => {
+    const startKey = `linguaflow_chat_start_${targetLang}`;
 
-      // 4. Request auto-backup for both resources
+    // Clear only the active-thread marker. The completed copy was already
+    // persisted by archiveActiveChatSession and is never cleared here.
+    try {
+      localStorage.removeItem(startKey);
+    } catch (_) {}
+
+    const initialMsg = getInitialBotMsg(targetLang);
+    messagesRef.current = [initialMsg];
+    setMessages([initialMsg]);
+    saveChatToStorage(targetLang, [initialMsg], { replaceDurable: true });
+    stopSpeaking();
+  };
+
+  // End active conversation and archive as a completed session.
+  const handleEndActiveChatSession = async () => {
+    if (isEndingSessionRef.current) return;
+    const currentMsgs = messagesRef.current || messages;
+    const hasUserActivity = Array.isArray(currentMsgs) && currentMsgs.some(m => m && m.sender === 'user' && m.text?.trim());
+    if (!hasUserActivity) return;
+
+    isEndingSessionRef.current = true;
+
+    try {
+      const archived = await archiveActiveChatSession(currentMsgs);
+      if (!archived) return;
+
+      resetActiveChatThread();
+
       requestAutoBackup({ type: 'chat-session-history', reason: 'chat-session-ended' });
       requestAutoBackup({ type: 'chat-history', reason: 'chat-reset-after-session-end' });
 
-      // 5. Navigate back to Hub so user immediately sees their archived conversation
+      // Navigate back to Hub so user immediately sees their archived conversation.
       setChatViewMode('hub');
     } catch (err) {
       console.error('Failed to end chat session:', err);
@@ -1158,20 +1180,32 @@ export default function App() {
     }
   };
 
-  // Pronounce single word helper (normal or slow)
   const handlePronounceWord = (word, rate = 1.0) => {
     const wordLang = selectedWord?.targetLang || targetLang;
     const meta = getLanguageMeta(wordLang);
     speakText(word, meta.speechCode || currentLangObj.speechCode, rate);
   };
 
-  // Reset conversation for CURRENT language only
-  const handleResetChat = () => {
-    isUserScrolledUpRef.current = false;
-    const initialMsg = getInitialBotMsg(targetLang);
-    setMessages([initialMsg]);
-    saveChatToStorage(targetLang, [initialMsg], { replaceDurable: true });
-    stopSpeaking();
+  // "New conversation" must not silently discard the current thread. Archive
+  // it first, just like ending it, then open a clean active thread.
+  const handleResetChat = async () => {
+    if (isEndingSessionRef.current) return;
+    const currentMsgs = messagesRef.current || messages;
+    const hasUserActivity = Array.isArray(currentMsgs) && currentMsgs.some(m => m && m.sender === 'user' && m.text?.trim());
+
+    isEndingSessionRef.current = true;
+    try {
+      if (hasUserActivity) {
+        const archived = await archiveActiveChatSession(currentMsgs);
+        if (!archived) return;
+        requestAutoBackup({ type: 'chat-session-history', reason: 'chat-session-reset' });
+      }
+
+      resetActiveChatThread();
+      requestAutoBackup({ type: 'chat-history', reason: 'chat-reset' });
+    } finally {
+      isEndingSessionRef.current = false;
+    }
   };
 
   // Handle saving completed voice call to unified history
