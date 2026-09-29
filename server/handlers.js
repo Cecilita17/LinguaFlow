@@ -678,11 +678,9 @@ ${isChinese ? 'Provide the standard Pinyin with tone marks for this COMPLETE wor
 ${isArabic ? 'Provide Latin romanization in "translit" or null.' : ''}
 ${!hasTranslit ? 'Set "translit" to null.' : ''}
 
-Format strictly as valid JSON matching this schema:
+Format strictly as valid JSON with ONLY these fields:
 {
-  "word": "${word}",
   "meaning": "short direct translation in ${nativeLang}",
-  "part_of_speech": "grammatical category in ${nativeLang} (e.g. sustantivo, verbo, adjetivo, adverbio)",
   "translit": ${hasTranslit ? '"phonetic pronunciation / Pinyin"' : 'null'}
 }`;
         const controller = new AbortController();
@@ -732,15 +730,38 @@ Format strictly as valid JSON matching this schema:
           });
           const rawText = data?.choices?.[0]?.message?.content;
           const parsed = cleanAndParseJSON(rawText);
-          const translation = parsed?.meaning || parsed?.translation || parsed?.gloss || parsed?.definition;
-          if (parsed && typeof translation === 'string' && translation.trim()) {
+          let translation = parsed?.meaning || parsed?.translation || parsed?.gloss || parsed?.definition;
+
+          // gpt-oss can occasionally omit its JSON wrapper even when it follows
+          // the request with a short translation. Recover that value rather than
+          // treating an otherwise useful answer as a failed lookup.
+          if (!translation && typeof rawText === 'string') {
+            const keyedValue = rawText.match(/"(?:meaning|translation|gloss|definition)"\s*:\s*"((?:\\.|[^"])*)"/i);
+            if (keyedValue?.[1]) {
+              try {
+                translation = JSON.parse(`"${keyedValue[1]}"`);
+              } catch (_) {
+                translation = keyedValue[1];
+              }
+            } else {
+              const plainValue = rawText
+                .replace(/<think>[\s\S]*?<\/think>/gi, '')
+                .replace(/\`\`\`(?:json)?/gi, '')
+                .trim();
+              if (plainValue && !/[{}\[\]]/.test(plainValue) && plainValue.split(/\s+/).length <= 12) {
+                translation = plainValue;
+              }
+            }
+          }
+
+          if (typeof translation === 'string' && translation.trim()) {
             return res.status(200).json({
               success: true,
               data: {
-                word: parsed.word || word,
+                word: parsed?.word || word,
                 meaning: translation.trim(),
-                part_of_speech: parsed.part_of_speech || parsed.pos || null,
-                translit: parsed.translit || parsed.pinyin || null
+                part_of_speech: parsed?.part_of_speech || parsed?.pos || null,
+                translit: parsed?.translit || parsed?.pinyin || null
               }
             });
           }
