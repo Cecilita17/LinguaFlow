@@ -42,10 +42,12 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
 
   const handleClose = () => {
     if (isDismissed) return;
-    // Hide locally before App re-renders the full reader tree. The actual
-    // state cleanup runs on the next frame and preserves the existing API.
+    // Paint the local close state before App re-renders the full reader tree.
+    // A second frame keeps that expensive unmount from swallowing the close.
     setIsDismissed(true);
-    requestAnimationFrame(onClose);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(onClose);
+    });
   };
 
   if (!wordData) return null;
