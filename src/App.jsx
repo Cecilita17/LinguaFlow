@@ -261,6 +261,19 @@ export default function App() {
     messagesRef.current = messages;
   }, [messages]);
 
+  // The conversation list is a view over persisted per-language histories.
+  // Always hydrate from that source when a learner opens a chat; never reuse a
+  // stale in-memory snapshot left over from another language or an earlier view.
+  const loadConversationForLanguage = (lang) => {
+    const saved = getSavedChat(lang);
+    const next = saved || [getInitialBotMsg(lang)];
+    if (!saved) saveChatToStorage(lang, next);
+    activeLangRef.current = lang;
+    messagesRef.current = next;
+    setMessages(next);
+    return next;
+  };
+
   // Switch target language and persist chat state per language
   const handleTargetLangChange = (newLangInput) => {
     const newLang = typeof newLangInput === 'string' ? newLangInput : (newLangInput?.code || newLangInput?.target?.value || 'pl');
@@ -274,19 +287,12 @@ export default function App() {
     }
 
     // 2. Load saved chat for newLang or initialize greeting
-    const savedForNewLang = getSavedChat(newLang);
-    const nextMessages = savedForNewLang || [getInitialBotMsg(newLang)];
-
     // 3. Update state & active reference
-    activeLangRef.current = newLang;
     setTargetLang(newLang);
-    setMessages(nextMessages);
+    loadConversationForLanguage(newLang);
 
     try {
       localStorage.setItem(TARGET_LANG_KEY, newLang);
-      if (!savedForNewLang) {
-        saveChatToStorage(newLang, nextMessages);
-      }
       requestAutoBackup({ type: 'settings', reason: 'target-language-updated' });
     } catch (e) {}
 
@@ -306,11 +312,11 @@ export default function App() {
   // Delete message handler
   const handleDeleteMessage = (messageId) => {
     if (!messageId) return;
-    setMessages((prev) => {
-      const updated = prev.filter((m) => m && m.id !== messageId);
-      saveChatToStorage(targetLang, updated);
-      return updated;
-    });
+    const updated = updateStoredChat(activeLangRef.current, (previous) => (
+      previous.filter((message) => message && message.id !== messageId)
+    ));
+    messagesRef.current = updated;
+    setMessages(updated);
   };
 
   const [config, setConfig] = useState(() => {
@@ -1036,6 +1042,8 @@ export default function App() {
   };
 
   const handleReturnToChatHub = () => {
+    // Flush the visible language before unmounting its conversation view.
+    saveChatToStorage(activeLangRef.current, messagesRef.current);
     setChatViewMode('hub');
     requestAutoBackup({ type: 'chat-history', reason: 'chat-exit' });
   };
@@ -1214,6 +1222,7 @@ export default function App() {
             setTargetLang={handleTargetLangChange}
             languages={languages}
             onStartChat={() => {
+              loadConversationForLanguage(targetLang);
               recordHabitActivityForToday({
                 user,
                 langCode: targetLang,
@@ -1226,6 +1235,8 @@ export default function App() {
               const effectiveLang = langCode || targetLang;
               if (langCode && langCode !== targetLang) {
                 handleTargetLangChange(langCode);
+              } else {
+                loadConversationForLanguage(effectiveLang);
               }
               recordHabitActivityForToday({
                 user,
