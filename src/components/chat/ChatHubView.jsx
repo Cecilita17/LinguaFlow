@@ -17,6 +17,8 @@ import { getLanguageMeta, getLocalizedLanguageName, LANGUAGE_FLAGS } from '../..
 import { getChatSessionHistory, deleteChatSession } from '../../services/chatSessionHistoryStorage.js';
 
 const CALL_STORAGE_KEY = 'linguaflow_call_history';
+const STORAGE_PREFIX = 'linguaflow_chat_';
+const SESSION_STORAGE_PREFIX = 'linguaflow_chat_session_';
 
 function formatSessionDate(isoStringOrTimestamp, isSpanish) {
   if (!isoStringOrTimestamp) return isSpanish ? 'Reciente' : 'Recent';
@@ -50,7 +52,86 @@ export function loadUnifiedHistory(isSpanish, targetLang = '') {
   const selectedLanguage = String(targetLang || '').toLowerCase().split('-')[0];
 
   if (typeof window !== 'undefined') {
-    // 1. Gather completed chat sessions from dedicated session history storage
+    // 1. Gather active in-progress continuous chats from localStorage
+    try {
+      const candidateLangs = new Set(['es', 'en', 'nl', 'pl', 'de', 'fr', 'it', 'ar', 'tr', 'zh', 'ru']);
+      if (selectedLanguage) {
+        candidateLangs.add(selectedLanguage);
+      }
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(STORAGE_PREFIX) && !key.startsWith('linguaflow_chat_start_') && !key.startsWith('linguaflow_chat_session_') && !key.startsWith('linguaflow_chat_voice_')) {
+          const langSuffix = key.slice(STORAGE_PREFIX.length);
+          if (langSuffix) candidateLangs.add(langSuffix);
+        }
+      }
+
+      candidateLangs.forEach((langCode) => {
+        const cleanLang = String(langCode || '').toLowerCase().split('-')[0];
+        if (selectedLanguage && cleanLang !== selectedLanguage) return;
+
+        try {
+          let raw = localStorage.getItem(`${STORAGE_PREFIX}${cleanLang}`);
+          if (!raw && typeof sessionStorage !== 'undefined') {
+            raw = sessionStorage.getItem(`${SESSION_STORAGE_PREFIX}${cleanLang}`);
+          }
+          if (!raw) return;
+
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+          // Only show active chat if the learner has actually sent at least one message
+          const hasRealUserActivity = parsed.some(
+            (m) => m && m.sender === 'user' && typeof m.text === 'string' && m.text.trim()
+          );
+          if (!hasRealUserActivity) return;
+
+          const langMeta = getLanguageMeta(cleanLang);
+          const lastMsg = parsed[parsed.length - 1];
+          const firstUserMsg = parsed.find((m) => m && m.sender === 'user');
+          const snippet = (lastMsg?.text || firstUserMsg?.text || (isSpanish ? 'Conversación en curso' : 'Active conversation')).trim();
+
+          let startedAt = null;
+          try {
+            startedAt = localStorage.getItem(`linguaflow_chat_start_${cleanLang}`);
+          } catch (_) {}
+
+          let timestamp = 0;
+          if (startedAt) {
+            timestamp = new Date(startedAt).getTime();
+          }
+          if (!timestamp || isNaN(timestamp)) {
+            if (firstUserMsg?.id) {
+              const rawNum = parseInt(firstUserMsg.id.replace(/\D/g, ''), 10);
+              if (rawNum && !isNaN(rawNum) && rawNum > 1000000000000) {
+                timestamp = rawNum;
+              }
+            }
+          }
+          if (!timestamp || isNaN(timestamp)) {
+            timestamp = Date.now();
+          }
+
+          const dateStr = formatSessionDate(startedAt || timestamp, isSpanish);
+
+          historyItems.push({
+            id: `active-chat-${cleanLang}`,
+            type: 'active-chat',
+            lang: cleanLang,
+            langName: getLocalizedLanguageName(cleanLang, langMeta.name || cleanLang.toUpperCase(), isSpanish),
+            flag: langMeta.flag || LANGUAGE_FLAGS[cleanLang] || '🌐',
+            lastMessage: snippet,
+            date: dateStr,
+            timestamp,
+            msgCount: parsed.length
+          });
+        } catch (e) {}
+      });
+    } catch (e) {
+      console.warn('[ChatHubView] Error loading active chat history:', e);
+    }
+
+    // 2. Gather completed chat sessions from dedicated session history storage
     try {
       const chatSessions = getChatSessionHistory();
       chatSessions.forEach((session) => {
@@ -88,7 +169,7 @@ export function loadUnifiedHistory(isSpanish, targetLang = '') {
       console.warn('[ChatHubView] Error loading chat session history:', e);
     }
 
-    // 2. Gather call sessions from separate call storage
+    // 3. Gather call sessions from separate call storage
     try {
       let storedCalls = [];
       const rawCalls = localStorage.getItem(CALL_STORAGE_KEY);
@@ -134,8 +215,10 @@ export function ChatHubView({
   languages = [],
   onStartChat,
   onStartCall,
+  onOpenActiveChat,
   onOpenChatSession,
   onOpenCallDetail,
+  onDeleteActiveChat,
   onDeleteChatSession,
   onDeleteCallSession
 }) {
@@ -154,13 +237,15 @@ export function ChatHubView({
     refreshHistory();
   }, [refreshHistory]);
 
-  // Listen to session synchronization and storage events
+  // Listen to session synchronization, chat synchronization, and storage events
   useEffect(() => {
     const handleSync = () => refreshHistory();
     window.addEventListener('linguaflow-chat-session-sync', handleSync);
+    window.addEventListener('linguaflow-chat-sync', handleSync);
     window.addEventListener('storage', handleSync);
     return () => {
       window.removeEventListener('linguaflow-chat-session-sync', handleSync);
+      window.removeEventListener('linguaflow-chat-sync', handleSync);
       window.removeEventListener('storage', handleSync);
     };
   }, [refreshHistory]);
@@ -173,7 +258,18 @@ export function ChatHubView({
       : 'Delete this conversation from history?');
 
     if (window.confirm(confirmMsg)) {
-      if (item.type === 'chat') {
+      if (item.type === 'active-chat') {
+        if (onDeleteActiveChat) {
+          onDeleteActiveChat(item.lang);
+        } else {
+          try {
+            localStorage.removeItem(`linguaflow_chat_${item.lang}`);
+            localStorage.removeItem(`linguaflow_chat_start_${item.lang}`);
+            sessionStorage.removeItem(`linguaflow_chat_session_${item.lang}`);
+            window.dispatchEvent(new CustomEvent('linguaflow-chat-sync'));
+          } catch (_) {}
+        }
+      } else if (item.type === 'chat') {
         deleteChatSession(item.id);
         if (onDeleteChatSession) {
           onDeleteChatSession(item.id);
@@ -196,7 +292,7 @@ export function ChatHubView({
 
       setHistoryItems((prev) => prev.filter((h) => h.id !== item.id));
     }
-  }, [isSpanish, t, onDeleteChatSession, onDeleteCallSession]);
+  }, [isSpanish, t, onDeleteActiveChat, onDeleteChatSession, onDeleteCallSession]);
 
   return (
     <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)] space-y-6">
@@ -306,13 +402,20 @@ export function ChatHubView({
         ) : (
           <div className="space-y-2.5">
             {historyItems.map((item) => {
-              const isChat = item.type === 'chat';
+              const isActiveChat = item.type === 'active-chat';
+              const isChatSession = item.type === 'chat';
 
               return (
                 <div
                   key={item.id}
                   onClick={() => {
-                    if (isChat) {
+                    if (isActiveChat) {
+                      if (onOpenActiveChat) {
+                        onOpenActiveChat(item.lang);
+                      } else {
+                        onOpenChatSession(item.lang);
+                      }
+                    } else if (isChatSession) {
                       onOpenChatSession(item.sessionData);
                     } else {
                       onOpenCallDetail(item.callData);
@@ -324,12 +427,14 @@ export function ChatHubView({
                     {/* Type & Lang Icon */}
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm ${
-                        isChat
+                        isActiveChat
+                          ? 'bg-gradient-to-tr from-amber-500 to-orange-500'
+                          : isChatSession
                           ? 'bg-gradient-to-tr from-rose-500 to-pink-500'
                           : 'bg-gradient-to-tr from-emerald-600 to-teal-500'
                       }`}
                     >
-                      {isChat ? <MessageSquare className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                      {item.type === 'call' ? <Mic className="w-5 h-5" /> : <MessageSquare className="w-5 h-5" />}
                     </div>
 
                     {/* Metadata & Snippet */}
@@ -341,12 +446,18 @@ export function ChatHubView({
                         </span>
                         <span
                           className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold border ${
-                            isChat
+                            isActiveChat
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/20'
+                              : isChatSession
                               ? 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20'
                               : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
                           }`}
                         >
-                          {isChat ? t('history_type_chat') : t('history_type_call')}
+                          {isActiveChat
+                            ? (isSpanish ? 'En curso' : 'In progress')
+                            : isChatSession
+                            ? (isSpanish ? 'Finalizada' : 'Completed')
+                            : (t('history_type_call') || (isSpanish ? 'Llamada' : 'Call'))}
                         </span>
                         {item.msgCount ? (
                           <span className="text-[10px] text-[var(--text-muted)] font-mono">

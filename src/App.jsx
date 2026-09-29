@@ -14,7 +14,7 @@ import HomePage from './pages/HomePage';
 import BottomNavBar from './components/BottomNavBar.jsx';
 import { useSpeech } from './hooks/useSpeech';
 import { usePipelineCall } from './hooks/usePipelineCall.js';
-import { Sparkles, RotateCcw, ArrowLeft, ArrowUp, MoreVertical } from 'lucide-react';
+import { Sparkles, RotateCcw, ArrowLeft, ArrowUp, MoreVertical, CheckCircle2 } from 'lucide-react';
 import { API_BASE_URL, sendChatMessage, lookupWordApi, fetchLanguagesApi } from './services/chatService';
 import { generateSentenceBreakdown, getOrFetchSentenceBreakdown } from './services/sentenceBreakdownEngine';
 import { normalizeChineseTokens, validateChineseTokens } from './services/chineseTokenNormalizer';
@@ -227,6 +227,11 @@ export default function App() {
   const isEndingSessionRef = useRef(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isChatVoiceMenuOpen, setIsChatVoiceMenuOpen] = useState(false);
+
+  const hasUserChatActivity = Boolean(
+    Array.isArray(messages) &&
+    messages.some((m) => m && m.sender === 'user' && typeof m.text === 'string' && m.text.trim())
+  );
 
   // Synchronize activeTab to URL and localStorage
   useEffect(() => {
@@ -1183,9 +1188,29 @@ export default function App() {
     requestAutoBackup({ type: 'call-history', reason: 'live-call-end' });
   };
 
+  const handleDeleteActiveChat = (langCode) => {
+    const effectiveLang = langCode || targetLang;
+    const initialMsg = getInitialBotMsg(effectiveLang);
+    saveChatToStorage(effectiveLang, [initialMsg], { replaceDurable: true });
+    try {
+      localStorage.removeItem(`linguaflow_chat_start_${effectiveLang}`);
+    } catch (_) {}
+    if (activeLangRef.current === effectiveLang) {
+      messagesRef.current = [initialMsg];
+      setMessages([initialMsg]);
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('linguaflow-chat-sync'));
+    } catch (_) {}
+    requestAutoBackup({ type: 'chat-history', reason: 'chat-reset-deleted' });
+  };
+
   const handleReturnToChatHub = () => {
     // Flush the visible language before unmounting its conversation view.
     saveChatToStorage(activeLangRef.current, messagesRef.current);
+    try {
+      window.dispatchEvent(new CustomEvent('linguaflow-chat-sync'));
+    } catch (_) {}
     setChatViewMode('hub');
     requestAutoBackup({ type: 'chat-history', reason: 'chat-exit' });
   };
@@ -1220,6 +1245,20 @@ export default function App() {
     // Synchronously initiate SpeechRecognition in direct response to user gesture
     pipelineCall.startCall();
     setChatViewMode('call');
+  };
+
+  const handleOpenGeneratedDocument = (doc) => {
+    if (doc) {
+      saveActiveDocumentDraft(doc);
+      if (doc.targetLang && doc.targetLang !== targetLang) {
+        handleTargetLangChange(doc.targetLang);
+      }
+      try {
+        window.location.hash = '#reader';
+      } catch (e) {}
+      setSelectedChatSessionData(null);
+      setActiveTab('text');
+    }
   };
 
   const handleOpenAudioDocument = (doc) => {
@@ -1350,6 +1389,7 @@ export default function App() {
           <ChatSessionDetailView
             sessionData={selectedChatSessionData}
             nativeLang={nativeLang}
+            apiKey={config?.apiKey || ''}
             onBack={() => {
               setSelectedChatSessionData(null);
               setChatViewMode('hub');
@@ -1361,6 +1401,7 @@ export default function App() {
               const meta = getLanguageMeta(sessionLang);
               speakText(text, meta.speechCode || sessionLang, speechRate);
             }}
+            onOpenGeneratedDocument={handleOpenGeneratedDocument}
             showTransliteration={showTransliteration}
           />
         </main>
@@ -1392,14 +1433,28 @@ export default function App() {
               setChatViewMode('chat');
             }}
             onStartCall={handleStartCall}
+            onOpenActiveChat={(langCode) => {
+              const effectiveLang = langCode || targetLang;
+              if (effectiveLang !== targetLang) {
+                handleTargetLangChange(effectiveLang);
+              } else {
+                loadConversationForLanguage(effectiveLang);
+              }
+              recordHabitActivityForToday({
+                user,
+                langCode: effectiveLang,
+                activityKey: 'conversation'
+              });
+              setChatViewMode('chat');
+            }}
             onOpenChatSession={(sessionData) => {
               if (sessionData && sessionData.messages) {
                 setSelectedChatSessionData(sessionData);
                 setChatViewMode('chat-session-detail');
               } else {
-                const effectiveLang = sessionData || targetLang;
-                if (sessionData && sessionData !== targetLang) {
-                  handleTargetLangChange(sessionData);
+                const effectiveLang = (typeof sessionData === 'string' ? sessionData : sessionData?.lang) || targetLang;
+                if (effectiveLang !== targetLang) {
+                  handleTargetLangChange(effectiveLang);
                 } else {
                   loadConversationForLanguage(effectiveLang);
                 }
@@ -1415,6 +1470,7 @@ export default function App() {
               setSelectedCallData(callData);
               setChatViewMode('call-detail');
             }}
+            onDeleteActiveChat={handleDeleteActiveChat}
             onDeleteChatSession={(sessionId) => {
               if (selectedChatSessionData && selectedChatSessionData.id === sessionId) {
                 setSelectedChatSessionData(null);
@@ -1449,14 +1505,14 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleEndActiveChatSession}
-                    disabled={!Array.isArray(messages) && messages.some(m => m && m.sender === 'user' && m.text?.trim()) || isProcessing}
+                    disabled={!hasUserChatActivity || isProcessing}
                     className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs ${
-                      Array.isArray(messages) && messages.some(m => m && m.sender === 'user' && m.text?.trim()) && !isProcessing
+                      hasUserChatActivity && !isProcessing
                         ? 'bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/30 text-rose-600 dark:text-rose-300 hover:border-rose-500/50 cursor-pointer active:scale-95'
                         : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-muted)] cursor-not-allowed opacity-50'
                     }`}
                     title={
-                      Array.isArray(messages) && messages.some(m => m && m.sender === 'user' && m.text?.trim())
+                      hasUserChatActivity
                         ? (isSpanish ? 'Finalizar y guardar esta conversación en el historial' : 'Finish and save this conversation to history')
                         : (isSpanish ? 'Escribe al menos un mensaje para poder finalizar la conversación' : 'Send at least one message before finishing the conversation')
                     }
