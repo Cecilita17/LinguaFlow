@@ -14,79 +14,81 @@ import {
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLanguageMeta, getLocalizedLanguageName, LANGUAGE_FLAGS } from '../../constants/languages.js';
+import { getChatSessionHistory, deleteChatSession } from '../../services/chatSessionHistoryStorage.js';
 
 const CALL_STORAGE_KEY = 'linguaflow_call_history';
 
-// Default mock call history for demonstration without interfering with real chat storage
-const DEFAULT_CALL_HISTORY = [
-  {
-    id: 'call-demo-1',
-    type: 'call',
-    lang: 'zh',
-    date: 'Hoy, 18:12',
-    timestamp: Date.now() - 1000 * 60 * 60 * 2,
-    duration: '04:25',
-    summary: 'Práctica de tonos y saludos cotidianos en Pekín',
-    transcript: [
-      { sender: 'user', text: '你好！今天天气怎么样？' },
-      { sender: 'bot', text: '今天北京天气很好，阳光明媚。你想去公园散步吗？' }
-    ]
-  },
-  {
-    id: 'call-demo-2',
-    type: 'call',
-    lang: 'de',
-    date: 'Ayer, 20:15',
-    timestamp: Date.now() - 1000 * 60 * 60 * 26,
-    duration: '06:10',
-    summary: 'Conversación sobre planes de viaje y trenes en Alemania',
-    transcript: [
-      { sender: 'user', text: 'Guten Tag! Ich möchte eine Fahrkarte nach Berlin kaufen.' },
-      { sender: 'bot', text: 'Sehr gerne! Möchten Sie mit dem ICE fahren oder mit der Regionalbahn?' }
-    ]
+function formatSessionDate(isoStringOrTimestamp, isSpanish) {
+  if (!isoStringOrTimestamp) return isSpanish ? 'Reciente' : 'Recent';
+  try {
+    const d = typeof isoStringOrTimestamp === 'number'
+      ? new Date(isoStringOrTimestamp)
+      : new Date(isoStringOrTimestamp);
+    if (isNaN(d.getTime())) return isSpanish ? 'Reciente' : 'Recent';
+
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (isToday) {
+      return isSpanish ? `Hoy, ${timeStr}` : `Today, ${timeStr}`;
+    }
+    if (isYesterday) {
+      return isSpanish ? `Ayer, ${timeStr}` : `Yesterday, ${timeStr}`;
+    }
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + `, ${timeStr}`;
+  } catch (_) {
+    return isSpanish ? 'Reciente' : 'Recent';
   }
-];
+}
 
 export function loadUnifiedHistory(isSpanish, targetLang = '') {
   const historyItems = [];
-  const selectedLanguage = String(targetLang || '').toLowerCase();
+  const selectedLanguage = String(targetLang || '').toLowerCase().split('-')[0];
 
-  // 1. Gather existing chat conversations
   if (typeof window !== 'undefined') {
+    // 1. Gather completed chat sessions from dedicated session history storage
     try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('linguaflow_chat_')) {
-          const langCode = key.replace('linguaflow_chat_', '');
-          if (selectedLanguage && langCode.toLowerCase() !== selectedLanguage) continue;
-          try {
-            const raw = localStorage.getItem(key);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                const lastMsg = parsed[parsed.length - 1];
-                const langMeta = getLanguageMeta(langCode);
-                const msgCount = parsed.length;
+      const chatSessions = getChatSessionHistory();
+      chatSessions.forEach((session) => {
+        if (!session || !session.id) return;
+        const sessionLang = String(session.targetLang || '').toLowerCase().split('-')[0];
+        if (selectedLanguage && sessionLang !== selectedLanguage) return;
 
-                historyItems.push({
-                  id: `chat-${langCode}`,
-                  type: 'chat',
-                  lang: langCode,
-                  langName: getLocalizedLanguageName(langCode, langMeta.name || langCode.toUpperCase(), isSpanish),
-                  flag: langMeta.flag || LANGUAGE_FLAGS[langCode] || '🌐',
-                  lastMessage: lastMsg?.text || (isSpanish ? 'Conversación activa' : 'Active conversation'),
-                  date: isSpanish ? 'Conversación guardada' : 'Saved conversation',
-                  timestamp: lastMsg?.id ? parseInt(lastMsg.id.replace(/\D/g, '')) || Date.now() : Date.now(),
-                  msgCount
-                });
-              }
-            }
-          } catch (e) {}
-        }
-      }
-    } catch (e) {}
+        const langMeta = getLanguageMeta(sessionLang);
+        const lastMsg = Array.isArray(session.messages) && session.messages.length > 0
+          ? session.messages[session.messages.length - 1]
+          : null;
+        const firstUserMsg = Array.isArray(session.messages)
+          ? session.messages.find(m => m && m.sender === 'user')
+          : null;
 
-    // 2. Gather call sessions from separate call storage or defaults
+        const snippet = (lastMsg?.text || firstUserMsg?.text || (isSpanish ? 'Conversación finalizada' : 'Completed conversation')).trim();
+        const msgCount = session.messageCount || (Array.isArray(session.messages) ? session.messages.length : 0);
+        const dateStr = formatSessionDate(session.endedAt || session.startedAt, isSpanish);
+        const timestamp = session.endedAt ? new Date(session.endedAt).getTime() : (session.startedAt ? new Date(session.startedAt).getTime() : 0);
+
+        historyItems.push({
+          id: session.id,
+          type: 'chat',
+          lang: sessionLang,
+          langName: getLocalizedLanguageName(sessionLang, langMeta.name || sessionLang.toUpperCase(), isSpanish),
+          flag: langMeta.flag || LANGUAGE_FLAGS[sessionLang] || '🌐',
+          lastMessage: snippet,
+          date: dateStr,
+          timestamp,
+          msgCount,
+          sessionData: session
+        });
+      });
+    } catch (e) {
+      console.warn('[ChatHubView] Error loading chat session history:', e);
+    }
+
+    // 2. Gather call sessions from separate call storage
     try {
       let storedCalls = [];
       const rawCalls = localStorage.getItem(CALL_STORAGE_KEY);
@@ -99,16 +101,19 @@ export function loadUnifiedHistory(isSpanish, targetLang = '') {
       }
 
       storedCalls.forEach((call) => {
-        if (selectedLanguage && String(call.lang || '').toLowerCase() !== selectedLanguage) return;
-        const langMeta = getLanguageMeta(call.lang);
+        if (!call || !call.id) return;
+        const callLang = String(call.lang || '').toLowerCase().split('-')[0];
+        if (selectedLanguage && callLang !== selectedLanguage) return;
+
+        const langMeta = getLanguageMeta(callLang);
         historyItems.push({
           id: call.id,
           type: 'call',
-          lang: call.lang,
-          langName: getLocalizedLanguageName(call.lang, langMeta.name || call.lang.toUpperCase(), isSpanish),
-          flag: langMeta.flag || LANGUAGE_FLAGS[call.lang] || '🌐',
-          lastMessage: call.summary || (isSpanish ? `Llamada de voz (${call.duration})` : `Voice call (${call.duration})`),
-          date: call.date || (isSpanish ? 'Llamada reciente' : 'Recent call'),
+          lang: callLang,
+          langName: getLocalizedLanguageName(callLang, langMeta.name || callLang.toUpperCase(), isSpanish),
+          flag: langMeta.flag || LANGUAGE_FLAGS[callLang] || '🌐',
+          lastMessage: call.summary || (isSpanish ? `Llamada de voz (${call.duration || ''})` : `Voice call (${call.duration || ''})`),
+          date: call.date || formatSessionDate(call.timestamp, isSpanish),
           duration: call.duration,
           timestamp: call.timestamp || 0,
           callData: call
@@ -117,7 +122,7 @@ export function loadUnifiedHistory(isSpanish, targetLang = '') {
     } catch (e) {}
   }
 
-  // Sort by most recent
+  // Sort by most recent timestamp descending
   historyItems.sort((a, b) => b.timestamp - a.timestamp);
 
   return historyItems;
@@ -138,29 +143,40 @@ export function ChatHubView({
   const currentTargetMeta = getLanguageMeta(targetLang);
   const currentTargetName = getLocalizedLanguageName(targetLang, currentTargetMeta.name || targetLang, isSpanish);
 
-  // Maintain local history state to reflect deletions immediately without reload
+  // Maintain local history state to reflect additions/deletions immediately
   const [historyItems, setHistoryItems] = useState(() => loadUnifiedHistory(isSpanish, targetLang));
 
-  useEffect(() => {
+  const refreshHistory = useCallback(() => {
     setHistoryItems(loadUnifiedHistory(isSpanish, targetLang));
   }, [isSpanish, targetLang]);
+
+  useEffect(() => {
+    refreshHistory();
+  }, [refreshHistory]);
+
+  // Listen to session synchronization and storage events
+  useEffect(() => {
+    const handleSync = () => refreshHistory();
+    window.addEventListener('linguaflow-chat-session-sync', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('linguaflow-chat-session-sync', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, [refreshHistory]);
 
   const handleDeleteItem = useCallback((e, item) => {
     e.stopPropagation();
 
     const confirmMsg = t('confirm_delete_chat') || (isSpanish
-      ? '¿Eliminar este chat del historial?'
-      : 'Delete this chat from history?');
+      ? '¿Eliminar esta conversación del historial?'
+      : 'Delete this conversation from history?');
 
     if (window.confirm(confirmMsg)) {
       if (item.type === 'chat') {
-        try {
-          localStorage.removeItem(`linguaflow_chat_${item.lang}`);
-        } catch (err) {
-          console.warn('Failed to remove chat from localStorage:', err);
-        }
+        deleteChatSession(item.id);
         if (onDeleteChatSession) {
-          onDeleteChatSession(item.lang);
+          onDeleteChatSession(item.id);
         }
       } else if (item.type === 'call') {
         try {
@@ -297,7 +313,7 @@ export function ChatHubView({
                   key={item.id}
                   onClick={() => {
                     if (isChat) {
-                      onOpenChatSession(item.lang);
+                      onOpenChatSession(item.sessionData);
                     } else {
                       onOpenCallDetail(item.callData);
                     }
@@ -332,6 +348,11 @@ export function ChatHubView({
                         >
                           {isChat ? t('history_type_chat') : t('history_type_call')}
                         </span>
+                        {item.msgCount ? (
+                          <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                            {item.msgCount} {isSpanish ? 'msjs' : 'msgs'}
+                          </span>
+                        ) : null}
                         {item.duration && (
                           <span className="text-[10px] text-[var(--text-muted)] font-mono">
                             {item.duration}
@@ -355,8 +376,8 @@ export function ChatHubView({
                       type="button"
                       onClick={(e) => handleDeleteItem(e, item)}
                       className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer active:scale-90"
-                      title={t('delete_chat') || (isSpanish ? 'Eliminar chat' : 'Delete chat')}
-                      aria-label={t('delete_chat') || (isSpanish ? 'Eliminar chat' : 'Delete chat')}
+                      title={t('delete_chat') || (isSpanish ? 'Eliminar conversación' : 'Delete conversation')}
+                      aria-label={t('delete_chat') || (isSpanish ? 'Eliminar conversación' : 'Delete conversation')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

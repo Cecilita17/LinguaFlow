@@ -16,6 +16,7 @@ import { saveTextDocument } from './textLibraryStorage.js';
 import { saveTranscriptToLibrary } from './transcriptLibraryStorage.js';
 import { saveImageDocument } from './imageReaderLibraryStorage.js';
 import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION } from './backupService.js';
+import { getChatSessionHistory, STORAGE_KEY_CHAT_SESSION_HISTORY } from './chatSessionHistoryStorage.js';
 
 /**
  * Validates the backup payload structure and version.
@@ -60,6 +61,7 @@ export async function restoreBackupData(payload) {
     imageDocumentsRestored: 0,
     savedWordsRestored: 0,
     chatConversationsRestored: 0,
+    chatSessionsRestored: 0,
     settingsRestored: false
   };
 
@@ -134,6 +136,26 @@ export async function restoreBackupData(payload) {
         } catch (e) {}
       }
     });
+  }
+
+  // 5b. Restore localStorage: Completed Chat Session History (Deduplicated by session ID)
+  if (Array.isArray(data.chatSessionHistory) && data.chatSessionHistory.length > 0) {
+    try {
+      const existingSessions = getChatSessionHistory();
+      const existingIds = new Set(existingSessions.map(s => s.id));
+      const merged = [...existingSessions];
+      for (const session of data.chatSessionHistory) {
+        if (session && session.id && !existingIds.has(session.id)) {
+          existingIds.add(session.id);
+          merged.push(session);
+        }
+      }
+      localStorage.setItem(STORAGE_KEY_CHAT_SESSION_HISTORY, JSON.stringify(merged));
+      window.dispatchEvent(new CustomEvent('linguaflow-chat-session-sync'));
+      summary.chatSessionsRestored = data.chatSessionHistory.length;
+    } catch (e) {
+      console.warn('[RestoreService] Error restoring chat session history:', e);
+    }
   }
 
   // 6. Restore localStorage: Active drafts / sessions

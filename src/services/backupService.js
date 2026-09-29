@@ -1,12 +1,12 @@
 /**
  * src/services/backupService.js
- * 
+ *
  * Collects, packages, and executes manual backups of LinguaFlow.
  * Gathers persistent data from:
  * - IndexedDB Text Documents (LinguaFlow_TextDocuments_DB)
  * - IndexedDB YouTube Transcripts (LinguaFlow_Transcripts_DB)
  * - localStorage user learning data & preferences
- * 
+ *
  * STRICT SECURITY:
  * Never includes session tokens, Google auth tokens, or API keys.
  */
@@ -15,6 +15,7 @@ import { getAllTextDocuments } from './textLibraryStorage.js';
 import { getAllSavedTranscripts } from './transcriptLibraryStorage.js';
 import { getAllImageDocuments } from './imageReaderLibraryStorage.js';
 import { gatherAllHabitTrackerData } from './habitTrackerService.js';
+import { getChatSessionHistory } from './chatSessionHistoryStorage.js';
 import {
   requestDriveAccessToken,
   getOrCreateBackupFolder,
@@ -145,7 +146,7 @@ export function getAllResourceFingerprints(userEmail) {
  * Fast deterministic canonical JSON stringifier for small objects or chunks.
  * Sorts object keys recursively to ensure consistent hashing across runs.
  * Note: Must ONLY be called on small objects or batches, NEVER on the entire backup payload!
- * 
+ *
  * @param {*} val
  * @returns {string}
  */
@@ -168,7 +169,7 @@ export const canonicalStringify = fastCanonicalJson;
 
 /**
  * Computes a SHA-256 hash (or FNV-1a fallback) for an individual string chunk.
- * 
+ *
  * @param {string} str
  * @returns {Promise<string>} Hex hash string
  */
@@ -265,6 +266,23 @@ async function hashChatHistory(chatHistory) {
     langHashes.push(`${lang}=${combinedMsgs}`);
   }
   return await hashStringChunk(langHashes.join(';'));
+}
+
+async function hashChatSessionHistory(chatSessionHistory) {
+  if (!Array.isArray(chatSessionHistory) || chatSessionHistory.length === 0) return 'empty';
+  const sorted = [...chatSessionHistory].sort((a, b) => {
+    const keyA = String(a?.id || a?.endedAt || '');
+    const keyB = String(b?.id || b?.endedAt || '');
+    return keyA.localeCompare(keyB);
+  });
+
+  const chunkHashes = [];
+  const CHUNK_SIZE = 25;
+  for (let i = 0; i < sorted.length; i += CHUNK_SIZE) {
+    const slice = sorted.slice(i, i + CHUNK_SIZE);
+    chunkHashes.push(await hashStringChunk(fastCanonicalJson(slice)));
+  }
+  return await hashStringChunk(chunkHashes.join(':'));
 }
 
 async function hashCallHistory(callHistory) {
@@ -371,7 +389,7 @@ async function hashYoutubeTranscripts(youtubeTranscripts) {
 
 /**
  * Computes a deterministic SHA-256 fingerprint for a single text document.
- * 
+ *
  * @param {object} doc
  * @returns {Promise<string>}
  */
@@ -400,7 +418,7 @@ export async function hashSingleTextDocument(doc) {
 
 /**
  * Computes a deterministic SHA-256 fingerprint for a YouTube transcript or array of transcripts.
- * 
+ *
  * @param {object|Array} transcripts
  * @returns {Promise<string>}
  */
@@ -434,7 +452,7 @@ export async function hashSingleYoutubeTranscript(transcripts) {
 
 /**
  * Computes a deterministic SHA-256 fingerprint for a single image document.
- * 
+ *
  * @param {object} doc
  * @returns {Promise<string>}
  */
@@ -463,7 +481,7 @@ async function hashImageLibrary(imageLibrary) {
 
 /**
  * Computes a deterministic SHA-256 fingerprint for any individual resource.
- * 
+ *
  * @param {string} type - 'text-document' | 'youtube-transcript' | 'image-document' | 'saved-words' | 'chat-history' | 'call-history' | 'habit-tracker' | 'settings'
  * @param {*} resourceData - Raw data of the resource
  * @returns {Promise<string>} Hex fingerprint
@@ -482,6 +500,8 @@ export async function computeResourceFingerprint(type, resourceData) {
       return await hashChatHistory(resourceData);
     case 'call-history':
       return await hashCallHistory(resourceData);
+    case 'chat-session-history':
+      return await hashChatSessionHistory(resourceData);
     case 'habit-tracker':
       return await hashHabitTracker(resourceData);
     case 'settings':
@@ -495,7 +515,7 @@ export async function computeResourceFingerprint(type, resourceData) {
 /**
  * Computes a deterministic composite SHA-256 fingerprint for a backup payload.
  * Processes data section-by-section and chunk-by-chunk without ever creating a monolithic string of the backup.
- * 
+ *
  * @param {object} payload
  * @returns {Promise<string|null>} Hex hash string, or null on unexpected failure
  */
@@ -509,6 +529,7 @@ export async function computePayloadFingerprint(payload) {
       savedWordsHash,
       chatHistoryHash,
       callHistoryHash,
+      chatSessionHistoryHash,
       habitTrackerHash,
       activeSessionsHash,
       cachedGlossesHash,
@@ -520,6 +541,7 @@ export async function computePayloadFingerprint(payload) {
       hashSavedWords(data.savedWords),
       hashChatHistory(data.chatHistory),
       hashCallHistory(data.callHistory),
+      hashChatSessionHistory(data.chatSessionHistory),
       hashHabitTracker(data.habitTracker),
       hashActiveSessions(data.activeSessions),
       hashCachedGlosses(data.cachedGlosses),
@@ -533,6 +555,7 @@ export async function computePayloadFingerprint(payload) {
       `savedWords:${savedWordsHash}`,
       `chatHistory:${chatHistoryHash}`,
       `callHistory:${callHistoryHash}`,
+      `chatSessionHistory:${chatSessionHistoryHash}`,
       `habitTracker:${habitTrackerHash}`,
       `activeSessions:${activeSessionsHash}`,
       `cachedGlosses:${cachedGlossesHash}`,
@@ -676,7 +699,7 @@ export function gatherCleanSettings() {
 
 /**
  * Creates the complete portable, versioned LinguaFlow backup payload.
- * 
+ *
  * @param {object} user - Current authenticated user
  * @returns {Promise<object>} Complete backup data object
  */
@@ -742,6 +765,9 @@ export async function createBackupPayload(user = null) {
     if (rawYtSession) activeYoutubeSession = JSON.parse(rawYtSession);
   } catch (e) {}
 
+  // 4b. Completed Chat session history
+  const chatSessionHistory = getChatSessionHistory();
+
   // 7. Chats, gloss caches, and habit tracker data
   const chatHistory = gatherChatHistory();
   const cachedGlosses = gatherCachedGlosses();
@@ -763,6 +789,7 @@ export async function createBackupPayload(user = null) {
       imageDocumentsCount: imageLibrary.length,
       savedWordsCount: savedWords.length,
       chatConversationsCount: Object.keys(chatHistory).length,
+      chatSessionHistoryCount: chatSessionHistory.length,
       callSessionsCount: callHistory.length,
       habitTrackerKeysCount: Object.keys(habitTracker).length
     },
@@ -770,6 +797,7 @@ export async function createBackupPayload(user = null) {
       settings,
       savedWords,
       chatHistory,
+      chatSessionHistory,
       callHistory,
       habitTracker,
       activeSessions: {
@@ -789,7 +817,7 @@ export async function createBackupPayload(user = null) {
  * Uses compact JSON (avoiding 3x-5x indentation expansion).
  * If monolithic stringify fails or exceeds V8 memory limits,
  * safely falls back to chunked Blob serialization without throwing "Invalid string length".
- * 
+ *
  * @param {object} payload - Complete backup data structure
  * @returns {Blob} Valid JSON Blob
  */
@@ -853,7 +881,7 @@ export function serializeBackupToBlob(payload) {
 /**
  * Performs a complete manual backup: generates payload, obtains Google Drive authorization,
  * locates or creates "LinguaFlow Backups" folder, and uploads the JSON file as a stream/blob.
- * 
+ *
  * @param {object} user - Current authenticated user
  * @param {function} onProgress - Progress status callback
  * @returns {Promise<object>} Uploaded file result and local metadata
@@ -919,7 +947,7 @@ export const RESOURCE_BACKUP_FORMAT = 'linguaflow-auto-resource';
 
 /**
  * Creates an individual portable resource backup payload.
- * 
+ *
  * @param {string} type
  * @param {string} id
  * @param {*} data
@@ -965,6 +993,10 @@ export function createCallHistoryBackupPayload(callHistory, user = null) {
   return createResourcePayload('call-history', 'call-history', callHistory, user);
 }
 
+export function createChatSessionHistoryBackupPayload(chatSessionHistory, user = null) {
+  return createResourcePayload('chat-session-history', 'chat-session-history', chatSessionHistory, user);
+}
+
 export function createHabitTrackerBackupPayload(habitTracker, user = null) {
   return createResourcePayload('habit-tracker', 'habit-tracker', habitTracker, user);
 }
@@ -975,7 +1007,7 @@ export function createSettingsBackupPayload(settings, user = null) {
 
 /**
  * Reconstructs a full standard backup snapshot from the incremental auto/ folder in Google Drive.
- * 
+ *
  * @param {string} accessToken
  * @param {string} userEmail
  * @returns {Promise<object>} Standard portable backup payload
@@ -997,6 +1029,7 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
   const imageLibrary = [];
   let savedWords = [];
   let chatHistory = {};
+  let chatSessionHistory = [];
   let callHistory = [];
   let habitTracker = {};
   let settings = gatherCleanSettings();
@@ -1020,6 +1053,8 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
         savedWords = data;
       } else if (resKey === 'chat-history' && data) {
         chatHistory = data;
+      } else if (resKey === 'chat-session-history' && Array.isArray(data)) {
+        chatSessionHistory = data;
       } else if (resKey === 'call-history' && Array.isArray(data)) {
         callHistory = data;
       } else if (resKey === 'habit-tracker' && data) {
@@ -1047,6 +1082,7 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
       imageDocumentsCount: imageLibrary.length,
       savedWordsCount: savedWords.length,
       chatConversationsCount: Object.keys(chatHistory).length,
+      chatSessionHistoryCount: chatSessionHistory.length,
       callSessionsCount: callHistory.length,
       habitTrackerKeysCount: Object.keys(habitTracker).length
     },
@@ -1054,6 +1090,7 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
       settings,
       savedWords,
       chatHistory,
+      chatSessionHistory,
       callHistory,
       habitTracker,
       activeSessions: { textDraft: null, youtubeSession: null },
@@ -1068,7 +1105,7 @@ export async function reconstructAutoBackupSnapshot(accessToken, userEmail) {
 /**
  * Fetches available backups from Google Drive folder.
  * Includes manual backups and an option for the latest auto-sync state if available.
- * 
+ *
  * @param {string} userEmail
  * @returns {Promise<Array<object>>}
  */
@@ -1102,7 +1139,7 @@ export async function getAvailableBackups(userEmail) {
 /**
  * Downloads a backup from Google Drive.
  * Supports standard backup files as well as 'auto-sync-latest'.
- * 
+ *
  * @param {string} userEmail
  * @param {string} fileId
  * @returns {Promise<object>} Parsed backup payload

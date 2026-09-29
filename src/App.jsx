@@ -28,11 +28,14 @@ import { ChatHubView } from './components/chat/ChatHubView.jsx';
 import { ChatVoicePlaybackMenu } from './components/chat/ChatVoicePlaybackMenu.jsx';
 import { LiveCallView } from './components/chat/LiveCallView.jsx';
 import { CallDetailView } from './components/chat/CallDetailView.jsx';
+import { ChatSessionDetailView } from './components/chat/ChatSessionDetailView.jsx';
+import { saveChatSession, deleteChatSession } from './services/chatSessionHistoryStorage.js';
 import { AutoBackupToast } from './components/common/AutoBackupToast.jsx';
 import { GlobalAudioImportWidget } from './components/audio/GlobalAudioImportWidget.jsx';
 import { HABIT_TRACKER_UPDATED_EVENT, recordHabitActivityForToday } from './services/habitTrackerService.js';
 import { loadActiveDocumentDraft, saveActiveDocumentDraft } from './services/textDocumentService.js';
 import { deleteDurableChatHistory, getDurableChatHistory, saveDurableChatHistory } from './services/chatHistoryStorage.js';
+import { getLanguageMeta } from './constants/languages.js';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', speechCode: 'es-ES', hasTranslit: false },
@@ -220,6 +223,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => getActiveTabFromLocation());
   const [chatViewMode, setChatViewMode] = useState('hub'); // 'hub' | 'chat' | 'call' | 'call-detail'
   const [selectedCallData, setSelectedCallData] = useState(null);
+  const [selectedChatSessionData, setSelectedChatSessionData] = useState(null);
+  const isEndingSessionRef = useRef(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isChatVoiceMenuOpen, setIsChatVoiceMenuOpen] = useState(false);
 
@@ -432,12 +437,14 @@ export default function App() {
   const [isReanalyzingId, setIsReanalyzingId] = useState(null);
 
   // Open Grammar Breakdown modal with instantaneous local preview + deep AI analysis
-  const handleOpenGrammarBreakdown = async (msg) => {
+  const handleOpenGrammarBreakdown = async (msg, langOverride = null) => {
+    if (!msg) return;
+    const effectiveTargetLang = langOverride || targetLang;
     const correctedText = msg.correctedText || msg.text;
     const originalText = msg.originalText || msg.text;
 
     // 1. Initial fast breakdown so modal opens instantly with zero lag
-    const initialBreakdown = generateSentenceBreakdown(correctedText, originalText, targetLang, nativeLang);
+    const initialBreakdown = generateSentenceBreakdown(correctedText, originalText, effectiveTargetLang, nativeLang);
     setBreakdownData({
       breakdown: initialBreakdown,
       originalText,
@@ -450,7 +457,7 @@ export default function App() {
       const fullBreakdown = await getOrFetchSentenceBreakdown({
         correctedText,
         originalText,
-        targetLang,
+        targetLang: effectiveTargetLang,
         nativeLang,
         apiKey: config?.apiKey || ''
       });
@@ -835,6 +842,13 @@ export default function App() {
 
     const tempUserId = retryMsgId || `user-${Date.now()}`;
     const cleanText = text.trim();
+
+    const startKey = `linguaflow_chat_start_${targetLang}`;
+    try {
+      if (!localStorage.getItem(startKey)) {
+        localStorage.setItem(startKey, new Date().toISOString());
+      }
+    } catch (_) {}
     // A request may finish after the learner switches languages. Keep every
     // mutation tied to the language that started this conversation instead of
     // appending it to whichever chat happens to be visible later.
@@ -998,6 +1012,7 @@ export default function App() {
     // 1. Clean the word for lookup, removing leading/trailing punctuation while preserving Unicode letters, marks, and numbers
     const wordStr = String(rawWord || tokenOrVocab?.word || '').trim();
     const cleanWord = wordStr.replace(/^[^\p{L}\p{N}\p{M}]+|[^\p{L}\p{N}\p{M}]+$/gu, '').trim() || wordStr;
+    const effectiveTargetLang = tokenOrVocab?.targetLang || targetLang;
 
     // 2. Extract any pre-existing transliteration/pinyin from token if available
     const existingTranslit = tokenOrVocab?.translit || tokenOrVocab?.auxiliary || null;
@@ -1009,7 +1024,7 @@ export default function App() {
         meaning: tokenOrVocab.meaning,
         part_of_speech: tokenOrVocab.part_of_speech || null,
         translit: tokenOrVocab.translit || existingTranslit,
-        targetLang
+        targetLang: effectiveTargetLang
       });
       return;
     }
@@ -1021,12 +1036,12 @@ export default function App() {
       part_of_speech: null,
       translit: existingTranslit,
       isLoading: true,
-      targetLang
+      targetLang: effectiveTargetLang
     });
 
     // 5. Query the backend definition lookup API independently of paragraph gloss
     try {
-      const lookupResult = await lookupWordApi(cleanWord, targetLang, nativeLang, config?.apiKey);
+      const lookupResult = await lookupWordApi(cleanWord, effectiveTargetLang, nativeLang, config?.apiKey);
       if (lookupResult) {
         if (lookupResult.error) {
           setSelectedWord({
@@ -1035,7 +1050,7 @@ export default function App() {
             error: lookupResult.error,
             part_of_speech: null,
             translit: existingTranslit,
-            targetLang
+            targetLang: effectiveTargetLang
           });
           return;
         }
@@ -1045,7 +1060,7 @@ export default function App() {
           meaning: lookupResult.meaning,
           part_of_speech: lookupResult.part_of_speech || null,
           translit: lookupResult.translit || existingTranslit,
-          targetLang
+          targetLang: effectiveTargetLang
         });
         return;
       }
@@ -1060,14 +1075,84 @@ export default function App() {
       error: 'No se pudo obtener la definición en este momento. Verifica tu conexión o clave de API.',
       part_of_speech: null,
       translit: existingTranslit,
-      targetLang
+      targetLang: effectiveTargetLang
     });
   };
 
 
+  // End active conversation and archive as a completed session
+  const handleEndActiveChatSession = async () => {
+    if (isEndingSessionRef.current) return;
+    const currentMsgs = messagesRef.current || messages;
+    const hasUserActivity = Array.isArray(currentMsgs) && currentMsgs.some(m => m && m.sender === 'user' && m.text?.trim());
+    if (!hasUserActivity) return;
+
+    isEndingSessionRef.current = true;
+
+    try {
+      const startKey = `linguaflow_chat_start_${targetLang}`;
+      let startedAt = null;
+      try {
+        startedAt = localStorage.getItem(startKey);
+      } catch (_) {}
+
+      if (!startedAt) {
+        const firstUserMsg = currentMsgs.find(m => m && m.sender === 'user');
+        if (firstUserMsg?.id) {
+          const rawNum = parseInt(firstUserMsg.id.replace(/\D/g, ''), 10);
+          if (rawNum && !isNaN(rawNum) && rawNum > 1000000000000) {
+            startedAt = new Date(rawNum).toISOString();
+          }
+        }
+      }
+      if (!startedAt) {
+        startedAt = new Date().toISOString();
+      }
+
+      const endedAt = new Date().toISOString();
+
+      // 1. Save completed session in dedicated persistent storage
+      saveChatSession({
+        targetLang,
+        nativeLang,
+        startedAt,
+        endedAt,
+        messages: currentMsgs,
+        metadata: {
+          level: config?.level || 'A2/B1'
+        }
+      });
+
+      // 2. Clear start timestamp
+      try {
+        localStorage.removeItem(startKey);
+      } catch (_) {}
+
+      // 3. Reset active conversation for THIS language
+      const initialMsg = getInitialBotMsg(targetLang);
+      messagesRef.current = [initialMsg];
+      setMessages([initialMsg]);
+      saveChatToStorage(targetLang, [initialMsg], { replaceDurable: true });
+      stopSpeaking();
+
+      // 4. Request auto-backup for both resources
+      requestAutoBackup({ type: 'chat-session-history', reason: 'chat-session-ended' });
+      requestAutoBackup({ type: 'chat-history', reason: 'chat-reset-after-session-end' });
+
+      // 5. Navigate back to Hub so user immediately sees their archived conversation
+      setChatViewMode('hub');
+    } catch (err) {
+      console.error('Failed to end chat session:', err);
+    } finally {
+      isEndingSessionRef.current = false;
+    }
+  };
+
   // Pronounce single word helper (normal or slow)
   const handlePronounceWord = (word, rate = 1.0) => {
-    speakText(word, currentLangObj.speechCode, rate);
+    const wordLang = selectedWord?.targetLang || targetLang;
+    const meta = getLanguageMeta(wordLang);
+    speakText(word, meta.speechCode || currentLangObj.speechCode, rate);
   };
 
   // Reset conversation for CURRENT language only
@@ -1260,6 +1345,25 @@ export default function App() {
             onWordClick={handleWordClick}
           />
         </main>
+      ) : chatViewMode === 'chat-session-detail' ? (
+        <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
+          <ChatSessionDetailView
+            sessionData={selectedChatSessionData}
+            nativeLang={nativeLang}
+            onBack={() => {
+              setSelectedChatSessionData(null);
+              setChatViewMode('hub');
+            }}
+            onWordClick={handleWordClick}
+            onOpenGrammarBreakdown={(msg) => handleOpenGrammarBreakdown(msg, selectedChatSessionData?.targetLang)}
+            onPlayAudio={(text) => {
+              const sessionLang = selectedChatSessionData?.targetLang || targetLang;
+              const meta = getLanguageMeta(sessionLang);
+              speakText(text, meta.speechCode || sessionLang, speechRate);
+            }}
+            showTransliteration={showTransliteration}
+          />
+        </main>
       ) : chatViewMode === 'call-detail' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)]">
           <CallDetailView
@@ -1288,37 +1392,34 @@ export default function App() {
               setChatViewMode('chat');
             }}
             onStartCall={handleStartCall}
-            onOpenChatSession={(langCode) => {
-              const effectiveLang = langCode || targetLang;
-              if (langCode && langCode !== targetLang) {
-                handleTargetLangChange(langCode);
+            onOpenChatSession={(sessionData) => {
+              if (sessionData && sessionData.messages) {
+                setSelectedChatSessionData(sessionData);
+                setChatViewMode('chat-session-detail');
               } else {
-                loadConversationForLanguage(effectiveLang);
+                const effectiveLang = sessionData || targetLang;
+                if (sessionData && sessionData !== targetLang) {
+                  handleTargetLangChange(sessionData);
+                } else {
+                  loadConversationForLanguage(effectiveLang);
+                }
+                recordHabitActivityForToday({
+                  user,
+                  langCode: effectiveLang,
+                  activityKey: 'conversation'
+                });
+                setChatViewMode('chat');
               }
-              recordHabitActivityForToday({
-                user,
-                langCode: effectiveLang,
-                activityKey: 'conversation'
-              });
-              setChatViewMode('chat');
             }}
             onOpenCallDetail={(callData) => {
               setSelectedCallData(callData);
               setChatViewMode('call-detail');
             }}
-            onDeleteChatSession={(deletedLang) => {
-              try {
-                sessionStorage.removeItem(`${SESSION_STORAGE_PREFIX}${deletedLang}`);
-              } catch (_) {}
-              if (deletedLang === targetLang) {
-                const initialGreeting = getInitialBotMsg(targetLang);
-                messagesRef.current = [initialGreeting];
-                setMessages([initialGreeting]);
-                saveChatToStorage(targetLang, [initialGreeting], { replaceDurable: true });
-              } else {
-                void deleteDurableChatHistory(deletedLang);
+            onDeleteChatSession={(sessionId) => {
+              if (selectedChatSessionData && selectedChatSessionData.id === sessionId) {
+                setSelectedChatSessionData(null);
               }
-              requestAutoBackup({ type: 'chat-history', reason: 'chat-deleted' });
+              requestAutoBackup({ type: 'chat-session-history', reason: 'chat-session-deleted' });
             }}
             onDeleteCallSession={(callId) => {
               if (selectedCallData && selectedCallData.id === callId) {
@@ -1334,14 +1435,36 @@ export default function App() {
             {/* Conversation-specific navbar */}
             <div className="shrink-0 z-30 border-b border-[var(--border-primary)] bg-[var(--app-bg)]/95 backdrop-blur-xl shadow-xs">
               <div className="flex items-center justify-between max-w-4xl w-full mx-auto px-4 py-3">
-                <button
-                  type="button"
-                  onClick={handleReturnToChatHub}
-                  className="px-3.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs font-semibold shadow-xs active:scale-95"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>{t('back_to_hub')}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleReturnToChatHub}
+                    className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs active:scale-95"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">{t('back_to_hub')}</span>
+                  </button>
+
+                  {/* Button: Finalizar conversación */}
+                  <button
+                    type="button"
+                    onClick={handleEndActiveChatSession}
+                    disabled={!Array.isArray(messages) && messages.some(m => m && m.sender === 'user' && m.text?.trim()) || isProcessing}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs ${
+                      Array.isArray(messages) && messages.some(m => m && m.sender === 'user' && m.text?.trim()) && !isProcessing
+                        ? 'bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/30 text-rose-600 dark:text-rose-300 hover:border-rose-500/50 cursor-pointer active:scale-95'
+                        : 'bg-[var(--surface-secondary)] border-[var(--border-primary)] text-[var(--text-muted)] cursor-not-allowed opacity-50'
+                    }`}
+                    title={
+                      Array.isArray(messages) && messages.some(m => m && m.sender === 'user' && m.text?.trim())
+                        ? (isSpanish ? 'Finalizar y guardar esta conversación en el historial' : 'Finish and save this conversation to history')
+                        : (isSpanish ? 'Escribe al menos un mensaje para poder finalizar la conversación' : 'Send at least one message before finishing the conversation')
+                    }
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span>{isSpanish ? 'Finalizar conversación' : 'End conversation'}</span>
+                  </button>
+                </div>
 
                 <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
                   <span className="text-sm">{currentLangObj.flag || '💬'}</span>

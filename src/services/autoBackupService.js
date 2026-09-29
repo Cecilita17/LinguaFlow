@@ -1,8 +1,8 @@
 /**
  * src/services/autoBackupService.js
- * 
+ *
  * Manages incremental, resource-based background automatic backups for LinguaFlow.
- * 
+ *
  * CORE RULES:
  * 1. Incremental Sync: Syncs only modified resources (text-document, youtube-transcript,
  *    saved-words, chat-history, call-history, habit-tracker, settings) instead of monolithic snapshots.
@@ -27,6 +27,7 @@ import { findTranscriptsByVideoId } from './transcriptLibraryStorage.js';
 import { getImageDocumentById } from './imageReaderLibraryStorage.js';
 import { loadActiveDocumentDraft } from './textDocumentService.js';
 import { gatherAllHabitTrackerData } from './habitTrackerService.js';
+import { getChatSessionHistory } from './chatSessionHistoryStorage.js';
 import {
   serializeBackupToBlob,
   saveLastBackupMeta,
@@ -98,7 +99,7 @@ export function getAutoBackupStatus() {
 
 /**
  * Subscribes to auto-backup status changes (for UI in Settings and Toast).
- * 
+ *
  * @param {function} listener
  * @returns {function} Unsubscribe callback
  */
@@ -122,7 +123,7 @@ function updateStatus(newStatus) {
 
 /**
  * Initializes the auto-backup service with the current authenticated user.
- * 
+ *
  * @param {object} user - Current authenticated user
  */
 export function initAutoBackupService(user) {
@@ -144,7 +145,7 @@ export function stopAutoBackupService() {
 
 /**
  * Generates the stable unique cache key for a resource.
- * 
+ *
  * @param {string} type
  * @param {string|null} id
  * @returns {string} e.g. 'text-document:123', 'youtube-transcript:abc', 'saved-words'
@@ -159,12 +160,15 @@ export function getResourceKey(type, id) {
   if (type === 'image-document' && id) {
     return `image-document:${id}`;
   }
+  if (type === 'chat-session-history') {
+    return 'chat-session-history';
+  }
   return type || 'generic';
 }
 
 /**
  * Generates the stable remote file name for a resource inside 'auto/'.
- * 
+ *
  * @param {string} type
  * @param {string|null} id
  * @returns {string} e.g. 'text-document-123.json', 'saved-words.json'
@@ -182,12 +186,15 @@ export function getResourceFileName(type, id) {
     const cleanId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
     return `image-document-${cleanId}.json`;
   }
+  if (type === 'chat-session-history') {
+    return 'chat-session-history.json';
+  }
   return `${type}.json`;
 }
 
 /**
  * Normalizes an incoming requestAutoBackup argument into an array of resource descriptors.
- * 
+ *
  * @param {*} param
  * @returns {Array<{ type: string, id: string|null, reason: string, deleted: boolean }>}
  */
@@ -210,6 +217,9 @@ function normalizeResourceRequests(param) {
     const reason = param;
     if (reason === 'live-call-end') {
       return [{ type: 'call-history', id: 'call-history', reason, deleted: false }];
+    }
+    if (reason === 'chat-session-ended' || reason === 'chat-session-deleted') {
+      return [{ type: 'chat-session-history', id: 'chat-session-history', reason, deleted: false }];
     }
     if (reason === 'chat-exit') {
       return [{ type: 'chat-history', id: 'chat-history', reason, deleted: false }];
@@ -245,7 +255,7 @@ function normalizeResourceRequests(param) {
 
 /**
  * Requests an automatic background backup for one or more modified resources.
- * 
+ *
  * @param {object|string|Array} [resourceOrReason='content-exit']
  *   - Object: { type: 'text-document', id: documentId, reason: 'text-reader-exit' }
  *   - Array of objects
@@ -285,7 +295,7 @@ export function requestAutoBackup(resourceOrReason = 'content-exit') {
 
 /**
  * Retrieves the local data for a specific resource type and id.
- * 
+ *
  * @param {string} type
  * @param {string|null} id
  * @returns {Promise<*>}
@@ -314,6 +324,9 @@ async function fetchLocalResourceData(type, id) {
     }
     case 'chat-history': {
       return gatherChatHistory();
+    }
+    case 'chat-session-history': {
+      return getChatSessionHistory();
     }
     case 'call-history': {
       try {
