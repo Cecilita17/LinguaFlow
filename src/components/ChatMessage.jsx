@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'lucide-react';
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
-import { normalizeChineseMessageTokens } from '../services/chineseTokenNormalizer.js';
+import { normalizeChineseMessageTokens, validateChineseTokens } from '../services/chineseTokenNormalizer.js';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 import { getArabicTransliteration } from '../services/arabicTransliteration.js';
 
@@ -500,15 +500,11 @@ export function ChatMessage({
   // Fallback for missing tokens
   if (tokens.length === 0 && message.text) {
     if (isChinese) {
-      // Split into single Hanzi characters or punctuation
-      const chars = Array.from(message.text);
-      tokens = chars.map(char => ({
-        word: char,
-        pinyin: PINYIN_LEXICON[char] || '',
-        meaning: ''
-      }));
+      // Use the same word-level fallback as live responses; never render a
+      // Chinese message as an unannotated character-by-character stream.
+      tokens = normalizeChineseMessageTokens(message.text, []);
     } else {
-      tokens = message.text.split(/(\s+)/).map(t => ({ word: t, clean_word: t.replace(/[.,/#!$%^&*;:{}=\-_`~()¿?¡!]/g, '') }));
+      tokens = message.text.split(/(\s+)/).map(t => ({ word: t, clean_word: t.replace(/[.,/#!$%^&*;:{}=\-_\`~()¿?¡!]/g, '') }));
     }
   }
 
@@ -524,7 +520,8 @@ export function ChatMessage({
     // Diagnostic logging: compare concatenated token strings with raw text
     const concatenated = tokens.map(t => (t.word || t.text || '')).join('');
     console.log('[ChineseTokenDebug] rawText length:', rawText.length, 'tokens length:', tokens.length, 'concatenated length:', concatenated.length);
-    if (concatenated !== rawText) {
+    const chineseValidation = isChinese ? validateChineseTokens(rawText, tokens) : null;
+    if (concatenated !== rawText || (chineseValidation && !chineseValidation.isValid)) {
       const firstMismatchIdx = (() => {
         const minLen = Math.min(rawText.length, concatenated.length);
         for (let i = 0; i < minLen; i++) {
@@ -532,7 +529,7 @@ export function ChatMessage({
         }
         return minLen;
       })();
-      console.warn('[ChineseTokenDebug] Token coverage mismatch. First mismatch at index', firstMismatchIdx);
+      console.warn('[ChineseTokenDebug] Token coverage or pinyin mismatch. First mismatch at index', firstMismatchIdx, chineseValidation?.issues || []);
       try {
         const corrected = normalizeChineseMessageTokens(rawText, tokens);
         if (corrected) {

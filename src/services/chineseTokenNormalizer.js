@@ -259,16 +259,26 @@ function resegmentOversizedToken(text) {
  * @param {Array} groqTokens - Tokens returned by Groq
  * @returns {Array} Normalized, reliable tokens
  */
-export function normalizeChineseTokens(originalText, groqTokens) {
-  if (!originalText || !Array.isArray(groqTokens) || groqTokens.length === 0) {
+export function normalizeChineseTokens(originalText, sourceTokens) {
+  if (!originalText || typeof originalText !== 'string') {
     return [];
   }
 
-  const validation = validateChineseTokens(originalText, groqTokens);
+  const sourceTokens = Array.isArray(sourceTokens) ? sourceTokens : [];
+
+  // A chat response can arrive without its optional token array. Build a
+  // deterministic word-level representation instead of falling back to bare
+  // characters, so existing messages also regain segmentation and pinyin.
+  if (sourceTokens.length === 0) {
+    return mergeSingleCharsUsingDict(resegmentOversizedToken(originalText))
+      .map(token => ensureTokenHasPinyin(token));
+  }
+
+  const validation = validateChineseTokens(originalText, sourceTokens);
 
   // If tokens are valid and complete, return as-is (with pinyin filled)
   if (validation.isValid) {
-    return groqTokens.map(token => ensureTokenHasPinyin(token));
+    return sourceTokens.map(token => ensureTokenHasPinyin(token));
   }
 
   console.warn('Chinese tokens validation issues:', validation.issues);
@@ -276,7 +286,7 @@ export function normalizeChineseTokens(originalText, groqTokens) {
   // Tokens are problematic - need repair
   const normalizedTokens = [];
 
-  for (const token of groqTokens) {
+  for (const token of sourceTokens) {
     const word = token.word || token.text || '';
     const isChinese = /[\u4E00-\u9FFF]/.test(word);
 

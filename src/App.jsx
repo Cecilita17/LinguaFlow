@@ -928,11 +928,11 @@ export default function App() {
         );
 
         // Normalize Chinese tokens if target language is Chinese
-        let normalizedTokens = bot_response.tokens || [];
-        if (conversationLang === 'zh' && normalizedTokens.length > 0) {
+        let normalizedTokens = Array.isArray(bot_response.tokens) ? bot_response.tokens : [];
+        if (conversationLang === 'zh') {
           const validation = validateChineseTokens(bot_response.text, normalizedTokens);
           if (!validation.isValid) {
-            console.warn('🔧 Normalizing problematic Chinese tokens:', validation.issues);
+            console.warn('🔧 Normalizing incomplete Chinese tokens:', validation.issues);
             normalizedTokens = normalizeChineseTokens(bot_response.text, normalizedTokens);
           }
         }
