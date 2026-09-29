@@ -28,13 +28,6 @@ export function CreateWithAiModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  if (!isOpen) return null;
-
-  const langMeta = LANGUAGE_METADATA[targetLang] || {
-    name: targetLang.toUpperCase(),
-    nativeName: targetLang.toUpperCase(),
-    flag: '🌐'
-  };
   const practiceVocabulary = React.useMemo(() => {
     if (!Array.isArray(requiredVocabulary)) return [];
     return requiredVocabulary.map((item) => typeof item === 'string' ? item : item?.word).filter(Boolean);
@@ -44,8 +37,18 @@ export function CreateWithAiModal({
 
   // Keep selectedWords synchronized whenever practiceVocabulary changes or modal opens
   React.useEffect(() => {
-    setSelectedWords(new Set(practiceVocabulary));
+    if (isOpen) {
+      setSelectedWords(new Set(practiceVocabulary));
+    }
   }, [practiceVocabulary, isOpen]);
+
+  if (!isOpen) return null;
+
+  const langMeta = LANGUAGE_METADATA[targetLang] || {
+    name: targetLang.toUpperCase(),
+    nativeName: targetLang.toUpperCase(),
+    flag: '🌐'
+  };
 
   const toggleWordSelection = (word) => {
     setSelectedWords((prev) => {
