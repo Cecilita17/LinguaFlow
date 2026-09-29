@@ -126,6 +126,49 @@ const _zhSegmenter = (() => {
 })();
 
 /**
+ * Segments a full Chinese text with the platform word segmenter. This is the
+ * primary recovery path for malformed AI token arrays, because it recognizes
+ * compounds beyond our offline dictionary (for example 老公, 借口, 负责人).
+ */
+function segmentFullChineseText(text, sourceTokens = []) {
+  if (!_zhSegmenter || !text) return [];
+
+  const knownPinyin = new Map();
+  for (const token of sourceTokens) {
+    const word = String(token?.word || token?.text || '').trim();
+    const pinyin = token?.translit || token?.pinyin || null;
+    if (word && pinyin) knownPinyin.set(word, pinyin);
+  }
+
+  const result = [];
+  try {
+    for (const segment of _zhSegmenter.segment(text)) {
+      const word = segment.segment;
+      if (!word || /^\s+$/.test(word)) continue;
+
+      const isPunctuation = !segment.isWordLike || /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()\-]+$/.test(word);
+      const entry = isPunctuation ? null : CHINESE_OFFLINE_DICT[word];
+      const pinyin = isPunctuation
+        ? null
+        : (knownPinyin.get(word) || entry?.pinyin || composePinyinFromChars(word) || null);
+
+      result.push({
+        word,
+        text: word,
+        translit: pinyin,
+        pinyin,
+        gloss: entry?.gloss || null,
+        isPunctuation
+      });
+    }
+  } catch (_) {
+    return [];
+  }
+
+  return result;
+}
+
+/**
  * Resegments oversized Chinese tokens using dictionary + Intl.Segmenter.
  * Strategy: dict longest-match first (gives pinyin), then Intl.Segmenter for
  * unknown words (gives word grouping even for proper nouns / rare vocabulary),
@@ -283,7 +326,15 @@ export function normalizeChineseTokens(originalText, groqTokens) {
 
   console.warn('Chinese tokens validation issues:', validation.issues);
 
-  // Tokens are problematic - need repair
+  // Prefer ICU's Chinese word segmenter for every malformed/incomplete AI
+  // response. It is not limited to a hand-maintained vocabulary list.
+  const platformSegments = segmentFullChineseText(originalText, sourceTokens);
+  if (platformSegments.length > 0) {
+    return platformSegments.map(token => ensureTokenHasPinyin(token));
+  }
+
+  // Older environments without Intl.Segmenter retain the deterministic
+  // dictionary-based recovery path below.
   const normalizedTokens = [];
 
   for (const token of sourceTokens) {
