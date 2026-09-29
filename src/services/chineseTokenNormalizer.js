@@ -313,8 +313,11 @@ export function normalizeChineseTokens(originalText, groqTokens) {
   // deterministic word-level representation instead of falling back to bare
   // characters, so existing messages also regain segmentation and pinyin.
   if (sourceTokens.length === 0) {
-    return mergeSingleCharsUsingDict(resegmentOversizedToken(originalText))
-      .map(token => ensureTokenHasPinyin(token));
+    const platformSegments = segmentFullChineseText(originalText, sourceTokens);
+    return (platformSegments.length > 0
+      ? platformSegments
+      : mergeSingleCharsUsingDict(resegmentOversizedToken(originalText))
+    ).map(token => ensureTokenHasPinyin(token));
   }
 
   const validation = validateChineseTokens(originalText, sourceTokens);
