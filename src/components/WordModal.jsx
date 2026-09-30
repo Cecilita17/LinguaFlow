@@ -57,7 +57,7 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/45 dark:bg-black/65 backdrop-blur-[2px] animate-fade-in transition-none ${isDismissed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/45 dark:bg-black/65 animate-fade-in transition-none ${isDismissed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       onClick={handleClose}
       role="presentation"
     >
