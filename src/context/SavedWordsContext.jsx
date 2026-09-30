@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, startTransition } from 'react';
 import { requestAutoBackup } from '../services/autoBackupService.js';
 
 export const STORAGE_KEY_SAVED_WORDS = 'linguaflow_saved_words';
@@ -169,6 +169,10 @@ export function SavedWordsProvider({ children }) {
     return [];
   });
 
+  const latestSavedWordsRef = useRef(savedWords);
+  const persistTimerRef = useRef(null);
+  const hasMountedRef = useRef(false);
+
   // Fast lookup Set using normalized keys
   const savedKeysSet = useMemo(() => {
     const set = new Set();
@@ -179,6 +183,42 @@ export function SavedWordsProvider({ children }) {
     }
     return set;
   }, [savedWords]);
+
+  // Persist and back up after the urgent tap has painted. Serializing a large
+  // vocabulary list and scheduling backup work must not block the modal.
+  useEffect(() => {
+    latestSavedWordsRef.current = savedWords;
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      persistSavedWords(latestSavedWordsRef.current);
+    }, 250);
+
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
+  }, [savedWords]);
+
+  // Flush a just-made change if the page is closed before the short delay.
+  useEffect(() => {
+    const flush = () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+        persistSavedWords(latestSavedWordsRef.current);
+      }
+    };
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, []);
 
   // Listen to storage events and backup restoration for cross-tab sync
   useEffect(() => {
@@ -222,32 +262,28 @@ export function SavedWordsProvider({ children }) {
     const cleanLang = String(lang).toLowerCase().split('-')[0].trim();
     if (!trimmedWord || !cleanLang) return;
 
-    setSavedWords((prev) => {
-      const key = getSavedWordKey(trimmedWord, cleanLang);
-      const exists = prev.some((item) => getSavedWordKey(item.word, item.lang) === key);
-      if (exists) return prev;
-      const next = [
-        ...prev,
-        {
-          word: trimmedWord,
-          lang: cleanLang,
-          addedAt: Date.now()
-        }
-      ];
-      persistSavedWords(next);
-      return next;
+    startTransition(() => {
+      setSavedWords((prev) => {
+        const key = getSavedWordKey(trimmedWord, cleanLang);
+        const exists = prev.some((item) => getSavedWordKey(item.word, item.lang) === key);
+        if (exists) return prev;
+        return [
+          ...prev,
+          {
+            word: trimmedWord,
+            lang: cleanLang,
+            addedAt: Date.now()
+          }
+        ];
+      });
     });
   }, []);
 
   const removeWord = useCallback((word, lang) => {
     if (!word || !lang) return;
     const key = getSavedWordKey(word, lang);
-    setSavedWords((prev) => {
-      const next = prev.filter((item) => getSavedWordKey(item.word, item.lang) !== key);
-      if (next.length !== prev.length) {
-        persistSavedWords(next);
-      }
-      return next;
+    startTransition(() => {
+      setSavedWords((prev) => prev.filter((item) => getSavedWordKey(item.word, item.lang) !== key));
     });
   }, []);
 
