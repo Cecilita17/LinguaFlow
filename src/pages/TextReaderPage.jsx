@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 40835)
+Total output lines: 3536
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   FileText,
@@ -261,6 +264,7 @@ export function TextReaderPage({
     (document.format === 'audio' || document.sourceType === 'audio') &&
     (document.audioPathname || document.audioUrl || document.audioBlob)
   );
+  const isAiGeneratedDocument = document?.sourceType === 'ai';
   const chapters = useMemo(() => {
     return (isEpub && Array.isArray(document?.chapters)) ? document.chapters : [];
   }, [isEpub, document?.chapters]);
@@ -345,11 +349,18 @@ export function TextReaderPage({
   }, [document?.id, readerParagraphs, isEpub, chapters, currentChapter]);
   chapterParagraphsRef.current = chapterParagraphs;
 
-  // Total pages: fixed 15 paragraphs per page for EPUB, 1 page for TXT (continuous scroll)
+  // EPUBs are always page-capable. Other long-form text, including imported
+  // audio transcripts, is paged after 15 paragraphs.
+  const isPaginatedReader = isEpub || (
+    !isAiGeneratedDocument &&
+    chapterParagraphs.length > PARAGRAPHS_PER_PAGE
+  );
+
+  // Total pages: fixed 15 paragraphs per page when pagination is enabled.
   const totalPages = useMemo(() => {
-    if (!isEpub || chapters.length === 0) return 1;
+    if (!isPaginatedReader) return 1;
     return Math.max(1, Math.ceil(chapterParagraphs.length / PARAGRAPHS_PER_PAGE));
-  }, [isEpub, chapters.length, chapterParagraphs.length]);
+  }, [isPaginatedReader, chapterParagraphs.length]);
 
   // Ensure currentParagraphPage does not exceed totalPages
   useEffect(() => {
@@ -358,15 +369,16 @@ export function TextReaderPage({
     }
   }, [currentParagraphPage, totalPages]);
 
-  // Render ONLY the current 15 paragraphs for EPUB, or all paragraphs for TXT
+  // Render the active page where pagination applies; shorter and AI-generated
+  // texts retain their continuous reader.
   const visibleParagraphs = useMemo(() => {
-    if (!isEpub || chapters.length === 0) {
+    if (!isPaginatedReader) {
       return chapterParagraphs;
     }
     const safePage = Math.min(Math.max(0, currentParagraphPage), totalPages - 1);
     const start = safePage * PARAGRAPHS_PER_PAGE;
     return chapterParagraphs.slice(start, start + PARAGRAPHS_PER_PAGE);
-  }, [isEpub, chapters.length, chapterParagraphs, currentParagraphPage, totalPages]);
+  }, [isPaginatedReader, chapterParagraphs, currentParagraphPage, totalPages]);
   visibleParagraphsRef.current = visibleParagraphs;
 
   const ensureCurrentSimplification = useCallback(async () => {
@@ -762,6 +774,9 @@ export function TextReaderPage({
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+    if (isAudioDocument && audioPlayerRef.current) {
+      try { audioPlayerRef.current.pause(); } catch (e) {}
+    }
     setPlayingParagraphId(null);
     setActiveAudioCharIndex(-1);
 
@@ -805,7 +820,7 @@ export function TextReaderPage({
         return updated;
       });
     }
-  }, [totalPages, currentParagraphPage, chapterParagraphs, currentChapterIndex, currentChapter, clearAudioVisualTimer]);
+  }, [totalPages, currentParagraphPage, chapterParagraphs, currentChapterIndex, currentChapter, clearAudioVisualTimer, isAudioDocument]);
 
 
   // Cleanup speech synthesis, glossing & timers on unmount
@@ -1204,7 +1219,7 @@ export function TextReaderPage({
       if (nextPara && handlePlayParagraphRef.current) {
         const nextParaIndex = currentIndex + 1;
         const nextPage = Math.floor(nextParaIndex / PARAGRAPHS_PER_PAGE);
-        if (isEpub && nextPage !== currentParagraphPageRef.current) {
+        if (isPaginatedReader && nextPage !== currentParagraphPageRef.current) {
           isProgrammaticScrollRef.current = true;
           setCurrentParagraphPage(nextPage);
           if (scrollContainerRef.current) {
@@ -1230,7 +1245,7 @@ export function TextReaderPage({
         }, 80);
       }
     }
-  }, [isEpub]);
+  }, [isPaginatedReader]);
 
 /**
  * Calculates real-time character highlight position inside an active paragraph.
@@ -1327,6 +1342,22 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       );
       if (activePara) {
         latestAudioPositionRef.current.paragraphId = activePara.id;
+        if (isPaginatedReader) {
+          const activeIndex = allParas.findIndex((paragraph) => paragraph.id === activePara.id);
+          const activePage = Math.floor(activeIndex / PARAGRAPHS_PER_PAGE);
+          if (activeIndex >= 0 && activePage !== currentParagraphPageRef.current) {
+            isProgrammaticScrollRef.current = true;
+            setCurrentParagraphPage(activePage);
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollTop = 0;
+              previousScrollTopRef.current = 0;
+            }
+            setIsHeaderHidden(false);
+            setTimeout(() => {
+              isProgrammaticScrollRef.current = false;
+            }, 200);
+          }
+        }
         if (playingParagraphIdRef.current !== activePara.id) {
           setPlayingParagraphId(activePara.id);
           playingParagraphIdRef.current = activePara.id;
@@ -1376,7 +1407,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         }
       }
     }
-  }, [document?.paragraphs, document?.audioSegments]);
+  }, [document?.paragraphs, document?.audioSegments, isPaginatedReader]);
 
   const handleAudioPause = useCallback((pausedTime) => {
     if (typeof pausedTime === 'number') {
@@ -1494,1085 +1525,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
 
     // Create encapsulated Audio Word Synchronizer for boundary-anchored local token progression
     const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
-    let prevActiveCharIndex = -1;
-    const synchronizer = createAudioWordSynchronizer({
-      text: cleanText,
-      tokens: paragraph.tokens || [],
-      targetLang: activeDocLang,
-      speechRate: currentRate,
-      utteranceRate,
-      paragraphId: paragraph.id,
-      playbackId,
-      isAndroid,
-      onActiveCharChange: (charIndex) => {
-        if (playbackId !== audioPlaybackIdRef.current) return;
-        if (isAndroid && charIndex >= 0) {
-          const matchedTok = synchronizer.wordTokens.find(wt => wt.startChar === charIndex);
-          if (prevActiveCharIndex >= 0 && charIndex > prevActiveCharIndex) {
-            const prevTok = synchronizer.wordTokens.find(wt => wt.startChar === prevActiveCharIndex);
-            const prevPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === prevActiveCharIndex);
-            const currPos = synchronizer.wordTokens.findIndex(wt => wt.startChar === charIndex);
-          }
-          prevActiveCharIndex = charIndex;
-        }
-        setActiveAudioCharIndex(charIndex);
-      },
-      debug: process.env.NODE_ENV !== 'production'
-    });
-    audioSynchronizerRef.current = synchronizer;
-
-    utterance.onstart = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handleStart(event);
-    };
-
-    utterance.onboundary = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handleBoundary(event);
-    };
-
-    utterance.onpause = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handlePause(event);
-    };
-
-    utterance.onresume = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handleResume(event);
-    };
-
-    utterance.onend = (event) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.handleEnd(event);
-      setPlayingParagraphId(null);
-      playingParagraphIdRef.current = null;
-      setActiveAudioCharIndex(-1);
-      advanceToNextParagraph(paragraph);
-    };
-
-    utterance.onerror = (e) => {
-      if (playbackId !== audioPlaybackIdRef.current) return;
-      synchronizer.stop();
-      setPlayingParagraphId(null);
-      playingParagraphIdRef.current = null;
-      setActiveAudioCharIndex(-1);
-      if (!userStoppedRef.current) {
-        console.warn('TTS playback error for paragraph:', paragraph.id, e);
-        setAudioErrorId(paragraph.id);
-      }
-    };
-
-    try {
-      window.speechSynthesis.speak(utterance);
-    } catch (speakErr) {
-      console.warn('SpeechSynthesis speak call error:', speakErr);
-    }
-  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate]);
-
-  handlePlayParagraphRef.current = handlePlayParagraph;
-
-  const handleStopAudio = useCallback(() => {
-    userStoppedRef.current = true;
-    audioPlaybackIdRef.current++;
-    clearAudioVisualTimer();
-    if (audioPlayerRef.current) {
-      try {
-        audioPlayerRef.current.pause();
-      } catch (e) {}
-    }
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    setPlayingParagraphId(null);
-    playingParagraphIdRef.current = null;
-    setActiveAudioCharIndex(-1);
-  }, [clearAudioVisualTimer]);
-
-  // Manual Audio Bookmark Persistence — ONLY saved upon explicit user action
-  const handleSaveAudioBookmark = useCallback((explicitParagraphId = null) => {
-    const currentDoc = documentRef.current || document;
-    if (!currentDoc) return;
-    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (currentDoc.paragraphs || []);
-    if (allParas.length === 0) return;
-
-    let targetParaId = explicitParagraphId;
-    let targetTime = 0;
-
-    if (!targetParaId) {
-      if (playingParagraphIdRef.current) {
-        targetParaId = playingParagraphIdRef.current;
-      } else if (audioBookmark?.paragraphId) {
-        targetParaId = audioBookmark.paragraphId;
-      } else {
-        const firstVis = visibleParagraphs[0] || allParas[0];
-        targetParaId = firstVis?.id;
-      }
-    }
-
-    const targetPara = allParas.find(p => p.id === targetParaId) || allParas[0];
-    if (!targetPara) return;
-
-    if (isAudioDocument) {
-      if (explicitParagraphId && typeof targetPara.audioStart === 'number') {
-        targetTime = targetPara.audioStart;
-      } else if (typeof audioCurrentTime === 'number' && !isNaN(audioCurrentTime) && audioCurrentTime > 0) {
-        targetTime = audioCurrentTime;
-      } else if (typeof targetPara.audioStart === 'number') {
-        targetTime = targetPara.audioStart;
-      }
-    }
-
-    const newBookmark = {
-      paragraphId: targetPara.id,
-      time: Math.round(targetTime * 100) / 100,
-      savedAt: new Date().toISOString()
-    };
-
-    setAudioBookmark(newBookmark);
-
-    const updated = {
-      ...currentDoc,
-      audioBookmark: newBookmark,
-      updatedAt: new Date().toISOString()
-    };
-    try { saveActiveDocumentDraft(updated); } catch (e) {}
-    saveTextDocument(updated).then(() => {
-      refreshLibraryCount();
-    }).catch(err => console.warn('Failed to save audio bookmark to library:', err));
-
-    setDocument(prev => {
-      if (!prev || prev.id !== currentDoc.id) return prev;
-      return updated;
-    });
-  }, [document, isAudioDocument, audioCurrentTime, visibleParagraphs, audioBookmark, refreshLibraryCount]);
-
-  // Resume playback from manual audio bookmark
-  const handleResumeAudioBookmark = useCallback(() => {
-    if (!audioBookmark?.paragraphId) return;
-    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
-    const targetPara = allParas.find(p => p.id === audioBookmark.paragraphId);
-    if (!targetPara) return;
-
-    if (isAudioDocument && audioPlayerRef.current) {
-      const seekTime = typeof audioBookmark.time === 'number' && audioBookmark.time >= 0
-        ? audioBookmark.time
-        : (typeof targetPara.audioStart === 'number' ? targetPara.audioStart : 0);
-      userStoppedRef.current = false;
-      setPlayingParagraphId(targetPara.id);
-      playingParagraphIdRef.current = targetPara.id;
-      if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
-        audioPlayerRef.current.seekAndPlay(seekTime);
-      } else if (typeof audioPlayerRef.current.seek === 'function') {
-        audioPlayerRef.current.seek(seekTime, true);
-      }
-    } else {
-      handlePlayParagraph(targetPara);
-    }
-
-    try {
-      const el = window.document.querySelector(`[data-paragraph-id="${targetPara.id}"]`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } catch (e) {}
-  }, [audioBookmark, isAudioDocument, document?.paragraphs, handlePlayParagraph]);
-
-  // Writes glosses to the currently displayed representation. Simplified EPUB
-  // glosses are kept inside their cache block and can never overwrite original tokens.
-  const applyGlossedParagraphs = useCallback((updatedParagraphs) => {
-    if (!Array.isArray(updatedParagraphs) || updatedParagraphs.length === 0) return;
-    const updatedMap = new Map(updatedParagraphs.map((paragraph) => [paragraph.id, paragraph]));
-    setDocument((previous) => {
-      if (!previous || !Array.isArray(previous.paragraphs)) return previous;
-      if (simplificationMode.kind !== 'simplified') {
-        return {
-          ...previous,
-          paragraphs: previous.paragraphs.map((paragraph) => updatedMap.get(paragraph.id) || paragraph)
-        };
-      }
-      const nextSimplifications = Object.fromEntries(
-        Object.entries(previous.epubSimplifications || {}).map(([key, block]) => {
-          if (block?.level !== simplificationMode.level || !Array.isArray(block.paragraphs)) return [key, block];
-          return [key, {
-            ...block,
-            paragraphs: block.paragraphs.map((variant) => {
-              const updated = updatedMap.get(variant.sourceParagraphId);
-              return updated ? {
-                ...variant,
-                tokens: updated.tokens || variant.tokens,
-                glosses: updated.glosses || variant.glosses || []
-              } : variant;
-            })
-          }];
-        })
-      );
-      return { ...previous, epubSimplifications: nextSimplifications };
-    });
-  }, [simplificationMode]);
-
-  // Trigger background AI glossing
-  const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
-    if (!Array.isArray(paragraphsToGloss) || paragraphsToGloss.length === 0) return;
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    setIsAutoGlossing(true);
-
-    const enriched = enrichParagraphsWithGlosses({
-      paragraphs: paragraphsToGloss,
-      targetLang: activeTargetLang,
-      nativeLang,
-      apiKey,
-      abortSignal: controller.signal,
-      onUpdate: (updatedParagraphs) => {
-        applyGlossedParagraphs(updatedParagraphs);
-      },
-      onProgress: (prog) => {
-        setGlossingProgress(prog);
-        if (!prog.isGlossing) {
-          setIsAutoGlossing(false);
-          if (!prog.isPaused) {
-            const completedCount = prog.completed;
-            const totalCount = prog.total;
-            const failedCount = (typeof prog.failed === 'number' && prog.failed >= 0) ? prog.failed : (totalCount - completedCount);
-            if (completedCount === totalCount) {
-              setGlossNotice({
-                message: `Glosado terminado: ${totalCount}/${totalCount}`,
-                type: 'success'
-              });
-            } else {
-              setGlossNotice({
-                message: `Glosado terminado: ${completedCount}/${totalCount}. ${failedCount} pendientes.`,
-                type: 'warning'
-              });
-            }
-          }
-        }
-      }
-    });
-
-    // Update document with immediately prepared offline tokens
-    applyGlossedParagraphs(enriched);
-  }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs]);
-
-  // Toggle Global Auto-Glossing (ON / OFF)
-  const handleToggleAutoGlossing = useCallback(() => {
-    if (isAutoGlossing) {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-      setIsAutoGlossing(false);
-      setGlossingProgress(prev => ({
-        ...prev,
-        isGlossing: false,
-        isPaused: true
-      }));
-    } else {
-      const paragraphsToGloss = (isEpub && visibleParagraphs.length > 0)
-        ? visibleParagraphs
-        : (document?.paragraphs || []);
-      if (!paragraphsToGloss || paragraphsToGloss.length === 0) return;
-
-      const activeTarget = activeDocLang || targetLang;
-      const missing = paragraphsToGloss.filter(p => !isGlossComplete(p, activeTarget, nativeLang));
-
-      if (missing.length === 0) {
-        setGlossNotice({
-          message: `Glosado terminado: ${paragraphsToGloss.length}/${paragraphsToGloss.length}`,
-          type: 'success'
-        });
-        return;
-      }
-
-      setIsAutoGlossing(true);
-      triggerGlossing(paragraphsToGloss, activeDocLang);
-    }
-  }, [isAutoGlossing, document, isEpub, visibleParagraphs, activeDocLang, targetLang, nativeLang, triggerGlossing]);
-
-  // Stop/Pause glossing
-  const handleStopGlossing = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsAutoGlossing(false);
-    setGlossingProgress(prev => ({
-      ...prev,
-      isGlossing: false,
-      isPaused: true
-    }));
-  };
-
-  // Resume glossing
-  const handleResumeGlossing = () => {
-    if (document && Array.isArray(document.paragraphs)) {
-      setIsAutoGlossing(true);
-      triggerGlossing(isEpub ? visibleParagraphs : document.paragraphs, targetLang);
-    }
-  };
-
-  // Individual paragraph glossing (runs ONLY for that paragraph, works even when auto-glossing is OFF)
-  const handleGlossParagraph = useCallback(async (paragraph) => {
-    if (!paragraph || !paragraph.id) return;
-    if (isGlossComplete(paragraph, activeDocLang, nativeLang)) return; // $0 Groq cost: already glossed!
-
-    // Mark solely this paragraph as glossing
-    setGlossingParagraphIds(prev => new Set(prev).add(paragraph.id));
-
-    try {
-      // Send ONLY this single paragraph to the glossing service
-      const updatedParagraph = await glossSingleParagraph({
-        paragraph,
-        targetLang: activeDocLang,
-        nativeLang,
-        apiKey
-      });
-
-      // Replace ONLY this paragraph inside document.paragraphs and persist immediately
-      applyGlossedParagraphs([updatedParagraph]);
-    } catch (err) {
-      console.error('Failed to gloss single paragraph:', err);
-    } finally {
-      setGlossingParagraphIds(prev => {
-        const next = new Set(prev);
-        next.delete(paragraph.id);
-        return next;
-      });
-    }
-  }, [activeDocLang, nativeLang, apiKey, applyGlossedParagraphs]);
-
-  // Alias for backwards compatibility
-  const handleGlossSingleParagraph = handleGlossParagraph;
-
-  // Individual paragraph full translation (Groq openai/gpt-oss-120b, cached in-memory per paragraph)
-  const handleTranslateParagraph = useCallback(async (paragraph) => {
-    if (!paragraph || !paragraph.id) return;
-    const paraId = getParagraphRepresentationKey(paragraph, simplificationMode);
-
-    // Check current state for this paragraph
-    setParagraphTranslations(prev => {
-      const currentState = prev[paraId];
-
-      // If currently translating, ignore double trigger
-      if (currentState?.isTranslating) return prev;
-
-      // If already translated without error, toggle visibility
-      if (currentState?.text && !currentState?.error) {
-        return {
-          ...prev,
-          [paraId]: {
-            ...currentState,
-            isVisible: !currentState.isVisible
-          }
-        };
-      }
-
-      // Otherwise set loading state and initiate fetch
-      return {
-        ...prev,
-        [paraId]: {
-          text: currentState?.text || null,
-          isTranslating: true,
-          isVisible: true,
-          error: null
-        }
-      };
-    });
-
-    // If already translated without error or already translating, don't re-fetch
-    if (paragraphTranslations[paraId]?.isTranslating) return;
-    if (paragraphTranslations[paraId]?.text && !paragraphTranslations[paraId]?.error) return;
-
-    try {
-      const result = await translateParagraphTextApi({
-        text: paragraph.text,
-        targetLang: activeDocLang,
-        nativeLang,
-        apiKey
-      });
-
-      setParagraphTranslations(prev => ({
-        ...prev,
-        [paraId]: {
-          text: result.translation,
-          isTranslating: false,
-          isVisible: true,
-          error: null
-        }
-      }));
-    } catch (err) {
-      console.error('Failed to translate paragraph:', err);
-      setParagraphTranslations(prev => ({
-        ...prev,
-        [paraId]: {
-          text: null,
-          isTranslating: false,
-          isVisible: true,
-          error: err.message || (isSpanish ? 'Error al traducir el párrafo.' : 'Could not translate the paragraph.')
-        }
-      }));
-    }
-  }, [paragraphTranslations, activeDocLang, nativeLang, apiKey, simplificationMode, isSpanish]);
-
-  // Submit / Start reading parsed text (OFFLINE ONLY: Zero AI calls!)
-  const handleStartReading = async () => {
-    const raw = inputText.trim();
-    if (!raw) return;
-
-    const isExistingDoc = Boolean(document && document.id);
-    const rawTextChanged = isExistingDoc && document.rawText.trim() !== raw;
-    const isExistingEpubDocument = Boolean(
-      isExistingDoc &&
-      (document.format === 'epub' || document.sourceType === 'epub' || (Array.isArray(document.chapters) && document.chapters.length > 0))
-    );
-    // A pasted text cannot share an EPUB's chapter identities. Reusing the EPUB
-    // document would leave the new paragraphs without chapterId values, making
-    // the chapter reader render an empty page. Preserve the book and save the
-    // pasted content as its own TXT document instead.
-    const shouldCreateIndependentTextDocument = isExistingEpubDocument && rawTextChanged;
-    const effectiveParagraphs = (!rawTextChanged && isExistingDoc && Array.isArray(document.paragraphs) && document.paragraphs.length > 0)
-      ? document.paragraphs
-      : splitTextIntoParagraphs(raw, targetLang, nativeLang);
-
-    // Validate if audio bookmark still points to an existing paragraph after edit
-    let preservedAudioBookmark = null;
-    if (isExistingDoc) {
-      const existingBookmark = resolveAudioBookmark(document);
-      if (existingBookmark?.paragraphId && effectiveParagraphs.some(p => p.id === existingBookmark.paragraphId)) {
-        preservedAudioBookmark = existingBookmark;
-      }
-    }
-
-    const isExistingAudioDoc = isExistingDoc && (
-      document.sourceType === 'audio' ||
-      document.format === 'audio' ||
-      Boolean(document.audioPathname || document.audioUrl || document.audioBlob)
-    );
-
-    const docToSave = createTextDocument({
-      id: shouldCreateIndependentTextDocument ? null : (isExistingDoc ? document.id : null),
-      title: shouldCreateIndependentTextDocument && inputTitle.trim() === (document.title || '').trim() ? '' : inputTitle.trim(),
-      author: shouldCreateIndependentTextDocument ? '' : (isExistingDoc ? (document.author || '') : ''),
-      sourceType: isExistingAudioDoc
-        ? (document.sourceType || 'audio')
-        : (shouldCreateIndependentTextDocument ? 'txt' : (isExistingDoc ? (document.sourceType || 'txt') : 'txt')),
-      format: isExistingAudioDoc
-        ? (document.format || 'audio')
-        : (shouldCreateIndependentTextDocument ? 'txt' : (isExistingDoc ? (document.format || 'txt') : 'txt')),
-      rawText: raw,
-      targetLang,
-      nativeLang,
-      paragraphs: effectiveParagraphs,
-      chapters: shouldCreateIndependentTextDocument ? null : (isExistingDoc ? (document.chapters || null) : null),
-      languageStates: shouldCreateIndependentTextDocument ? null : (isExistingDoc ? document.languageStates : null),
-      audioPathname: isExistingAudioDoc ? document.audioPathname : null,
-      audioUrl: isExistingAudioDoc ? document.audioUrl : null,
-      audioBlob: isExistingAudioDoc ? document.audioBlob : null,
-      audioMimeType: isExistingAudioDoc ? document.audioMimeType : null,
-      audioSegments: isExistingAudioDoc ? document.audioSegments : null,
-      audioDuration: isExistingAudioDoc ? document.audioDuration : null,
-      audioBookmark: preservedAudioBookmark,
-      lastReadingPosition: isExistingDoc ? document.lastReadingPosition : null,
-      createdAt: shouldCreateIndependentTextDocument ? null : (isExistingDoc ? document.createdAt : null)
-    });
-
-    const saved = await saveDocument(docToSave);
-    setDocument(saved);
-    const savedBookmark = resolveAudioBookmark(saved);
-    const isValidBookmark = Boolean(
-      savedBookmark?.paragraphId &&
-      Array.isArray(saved.paragraphs) &&
-      saved.paragraphs.some(p => p.id === savedBookmark.paragraphId)
-    );
-    setAudioBookmark(isValidBookmark ? savedBookmark : null);
-    setIsEditing(false);
-    setIsHeaderHidden(false);
-    previousScrollTopRef.current = 0;
-    await refreshLibraryCount();
-
-    // Auto-glossing MUST BE OFF BY DEFAULT:
-    // Display text immediately, persist offline segmentation, ZERO AI calls!
-    const alreadyComplete = effectiveParagraphs.every(p => isGlossComplete(p, targetLang, nativeLang));
-    const completedCount = effectiveParagraphs.filter(p => isGlossComplete(p, targetLang, nativeLang)).length;
-
-    setGlossingProgress({
-      total: effectiveParagraphs.length,
-      completed: completedCount,
-      isGlossing: false,
-      isPaused: false,
-      isComplete: alreadyComplete,
-      failed: 0
-    });
-    setIsAutoGlossing(false);
-    navigateToView('reader');
-  };
-
-  // Open / select document from saved library modal
-  const handleSelectSavedDocument = useCallback((doc) => {
-    if (!doc) return;
-    recordHabitActivityForToday({
-      user,
-      langCode: doc.targetLang || targetLang,
-      activityKey: 'reading'
-    });
-    audioPlaybackIdRef.current++;
-    clearAudioVisualTimer();
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setPlayingParagraphId(null);
-    setActiveAudioCharIndex(-1);
-    setAudioErrorId(null);
-    setDocument(doc);
-    const targetChapterIdx = resolveChapterIndexForDoc(doc);
-    setCurrentChapterIndex(targetChapterIdx);
-    const targetPageIdx = resolvePageIndexForDoc(doc, targetChapterIdx);
-    setCurrentParagraphPage(targetPageIdx);
-    setInputText(doc.rawText || '');
-    setInputTitle(doc.title || '');
-    setIsEditing(false);
-    setIsHeaderHidden(false);
-    previousScrollTopRef.current = 0;
-    saveActiveDocumentDraft(doc);
-
-    // Sync manual audio bookmark from loaded document (validate existence)
-    const savedBookmark = resolveAudioBookmark(doc);
-    const isValidBookmark = Boolean(
-      savedBookmark?.paragraphId &&
-      Array.isArray(doc.paragraphs) &&
-      doc.paragraphs.some(p => p.id === savedBookmark.paragraphId)
-    );
-    const validBookmark = isValidBookmark ? savedBookmark : null;
-    setAudioBookmark(validBookmark);
-
-    // If opening an audio document, prepare latestAudioPositionRef (staying paused)
-    if ((doc.sourceType === 'audio' || doc.format === 'audio') && (doc.audioPathname || doc.audioUrl || doc.audioBlob)) {
-      const savedTime = typeof validBookmark?.time === 'number'
-        ? validBookmark.time
-        : (typeof doc.lastAudioPosition === 'number' ? doc.lastAudioPosition : 0);
-      latestAudioPositionRef.current = {
-        time: savedTime,
-        paragraphId: validBookmark?.paragraphId || null
-      };
-      if (audioPlayerRef.current) {
-        audioPlayerRef.current.seek(savedTime);
-      }
-    }
-
-    const savedReadingPos = doc.lastReadingPosition;
-    const isValidReadingPos = Boolean(
-      savedReadingPos?.paragraphId &&
-      Array.isArray(doc.paragraphs) &&
-      doc.paragraphs.some(p => p.id === savedReadingPos.paragraphId)
-    );
-    const validReadingPosId = isValidReadingPos ? savedReadingPos.paragraphId : null;
-
-    // Prioritize manual audio bookmark; fallback to last reading position
-    const targetScrollId = validBookmark?.paragraphId || validReadingPosId;
-    if (targetScrollId) {
-      setPendingScrollParagraphId(targetScrollId);
-    } else {
-      setPendingScrollParagraphId(null);
-    }
-
-    if (setTargetLang && doc.targetLang) {
-      setTargetLang(doc.targetLang);
-    }
-
-    const docLang = doc.targetLang || 'zh';
-    const paras = Array.isArray(doc.paragraphs) ? doc.paragraphs : [];
-    const allComplete = paras.length > 0 && paras.every(p => isGlossComplete(p, docLang, nativeLang));
-    const completedCount = paras.filter(p => isGlossComplete(p, docLang, nativeLang)).length;
-
-    setGlossingProgress({
-      total: paras.length,
-      completed: completedCount,
-      isGlossing: false,
-      isPaused: false,
-      isComplete: allComplete,
-      failed: 0
-    });
-    setIsAutoGlossing(false);
-    setLoadingParagraphIds(new Set());
-    navigateToView('reader');
-  }, [setTargetLang, navigateToView, nativeLang, targetLang, user]);
-
-  // Delete document handler from library modal / view
-  const handleDeleteDocumentFromLibrary = useCallback(async (deletedId) => {
-    if (document && document.id === deletedId) {
-      audioPlaybackIdRef.current++;
-      clearAudioVisualTimer();
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      setIsAutoGlossing(false);
-      setLoadingParagraphIds(new Set());
-      setAudioBookmark(null);
-      setPendingScrollParagraphId(null);
-      clearActiveDocumentDraft();
-      setDocument(null);
-      setInputText('');
-      setInputTitle('');
-      setPlayingParagraphId(null);
-      setActiveAudioCharIndex(-1);
-      setGlossingProgress({
-        total: 0,
-        completed: 0,
-        isGlossing: false,
-        isPaused: false,
-        isComplete: false,
-        failed: 0
-      });
-      navigateToView('library');
-    }
-    await refreshLibraryCount();
-  }, [clearAudioVisualTimer, document, refreshLibraryCount, navigateToView]);
-
-  // Start new document from modal
-  const handleNewDocumentFromModal = useCallback(() => {
-    handleClearDocument();
-  }, []);
-
-  // File Upload handler (.txt and .epub)
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Reset file input value so selecting same file again re-triggers
-    e.target.value = '';
-
-    const isEpub = file.name.toLowerCase().endsWith('.epub') || file.type.includes('epub');
-
-    if (isEpub) {
-      setIsEpubImporting(true);
-      setEpubImportStatus(isSpanish ? 'Leyendo libro EPUB...' : 'Reading EPUB book...');
-      try {
-        const parsed = await parseEpubFile(file, {
-          targetLang,
-          nativeLang,
-          onProgress: (prog) => {
-            setEpubImportStatus(isSpanish
-              ? `Extrayendo capítulos... (${prog.current} de ${prog.total})`
-              : `Extracting chapters... (${prog.current} of ${prog.total})`);
-          }
-        });
-
-        // Set detected language if available and not explicitly customized
-        const docLang = parsed.targetLang || targetLang;
-        if (parsed.detectedLanguage && setTargetLang && parsed.detectedLanguage !== targetLang) {
-          setTargetLang(parsed.detectedLanguage);
-        }
-
-        const docToSave = createTextDocument({
-          title: parsed.title,
-          author: parsed.author,
-          sourceType: 'epub',
-          format: 'epub',
-          rawText: parsed.rawText,
-          targetLang: docLang,
-          nativeLang,
-          paragraphs: parsed.paragraphs,
-          chapters: parsed.chapters,
-          coverImage: parsed.coverImage,
-          createdAt: new Date().toISOString()
-        });
-
-        const saved = await saveDocument(docToSave);
-        setDocument(saved);
-        setInputText(saved.rawText || '');
-        setInputTitle(saved.title || '');
-        setIsEditing(false);
-        setIsHeaderHidden(false);
-        setPendingScrollParagraphId(null);
-        previousScrollTopRef.current = 0;
-        await refreshLibraryCount();
-
-        // Auto-glossing is OFF by default:
-        const alreadyComplete = saved.paragraphs.every(p => isGlossComplete(p, docLang, nativeLang));
-        const completedCount = saved.paragraphs.filter(p => isGlossComplete(p, docLang, nativeLang)).length;
-
-        setGlossingProgress({
-          total: saved.paragraphs.length,
-          completed: completedCount,
-          isGlossing: false,
-          isPaused: false,
-          isComplete: alreadyComplete,
-          failed: 0
-        });
-        setIsAutoGlossing(false);
-        navigateToView('reader');
-      } catch (err) {
-        console.error('Error al importar archivo EPUB:', err);
-        alert(`Error al importar el archivo EPUB: ${err.message || err}`);
-      } finally {
-        setIsEpubImporting(false);
-        setEpubImportStatus('');
-      }
-      return;
-    }
-
-    // Default: .txt handling
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result;
-      if (typeof content === 'string') {
-        setInputText(content);
-        if (!inputTitle.trim()) {
-          const defaultName = file.name.replace(/\.[^/.]+$/, '');
-          setInputTitle(defaultName);
-        }
-      }
-    };
-    reader.readAsText(file, 'utf-8');
-  };
-
-  const handleAudioFileSelection = (event) => {
-    const file = event.target.files?.[0] || null;
-    event.target.value = '';
-    if (file) setSelectedAudioFile(file);
-  };
-
-  const handleTimestampFileSelection = (event) => {
-    const file = event.target.files?.[0] || null;
-    event.target.value = '';
-    if (file) setSelectedTimestampFile(file);
-  };
-
-  // Imports a user-supplied, timestamped transcript. It intentionally avoids
-  // Whisper so paragraph timing comes directly from the supplied SRT/VTT file.
-  const handleTimestampedAudioImport = async () => {
-    if (!selectedAudioFile || !selectedTimestampFile) return;
-    setIsImporting(true);
-    setImportStatus(isSpanish ? 'Leyendo transcripción con timestamps...' : 'Reading timestamped transcript...');
-    try {
-      const transcriptContent = await selectedTimestampFile.text();
-      const parsed = parseSubtitlesAuto(transcriptContent, selectedTimestampFile.name, targetLang);
-      if (!['srt', 'vtt'].includes(parsed.format) || !Array.isArray(parsed.subtitles) || parsed.subtitles.length === 0) {
-        throw new Error(isSpanish
-          ? 'Selecciona una transcripción SRT o VTT válida con timestamps.'
-          : 'Choose a valid timestamped SRT or VTT transcript.');
-      }
-
-      const paragraphs = parsed.subtitles.map((subtitle, index) => ({
-        id: `p-${index + 1}`,
-        index,
-        text: subtitle.text,
-        tokens: tokenizeAndGlossLineOffline(subtitle.text, targetLang, nativeLang),
-        glosses: [],
-        audioStart: subtitle.startTime,
-        audioEnd: subtitle.endTime,
-        audioSegments: [{
-          id: subtitle.id || `timestamp_${index + 1}`,
-          start: subtitle.startTime,
-          end: subtitle.endTime,
-          text: subtitle.text
-        }],
-        tts: { speechCode: getLanguageMeta(targetLang)?.speechCode || 'zh-CN', rate: 1.0 }
-      }));
-      const rawText = paragraphs.map((paragraph) => paragraph.text).join('\n\n');
-      const defaultTitle = selectedAudioFile.name.replace(/\.[^/.]+$/, '') || (isSpanish ? 'Audio con transcripción' : 'Timestamped audio');
-      const docToSave = createTextDocument({
-        title: inputTitle.trim() || defaultTitle,
-        sourceType: 'audio',
-        format: 'audio',
-        rawText,
-        paragraphs,
-        targetLang,
-        nativeLang,
-        audioBlob: selectedAudioFile,
-        audioMimeType: selectedAudioFile.type || 'audio/webm',
-        audioSegments: paragraphs.flatMap((paragraph) => paragraph.audioSegments),
-        audioDuration: Math.max(...parsed.subtitles.map((subtitle) => subtitle.endTime || 0), 0),
-        createdAt: new Date().toISOString()
-      });
-      const saved = await saveDocument(docToSave);
-      setDocument(saved);
-      setInputText(saved.rawText || '');
-      setInputTitle(saved.title || '');
-      setSelectedAudioFile(null);
-      setSelectedTimestampFile(null);
-      setIsEditing(false);
-      setIsHeaderHidden(false);
-      setPendingScrollParagraphId(null);
-      previousScrollTopRef.current = 0;
-      await refreshLibraryCount();
-      setGlossingProgress({ total: saved.paragraphs.length, completed: 0, isGlossing: false, isPaused: false, isComplete: false, failed: 0 });
-      setIsAutoGlossing(false);
-      navigateToView('reader');
-    } catch (error) {
-      console.error('Error importing timestamped audio:', error);
-      alert(isSpanish ? `Error al importar audio con timestamps: ${error.message || error}` : `Error importing timestamped audio: ${error.message || error}`);
-    } finally {
-      setIsImporting(false);
-      setImportStatus('');
-    }
-  };
-
-  // Paste from clipboard handler
-  const handlePasteClipboard = async () => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.readText) {
-        const text = await navigator.clipboard.readText();
-        if (text) {
-          setInputText(text);
-        }
-      }
-    } catch (err) {
-      console.warn('Clipboard paste notice:', err);
-    }
-  };
-
-  // Clear / New Document handler
-  const handleClearDocument = () => {
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    setIsAutoGlossing(false);
-    setLoadingParagraphIds(new Set());
-    setPlayingParagraphId(null);
-    setAudioErrorId(null);
-    setPendingScrollParagraphId(null);
-    clearActiveDocumentDraft();
-    setDocument(null);
-    setInputText('');
-    setInputTitle('');
-    setIsEditing(true);
-    setIsHeaderHidden(false);
-    previousScrollTopRef.current = 0;
-    setGlossingProgress({
-      total: 0,
-      completed: 0,
-      isGlossing: false,
-      isPaused: false,
-      isComplete: false,
-      failed: 0
-    });
-  };
-
-  // Toggle menu visibility
-  const toggleActionsMenu = useCallback((e) => {
-    if (e) {
-      if (typeof e.preventDefault === 'function') e.preventDefault();
-      if (typeof e.stopPropagation === 'function') e.stopPropagation();
-    }
-    setIsActionsMenuOpen(prev => !prev);
-  }, []);
-
-  // Close the menu when clicking outside of the trigger
-  useEffect(() => {
-    if (!isActionsMenuOpen) return;
-    const handleClickOutside = (e) => {
-      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target)) {
-        setIsActionsMenuOpen(false);
-      }
-    };
-    // Delay event listener registration so opening tap/click does not immediately close the menu
-    const timer = setTimeout(() => {
-      window.addEventListener('pointerdown', handleClickOutside);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('pointerdown', handleClickOutside);
-    };
-  }, [isActionsMenuOpen]);
-
-  // Audio toggle helper for top bar "A" button
-  const isPlayingAnyAudio = Boolean(playingParagraphId);
-
-  const handleToggleAudio = useCallback(() => {
-    if (isPlayingAnyAudio) {
-      handleStopAudio();
-      return;
-    }
-    const paras = visibleParagraphs.length > 0 ? visibleParagraphs : (document?.paragraphs || []);
-    if (paras.length === 0) return;
-
-    if (isAudioDocument && audioPlayerRef.current) {
-      const resumeTime = typeof latestAudioPositionRef.current.time === 'number'
-        ? latestAudioPositionRef.current.time
-        : (typeof document?.lastAudioPosition === 'number' ? document.lastAudioPosition : 0);
-
-      const targetPara = paras.find(p =>
-          typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
-          resumeTime >= p.audioStart && resumeTime < p.audioEnd
-        )
-        || paras[0];
-
-      if (targetPara) {
-        setPlayingParagraphId(targetPara.id);
-        playingParagraphIdRef.current = targetPara.id;
-        latestAudioPositionRef.current.paragraphId = targetPara.id;
-        latestAudioPositionRef.current.time = resumeTime;
-        userStoppedRef.current = false;
-        if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
-          audioPlayerRef.current.seekAndPlay(resumeTime);
-        } else if (typeof audioPlayerRef.current.seek === 'function') {
-          audioPlayerRef.current.seek(resumeTime, true);
-        }
-        return;
-      }
-    }
-
-    const targetPara = paras[0];
-    if (targetPara) {
-      handlePlayParagraph(targetPara);
-    }
-  }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, handlePlayParagraph]);
-
-  // Edit title action from three-dots menu
-  const handleEditTitle = useCallback(() => {
-    setIsActionsMenuOpen(false);
-    const currentTitle = document?.title || '';
-    const newTitle = window.prompt(t('edit_title') || 'Editar título del documento:', currentTitle);
-    if (newTitle !== null && newTitle.trim()) {
-      const trimmed = newTitle.trim();
-      setDocument(prev => {
-        if (!prev) return prev;
-        const updated = {
-          ...prev,
-          title: trimmed,
-          updatedAt: new Date().toISOString()
-        };
-        saveActiveDocumentDraft(updated);
-        if (updated.id) {
-          saveTextDocument(updated).then(() => refreshLibraryCount()).catch(() => {});
-        }
-        return updated;
-      });
-      setInputTitle(trimmed);
-    }
-  }, [document?.title, t, refreshLibraryCount]);
-
-  // Delete document action from three-dots menu
-  const handleDeleteText = useCallback(() => {
-    setIsActionsMenuOpen(false);
-    const confirmed = window.confirm(t('confirm_delete_text') || '¿Seguro que deseas eliminar este texto?');
-    if (confirmed) {
-      if (document?.id) {
-        deleteTextDocument(document.id).then(() => refreshLibraryCount()).catch(() => {});
-      }
-      handleClearDocument();
-      navigateToView('library');
-    }
-  }, [document?.id, handleClearDocument, refreshLibraryCount, t, navigateToView]);
-
-  // Open library action from three-dots menu
-  const handleOpenLibrary = useCallback(() => {
-    handleStopAudio();
-    setIsActionsMenuOpen(false);
-    navigateToView('library');
-  }, [handleStopAudio, navigateToView]);
-
-  // Go back to Home — reuses the existing setActiveTab from App.jsx
-  const handleGoHome = useCallback(() => {
-    handleStopAudio();
-    setIsActionsMenuOpen(false);
-    if (typeof setActiveTab === 'function') {
-      setActiveTab('home');
-    }
-  }, [handleStopAudio, setActiveTab]);
-
-
-  const currentLangMeta = getLanguageMeta(targetLang);
-  // Reuses the existing scroll-direction detection but now applies to the chapter bar only.
-  // Header stays visible; only the chapter bar hides on scroll down and reappears on scroll up.
-  const isChapterBarHidden = isHeaderHidden && !isEditing && !isActionsMenuOpen;
-
-  return (
-    <div className="h-full flex-1 overflow-hidden w-full flex flex-col bg-[var(--app-bg)] text-[var(--text-primary)] min-h-0">
-      {viewMode === 'library' || (!document && viewMode === 'reader') ? (
-        /* =================== VIEW 1: DEDICATED TEXT LIBRARY =================== */
-        <TextLibraryView
-          targetLang={targetLang}
-          onSelectDocument={handleSelectSavedDocument}
-          onAddNew={handleAddNewDocument}
-          onBackToHome={handleGoHome}
-          onDeleteDocument={handleDeleteDocumentFromLibrary}
-          currentDocumentId={document?.id || ''}
-        />
-      ) : viewMode === 'importer' ? (
-        /* =================== VIEW 2: ADD / IMPORT TEXT SCREEN =================== */
-        <div className="flex flex-col h-full w-full max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-5 overflow-y-auto custom-scrollbar text-[var(--text-primary)]">
-          {/* Top Bar with Back to Library */}
-          <div className="flex-shrink-0 flex items-center justify-between pb-3 sm:pb-4 border-b border-[var(--border-primary)] mb-4">
-            <button
-              type="button"
-              onClick={() => navigateToView('library')}
-              className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>{isSpanish ? 'Biblioteca' : 'Library'}</span>
-            </button>
-
-            <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-              <Plus className="w-4 h-4 text-rose-500" />
-              <span>{t('text_importer_heading') || (isSpanish ? 'Importar o escribir texto' : 'Import or write text')}</span>
-            </h2>
-
-            <div className="w-20" />
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full animate-fade-in my-auto">
-            <div className="p-4 sm:p-7 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-2xl text-[var(--text-primary)]">
-              {/* Header Title inside card */}
-              <div className="flex items-center justify-between mb-5 pb-4 border-b border-[var(--border-primary)]">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/60">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-[var(--text-primary)] leading-tight">
-                      {t('text_importer_heading') || 'Importar o escribir texto'}
-                    </h3>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                      {t('text_importer_subheading') || 'Pega cualquier lectura. Se dividirá automáticamente en párrafos con audio y glosado.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  {savedDocsCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => navigateToView('library')}
-                      className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer transition-all shadow-xs"
-                    >
-                      <BookOpen className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-                      <span>{isSpanish ? `Biblioteca (${savedDocsCount})` : `Library (${savedDocsCount})`}</span>
-                    </button>
-                  )}
-
-                  {document && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsHeaderHidden(false);
-                        previousScrollTopRef.current = 0;
-                        navigateToView('reader');
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold cursor-pointer hover:bg-[var(--surface-hover)]"
-                    >
-                      {isSpanish ? 'Volver a lectura' : 'Back to reading'}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Import status indicator banner */}
-              {isImporting && (
-                <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-amber-700 dark:text-amber-300 animate-pulse">
+    let prevActiveCharIndex =…10835 tokens truncated…xt-amber-300 animate-pulse">
                   <div className="flex items-center gap-3 min-w-0">
                     <Loader2 className="w-5 h-5 animate-spin shrink-0 text-amber-500" />
                     <span className="text-xs sm:text-sm font-semibold truncate">
@@ -3113,7 +2066,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
             )}
 
             {/* EPUB Page Navigation Bar (Top): Shown when chapter has multiple 15-paragraph pages */}
-            {isEpub && totalPages > 1 && (
+            {isPaginatedReader && totalPages > 1 && (
               <div className="flex items-center justify-between py-2 px-3 mb-3 rounded-xl bg-[var(--surface-primary)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] shadow-sm">
                 <button
                   type="button"
@@ -3255,7 +2208,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
             )}
 
             {/* EPUB Page Navigation Bar (Bottom): Shown when chapter has multiple 15-paragraph pages */}
-            {isEpub && totalPages > 1 && (
+            {isPaginatedReader && totalPages > 1 && (
               <div className="flex items-center justify-between py-2.5 px-3 mt-4 mb-2 rounded-xl bg-[var(--surface-primary)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] shadow-sm">
                 <button
                   type="button"
@@ -3505,3 +2458,4 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
 }
 
 export default TextReaderPage;
+
