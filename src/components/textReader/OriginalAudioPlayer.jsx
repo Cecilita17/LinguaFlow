@@ -72,41 +72,63 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
         : `${API_BASE_URL || ''}/api/audio-stream?pathname=${encodeURIComponent(audioPathname)}`)
     : '');
 
-  const pendingSeekCallbackRef = useRef(null);
+  // A seek is asynchronous in HTMLMediaElement. Keep the latest request together
+  // with its target so an older `seeked` event cannot complete a newer request.
+  const pendingSeekRequestRef = useRef(null);
+  const seekRequestIdRef = useRef(0);
   const isProgrammaticSeekingRef = useRef(false);
+  const SEEK_TARGET_TOLERANCE_SECONDS = 0.05;
+
+  const completePendingSeek = useCallback((audio) => {
+    const request = pendingSeekRequestRef.current;
+    const current = audio?.currentTime;
+
+    if (
+      !request ||
+      request.requestId !== seekRequestIdRef.current ||
+      typeof current !== 'number' ||
+      !Number.isFinite(current) ||
+      Math.abs(current - request.targetTime) > SEEK_TARGET_TOLERANCE_SECONDS
+    ) {
+      return false;
+    }
+
+    pendingSeekRequestRef.current = null;
+    isProgrammaticSeekingRef.current = false;
+    if (onTimeUpdate) {
+      onTimeUpdate(current);
+    }
+    if (request.autoPlay) {
+      const promise = audio.play();
+      if (promise !== undefined) {
+        promise.catch(err => {
+          console.warn('[OriginalAudioPlayer] play() error:', err);
+          if (onError) onError(err);
+        });
+      }
+    }
+    return true;
+  }, [onError, onTimeUpdate]);
 
   const seek = useCallback((time, autoPlay = false) => {
     const audio = audioRef.current;
     if (!audio) return;
     const safeTime = Math.max(0, typeof time === 'number' && !isNaN(time) ? time : 0);
 
-    // Cancel any previous pending seek callback (ensures latest click wins)
-    pendingSeekCallbackRef.current = null;
+    // Every request supersedes the preceding one. The request id and target are
+    // both checked in handleSeeked before this seek may resume playback.
+    const requestId = ++seekRequestIdRef.current;
+    pendingSeekRequestRef.current = {
+      requestId,
+      targetTime: safeTime,
+      autoPlay
+    };
     isProgrammaticSeekingRef.current = true;
     setLocalCurrentTime(safeTime);
 
-    const onSeekComplete = () => {
-      isProgrammaticSeekingRef.current = false;
-      pendingSeekCallbackRef.current = null;
-      if (onTimeUpdate) {
-        onTimeUpdate(audio.currentTime);
-      }
-      if (autoPlay) {
-        const promise = audio.play();
-        if (promise !== undefined) {
-          promise.catch(err => {
-            console.warn('[OriginalAudioPlayer] play() error:', err);
-            if (onError) onError(err);
-          });
-        }
-      }
-    };
-
-    pendingSeekCallbackRef.current = onSeekComplete;
-
     // If audio is already at the target position and not currently seeking, complete immediately
-    if (Math.abs(audio.currentTime - safeTime) < 0.05 && !audio.seeking) {
-      onSeekComplete();
+    if (Math.abs(audio.currentTime - safeTime) <= SEEK_TARGET_TOLERANCE_SECONDS && !audio.seeking) {
+      completePendingSeek(audio);
       return;
     }
 
@@ -114,9 +136,14 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
       audio.currentTime = safeTime;
     } catch (e) {
       console.warn('[OriginalAudioPlayer] seek error:', e);
-      onSeekComplete();
+      // Do not play from the previous position if the requested seek failed.
+      if (!completePendingSeek(audio)) {
+        pendingSeekRequestRef.current = null;
+        isProgrammaticSeekingRef.current = false;
+        if (onError) onError(e);
+      }
     }
-  }, [onError, onTimeUpdate]);
+  }, [completePendingSeek, onError]);
 
   // Imperative handle exposed to parent via ref (equivalent to YouTube player methods)
   useImperativeHandle(ref, () => ({
@@ -210,17 +237,17 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     const current = audio.currentTime || 0;
     setLocalCurrentTime(current);
 
-    if (pendingSeekCallbackRef.current) {
-      const cb = pendingSeekCallbackRef.current;
-      pendingSeekCallbackRef.current = null;
-      cb();
+    if (pendingSeekRequestRef.current) {
+      // An older/intermediate seek can emit after a newer request was made.
+      // Keep waiting unless this event reaches the latest requested absolute time.
+      completePendingSeek(audio);
     } else {
       isProgrammaticSeekingRef.current = false;
       if (onTimeUpdate) {
         onTimeUpdate(current);
       }
     }
-  }, [onTimeUpdate]);
+  }, [completePendingSeek, onTimeUpdate]);
 
   const handleTimeUpdate = useCallback((e) => {
     const current = e.target.currentTime || 0;
@@ -424,3 +451,4 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
 });
 
 export default OriginalAudioPlayer;
+
