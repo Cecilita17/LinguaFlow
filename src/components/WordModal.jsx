@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { startTransition, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Bookmark, Check, Volume2, Snail } from 'lucide-react';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
@@ -34,20 +35,22 @@ export function WordModal({ wordData, targetLang = 'zh', onClose, onPronounceWor
     setOptimisticSaved(nextSaved);
     setIsSaving(true);
 
-    requestAnimationFrame(() => {
-      toggleSavedWord(word, activeLang);
-      setIsSaving(false);
-    });
+    // Paint the local state first. Updating saved words can re-render large
+    // readers and queue a backup, so it belongs to a non-urgent transition.
+    setTimeout(() => {
+      startTransition(() => {
+        toggleSavedWord(word, activeLang);
+        setIsSaving(false);
+      });
+    }, 0);
   };
 
   const handleClose = () => {
     if (isDismissed) return;
-    // Paint the local close state before App re-renders the full reader tree.
-    // A second frame keeps that expensive unmount from swallowing the close.
-    setIsDismissed(true);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(onClose);
-    });
+    // The modal is visually dismissed synchronously. The parent unmount is a
+    // transition because it may re-render an entire reader beneath the overlay.
+    flushSync(() => setIsDismissed(true));
+    startTransition(onClose);
   };
 
   if (!wordData) return null;
