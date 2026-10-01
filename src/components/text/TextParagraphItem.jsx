@@ -240,20 +240,18 @@ function TextParagraphItemComponent({
           )}
         </div>
       )}
-      {onSaveReadingBookmark && (
+      {onSaveReadingBookmark && !isReadingBookmarkDisabled && (
         <button
           type="button"
-          disabled={isReadingBookmarkDisabled}
           onClick={(event) => {
             event.stopPropagation();
             onSaveReadingBookmark(paragraph);
           }}
           title={isSpanish ? 'Guardar posición (con la voz detenida)' : 'Save position (with speech stopped)'}
           aria-label={isSpanish ? 'Guardar posición en este párrafo' : 'Save position at this paragraph'}
-          className="mb-2 inline-flex items-center gap-1 text-[10px] text-[var(--text-muted)] hover:text-rose-500 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="mb-2 inline-flex items-center justify-center w-7 h-7 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
         >
           <Bookmark className="w-3 h-3" />
-          {isSpanish ? 'Guardar posición' : 'Save position'}
         </button>
       )}
       {/* Saved reading or playback position */}

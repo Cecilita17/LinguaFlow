@@ -90,6 +90,13 @@ import {
   upsertAudioSyncAnchor
 } from '../utils/audioSyncAnchors.js';
 
+function resolveManualReadingBookmarkId(doc) {
+  if (!doc || doc.sourceType === 'audio' || doc.format === 'audio') return null;
+  const bookmark = doc.manualReadingBookmark;
+  return bookmark?.documentId === doc.id && doc.paragraphs?.some(p => p.id === bookmark.paragraphId)
+    ? bookmark.paragraphId : null;
+}
+
 /**
  * Resolves the initial chapter index for a document based on its saved reading/audio bookmarks.
  * Fallback order:
@@ -101,7 +108,7 @@ import {
 function resolveChapterIndexForDoc(doc) {
   if (!doc || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
   const bookmark = resolveAudioBookmark(doc);
-  const targetId = doc.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
+  const targetId = resolveManualReadingBookmarkId(doc) || doc.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
   if (targetId) {
     const chIdx = doc.chapters.findIndex(ch => Array.isArray(ch.paragraphIds) && ch.paragraphIds.includes(targetId));
     if (chIdx !== -1) return chIdx;
@@ -129,7 +136,7 @@ function resolvePageIndexForDoc(doc, chapterIdx = 0) {
   const ch = isEp ? (doc.chapters?.[chapterIdx] || doc.chapters?.[0]) : null;
   const chapterParas = ch ? doc.paragraphs.filter(p => p.chapterId === ch.id) : doc.paragraphs;
   const bookmark = resolveAudioBookmark(doc);
-  const targetId = doc.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
+  const targetId = resolveManualReadingBookmarkId(doc) || doc.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
   if (targetId) {
     const pIdx = chapterParas.findIndex(p => p.id === targetId);
     if (pIdx !== -1) {
@@ -888,7 +895,7 @@ export function TextReaderPage({
               setAudioBookmark(mergedBookmark);
             }
 
-            const targetPosId = merged.lastReadingPosition?.paragraphId || mergedBookmark?.paragraphId;
+            const targetPosId = resolveManualReadingBookmarkId(merged) || merged.lastReadingPosition?.paragraphId || mergedBookmark?.paragraphId;
             if (targetPosId) {
               setPendingScrollParagraphId(targetPosId);
             }
@@ -902,7 +909,7 @@ export function TextReaderPage({
           setAudioBookmark(bookmark);
         }
 
-        const targetPosId = draft.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
+        const targetPosId = resolveManualReadingBookmarkId(draft) || draft.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
         if (targetPosId) {
           setPendingScrollParagraphId(targetPosId);
         }
@@ -2119,7 +2126,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     // reading position. Scroll to the active audio paragraph when it is known.
     const targetScrollId = isImportedAudio
       ? (doc.lastAudioParagraphId || validReadingPosId)
-      : (validReadingPosId || validBookmark?.paragraphId);
+      : (resolveManualReadingBookmarkId(doc) || validReadingPosId || validBookmark?.paragraphId);
     if (targetScrollId) {
       setPendingScrollParagraphId(targetScrollId);
     } else {
@@ -2483,21 +2490,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     documentRef.current = updated;
     saveActiveDocumentDraft(updated);
     setDocument(updated);
-  }, [isAudioDocument]);
-
-  const handleGoToReadingBookmark = useCallback(() => {
-    const currentDoc = documentRef.current;
-    const bookmark = currentDoc?.manualReadingBookmark;
-    if (isAudioDocument || playingParagraphIdRef.current || window.speechSynthesis?.speaking || bookmark?.documentId !== currentDoc?.id) return;
-    const paragraph = currentDoc.paragraphs?.find(p => p.id === bookmark?.paragraphId);
-    if (!paragraph) return;
-    const chapterIndex = (currentDoc.chapters || []).findIndex(ch => ch.paragraphIds?.includes(paragraph.id));
-    if (chapterIndex >= 0) setCurrentChapterIndex(chapterIndex);
-    const chapterParagraphs = chapterIndex >= 0
-      ? currentDoc.paragraphs.filter(p => p.chapterId === currentDoc.chapters[chapterIndex].id)
-      : currentDoc.paragraphs;
-    setCurrentParagraphPage(Math.floor(chapterParagraphs.findIndex(p => p.id === paragraph.id) / PARAGRAPHS_PER_PAGE));
-    setPendingScrollParagraphId(paragraph.id);
   }, [isAudioDocument]);
 
   // Edit title action from three-dots menu
@@ -3421,17 +3413,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                 ))}
               </select>
             </div>
-
-            {!isAudioDocument && document?.manualReadingBookmark && (
-              <button
-                type="button"
-                onClick={handleGoToReadingBookmark}
-                disabled={Boolean(playingParagraphId)}
-                className="px-2 py-1.5 text-xs rounded-xl text-rose-600 dark:text-rose-400 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {isSpanish ? 'Posición guardada · Ir' : 'Saved position · Go'}
-              </button>
-            )}
 
             {/* Translation / Glosses — same interlinearMode / setInterlinearMode */}
             <button
