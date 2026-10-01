@@ -89,6 +89,39 @@ function enrichArabicPayload(data, targetLang) {
   return data;
 }
 
+// The chat model provides the only complete source of word boundaries and
+// tone-marked Pinyin for arbitrary Chinese learner input.  Keep that data when
+// it exactly covers the corrected sentence; falling back to a character diff is
+// reserved for malformed model payloads only.
+function normalizeChineseCorrectionTokens(rawTokens, correctedText) {
+  if (!Array.isArray(rawTokens) || rawTokens.length === 0) return null;
+
+  const tokens = rawTokens.map((token) => {
+    if (!token || typeof token !== 'object') return null;
+    const text = String(token.text || token.word || '').trim();
+    if (!text) return null;
+    return {
+      text,
+      changed: Boolean(token.changed ?? token.isChanged ?? token.is_changed),
+      original: token.original ? String(token.original).trim() : null,
+      translit: token.translit || token.pinyin || null
+    };
+  }).filter(Boolean);
+
+  if (tokens.length === 0) return null;
+
+  const compactCorrected = String(correctedText || '').replace(/\s+/g, '');
+  const compactTokens = tokens.map((token) => token.text).join('').replace(/\s+/g, '');
+  if (compactTokens !== compactCorrected) return null;
+
+  const everyChineseTokenHasPinyin = tokens.every((token) => {
+    const containsHanzi = /[\u4E00-\u9FFF]/.test(token.text);
+    return !containsHanzi || (typeof token.translit === 'string' && token.translit.trim().length > 0);
+  });
+
+  return everyChineseTokenHasPinyin ? tokens : null;
+}
+
 /**
  * Normalizes any valid or semi-structured JSON response from Groq into LinguaFlow's expected chat schema:
  * {
@@ -157,12 +190,14 @@ export function normalizeChatPayload(parsed, rawUserText = '', targetLang = 'es'
       ? rawCor.diff_tokens
       : (Array.isArray(rawCor.diffTokens) ? rawCor.diffTokens : (Array.isArray(rawCor.tokens) ? rawCor.tokens : null));
 
-    // Chinese model diffs are occasionally returned as one whole sentence marked
-    // changed. Recompute them locally at character granularity, then let the
-    // reader regroup them into natural words with pinyin.
-    let diffTokens = targetLang === 'zh'
-      ? computeWordDiff(origText, corrText)
-      : (rawDiffTokens && rawDiffTokens.length > 0
+    // Prefer the model's word-level Chinese correction tokens when they cover
+    // the corrected sentence and include Pinyin.  The old unconditional local
+    // character diff discarded that information and made user bubbles render
+    // isolated Hanzi without pronunciation.
+    const chineseTokens = targetLang === 'zh'
+      ? normalizeChineseCorrectionTokens(rawDiffTokens, corrText)
+      : null;
+    let diffTokens = chineseTokens || (rawDiffTokens && rawDiffTokens.length > 0 && targetLang !== 'zh'
           ? rawDiffTokens.map(t => {
               if (!t) return null;
               if (typeof t === 'string') return { text: t, changed: false, original: null, translit: null };
