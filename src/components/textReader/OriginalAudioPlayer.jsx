@@ -31,7 +31,6 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   onPlay = null,
   onPause = null,
   onEnded = null,
-  onParagraphEnd = null,
   onError = null,
   initialTime = 0,
   playbackRate = 1.0,
@@ -86,17 +85,13 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   const pendingSeekRequestRef = useRef(null);
   const seekRequestIdRef = useRef(0);
   const isProgrammaticSeekingRef = useRef(false);
-  const activeParagraphPlaybackRef = useRef(null);
   const ignoreNextProgrammaticPauseRef = useRef(false);
   const SEEK_TARGET_TOLERANCE_SECONDS = 0.05;
 
-  const invalidatePendingPlayback = useCallback(({ clearParagraphLimit = true } = {}) => {
+  const invalidatePendingPlayback = useCallback(() => {
     seekRequestIdRef.current += 1;
     pendingSeekRequestRef.current = null;
     isProgrammaticSeekingRef.current = false;
-    if (clearParagraphLimit) {
-      activeParagraphPlaybackRef.current = null;
-    }
   }, []);
 
   const completePendingSeek = useCallback((audio) => {
@@ -131,16 +126,10 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     return true;
   }, [onError, onTimeUpdate]);
 
-  const seek = useCallback((time, autoPlay = false, paragraphPlayback = null, intent = 'manualSeek') => {
+  const seek = useCallback((time, autoPlay = false, intent = 'manualSeek') => {
     const audio = audioRef.current;
     if (!audio) return;
     const safeTime = Math.max(0, typeof time === 'number' && !isNaN(time) ? time : 0);
-
-    // A generic seek belongs to the player controls/restoration path and must
-    // never inherit an end boundary from an earlier paragraph button press.
-    if (!paragraphPlayback) {
-      activeParagraphPlaybackRef.current = null;
-    }
 
     // Every request supersedes the preceding one. The request id and target are
     // both checked in handleSeeked before this seek may resume playback.
@@ -152,13 +141,9 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
       requestId,
       targetTime: safeTime,
       autoPlay,
-      paragraphPlayback,
       intent
     };
     isProgrammaticSeekingRef.current = true;
-    if (paragraphPlayback) {
-      activeParagraphPlaybackRef.current = { ...paragraphPlayback, requestId };
-    }
     setLocalCurrentTime(safeTime);
 
     // A prior paragraph can still be playing while this new request is queued.
@@ -217,16 +202,13 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     },
 
     seek: (time, autoPlay = false) => {
-      seek(time, autoPlay, null, 'manualSeek');
+      seek(time, autoPlay, 'manualSeek');
     },
 
-    seekAndPlay: (startTime, endTime = null, paragraphId = null) => {
-      const hasParagraphRange = typeof endTime === 'number' && endTime > startTime;
-      seek(startTime, true, hasParagraphRange ? {
-        startTime,
-        endTime,
-        paragraphId
-      } : null, hasParagraphRange ? 'paragraph' : 'resume');
+    // A paragraph timestamp selects the start only. SRT/VTT end timestamps
+    // are visual cue boundaries and must not physically cut the audio stream.
+    seekAndPlay: (startTime) => {
+      seek(startTime, true, 'paragraph');
     },
 
     getCurrentTime: () => audioRef.current?.currentTime || 0,
@@ -279,7 +261,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     // authority as every other programmatic position change. A paragraph click
     // received before metadata wins because seek() marks this as consumed.
     if (!initialSeekDoneRef.current && typeof initialTime === 'number' && initialTime > 0) {
-      seek(initialTime, false, null, 'initialRestore');
+      seek(initialTime, false, 'initialRestore');
     }
 
     if (onReady) onReady({ duration: dur });
@@ -312,26 +294,8 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
       setLocalCurrentTime(current);
     }
 
-    const paragraphPlayback = activeParagraphPlaybackRef.current;
-    if (paragraphPlayback && current >= paragraphPlayback.endTime - 0.015) {
-      // `timeupdate` is not frame-accurate. Stop on the final available tick
-      // before the saved boundary so a paragraph play cannot bleed into the
-      // following subtitle interval.
-      activeParagraphPlaybackRef.current = null;
-      invalidatePendingPlayback({ clearParagraphLimit: false });
-      try {
-        e.target.pause();
-      } catch (_) {}
-      if (onTimeUpdate) {
-        onTimeUpdate(Math.max(paragraphPlayback.startTime, paragraphPlayback.endTime - 0.001));
-      }
-      if (onParagraphEnd) {
-        onParagraphEnd(paragraphPlayback.paragraphId);
-      }
-      return;
-    }
     if (onTimeUpdate) onTimeUpdate(current);
-  }, [invalidatePendingPlayback, onParagraphEnd, onTimeUpdate, seekValue]);
+  }, [onTimeUpdate, seekValue]);
 
   const handlePlay = useCallback(() => {
     console.log('[OriginalAudioPlayer] play');

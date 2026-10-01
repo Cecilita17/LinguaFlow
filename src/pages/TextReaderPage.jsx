@@ -1243,17 +1243,6 @@ export function TextReaderPage({
     }
   }, [isPaginatedReader]);
 
-  // A paragraph button uses a hard audio boundary. When Auto Play is enabled,
-  // reaching that boundary must explicitly launch the next paragraph instead
-  // of leaving playback paused at the end of the current interval.
-  const handleBoundedParagraphEnd = useCallback((paragraphId) => {
-    const currentParagraph = (chapterParagraphsRef.current || [])
-      .find((paragraph) => paragraph.id === paragraphId);
-    if (currentParagraph) {
-      advanceToNextParagraph(currentParagraph);
-    }
-  }, [advanceToNextParagraph]);
-
 /**
  * Calculates real-time character highlight position inside an active paragraph.
  * Respects Whisper segment bounds and freezes during silence/pauses instead of
@@ -1392,28 +1381,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       }
     }
 
-    // Check segment boundary of currently playing paragraph when autoPlay is disabled
-    const curId = playingParagraphIdRef.current;
-    if (curId) {
-      const currentPara = allParas.find(p => p.id === curId);
-      if (
-        currentPara &&
-        typeof currentPara.audioStart === 'number' &&
-        typeof currentPara.audioEnd === 'number' &&
-        currentPara.audioEnd > currentPara.audioStart &&
-        newTime >= currentPara.audioEnd &&
-        newTime >= currentPara.audioStart
-      ) {
-        if (!autoPlayTextReaderRef.current) {
-          if (audioPlayerRef.current) {
-            audioPlayerRef.current.pause();
-          }
-          setPlayingParagraphId(null);
-          playingParagraphIdRef.current = null;
-          setActiveAudioCharIndex(-1);
-        }
-      }
-    }
   }, [document?.paragraphs, document?.audioSegments, isPaginatedReader]);
 
   const handleAudioPause = useCallback((pausedTime) => {
@@ -3362,7 +3329,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
           isPlaying={Boolean(playingParagraphId)}
           onTogglePlay={handleToggleAudio}
           onTimeUpdate={handleAudioTimeUpdate}
-          onParagraphEnd={handleBoundedParagraphEnd}
           onPause={handleAudioPause}
           onEnded={handleAudioEnded}
           onError={handleAudioError}
