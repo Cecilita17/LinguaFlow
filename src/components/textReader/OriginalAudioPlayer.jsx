@@ -405,6 +405,9 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   }
 
   const displayedTime = seekValue !== null ? seekValue : localCurrentTime;
+  const progressPercent = duration > 0
+    ? Math.max(0, Math.min(100, (displayedTime / duration) * 100))
+    : 0;
 
   return (
     <div className="shrink-0 z-20 bg-[var(--surface-primary)]/95 backdrop-blur-md border-t border-[var(--border-primary)] px-3 sm:px-4 py-2 sm:py-2.5 transition-colors shadow-xs">
@@ -464,7 +467,10 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
             onChange={handleSliderChange}
             onPointerDown={handleSliderPointerDown}
             onPointerUp={handleSliderCommit}
-            className="w-full h-1.5 sm:h-2 bg-[var(--surface-secondary)] rounded-lg appearance-none cursor-pointer accent-rose-500 focus:outline-hidden"
+            className="w-full h-1.5 sm:h-2 rounded-lg appearance-none cursor-pointer accent-orange-500 focus:outline-hidden"
+            style={{
+              background: `linear-gradient(to right, #f97316 0%, #f97316 ${progressPercent}%, var(--surface-secondary) ${progressPercent}%, var(--surface-secondary) 100%)`
+            }}
             aria-label={isSpanish ? 'Progreso del audio original' : 'Original audio progress'}
           />
         </div>
