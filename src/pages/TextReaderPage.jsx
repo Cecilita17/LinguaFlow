@@ -706,6 +706,7 @@ export function TextReaderPage({
                 const prev = documentRef.current;
                 if (prev && prev.lastReadingPosition?.paragraphId !== pid) {
                   const posData = {
+                    ...prev.lastReadingPosition,
                     paragraphId: pid,
                     chapterIndex: currentChapterIndex,
                     chapterId: currentChapter?.id,
@@ -765,6 +766,7 @@ export function TextReaderPage({
         const updated = {
           ...prev,
           lastReadingPosition: {
+            ...prev.lastReadingPosition,
             paragraphId: firstParaId,
             chapterIndex: newIndex,
             chapterId: targetChapter.id,
@@ -821,6 +823,7 @@ export function TextReaderPage({
         const updated = {
           ...prev,
           lastReadingPosition: {
+            ...prev.lastReadingPosition,
             paragraphId: firstParaOfPage.id,
             chapterIndex: currentChapterIndex,
             chapterId: currentChapter?.id,
@@ -1604,6 +1607,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
         const updated = {
           ...currentDoc,
           lastReadingPosition: {
+            ...currentDoc.lastReadingPosition,
             paragraphId: paragraph.id,
             chapterIndex: Math.max(0, chapterIndex),
             chapterId: currentDoc.chapters?.[chapterIndex]?.id,
@@ -1635,6 +1639,22 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     utterance.onend = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       synchronizer.handleEnd(event);
+      // Mark only a paragraph that finished speaking; the resume position
+      // remains independent and advances when the next utterance starts.
+      const currentDoc = documentRef.current;
+      if (currentDoc?.id === document?.id) {
+        const updated = {
+          ...currentDoc,
+          lastReadingPosition: {
+            ...currentDoc.lastReadingPosition,
+            completedParagraphId: paragraph.id,
+            updatedAt: Date.now()
+          }
+        };
+        documentRef.current = updated;
+        saveActiveDocumentDraft(updated);
+        setDocument(updated);
+      }
       setPlayingParagraphId(null);
       playingParagraphIdRef.current = null;
       setActiveAudioCharIndex(-1);
@@ -3222,7 +3242,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isAudioBookmark={false}
                       isLastAudioPosition={isAudioDocument
                         ? lastSavedAudioParagraphId === paragraph.id
-                        : (document?.lastReadingPosition?.paragraphId || audioBookmark?.paragraphId) === paragraph.id}
+                        : document?.lastReadingPosition?.completedParagraphId === paragraph.id}
                       audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
                       isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
                       translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
