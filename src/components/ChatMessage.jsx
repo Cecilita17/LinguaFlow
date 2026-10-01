@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'lucide-react';
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
-import { normalizeChineseMessageTokens, validateChineseTokens } from '../services/chineseTokenNormalizer.js';
+import { normalizeChineseMessageTokens, validateChineseTokens, resolveChinesePinyin } from '../services/chineseTokenNormalizer.js';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
 import { getArabicTransliteration } from '../services/arabicTransliteration.js';
 
@@ -218,18 +218,7 @@ export function ChatMessage({
     }
 
     if (targetLang === 'zh') {
-      if (token.pinyin && typeof token.pinyin === 'string' && token.pinyin.trim().length > 0) {
-        return token.pinyin.trim();
-      }
-      if (token.translit && typeof token.translit === 'string' && token.translit.trim().length > 0) {
-        return token.translit.trim();
-      }
-      if (token.auxiliary && typeof token.auxiliary === 'string' && token.auxiliary.trim().length > 0) {
-        return token.auxiliary.trim();
-      }
-      const wordStr = (token.text || token.word || token.clean_word || '').trim();
-      if (PINYIN_LEXICON[wordStr]) return PINYIN_LEXICON[wordStr];
-      return null;
+      return resolveChinesePinyin(token);
     }
 
     if (targetLang === 'ar' || isArabic) {
@@ -285,7 +274,7 @@ export function ChatMessage({
         translit: token.translit || token.pinyin || null
       };
     });
-  }, [message.diffTokens, message.correctedText, message.text, targetLang]);
+  }, [message.diffTokens, message.tokens, message.correctedText, message.text, targetLang]);
 
   // USER MESSAGE BUBBLE
   if (isUser) {

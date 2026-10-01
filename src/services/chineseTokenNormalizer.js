@@ -11,7 +11,24 @@
  * Uses offline dictionary + Intl.Segmenter as fallback for resegmentation.
  */
 
+import { pinyin as generatePinyin } from 'pinyin-pro';
+
 import { CHINESE_OFFLINE_DICT } from './languageGlossStrategies.js';
+
+// Reject Hanzi accidentally returned in the pronunciation field.
+function isUsablePinyin(value) {
+  return typeof value === 'string' && /[a-züà-ǜ]/i.test(value)
+    && !/[\u3400-\u9FFF]/.test(value);
+}
+
+export function resolveChinesePinyin(token) {
+  const word = typeof token === 'string' ? token : (token?.word || token?.text || token?.clean_word || '');
+  if (!/[\u3400-\u9FFF]/.test(word)) return null;
+  for (const value of [token?.pinyin, token?.translit, token?.auxiliary]) {
+    if (isUsablePinyin(value)) return value.trim();
+  }
+  return generatePinyin(word, { toneType: 'symbol', nonZh: 'consecutive' });
+}
 
 /**
  * Validates if Groq tokens properly cover the entire text
@@ -57,7 +74,7 @@ export function validateChineseTokens(text, tokens) {
     const translit = token.translit || token.pinyin || '';
     const isChinese = /[\u4E00-\u9FFF]/.test(word);
 
-    if (isChinese && !translit) {
+    if (isChinese && !isUsablePinyin(translit)) {
       issues.push(`No Pinyin for token: "${word}"`);
     }
   }
@@ -92,6 +109,26 @@ export function validateChineseTokens(text, tokens) {
         issues.push(`Over-fragmentation: "${buf}" split character-by-character`);
       }
       i += run - 1;
+    }
+  }
+
+  // Detect any token boundary inside an ICU lexical word, including just
+  // two adjacent characters (压力) and partially split compounds.
+  if (_zhSegmenter) {
+    const boundaries = new Set();
+    let offset = 0;
+    for (const token of tokens) {
+      offset += (token.word || token.text || '').length;
+      boundaries.add(offset);
+    }
+    for (const segment of _zhSegmenter.segment(text)) {
+      if (!segment.isWordLike || !/[\u4E00-\u9FFF]/.test(segment.segment)) continue;
+      for (let i = segment.index + 1; i < segment.index + segment.segment.length; i++) {
+        if (boundaries.has(i)) {
+          issues.push(`Split Chinese word: "${segment.segment}"`);
+          break;
+        }
+      }
     }
   }
 
@@ -134,10 +171,11 @@ function segmentFullChineseText(text, sourceTokens = []) {
   if (!_zhSegmenter || !text) return [];
 
   const knownPinyin = new Map();
+  const knownTokens = new Map(sourceTokens.map(token => [token?.word || token?.text, token]));
   for (const token of sourceTokens) {
     const word = String(token?.word || token?.text || '').trim();
     const pinyin = token?.translit || token?.pinyin || null;
-    if (word && pinyin) knownPinyin.set(word, pinyin);
+    if (word && isUsablePinyin(pinyin)) knownPinyin.set(word, pinyin);
   }
 
   const result = [];
@@ -153,11 +191,12 @@ function segmentFullChineseText(text, sourceTokens = []) {
         : (knownPinyin.get(word) || entry?.pinyin || composePinyinFromChars(word) || null);
 
       result.push({
+        ...knownTokens.get(word),
         word,
         text: word,
         translit: pinyin,
         pinyin,
-        gloss: entry?.gloss || null,
+        gloss: knownTokens.get(word)?.gloss || entry?.gloss || null,
         isPunctuation
       });
     }
@@ -503,52 +542,13 @@ function composePinyinFromChars(word) {
   return parts.join(' ');
 }
 
-/**
- * Ensures a token has Pinyin from dictionary if it's Chinese.
- * Tries the compound entry first, then composes from single-character entries.
- * Never invents Pinyin.
- * @param {object} token
- * @returns {object}
- */
+/** Fill missing or malformed pronunciation using the local Pinyin engine. */
 function ensureTokenHasPinyin(token) {
   if (!token) return token;
 
-  const word = token.word || token.text || '';
-  const translit = token.translit || token.pinyin || '';
-
-  // Already has Pinyin
-  if (translit && translit.trim()) {
-    return token;
-  }
-
-  // Is it Chinese?
-  const isChinese = /[\u4E00-\u9FFF]/.test(word);
-  if (!isChinese) {
-    return token;
-  }
-
-  // Try to get from dictionary (compound entry)
-  const entry = CHINESE_OFFLINE_DICT[word];
-  if (entry && entry.pinyin) {
-    return {
-      ...token,
-      translit: entry.pinyin,
-      pinyin: entry.pinyin
-    };
-  }
-
-  // Compose Pinyin from single-character dict entries (multi-char words only)
-  const composed = composePinyinFromChars(word);
-  if (composed) {
-    return {
-      ...token,
-      translit: composed,
-      pinyin: composed
-    };
-  }
-
-  // No Pinyin available - return as-is (null is OK)
-  return token;
+  const pronunciation = resolveChinesePinyin(token);
+  if (!pronunciation) return token;
+  return { ...token, translit: pronunciation, pinyin: pronunciation };
 }
 
 /**
