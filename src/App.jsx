@@ -59,6 +59,21 @@ const ACTIVE_TAB_KEY = 'linguaflow_active_tab';
 const CALL_STORAGE_KEY = 'linguaflow_call_history';
 const VALID_TABS = ['home', 'chat', 'youtube', 'text', 'image', 'settings', 'habits'];
 
+// WordModal is hosted at the application level. Opening or closing it changes
+// only modal state, but App would otherwise recreate the entire active reader
+// subtree. The reader props that affect its behavior are compared explicitly;
+// callback identities are intentionally excluded because their captured input
+// values are represented by the primitive props below.
+function areReaderPagePropsEqual(previous, next) {
+  return previous.targetLang === next.targetLang
+    && previous.nativeLang === next.nativeLang
+    && previous.languages === next.languages
+    && previous.apiKey === next.apiKey;
+}
+
+const StableTextReaderPage = React.memo(TextReaderPage, areReaderPagePropsEqual);
+const StableYouTubeReaderPage = React.memo(YouTubeReaderPage, areReaderPagePropsEqual);
+
 function getActiveTabFromLocation() {
   try {
     if (typeof window !== 'undefined') {
@@ -1394,7 +1409,7 @@ export default function App() {
         </main>
       ) : activeTab === 'youtube' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <YouTubeReaderPage
+          <StableYouTubeReaderPage
             targetLang={targetLang}
             setTargetLang={handleTargetLangChange}
             languages={languages}
@@ -1406,7 +1421,7 @@ export default function App() {
         </main>
       ) : activeTab === 'text' ? (
         <main className="flex-1 overflow-hidden w-full flex flex-col min-h-0">
-          <TextReaderPage
+          <StableTextReaderPage
             targetLang={targetLang}
             setTargetLang={handleTargetLangChange}
             nativeLang={nativeLang}
