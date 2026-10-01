@@ -46,6 +46,7 @@ function TextParagraphItemComponent({
   onParagraphPress = null,
   onSaveReadingBookmark = null,
   isReadingBookmarkDisabled = false,
+  isReadingBookmarked = false,
   onWordClick = null,
   onGloss = null,
   onGlossParagraph = null,
@@ -479,9 +480,14 @@ function TextParagraphItemComponent({
               }}
               title={isSpanish ? 'Guardar posición (con la voz detenida)' : 'Save position (with speech stopped)'}
               aria-label={isSpanish ? 'Guardar posición en este párrafo' : 'Save position at this paragraph'}
-              className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-rose-600 dark:text-rose-300 hover:text-rose-700 dark:hover:text-white group-hover/para:border-rose-500/60"
+              aria-pressed={isReadingBookmarked}
+              className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer ${
+                isReadingBookmarked
+                  ? 'bg-rose-500/20 border border-rose-500/70 text-rose-600 dark:text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/30'
+                  : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-rose-600 dark:text-rose-300 hover:text-rose-700 dark:hover:text-white group-hover/para:border-rose-500/60'
+              }`}
             >
-              <Bookmark className="w-3.5 h-3.5" />
+              <Bookmark className={`w-3.5 h-3.5 ${isReadingBookmarked ? 'fill-current' : ''}`} />
             </button>
           )}
           {/* Paragraph Audio Button (▶️ / ⏸️ / ⚠️) - Plays/pauses ONLY this paragraph */}
@@ -573,6 +579,7 @@ function arePropsEqual(prevProps, nextProps) {
   if (prevProps.isAudioBookmark !== nextProps.isAudioBookmark) return false;
   if (prevProps.isLastAudioPosition !== nextProps.isLastAudioPosition) return false;
   if (prevProps.onSaveReadingBookmark !== nextProps.onSaveReadingBookmark) return false;
+  if (prevProps.isReadingBookmarked !== nextProps.isReadingBookmarked) return false;
   if (prevProps.isReadingBookmarkDisabled !== nextProps.isReadingBookmarkDisabled) return false;
   if (prevProps.onParagraphPress !== nextProps.onParagraphPress) return false;
   if (prevProps.audioSyncAnchor !== nextProps.audioSyncAnchor) return false;

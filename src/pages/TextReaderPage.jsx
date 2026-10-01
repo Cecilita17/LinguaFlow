@@ -3237,6 +3237,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       onStop={handleStopAudio}
                       onSaveReadingBookmark={isAudioDocument ? null : handleSaveReadingBookmark}
                       isReadingBookmarkDisabled={Boolean(playingParagraphId)}
+                      isReadingBookmarked={!isAudioDocument && document?.manualReadingBookmark?.documentId === document?.id && document?.manualReadingBookmark?.paragraphId === paragraph.id}
                       onParagraphClick={null}
                       onParagraphPress={handlePlayParagraph}
                       onWordClick={onWordClick}
