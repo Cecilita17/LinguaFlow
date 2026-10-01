@@ -1243,6 +1243,17 @@ export function TextReaderPage({
     }
   }, [isPaginatedReader]);
 
+  // A paragraph button uses a hard audio boundary. When Auto Play is enabled,
+  // reaching that boundary must explicitly launch the next paragraph instead
+  // of leaving playback paused at the end of the current interval.
+  const handleBoundedParagraphEnd = useCallback((paragraphId) => {
+    const currentParagraph = (chapterParagraphsRef.current || [])
+      .find((paragraph) => paragraph.id === paragraphId);
+    if (currentParagraph) {
+      advanceToNextParagraph(currentParagraph);
+    }
+  }, [advanceToNextParagraph]);
+
 /**
  * Calculates real-time character highlight position inside an active paragraph.
  * Respects Whisper segment bounds and freezes during silence/pauses instead of
@@ -3350,6 +3361,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
           isPlaying={Boolean(playingParagraphId)}
           onTogglePlay={handleToggleAudio}
           onTimeUpdate={handleAudioTimeUpdate}
+          onParagraphEnd={handleBoundedParagraphEnd}
           onPause={handleAudioPause}
           onEnded={handleAudioEnded}
           onError={handleAudioError}
