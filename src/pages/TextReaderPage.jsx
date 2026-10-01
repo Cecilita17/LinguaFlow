@@ -2908,7 +2908,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                   </button>
 
                   {/* Continuar desde marcador */}
-                  {audioBookmark && (
+                  {!isAudioDocument && audioBookmark && (
                     <button
                       type="button"
                       onClick={() => {
@@ -3238,8 +3238,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isAudioError={audioErrorId === paragraph.id}
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
-                      isAudioBookmark={audioBookmark?.paragraphId === paragraph.id}
-                      isLastAudioPosition={audioBookmark?.paragraphId === paragraph.id}
+                      isAudioBookmark={!isAudioDocument && audioBookmark?.paragraphId === paragraph.id}
+                      isLastAudioPosition={!isAudioDocument && audioBookmark?.paragraphId === paragraph.id}
                       audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
                       isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
                       translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
@@ -3248,7 +3248,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       translationError={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.error || null}
                       onPlay={handlePlayParagraph}
                       onStop={handleStopAudio}
-                      onParagraphClick={(selectedParagraph) => handleSaveAudioBookmark(selectedParagraph.id)}
+                      onParagraphClick={isAudioDocument ? null : (selectedParagraph) => handleSaveAudioBookmark(selectedParagraph.id)}
                       onWordClick={onWordClick}
                       onGloss={handleGlossParagraph}
                       onGlossParagraph={handleGlossParagraph}
@@ -3390,8 +3390,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
           onPause={handleAudioPause}
           onEnded={handleAudioEnded}
           onError={handleAudioError}
-          onSaveBookmark={handleSaveAudioBookmark}
-          isBookmarked={Boolean(audioBookmark)}
+          onSaveBookmark={isAudioDocument ? null : handleSaveAudioBookmark}
+          isBookmarked={!isAudioDocument && Boolean(audioBookmark)}
           playbackRate={speechRate}
         />
       )}
@@ -3471,9 +3471,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
               <Sparkles className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500/30' : ''}`} />
             </button>
 
-            <button
-              type="button"
-              onClick={() => handleSaveAudioBookmark()}
+            {!isAudioDocument && (
+              <button
+                type="button"
+                onClick={() => handleSaveAudioBookmark()}
               title={audioBookmark ? (isSpanish ? 'Actualizar marcador' : 'Update bookmark') : (isSpanish ? 'Guardar marcador' : 'Save bookmark')}
               aria-label={audioBookmark ? (isSpanish ? 'Actualizar marcador' : 'Update bookmark') : (isSpanish ? 'Guardar marcador' : 'Save bookmark')}
               className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
@@ -3483,7 +3484,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
               }`}
             >
               <Bookmark className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${audioBookmark ? 'fill-current' : ''}`} />
-            </button>
+              </button>
+            )}
           </div>
         </div>
       )}
