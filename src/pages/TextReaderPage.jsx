@@ -2493,6 +2493,13 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     setDocument(updated);
   }, [isAudioDocument]);
 
+  const handleParagraphPress = useCallback((paragraph) => {
+    // Save a deliberate selection before playback starts; automatic playback
+    // and word lookups never invoke this handler.
+    handleSaveReadingBookmark(paragraph);
+    handlePlayParagraph(paragraph);
+  }, [handleSaveReadingBookmark, handlePlayParagraph]);
+
   // Edit title action from three-dots menu
   const handleEditTitle = useCallback(() => {
     setIsActionsMenuOpen(false);
@@ -3226,7 +3233,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isAudioError={audioErrorId === paragraph.id}
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
-                      isAudioBookmark={false}
+                      isAudioBookmark={!isAudioDocument && document?.manualReadingBookmark?.documentId === document?.id && document?.manualReadingBookmark?.paragraphId === paragraph.id}
                       isLastAudioPosition={isAudioDocument && playingParagraphId !== paragraph.id && lastSavedAudioParagraphId === paragraph.id}
                       audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
                       isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
@@ -3240,7 +3247,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isReadingBookmarkDisabled={Boolean(playingParagraphId)}
                       isReadingBookmarked={!isAudioDocument && document?.manualReadingBookmark?.documentId === document?.id && document?.manualReadingBookmark?.paragraphId === paragraph.id}
                       onParagraphClick={null}
-                      onParagraphPress={handlePlayParagraph}
+                      onParagraphPress={handleParagraphPress}
                       onWordClick={onWordClick}
                       onGloss={handleGlossParagraph}
                       onGlossParagraph={handleGlossParagraph}
