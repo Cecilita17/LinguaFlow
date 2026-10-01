@@ -1038,6 +1038,8 @@ export async function loadActiveDocumentFull() {
           lastAudioPositionUpdatedAt: mergedBookmark?.savedAt ? new Date(mergedBookmark.savedAt).getTime() : (draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null),
           lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
         };
+        // A library selection may have replaced the draft while IndexedDB loaded.
+        if (loadActiveDocumentDraft()?.id !== draft.id) return null;
         memoryActiveDraft = merged;
         return merged;
       }

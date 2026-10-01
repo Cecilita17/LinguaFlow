@@ -327,8 +327,11 @@ export function TextReaderPage({
 
   // If initialized from minimal localStorage draft, hydrate full paragraphs and audio metadata from IndexedDB
   useEffect(() => {
-    if (document?.isMinimalDraft && document?.id) {
+    let cancelled = false;
+    const draftId = document?.id;
+    if (document?.isMinimalDraft && draftId) {
       loadActiveDocumentFull().then(fullDoc => {
+        if (cancelled || documentRef.current?.id !== draftId) return;
         if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
           setDocument(fullDoc);
           const bookmark = resolveAudioBookmark(fullDoc);
@@ -338,6 +341,7 @@ export function TextReaderPage({
         }
       }).catch(err => console.warn('Failed to hydrate full document from IndexedDB:', err));
     }
+    return () => { cancelled = true; };
   }, [document?.id, document?.isMinimalDraft]);
 
   const currentChapter = isEpub && chapters[currentChapterIndex] ? chapters[currentChapterIndex] : null;
@@ -856,14 +860,18 @@ export function TextReaderPage({
 
   // On mount: run migration from legacy localStorage to IndexedDB, refresh count, and schedule draft scroll restoration
   useEffect(() => {
+    let cancelled = false;
+    const initialDocumentId = documentRef.current?.id;
     migrateFromLocalStorage().then(async () => {
       await refreshLibraryCount();
 
       // Hydrate full active document from IndexedDB if active draft is minimal or missing full paragraphs
+      if (cancelled || documentRef.current?.id !== initialDocumentId) return;
       const draft = loadActiveDocumentDraft();
       if (draft && draft.id) {
         try {
           const fullDoc = await getTextDocumentById(draft.id);
+          if (cancelled || documentRef.current?.id !== draft.id) return;
           if (fullDoc && Array.isArray(fullDoc.paragraphs) && fullDoc.paragraphs.length > 0) {
             const mergedBookmark = resolveAudioBookmark(draft) || resolveAudioBookmark(fullDoc);
             const merged = {
@@ -900,6 +908,7 @@ export function TextReaderPage({
         }
       }
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, [refreshLibraryCount]);
 
   // Save active document state whenever document changes (syncs draft + IndexedDB)
@@ -2142,6 +2151,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     setPlayingParagraphId(null);
     setActiveAudioCharIndex(-1);
     setAudioErrorId(null);
+    // Invalidate pending draft restoration before React renders the selection.
+    documentRef.current = doc;
     setDocument(doc);
     const targetChapterIdx = resolveChapterIndexForDoc(doc);
     setCurrentChapterIndex(targetChapterIdx);
