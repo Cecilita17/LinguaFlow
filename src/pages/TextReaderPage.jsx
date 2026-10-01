@@ -104,7 +104,7 @@ function resolveChapterIndexForDoc(doc) {
   return 0;
 }
 
-const PARAGRAPHS_PER_PAGE = 15;
+const PARAGRAPHS_PER_PAGE = 6;
 const PRACTICE_TEXT_MAX_PARAGRAPHS = 25;
 const PRACTICE_TEXT_MAX_CHARACTERS = 6000;
 const PRACTICE_VOCABULARY_MAX = 30;
@@ -352,7 +352,7 @@ export function TextReaderPage({
     chapterParagraphs.length > PARAGRAPHS_PER_PAGE
   );
 
-  // Total pages: fixed 15 paragraphs per page when pagination is enabled.
+  // Total pages: fixed 6 paragraphs per page when pagination is enabled.
   const totalPages = useMemo(() => {
     if (!isPaginatedReader) return 1;
     return Math.max(1, Math.ceil(chapterParagraphs.length / PARAGRAPHS_PER_PAGE));
