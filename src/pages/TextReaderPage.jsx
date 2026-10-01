@@ -3249,6 +3249,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       onPlay={handlePlayParagraph}
                       onStop={handleStopAudio}
                       onParagraphClick={isAudioDocument ? null : (selectedParagraph) => handleSaveAudioBookmark(selectedParagraph.id)}
+                      onParagraphPress={isAudioDocument ? handlePlayParagraph : null}
                       onWordClick={onWordClick}
                       onGloss={handleGlossParagraph}
                       onGlossParagraph={handleGlossParagraph}

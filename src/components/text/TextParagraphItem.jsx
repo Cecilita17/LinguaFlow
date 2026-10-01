@@ -43,6 +43,7 @@ function TextParagraphItemComponent({
   onPlay = null,
   onStop = null,
   onParagraphClick = null,
+  onParagraphPress = null,
   onWordClick = null,
   onGloss = null,
   onGlossParagraph = null,
@@ -92,6 +93,7 @@ function TextParagraphItemComponent({
       suppressNextParagraphClickRef.current = false;
       return;
     }
+    if (onParagraphPress) onParagraphPress(paragraph);
     if (onParagraphClick) onParagraphClick(paragraph);
   };
 
@@ -554,6 +556,7 @@ function arePropsEqual(prevProps, nextProps) {
   if (prevProps.hasGloss !== nextProps.hasGloss) return false;
   if (prevProps.isAudioBookmark !== nextProps.isAudioBookmark) return false;
   if (prevProps.isLastAudioPosition !== nextProps.isLastAudioPosition) return false;
+  if (prevProps.onParagraphPress !== nextProps.onParagraphPress) return false;
   if (prevProps.audioSyncAnchor !== nextProps.audioSyncAnchor) return false;
   if (prevProps.isAudioSyncAvailable !== nextProps.isAudioSyncAvailable) return false;
   if (prevProps.translation !== nextProps.translation) return false;
