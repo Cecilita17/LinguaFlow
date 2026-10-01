@@ -1756,7 +1756,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
   }, [simplificationMode]);
 
   // Trigger background AI glossing
-  const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang) => {
+  const triggerGlossing = useCallback((paragraphsToGloss, activeTargetLang = targetLang, notifyAtEnd = false) => {
     if (!Array.isArray(paragraphsToGloss) || paragraphsToGloss.length === 0) return;
 
     if (abortControllerRef.current) {
@@ -1779,27 +1779,23 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       onProgress: (prog) => {
         if (controller.signal.aborted || abortControllerRef.current !== controller) return;
         setGlossingProgress(prog);
-        if (!prog.isGlossing) {
-          if (!prog.isPaused) {
-            const completedCount = prog.completed;
-            const totalCount = prog.total;
-            const failedCount = (typeof prog.failed === 'number' && prog.failed >= 0) ? prog.failed : (totalCount - completedCount);
-            if (completedCount < totalCount) {
-              setGlossNotice({
-                message: `Glosado terminado: ${completedCount}/${totalCount}. ${failedCount} pendientes.`,
-                type: 'warning'
-              });
-            }
-          }
+        if (!prog.isGlossing && !prog.isPaused && notifyAtEnd) {
+          setIsAutoGlossing(false);
+          setGlossNotice({
+            message: isSpanish
+              ? `Glosado del capítulo: ${prog.completed}/${prog.total}`
+              : `Chapter glossed: ${prog.completed}/${prog.total}`,
+            type: prog.completed === prog.total ? 'success' : 'warning'
+          });
         }
       }
     });
 
     // Update document with immediately prepared offline tokens
     applyGlossedParagraphs(enriched);
-  }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs]);
+  }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs, isSpanish]);
 
-  // The enabled mode survives a completed page; each page owns one request.
+  // EPUB runs own the complete chapter; other texts follow the visible page.
   const autoGlossScopeRef = useRef(null);
   const handleToggleAutoGlossing = useCallback(() => {
     if (isAutoGlossing) {
@@ -1821,18 +1817,22 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       setIsAutoGlossing(false);
       return;
     }
-    const paragraphs = visibleParagraphsRef.current;
+    const paragraphs = isEpub ? chapterParagraphsRef.current : visibleParagraphsRef.current;
     if (paragraphs.some(paragraph => !isGlossComplete(paragraph, activeDocLang, nativeLang))) {
-      triggerGlossing(paragraphs, activeDocLang);
+      triggerGlossing(paragraphs, activeDocLang, isEpub);
     } else {
       setGlossingProgress({ total: paragraphs.length, completed: paragraphs.length,
         isGlossing: false, isPaused: false, isComplete: true, failed: 0 });
+      if (isEpub) {
+        setIsAutoGlossing(false);
+        setGlossNotice({ message: isSpanish ? `Glosado del capítulo: ${paragraphs.length}/${paragraphs.length}` : `Chapter glossed: ${paragraphs.length}/${paragraphs.length}`, type: 'success' });
+      }
     }
     return () => {
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
     };
-  }, [isAutoGlossing, viewMode, document?.id, isEpub, currentChapter?.id, currentParagraphPage,
+  }, [isAutoGlossing, viewMode, document?.id, isEpub, currentChapter?.id, isEpub ? null : currentParagraphPage,
     activeDocLang, nativeLang, simplificationMode.kind, simplificationMode.level, triggerGlossing]);
 
   // Stop/Pause glossing
