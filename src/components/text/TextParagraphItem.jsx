@@ -479,9 +479,9 @@ function TextParagraphItemComponent({
               }}
               title={isSpanish ? 'Guardar posición (con la voz detenida)' : 'Save position (with speech stopped)'}
               aria-label={isSpanish ? 'Guardar posición en este párrafo' : 'Save position at this paragraph'}
-              className="inline-flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+              className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-rose-600 dark:text-rose-300 hover:text-rose-700 dark:hover:text-white group-hover/para:border-rose-500/60"
             >
-              <Bookmark className="w-3 h-3" />
+              <Bookmark className="w-3.5 h-3.5" />
             </button>
           )}
           {/* Paragraph Audio Button (▶️ / ⏸️ / ⚠️) - Plays/pauses ONLY this paragraph */}
