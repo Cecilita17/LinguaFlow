@@ -324,9 +324,12 @@ export async function saveTextDocument(rawDoc) {
     ? normalizeAudioSyncAnchors(rawDoc.audioSyncAnchors)
     : normalizeAudioSyncAnchors(existing?.audioSyncAnchors);
 
-  // 6. Safe preservation of manual audioBookmark & legacy fields:
+  // 6. Safe preservation of manual audioBookmark & legacy fields. Imported
+  // original audio deliberately uses a continuous lastAudioPosition instead;
+  // legacy paragraph bookmarks must not pin playback to one old paragraph.
+  const isOriginalAudioDocument = effectiveSourceType === 'audio' || effectiveFormat === 'audio';
   let effectiveAudioBookmark = null;
-  if (isExplicitAudioRemoval) {
+  if (isOriginalAudioDocument || isExplicitAudioRemoval) {
     effectiveAudioBookmark = null;
   } else if (rawDoc.audioBookmark !== undefined) {
     effectiveAudioBookmark = rawDoc.audioBookmark;
@@ -439,6 +442,60 @@ export async function saveTextDocument(rawDoc) {
         requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-persistence-failed' });
       } catch (_) {}
       resolve(null);
+    }
+  });
+}
+
+/**
+ * Persists continuous original-audio playback progress without rebuilding the
+ * document or triggering an auto-backup for every timeupdate. The document
+ * itself remains the durable source of truth in IndexedDB.
+ */
+export async function updateTextDocumentPlaybackPosition(id, time, paragraphId = null) {
+  if (!id || !Number.isFinite(time)) return false;
+
+  const applyPosition = (doc) => {
+    if (!doc || (doc.sourceType !== 'audio' && doc.format !== 'audio')) return null;
+    return {
+      ...doc,
+      // Audio documents resume from continuous media time, not a manual cue.
+      audioBookmark: null,
+      lastAudioPosition: Math.max(0, time),
+      lastAudioParagraphId: paragraphId || null,
+      lastAudioPositionUpdatedAt: Date.now(),
+      updatedAt: new Date().toISOString()
+    };
+  };
+
+  const db = await openDatabase();
+  if (!db) {
+    const updated = applyPosition(memoryStore.get(id));
+    if (!updated) return false;
+    memoryStore.set(id, updated);
+    return true;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const getRequest = store.get(id);
+      getRequest.onsuccess = () => {
+        const updated = applyPosition(getRequest.result || memoryStore.get(id));
+        if (!updated) {
+          resolve(false);
+          return;
+        }
+        const putRequest = store.put(updated);
+        putRequest.onsuccess = () => {
+          memoryStore.set(id, updated);
+          resolve(true);
+        };
+        putRequest.onerror = () => resolve(false);
+      };
+      getRequest.onerror = () => resolve(false);
+    } catch (_) {
+      resolve(false);
     }
   });
 }

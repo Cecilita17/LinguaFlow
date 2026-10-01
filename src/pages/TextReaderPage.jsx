@@ -62,7 +62,8 @@ import {
   getAllTextDocuments,
   deleteTextDocument,
   getTextDocumentsCount,
-  migrateFromLocalStorage
+  migrateFromLocalStorage,
+  updateTextDocumentPlaybackPosition
 } from '../services/textLibraryStorage.js';
 import {
   enrichParagraphsWithGlosses,
@@ -1338,6 +1339,38 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
   return segSpans[0]?.startChar ?? 0;
 }
 
+  const flushAudioPlaybackPosition = useCallback(() => {
+    const throttler = audioSaveThrottlerRef.current;
+    if (throttler.timer) {
+      clearTimeout(throttler.timer);
+      throttler.timer = null;
+    }
+    const currentDoc = documentRef.current;
+    const { time, paragraphId } = latestAudioPositionRef.current;
+    if (!currentDoc?.id || (currentDoc.sourceType !== 'audio' && currentDoc.format !== 'audio') || !Number.isFinite(time)) return;
+    throttler.lastSavedTime = Date.now();
+    updateTextDocumentPlaybackPosition(currentDoc.id, time, paragraphId).catch(() => {});
+  }, []);
+
+  const scheduleAudioPlaybackPositionSave = useCallback(() => {
+    const currentDoc = documentRef.current;
+    if (!currentDoc?.id || (currentDoc.sourceType !== 'audio' && currentDoc.format !== 'audio')) return;
+    const throttler = audioSaveThrottlerRef.current;
+    const elapsed = Date.now() - throttler.lastSavedTime;
+    const delay = Math.max(0, 2000 - elapsed);
+    if (throttler.timer) return;
+    throttler.timer = setTimeout(() => flushAudioPlaybackPosition(), delay);
+  }, [flushAudioPlaybackPosition]);
+
+  useEffect(() => {
+    const flush = () => flushAudioPlaybackPosition();
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [flushAudioPlaybackPosition]);
+
   // Playback time update handler — 100% decoupled from bookmarks
   const handleAudioTimeUpdate = useCallback((newTime) => {
     if (typeof newTime !== 'number' || isNaN(newTime)) return;
@@ -1395,22 +1428,26 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       }
     }
 
-  }, [document?.paragraphs, document?.audioSegments, isPaginatedReader, effectiveAudioParagraphs, audioSyncAnchors]);
+    scheduleAudioPlaybackPositionSave();
+
+  }, [document?.paragraphs, document?.audioSegments, isPaginatedReader, effectiveAudioParagraphs, audioSyncAnchors, scheduleAudioPlaybackPositionSave]);
 
   const handleAudioPause = useCallback((pausedTime) => {
     if (typeof pausedTime === 'number') {
       latestAudioPositionRef.current.time = pausedTime;
     }
+    flushAudioPlaybackPosition();
     setPlayingParagraphId(null);
     playingParagraphIdRef.current = null;
     setActiveAudioCharIndex(-1);
-  }, []);
+  }, [flushAudioPlaybackPosition]);
 
   const handleAudioEnded = useCallback(() => {
+    flushAudioPlaybackPosition();
     setPlayingParagraphId(null);
     playingParagraphIdRef.current = null;
     setActiveAudioCharIndex(-1);
-  }, []);
+  }, [flushAudioPlaybackPosition]);
 
   const handleAudioError = useCallback((err) => {
     console.warn('[TextReader] Original audio playback error:', err);
@@ -2104,8 +2141,14 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     previousScrollTopRef.current = 0;
     saveActiveDocumentDraft(doc);
 
-    // Sync manual audio bookmark from loaded document (validate existence)
-    const savedBookmark = resolveAudioBookmark(doc);
+    const isImportedAudio = Boolean(
+      (doc.sourceType === 'audio' || doc.format === 'audio') &&
+      (doc.audioPathname || doc.audioUrl || doc.audioBlob)
+    );
+
+    // Imported audio resumes from its last continuous media position. Other
+    // document types retain their explicit manual bookmark behavior.
+    const savedBookmark = isImportedAudio ? null : resolveAudioBookmark(doc);
     const isValidBookmark = Boolean(
       savedBookmark?.paragraphId &&
       Array.isArray(doc.paragraphs) &&
@@ -2115,13 +2158,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     setAudioBookmark(validBookmark);
 
     // If opening an audio document, prepare latestAudioPositionRef (staying paused)
-    if ((doc.sourceType === 'audio' || doc.format === 'audio') && (doc.audioPathname || doc.audioUrl || doc.audioBlob)) {
-      const savedTime = typeof validBookmark?.time === 'number'
-        ? validBookmark.time
-        : (typeof doc.lastAudioPosition === 'number' ? doc.lastAudioPosition : 0);
+    if (isImportedAudio) {
+      const savedTime = typeof doc.lastAudioPosition === 'number' ? doc.lastAudioPosition : 0;
       latestAudioPositionRef.current = {
         time: savedTime,
-        paragraphId: validBookmark?.paragraphId || null
+        paragraphId: doc.lastAudioParagraphId || null
       };
       if (audioPlayerRef.current) {
         audioPlayerRef.current.seek(savedTime);
@@ -2136,8 +2177,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     );
     const validReadingPosId = isValidReadingPos ? savedReadingPos.paragraphId : null;
 
-    // Prioritize manual audio bookmark; fallback to last reading position
-    const targetScrollId = validBookmark?.paragraphId || validReadingPosId;
+    // Audio progress is continuous; other documents can prioritize a manual
+    // bookmark. Scroll to the active audio paragraph when it is known.
+    const targetScrollId = isImportedAudio
+      ? (doc.lastAudioParagraphId || validReadingPosId)
+      : (validBookmark?.paragraphId || validReadingPosId);
     if (targetScrollId) {
       setPendingScrollParagraphId(targetScrollId);
     } else {
@@ -3381,9 +3425,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
           audioBlob={document.audioBlob}
           sourceIdentity={document.id}
           initialTime={
-            typeof audioBookmark?.time === 'number'
-              ? audioBookmark.time
-              : (typeof document.lastAudioPosition === 'number' ? document.lastAudioPosition : 0)
+            typeof document.lastAudioPosition === 'number'
+              ? document.lastAudioPosition
+              : 0
           }
           isPlaying={Boolean(playingParagraphId)}
           onTogglePlay={handleToggleAudio}

@@ -683,6 +683,9 @@ export function normalizeDocument(rawDoc) {
  */
 export function resolveAudioBookmark(doc) {
   if (!doc || typeof doc !== 'object') return null;
+  // Imported original audio uses lastAudioPosition as continuous playback
+  // progress. A legacy paragraph bookmark must never override that progress.
+  if (doc.sourceType === 'audio' || doc.format === 'audio') return null;
   if (doc.audioBookmark && typeof doc.audioBookmark === 'object' && doc.audioBookmark.paragraphId) {
     return {
       paragraphId: doc.audioBookmark.paragraphId,
