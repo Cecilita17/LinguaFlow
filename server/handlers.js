@@ -1549,7 +1549,16 @@ export async function handleBatchGloss(req, res) {
         languageRules = `- CHINESE RULES (targetLang: 'zh'):
   * Generate tone-marked Pinyin in the "auxiliary" field (e.g. "huānyíng", "jīntiān", "de").
   * In the "word" field, provide the exact Chinese characters (Hanzi).
-  * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").`;
+  * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").
+  * COMPACT CHINESE GLOSSES: Prefer ONE word, or a short expression of 1–3 words when needed for accuracy. Choose the single meaning that fits this sentence; avoid lists of alternatives, full-sentence translations, definitions, and grammatical explanations. Use a longer expression only when the meaning cannot be conveyed accurately in a short gloss.
+  * HIGH-FREQUENCY WORDS AND PARTICLES: Keep basic words especially brief. For particles without a direct translation (把, 了, 的, 地, 得, 吗, 呢, 吧, 着, 过), use ONE tiny label or a familiar grammatical abbreviation in ${nativeLangName}, ideally 2–5 characters (including a trailing period), instead of a full grammatical term or a sentence. Prefer a short everyday equivalent when available. This applies to EVERY native language, not only Spanish or English. Localize the abbreviation to the student’s language and script; never impose Spanish or English labels on other languages. Treat the character range as a brevity target, not a reason to truncate words or lose meaning. Still provide a non-empty gloss; do not hide or omit common words.
+  * CONTEXT FIRST: Use an ordinary lexical translation when the character is a verb, noun, or measure word rather than a particle (e.g. 把 as a verb means "hold", 了 in 了解 is part of a lexical word, 的 in 的确 is not the possessive particle). Preserve complete lexical words and tone-marked Pinyin.
+  * Compact particle examples in ${nativeLangName}: ${nativeLang === 'es'
+    ? '的 → "de" or "mod."; 了 → "ya" or "compl." (perfective), "camb." (sentence-final); 把 → "obj." (disposal construction); 吗 → "preg.".'
+    : nativeLang === 'en'
+      ? '的 → "poss." or "mod."; 了 → "done" or "perf." (perfective), "new" (sentence-final); 把 → "obj." (disposal construction); 吗 → "Q".'
+      : 'Use familiar LOCAL abbreviations or very short equivalents for possession/modification, completion/change, object marking, and questions in the student’s native language and script. Do not expand them into long terms or explanations.'}
+  * These examples illustrate brevity, not fixed substitutions: select the label or lexical meaning appropriate to the actual sentence.`;
       } else if (isArabic) {
         languageRules = `- ARABIC RULES (targetLang: 'ar'):
   * In the "word" field, provide the Arabic script word corresponding to the input token.
