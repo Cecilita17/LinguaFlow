@@ -4,7 +4,7 @@ import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
-import { useSavedWords } from '../../context/SavedWordsContext.jsx';
+import { SavedWordState } from '../../context/SavedWordsContext.jsx';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 import { useAudioSettings } from '../../context/AudioSettingsContext.jsx';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
@@ -47,7 +47,6 @@ function TextParagraphItemComponent({
   onTranslate = null,
   onTranslateParagraph = null
 }) {
-  const { isWordSaved } = useSavedWords();
   const { wordHighlightEnabled } = useAudioSettings();
   const { isSpanish } = useSiteLanguage();
   const { text, tokens = [] } = paragraph;
@@ -245,9 +244,8 @@ function TextParagraphItemComponent({
                     )}
 
                     {/* Tier 2 (CENTER): Word (Arabic with tashkīl in RTL, Russian, Polish, Latin scripts in LTR) */}
-                    {(() => {
-                      const isSaved = !isPunctuation && isWordSaved(word, targetLang);
-                      return (
+                    <SavedWordState word={word} lang={targetLang}>
+                      {(isSaved) => (
                         <span
                           dir={textDirection}
                           className={`${
@@ -262,8 +260,8 @@ function TextParagraphItemComponent({
                         >
                           {word}
                         </span>
-                      );
-                    })()}
+                      )}
+                    </SavedWordState>
 
                     {/* Tier 3 (BOTTOM): Gloss in student's native language (Only shown when interlinearMode is enabled) */}
                     {interlinearMode && cleanGloss && (
@@ -307,11 +305,10 @@ function TextParagraphItemComponent({
                   );
                 }
 
-                const isSaved = isWordSaved(cleanWord, targetLang);
-
                 return (
-                  <span
-                    key={cIdx}
+                  <SavedWordState key={cIdx} word={cleanWord} lang={targetLang}>
+                    {(isSaved) => (
+                    <span
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onParagraphClick) onParagraphClick(paragraph);
@@ -332,6 +329,8 @@ function TextParagraphItemComponent({
                   >
                     {chunk}
                   </span>
+                    )}
+                  </SavedWordState>
                 );
               })}
               {/* Inline Paragraph Translation Icon (At end of text flow) */}

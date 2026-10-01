@@ -4,7 +4,7 @@ import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/lang
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
-import { useSavedWords } from '../../context/SavedWordsContext.jsx';
+import { SavedWordState } from '../../context/SavedWordsContext.jsx';
 import { useAudioSettings } from '../../context/AudioSettingsContext.jsx';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
@@ -34,7 +34,6 @@ export function TranscriptLine({
   nativeLang = 'es',
   onWordClick = null
 }) {
-  const { isWordSaved } = useSavedWords();
   const { wordHighlightEnabled } = useAudioSettings();
   const { isSpanish } = useSiteLanguage();
   if (!line || typeof line !== 'object') return null;
@@ -288,10 +287,10 @@ export function TranscriptLine({
                       )}
 
                       {/* Tier 2 (CENTER): Word (Arabic with diacritics/tashkeel in RTL, Russian/Polish/Latin scripts in LTR) */}
-                      {(() => {
-                        const isSaved = !isPunctuation && isWordSaved(word, targetLang);
-                        const isAudioActive = wordHighlightEnabled && isActive && activeTokenIndex === idx;
-                        return (
+                      <SavedWordState word={word} lang={targetLang}>
+                        {(isSaved) => {
+                          const isAudioActive = wordHighlightEnabled && isActive && activeTokenIndex === idx;
+                          return (
                           <span
                             dir={textDirection}
                             className={`${
@@ -306,8 +305,9 @@ export function TranscriptLine({
                           >
                             {renderHighlightedText(word)}
                           </span>
-                        );
-                      })()}
+                          );
+                        }}
+                      </SavedWordState>
 
                       {/* Tier 3 (BOTTOM): Gloss in student's native language (Only shown when interlinearMode is true) */}
                       {interlinearMode && cleanGloss && (
@@ -358,11 +358,10 @@ export function TranscriptLine({
                 );
               }
 
-              const isSaved = isWordSaved(cleanWord, targetLang);
-
               return (
-                <span
-                  key={cIdx}
+                <SavedWordState key={cIdx} word={cleanWord} lang={targetLang}>
+                  {(isSaved) => (
+                  <span
                   onClick={(e) => {
                     if (onWordClick) {
                       e.stopPropagation();
@@ -382,6 +381,8 @@ export function TranscriptLine({
                 >
                   {renderHighlightedText(chunk)}
                 </span>
+                  )}
+                </SavedWordState>
               );
             })}
             {/* Inline Paragraph Translation Icon (At end of text flow) */}

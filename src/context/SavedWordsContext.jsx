@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, startTransition } from 'react';
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, useSyncExternalStore, startTransition } from 'react';
 import { requestAutoBackup } from '../services/autoBackupService.js';
 
 export const STORAGE_KEY_SAVED_WORDS = 'linguaflow_saved_words';
@@ -27,14 +27,90 @@ export function getSavedWordKey(word = '', lang = '') {
   return `${cleanLang}:${cleanWord.toLowerCase()}`;
 }
 
+// A keyed external store keeps reader token updates local to the word that
+// changed. The existing context remains the canonical array API for consumers
+// that truly need the complete vocabulary (backup, modal, chat history, etc.).
+let savedWordKeys = new Set();
+const savedWordKeyListeners = new Map();
+
+function getSavedWordKeys(words = []) {
+  const nextKeys = new Set();
+  for (const item of words) {
+    if (!item?.word || !item?.lang) continue;
+    const key = getSavedWordKey(item.word, item.lang);
+    if (key) nextKeys.add(key);
+  }
+  return nextKeys;
+}
+
+function syncSavedWordKeyStore(words = []) {
+  const nextKeys = getSavedWordKeys(words);
+  const changedKeys = new Set();
+
+  savedWordKeys.forEach((key) => {
+    if (!nextKeys.has(key)) changedKeys.add(key);
+  });
+  nextKeys.forEach((key) => {
+    if (!savedWordKeys.has(key)) changedKeys.add(key);
+  });
+
+  savedWordKeys = nextKeys;
+  changedKeys.forEach((key) => {
+    const listeners = savedWordKeyListeners.get(key);
+    if (listeners) Array.from(listeners).forEach((listener) => listener());
+  });
+}
+
+function subscribeToSavedWordKey(key, listener) {
+  if (!key) return () => {};
+  let listeners = savedWordKeyListeners.get(key);
+  if (!listeners) {
+    listeners = new Set();
+    savedWordKeyListeners.set(key, listeners);
+  }
+  listeners.add(listener);
+  return () => {
+    const currentListeners = savedWordKeyListeners.get(key);
+    if (!currentListeners) return;
+    currentListeners.delete(listener);
+    if (currentListeners.size === 0) savedWordKeyListeners.delete(key);
+  };
+}
+
+/**
+ * Granular saved-word subscription for dense reader surfaces. Only components
+ * displaying the changed language+word key receive a React update.
+ */
+export function useIsWordSaved(word, lang) {
+  const key = getSavedWordKey(word, lang);
+  const subscribe = useCallback((listener) => subscribeToSavedWordKey(key, listener), [key]);
+  const getSnapshot = useCallback(() => Boolean(key && savedWordKeys.has(key)), [key]);
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+}
+
+// Lets dense token maps subscribe per word without violating the Rules of
+// Hooks. The visual markup stays owned by each reader.
+export const SavedWordState = React.memo(function SavedWordState({ word, lang, children }) {
+  const isSaved = useIsWordSaved(word, lang);
+  return children(isSaved);
+});
+
 /**
  * Returns only the user's saved vocabulary that actually appears in a reading.
  * Token values are preferred because they are the same values highlighted in yellow;
  * the text check covers documents that have not yet been tokenized.
  */
-export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targetLang = '') {
-  const language = String(targetLang || '').toLowerCase().split('-')[0];
-  if (!language || !Array.isArray(savedWords) || !Array.isArray(paragraphs)) return [];
+const paragraphPresenceIndexCache = new WeakMap();
+
+function getParagraphPresenceIndex(paragraphs, language) {
+  let indexesByLanguage = paragraphPresenceIndexCache.get(paragraphs);
+  if (!indexesByLanguage) {
+    indexesByLanguage = new Map();
+    paragraphPresenceIndexCache.set(paragraphs, indexesByLanguage);
+  }
+
+  const cached = indexesByLanguage.get(language);
+  if (cached) return cached;
 
   const tokenKeys = new Set();
   const text = paragraphs
@@ -47,6 +123,17 @@ export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targ
       return paragraph?.text || '';
     })
     .join('\n');
+
+  const index = { tokenKeys, text };
+  indexesByLanguage.set(language, index);
+  return index;
+}
+
+export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targetLang = '') {
+  const language = String(targetLang || '').toLowerCase().split('-')[0];
+  if (!language || !Array.isArray(savedWords) || !Array.isArray(paragraphs)) return [];
+
+  const { tokenKeys, text } = getParagraphPresenceIndex(paragraphs, language);
 
   const escapeRegExp = (value) => Array.from(String(value)).map((char) =>
     '\\^$.*+?()[]{}|/'.includes(char) ? '\\' + char : char
@@ -161,11 +248,15 @@ export function SavedWordsProvider({ children }) {
       const stored = localStorage.getItem(STORAGE_KEY_SAVED_WORDS);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          syncSavedWordKeyStore(parsed);
+          return parsed;
+        }
       }
     } catch (e) {
       console.warn('Failed to parse saved words from localStorage:', e);
     }
+    syncSavedWordKeyStore([]);
     return [];
   });
 
@@ -186,6 +277,12 @@ export function SavedWordsProvider({ children }) {
 
   // Persist and back up after the urgent tap has painted. Serializing a large
   // vocabulary list and scheduling backup work must not block the modal.
+  // Keep reader token highlights in sync before paint, while persistence stays
+  // deferred below and therefore cannot delay the modal interaction.
+  useLayoutEffect(() => {
+    syncSavedWordKeyStore(savedWords);
+  }, [savedWords]);
+
   useEffect(() => {
     latestSavedWordsRef.current = savedWords;
     if (!hasMountedRef.current) {
