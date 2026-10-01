@@ -127,7 +127,7 @@ export function estimateSpeechDurationMs(text, targetLang = 'es', rate = 1.0) {
   const len = text.trim().length;
   if (len === 0) return 0;
 
-  const effectiveRate = Math.max(0.5, Math.min(2.0, typeof rate === 'number' ? rate : 1.0));
+  const effectiveRate = Math.max(0.2, Math.min(2.0, typeof rate === 'number' ? rate : 1.0));
 
   let msPerChar = 68;
   if (targetLang === 'zh' || /[\u4E00-\u9FFF]/.test(text)) {
@@ -308,7 +308,8 @@ export function createAudioWordSynchronizer({
   let totalPausedDuration = 0;
   let prevBoundaryWordPos = -1;
 
-  const effectiveRate = Math.max(0.5, Math.min(2.0, typeof speechRate === 'number' ? speechRate : 1.0));
+  // Pace estimates with the rate actually sent to the speech engine.
+  const effectiveRate = Math.max(0.2, Math.min(2.0, typeof utteranceRate === 'number' ? utteranceRate : 1.0));
   const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, effectiveRate);
   let calibratedDurationMs = estimatedDurationMs;
 
@@ -321,7 +322,7 @@ export function createAudioWordSynchronizer({
 
   function setActiveTokenPos(pos, source = 'snap') {
     if (wordTokens.length === 0) return;
-    const isSnap = source === 'snap' || source === 'init';
+    const isSnap = source === 'snap' || source === 'init' || source === 'boundary';
     const clampedPos = Math.max(0, Math.min(wordTokens.length - 1, pos));
 
     // Monotonic progression: during speech, do not jump backwards
@@ -338,6 +339,7 @@ export function createAudioWordSynchronizer({
     const beforeHighestVisited = highestVisitedTokenPos;
 
     activeTokenPos = clampedPos;
+    if (source === 'boundary') highestVisitedTokenPos = clampedPos;
     if (clampedPos > highestVisitedTokenPos) {
       highestVisitedTokenPos = clampedPos;
     }
@@ -382,6 +384,10 @@ new activeCharIndex: ${newActiveChar}`);
   function tick() {
     if (!isRunning || isPaused || wordTokens.length === 0) return;
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+    // Once real word events arrive, the audible word owns the highlight.
+    // An estimate must not race ahead or override a corrective boundary.
+    if (hasConfirmedBoundary && !isArabic) return;
 
     // --- ANDROID SPECIFIC ANTI-SKIP STRATEGY ---
     // Android Arabic voices can report boundary positions ahead of the audible word.
@@ -584,7 +590,8 @@ word="${matchedWord}"`);
         // Set smooth catch-up target: do NOT snap directly, let tick() visit intermediate words
         hasConfirmedBoundary = true;
         lastConfirmedWordPos = Math.max(lastConfirmedWordPos, matchedWordPos);
-        targetBoundaryWordPos = Math.max(targetBoundaryWordPos, Math.max(highestVisitedTokenPos, matchedWordPos));
+        targetBoundaryWordPos = matchedWordPos;
+        setActiveTokenPos(matchedWordPos, 'boundary');
       }
     }
 
