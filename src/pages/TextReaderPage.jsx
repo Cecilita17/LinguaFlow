@@ -3236,7 +3236,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       translationError={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.error || null}
                       onPlay={handlePlayParagraph}
                       onStop={handleStopAudio}
-                      onSaveReadingBookmark={isAudioDocument ? null : handleSaveReadingBookmark}
+                      onSaveReadingBookmark={null}
                       isReadingBookmarkDisabled={Boolean(playingParagraphId)}
                       isReadingBookmarked={!isAudioDocument && document?.manualReadingBookmark?.documentId === document?.id && document?.manualReadingBookmark?.paragraphId === paragraph.id}
                       onParagraphClick={null}
