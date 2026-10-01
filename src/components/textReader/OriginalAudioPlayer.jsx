@@ -36,7 +36,8 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   isPlaying = false,
   onTogglePlay = null,
   onSaveBookmark = null,
-  isBookmarked = false
+  isBookmarked = false,
+  onDebugEvent = null
 }, ref) {
   const audioRef = useRef(null);
   const { isSpanish } = useSiteLanguage();
@@ -76,8 +77,16 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   // with its target so an older `seeked` event cannot complete a newer request.
   const pendingSeekRequestRef = useRef(null);
   const seekRequestIdRef = useRef(0);
+  const postSeekTimeupdateRef = useRef(null);
   const isProgrammaticSeekingRef = useRef(false);
   const SEEK_TARGET_TOLERANCE_SECONDS = 0.05;
+
+  const emitAudioDebug = useCallback((event, details) => {
+    console.info(`[AudioDebug] ${event}`, details);
+    if (onDebugEvent) {
+      onDebugEvent({ event, ...details });
+    }
+  }, [onDebugEvent]);
 
   const completePendingSeek = useCallback((audio) => {
     const request = pendingSeekRequestRef.current;
@@ -95,6 +104,10 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
 
     pendingSeekRequestRef.current = null;
     isProgrammaticSeekingRef.current = false;
+    postSeekTimeupdateRef.current = {
+      targetTime: request.targetTime,
+      remaining: 3
+    };
     if (onTimeUpdate) {
       onTimeUpdate(current);
     }
@@ -123,6 +136,14 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
       targetTime: safeTime,
       autoPlay
     };
+    emitAudioDebug('seek requested', {
+      requestId,
+      requestedTime: safeTime,
+      currentTimeBeforeAssignment: audio.currentTime,
+      duration: audio.duration,
+      playbackRate: audio.playbackRate,
+      seeking: audio.seeking
+    });
     isProgrammaticSeekingRef.current = true;
     setLocalCurrentTime(safeTime);
 
@@ -134,6 +155,14 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
 
     try {
       audio.currentTime = safeTime;
+      emitAudioDebug('seek assigned', {
+        requestId,
+        targetTime: safeTime,
+        currentTimeImmediatelyAfterAssignment: audio.currentTime,
+        seeking: audio.seeking,
+        duration: audio.duration,
+        playbackRate: audio.playbackRate
+      });
     } catch (e) {
       console.warn('[OriginalAudioPlayer] seek error:', e);
       // Do not play from the previous position if the requested seek failed.
@@ -143,7 +172,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
         if (onError) onError(e);
       }
     }
-  }, [completePendingSeek, onError]);
+  }, [completePendingSeek, emitAudioDebug, onError]);
 
   // Imperative handle exposed to parent via ref (equivalent to YouTube player methods)
   useImperativeHandle(ref, () => ({
@@ -235,6 +264,19 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   const handleSeeked = useCallback((e) => {
     const audio = e.target;
     const current = audio.currentTime || 0;
+    const pendingRequest = pendingSeekRequestRef.current;
+    emitAudioDebug('seeked', {
+      requestIdActual: seekRequestIdRef.current,
+      pendingRequestId: pendingRequest?.requestId ?? null,
+      targetTime: pendingRequest?.targetTime ?? null,
+      actualCurrentTime: current,
+      difference: typeof pendingRequest?.targetTime === 'number'
+        ? current - pendingRequest.targetTime
+        : null,
+      seeking: audio.seeking,
+      playbackRate: audio.playbackRate,
+      duration: audio.duration
+    });
     setLocalCurrentTime(current);
 
     if (pendingSeekRequestRef.current) {
@@ -247,7 +289,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
         onTimeUpdate(current);
       }
     }
-  }, [completePendingSeek, onTimeUpdate]);
+  }, [completePendingSeek, emitAudioDebug, onTimeUpdate]);
 
   const handleTimeUpdate = useCallback((e) => {
     const current = e.target.currentTime || 0;
@@ -258,8 +300,23 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     if (!isSeekingRef.current && seekValue === null) {
       setLocalCurrentTime(current);
     }
+    const postSeek = postSeekTimeupdateRef.current;
+    if (postSeek?.remaining > 0) {
+      emitAudioDebug('post-seek timeupdate', {
+        targetTime: postSeek.targetTime,
+        currentTime: current,
+        elapsedFromTarget: current - postSeek.targetTime,
+        seeking: e.target.seeking,
+        playbackRate: e.target.playbackRate,
+        duration: e.target.duration
+      });
+      postSeek.remaining -= 1;
+      if (postSeek.remaining === 0) {
+        postSeekTimeupdateRef.current = null;
+      }
+    }
     if (onTimeUpdate) onTimeUpdate(current);
-  }, [onTimeUpdate, seekValue]);
+  }, [emitAudioDebug, onTimeUpdate, seekValue]);
 
   const handlePlay = useCallback(() => {
     console.log('[OriginalAudioPlayer] play');
