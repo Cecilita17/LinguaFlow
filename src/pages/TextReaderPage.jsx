@@ -742,6 +742,10 @@ export function TextReaderPage({
   // Navigate to another chapter (unmounts previous chapter, mounts new chapter, scrolls to top)
   const handleNavigateChapter = useCallback((newIndex) => {
     if (newIndex < 0 || newIndex >= chapters.length) return;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsAutoGlossing(false);
+    setGlossingProgress(previous => ({ ...previous, isGlossing: false, isPaused: true }));
     audioPlaybackIdRef.current++;
     clearAudioVisualTimer();
     if (window.speechSynthesis) {
@@ -1768,12 +1772,13 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       apiKey,
       abortSignal: controller.signal,
       onUpdate: (updatedParagraphs) => {
+        if (controller.signal.aborted || abortControllerRef.current !== controller) return;
         applyGlossedParagraphs(updatedParagraphs);
       },
       onProgress: (prog) => {
+        if (controller.signal.aborted || abortControllerRef.current !== controller) return;
         setGlossingProgress(prog);
         if (!prog.isGlossing) {
-          setIsAutoGlossing(false);
           if (!prog.isPaused) {
             const completedCount = prog.completed;
             const totalCount = prog.total;
@@ -1798,40 +1803,41 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     applyGlossedParagraphs(enriched);
   }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs]);
 
-  // Toggle Global Auto-Glossing (ON / OFF)
+  // The enabled mode survives a completed page; each page owns one request.
+  const autoGlossScopeRef = useRef(null);
   const handleToggleAutoGlossing = useCallback(() => {
     if (isAutoGlossing) {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
       setIsAutoGlossing(false);
-      setGlossingProgress(prev => ({
-        ...prev,
-        isGlossing: false,
-        isPaused: true
-      }));
-    } else {
-      const paragraphsToGloss = (isEpub && visibleParagraphs.length > 0)
-        ? visibleParagraphs
-        : (document?.paragraphs || []);
-      if (!paragraphsToGloss || paragraphsToGloss.length === 0) return;
-
-      const activeTarget = activeDocLang || targetLang;
-      const missing = paragraphsToGloss.filter(p => !isGlossComplete(p, activeTarget, nativeLang));
-
-      if (missing.length === 0) {
-        setGlossNotice({
-          message: `Glosado terminado: ${paragraphsToGloss.length}/${paragraphsToGloss.length}`,
-          type: 'success'
-        });
-        return;
-      }
-
-      setIsAutoGlossing(true);
-      triggerGlossing(paragraphsToGloss, activeDocLang);
+      setGlossingProgress(previous => ({ ...previous, isGlossing: false, isPaused: true }));
+      return;
     }
-  }, [isAutoGlossing, document, isEpub, visibleParagraphs, activeDocLang, targetLang, nativeLang, triggerGlossing]);
+    if (!document?.id || visibleParagraphs.length === 0) return;
+    autoGlossScopeRef.current = { documentId: document.id, chapterId: isEpub ? currentChapter?.id : null };
+    setIsAutoGlossing(true);
+  }, [isAutoGlossing, document?.id, visibleParagraphs.length, isEpub, currentChapter?.id]);
+
+  useEffect(() => {
+    if (!isAutoGlossing || viewMode !== 'reader') return;
+    const scope = autoGlossScopeRef.current;
+    if (scope?.documentId !== document?.id || (isEpub && scope?.chapterId !== currentChapter?.id)) {
+      setIsAutoGlossing(false);
+      return;
+    }
+    const paragraphs = visibleParagraphsRef.current;
+    if (paragraphs.some(paragraph => !isGlossComplete(paragraph, activeDocLang, nativeLang))) {
+      triggerGlossing(paragraphs, activeDocLang);
+    } else {
+      setGlossingProgress({ total: paragraphs.length, completed: paragraphs.length,
+        isGlossing: false, isPaused: false, isComplete: true, failed: 0 });
+    }
+    return () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
+  }, [isAutoGlossing, viewMode, document?.id, isEpub, currentChapter?.id, currentParagraphPage,
+    activeDocLang, nativeLang, simplificationMode.kind, simplificationMode.level, triggerGlossing]);
 
   // Stop/Pause glossing
   const handleStopGlossing = () => {
@@ -1847,12 +1853,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     }));
   };
 
-  // Resume glossing
+  // Resume the current page and retain the same document/chapter scope.
   const handleResumeGlossing = () => {
-    if (document && Array.isArray(document.paragraphs)) {
-      setIsAutoGlossing(true);
-      triggerGlossing(isEpub ? visibleParagraphs : document.paragraphs, targetLang);
-    }
+    if (!document?.id) return;
+    autoGlossScopeRef.current = { documentId: document.id, chapterId: isEpub ? currentChapter?.id : null };
+    setIsAutoGlossing(true);
   };
 
   // Individual paragraph glossing (runs ONLY for that paragraph, works even when auto-glossing is OFF)
