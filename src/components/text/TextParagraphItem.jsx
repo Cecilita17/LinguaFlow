@@ -175,7 +175,7 @@ function TextParagraphItemComponent({
     </button>
   );
 
-  const isMarked = isAudioBookmark || isLastAudioPosition;
+  const isMarked = !isPlaying && (isAudioBookmark || isLastAudioPosition);
 
   return (
     <div

@@ -1601,23 +1601,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
 
     utterance.onstart = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
-      const currentDoc = documentRef.current;
-      if (currentDoc?.id === document?.id) {
-        const chapterIndex = (currentDoc.chapters || []).findIndex(ch => ch.paragraphIds?.includes(paragraph.id));
-        const updated = {
-          ...currentDoc,
-          lastReadingPosition: {
-            ...currentDoc.lastReadingPosition,
-            paragraphId: paragraph.id,
-            chapterIndex: Math.max(0, chapterIndex),
-            chapterId: currentDoc.chapters?.[chapterIndex]?.id,
-            updatedAt: Date.now()
-          }
-        };
-        documentRef.current = updated;
-        saveActiveDocumentDraft(updated);
-        setDocument(updated);
-      }
       synchronizer.handleStart(event);
     };
 
@@ -1639,14 +1622,17 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     utterance.onend = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       synchronizer.handleEnd(event);
-      // Mark only a paragraph that finished speaking; the resume position
-      // remains independent and advances when the next utterance starts.
+      // Persist progress only after speech and its word synchronizer finish.
       const currentDoc = documentRef.current;
       if (currentDoc?.id === document?.id) {
+        const chapterIndex = (currentDoc.chapters || []).findIndex(ch => ch.paragraphIds?.includes(paragraph.id));
         const updated = {
           ...currentDoc,
           lastReadingPosition: {
             ...currentDoc.lastReadingPosition,
+            paragraphId: paragraph.id,
+            chapterIndex: Math.max(0, chapterIndex),
+            chapterId: currentDoc.chapters?.[chapterIndex]?.id,
             completedParagraphId: paragraph.id,
             updatedAt: Date.now()
           }
@@ -3240,9 +3226,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
                       isAudioBookmark={false}
-                      isLastAudioPosition={isAudioDocument
+                      isLastAudioPosition={playingParagraphId !== paragraph.id && (isAudioDocument
                         ? lastSavedAudioParagraphId === paragraph.id
-                        : document?.lastReadingPosition?.completedParagraphId === paragraph.id}
+                        : document?.lastReadingPosition?.completedParagraphId === paragraph.id)}
                       audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
                       isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
                       translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
