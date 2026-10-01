@@ -3353,6 +3353,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
           audioPathname={document.audioPathname}
           audioUrl={document.audioUrl}
           audioBlob={document.audioBlob}
+          sourceIdentity={document.id}
           initialTime={
             typeof audioBookmark?.time === 'number'
               ? audioBookmark.time

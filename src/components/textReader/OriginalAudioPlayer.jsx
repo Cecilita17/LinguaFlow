@@ -25,6 +25,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   audioPathname,
   audioUrl = null,
   audioBlob = null,
+  sourceIdentity = null,
   onReady = null,
   onTimeUpdate = null,
   onPlay = null,
@@ -53,7 +54,14 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
 
   const activeIsPlaying = typeof isPlaying === 'boolean' ? isPlaying : isPlayingInternal;
 
-  // Manage object URL lifecycle if an audioBlob instance is provided
+  // Keep the object URL stable for a document. IndexedDB hydration can return
+  // a new Blob object for the same saved file; its object identity alone must
+  // not reload the <audio> element while the reader is playing.
+  const audioBlobSourceKey = audioBlob instanceof Blob
+    ? `${sourceIdentity || 'audio'}:${audioBlob.size}:${audioBlob.type || ''}:${audioBlob.name || ''}:${audioBlob.lastModified || ''}`
+    : null;
+
+  // Manage object URL lifecycle if an audioBlob instance is provided.
   useEffect(() => {
     if (audioBlob instanceof Blob) {
       const url = URL.createObjectURL(audioBlob);
@@ -64,7 +72,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     } else {
       setGeneratedBlobUrl(null);
     }
-  }, [audioBlob]);
+  }, [audioBlobSourceKey]);
 
   // Compute clean stream URL from generatedBlobUrl, audioUrl, or audioPathname
   const streamUrl = generatedBlobUrl || audioUrl || (audioPathname
@@ -123,7 +131,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     return true;
   }, [onError, onTimeUpdate]);
 
-  const seek = useCallback((time, autoPlay = false, paragraphPlayback = null) => {
+  const seek = useCallback((time, autoPlay = false, paragraphPlayback = null, intent = 'manualSeek') => {
     const audio = audioRef.current;
     if (!audio) return;
     const safeTime = Math.max(0, typeof time === 'number' && !isNaN(time) ? time : 0);
@@ -137,11 +145,15 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     // Every request supersedes the preceding one. The request id and target are
     // both checked in handleSeeked before this seek may resume playback.
     const requestId = ++seekRequestIdRef.current;
+    // Any explicit seek wins over a delayed initial restoration that may still
+    // be waiting for metadata from the source load.
+    initialSeekDoneRef.current = true;
     pendingSeekRequestRef.current = {
       requestId,
       targetTime: safeTime,
       autoPlay,
-      paragraphPlayback
+      paragraphPlayback,
+      intent
     };
     isProgrammaticSeekingRef.current = true;
     if (paragraphPlayback) {
@@ -205,7 +217,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     },
 
     seek: (time, autoPlay = false) => {
-      seek(time, autoPlay);
+      seek(time, autoPlay, null, 'manualSeek');
     },
 
     seekAndPlay: (startTime, endTime = null, paragraphId = null) => {
@@ -214,7 +226,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
         startTime,
         endTime,
         paragraphId
-      } : null);
+      } : null, hasParagraphRange ? 'paragraph' : 'resume');
     },
 
     getCurrentTime: () => audioRef.current?.currentTime || 0,
@@ -263,17 +275,15 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     setErrorMessage(null);
     console.log('[OriginalAudioPlayer] loadedmetadata duration=', dur);
 
-    // Initial seek to restored lastAudioPosition if specified, but stay paused
+    // Initial restoration is intentionally routed through the same seek
+    // authority as every other programmatic position change. A paragraph click
+    // received before metadata wins because seek() marks this as consumed.
     if (!initialSeekDoneRef.current && typeof initialTime === 'number' && initialTime > 0) {
-      initialSeekDoneRef.current = true;
-      try {
-        audio.currentTime = initialTime;
-        setLocalCurrentTime(initialTime);
-      } catch (err) {}
+      seek(initialTime, false, null, 'initialRestore');
     }
 
     if (onReady) onReady({ duration: dur });
-  }, [initialTime, onReady]);
+  }, [initialTime, onReady, seek]);
 
   const handleSeeked = useCallback((e) => {
     const audio = e.target;
