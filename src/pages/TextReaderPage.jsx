@@ -1622,25 +1622,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     utterance.onend = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       synchronizer.handleEnd(event);
-      // Persist progress only after speech and its word synchronizer finish.
-      const currentDoc = documentRef.current;
-      if (currentDoc?.id === document?.id) {
-        const chapterIndex = (currentDoc.chapters || []).findIndex(ch => ch.paragraphIds?.includes(paragraph.id));
-        const updated = {
-          ...currentDoc,
-          lastReadingPosition: {
-            ...currentDoc.lastReadingPosition,
-            paragraphId: paragraph.id,
-            chapterIndex: Math.max(0, chapterIndex),
-            chapterId: currentDoc.chapters?.[chapterIndex]?.id,
-            completedParagraphId: paragraph.id,
-            updatedAt: Date.now()
-          }
-        };
-        documentRef.current = updated;
-        saveActiveDocumentDraft(updated);
-        setDocument(updated);
-      }
       setPlayingParagraphId(null);
       playingParagraphIdRef.current = null;
       setActiveAudioCharIndex(-1);
@@ -2492,6 +2473,33 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     }
   }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, handlePlayParagraph, effectiveAudioParagraphs, audioBookmark]);
 
+  const handleSaveReadingBookmark = useCallback((paragraph) => {
+    const currentDoc = documentRef.current;
+    if (isAudioDocument || playingParagraphIdRef.current || window.speechSynthesis?.speaking || !currentDoc?.id || !paragraph?.id) return;
+    const updated = {
+      ...currentDoc,
+      manualReadingBookmark: { documentId: currentDoc.id, paragraphId: paragraph.id }
+    };
+    documentRef.current = updated;
+    saveActiveDocumentDraft(updated);
+    setDocument(updated);
+  }, [isAudioDocument]);
+
+  const handleGoToReadingBookmark = useCallback(() => {
+    const currentDoc = documentRef.current;
+    const bookmark = currentDoc?.manualReadingBookmark;
+    if (isAudioDocument || playingParagraphIdRef.current || window.speechSynthesis?.speaking || bookmark?.documentId !== currentDoc?.id) return;
+    const paragraph = currentDoc.paragraphs?.find(p => p.id === bookmark?.paragraphId);
+    if (!paragraph) return;
+    const chapterIndex = (currentDoc.chapters || []).findIndex(ch => ch.paragraphIds?.includes(paragraph.id));
+    if (chapterIndex >= 0) setCurrentChapterIndex(chapterIndex);
+    const chapterParagraphs = chapterIndex >= 0
+      ? currentDoc.paragraphs.filter(p => p.chapterId === currentDoc.chapters[chapterIndex].id)
+      : currentDoc.paragraphs;
+    setCurrentParagraphPage(Math.floor(chapterParagraphs.findIndex(p => p.id === paragraph.id) / PARAGRAPHS_PER_PAGE));
+    setPendingScrollParagraphId(paragraph.id);
+  }, [isAudioDocument]);
+
   // Edit title action from three-dots menu
   const handleEditTitle = useCallback(() => {
     setIsActionsMenuOpen(false);
@@ -3226,9 +3234,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
                       isAudioBookmark={false}
-                      isLastAudioPosition={playingParagraphId !== paragraph.id && (isAudioDocument
-                        ? lastSavedAudioParagraphId === paragraph.id
-                        : document?.lastReadingPosition?.completedParagraphId === paragraph.id)}
+                      isLastAudioPosition={isAudioDocument && playingParagraphId !== paragraph.id && lastSavedAudioParagraphId === paragraph.id}
                       audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
                       isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
                       translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
@@ -3237,6 +3243,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       translationError={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.error || null}
                       onPlay={handlePlayParagraph}
                       onStop={handleStopAudio}
+                      onSaveReadingBookmark={isAudioDocument ? null : handleSaveReadingBookmark}
+                      isReadingBookmarkDisabled={Boolean(playingParagraphId)}
                       onParagraphClick={null}
                       onParagraphPress={handlePlayParagraph}
                       onWordClick={onWordClick}
@@ -3413,6 +3421,17 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                 ))}
               </select>
             </div>
+
+            {!isAudioDocument && document?.manualReadingBookmark && (
+              <button
+                type="button"
+                onClick={handleGoToReadingBookmark}
+                disabled={Boolean(playingParagraphId)}
+                className="px-2 py-1.5 text-xs rounded-xl text-rose-600 dark:text-rose-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isSpanish ? 'Posición guardada · Ir' : 'Saved position · Go'}
+              </button>
+            )}
 
             {/* Translation / Glosses — same interlinearMode / setInterlinearMode */}
             <button

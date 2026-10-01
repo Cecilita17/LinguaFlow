@@ -669,6 +669,7 @@ export function normalizeDocument(rawDoc) {
       : (typeof rawDoc.lastAudioPosition === 'object' && typeof rawDoc.lastAudioPosition?.updatedAt === 'number'
         ? rawDoc.lastAudioPosition.updatedAt
         : null)),
+    manualReadingBookmark: rawDoc.manualReadingBookmark || null,
     lastReadingPosition,
     createdAt: rawDoc.createdAt || now,
     updatedAt: rawDoc.updatedAt || now
@@ -929,6 +930,7 @@ export function extractMinimalDraft(doc) {
       : (typeof doc.lastAudioPosition === 'object' && typeof doc.lastAudioPosition?.updatedAt === 'number'
         ? doc.lastAudioPosition.updatedAt
         : null),
+    manualReadingBookmark: doc.manualReadingBookmark || null,
     lastReadingPosition: doc.lastReadingPosition || null,
     createdAt: doc.createdAt || null,
     updatedAt: doc.updatedAt || null,

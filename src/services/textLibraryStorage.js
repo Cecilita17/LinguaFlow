@@ -394,6 +394,7 @@ export async function saveTextDocument(rawDoc) {
     lastAudioPosition: effectiveAudioBookmark ? effectiveAudioBookmark.time : (rawDoc.lastAudioPosition !== undefined ? rawDoc.lastAudioPosition : (existing?.lastAudioPosition ?? null)),
     lastAudioParagraphId: effectiveAudioBookmark ? effectiveAudioBookmark.paragraphId : (rawDoc.lastAudioParagraphId || existing?.lastAudioParagraphId || null),
     lastAudioPositionUpdatedAt: effectiveAudioBookmark?.savedAt ? new Date(effectiveAudioBookmark.savedAt).getTime() : (rawDoc.lastAudioPositionUpdatedAt || existing?.lastAudioPositionUpdatedAt || null),
+    manualReadingBookmark: rawDoc.manualReadingBookmark !== undefined ? rawDoc.manualReadingBookmark : (existing?.manualReadingBookmark || null),
     lastReadingPosition: effectiveLastReadingPosition,
     createdAt: existing?.createdAt || rawDoc.createdAt || now,
     updatedAt: now

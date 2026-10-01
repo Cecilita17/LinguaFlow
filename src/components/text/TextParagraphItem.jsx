@@ -44,6 +44,8 @@ function TextParagraphItemComponent({
   onStop = null,
   onParagraphClick = null,
   onParagraphPress = null,
+  onSaveReadingBookmark = null,
+  isReadingBookmarkDisabled = false,
   onWordClick = null,
   onGloss = null,
   onGlossParagraph = null,
@@ -237,6 +239,22 @@ function TextParagraphItemComponent({
             </button>
           )}
         </div>
+      )}
+      {onSaveReadingBookmark && (
+        <button
+          type="button"
+          disabled={isReadingBookmarkDisabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSaveReadingBookmark(paragraph);
+          }}
+          title={isSpanish ? 'Guardar posición (con la voz detenida)' : 'Save position (with speech stopped)'}
+          aria-label={isSpanish ? 'Guardar posición en este párrafo' : 'Save position at this paragraph'}
+          className="mb-2 inline-flex items-center gap-1 text-[10px] text-[var(--text-muted)] hover:text-rose-500 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Bookmark className="w-3 h-3" />
+          {isSpanish ? 'Guardar posición' : 'Save position'}
+        </button>
       )}
       {/* Saved reading or playback position */}
       {isMarked && !isPlaying && (
@@ -556,6 +574,8 @@ function arePropsEqual(prevProps, nextProps) {
   if (prevProps.hasGloss !== nextProps.hasGloss) return false;
   if (prevProps.isAudioBookmark !== nextProps.isAudioBookmark) return false;
   if (prevProps.isLastAudioPosition !== nextProps.isLastAudioPosition) return false;
+  if (prevProps.onSaveReadingBookmark !== nextProps.onSaveReadingBookmark) return false;
+  if (prevProps.isReadingBookmarkDisabled !== nextProps.isReadingBookmarkDisabled) return false;
   if (prevProps.onParagraphPress !== nextProps.onParagraphPress) return false;
   if (prevProps.audioSyncAnchor !== nextProps.audioSyncAnchor) return false;
   if (prevProps.isAudioSyncAvailable !== nextProps.isAudioSyncAvailable) return false;
