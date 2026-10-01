@@ -30,6 +30,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   onPlay = null,
   onPause = null,
   onEnded = null,
+  onParagraphEnd = null,
   onError = null,
   initialTime = 0,
   playbackRate = 1.0,
@@ -314,10 +315,13 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
       if (onTimeUpdate) {
         onTimeUpdate(Math.max(paragraphPlayback.startTime, paragraphPlayback.endTime - 0.001));
       }
+      if (onParagraphEnd) {
+        onParagraphEnd(paragraphPlayback.paragraphId);
+      }
       return;
     }
     if (onTimeUpdate) onTimeUpdate(current);
-  }, [invalidatePendingPlayback, onTimeUpdate, seekValue]);
+  }, [invalidatePendingPlayback, onParagraphEnd, onTimeUpdate, seekValue]);
 
   const handlePlay = useCallback(() => {
     console.log('[OriginalAudioPlayer] play');
