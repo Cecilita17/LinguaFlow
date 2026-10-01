@@ -36,6 +36,10 @@ import {
   getSavedTranscriptsCount
 } from './transcriptLibraryStorage.js';
 
+// Short-lived cache for the active page. Durable transcript records are the
+// persistent source; this avoids growing localStorage per processed video.
+const inMemoryGlossCaches = new Map();
+
 // Re-export dictionaries, strategies, and library functions for backwards-compatibility
 export {
   CHINESE_OFFLINE_DICT,
@@ -330,11 +334,17 @@ export function loadCachedGlosses(videoId, subtitlesCount, targetLang = 'zh', na
     return {};
   }
   const key = getStorageKey(videoId, subtitlesCount, targetLang, nativeLang);
+  const memoryValue = inMemoryGlossCaches.get(key);
+  if (memoryValue && typeof memoryValue === 'object') return memoryValue;
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return (parsed && typeof parsed === 'object') ? parsed : {};
+    if (parsed && typeof parsed === 'object') {
+      inMemoryGlossCaches.set(key, parsed);
+      return parsed;
+    }
+    return {};
   } catch (err) {
     console.warn('[GlossCache] Corrupted cache detected, clearing key:', key);
     try { localStorage.removeItem(key); } catch (e) {}
@@ -346,13 +356,39 @@ export function loadCachedGlosses(videoId, subtitlesCount, targetLang = 'zh', na
  * Safely persist verified glosses to localStorage
  */
 export function saveCachedGlosses(videoId, subtitlesCount, cacheData, targetLang = 'zh', nativeLang = 'es') {
-  if (typeof window === 'undefined' || !window.localStorage || !cacheData) return;
+  if (!cacheData) return;
   const key = getStorageKey(videoId, subtitlesCount, targetLang, nativeLang);
-  try {
-    localStorage.setItem(key, JSON.stringify(cacheData));
-  } catch (err) {
-    console.warn('[GlossCache] Failed to save glosses to localStorage (quota exceeded?):', err.message);
+  inMemoryGlossCaches.set(key, cacheData);
+}
+
+// Remove a legacy cache only where the complete transcript/gloss payload is
+// already verifiably present in IndexedDB. Unknown keys remain untouched.
+export async function cleanupVerifiedLegacyGlossCaches() {
+  if (typeof window === 'undefined' || !window.localStorage) return 0;
+  const legacyKeys = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith('linguaflow_gloss_v4_')) legacyKeys.push(key);
   }
+
+  let removed = 0;
+  for (const key of legacyKeys) {
+    const match = /^linguaflow_gloss_v4_(.+)_(\d+)_([^_]+)_([^_]+)$/.exec(key);
+    if (!match) continue;
+    const [, videoId, countRaw, targetLang, nativeLang] = match;
+    const records = await findTranscriptsByVideoId(videoId, targetLang);
+    const hasDurableCopy = records.some((record) =>
+      String(record?.nativeLanguage || record?.nativeLang || '').toLowerCase() === nativeLang.toLowerCase() &&
+      Number(record?.subtitlesCount || record?.subtitles?.length) === Number(countRaw) &&
+      Array.isArray(record?.subtitles) && record.subtitles.length > 0
+    );
+    if (!hasDurableCopy) continue;
+    try {
+      localStorage.removeItem(key);
+      removed += 1;
+    } catch (_) {}
+  }
+  return removed;
 }
 
 /**

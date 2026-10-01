@@ -619,6 +619,18 @@ export function YouTubeReaderPage({
         if (Array.isArray(parsed.subtitles) && parsed.subtitles.length > 0) {
           const normalized = normalizeSubtitlesSafely(parsed.subtitles, parsed.subtitleFormat || 'sub');
           launchProgressiveTokenization(normalized, targetLang);
+        } else if (parsed.videoId) {
+          // New sessions persist only lightweight metadata. The complete
+          // transcript/glosses already live in IndexedDB.
+          findTranscriptsByVideoId(parsed.videoId, targetLang).then((records) => {
+            const record = records.find((item) => item.id === parsed.currentRecordId)
+              || records.find((item) => String(item.nativeLanguage || item.nativeLang || '') === String(nativeLang || ''))
+              || records[0];
+            if (record?.subtitles?.length) {
+              launchProgressiveTokenization(record.subtitles, targetLang);
+              if (record.id) setCurrentRecordId(record.id);
+            }
+          }).catch(() => {});
         }
         if (parsed.subtitleFormat) setSubtitleFormat(parsed.subtitleFormat);
         if (parsed.subtitleSource) setSubtitleSource(parsed.subtitleSource);
@@ -712,21 +724,6 @@ export function YouTubeReaderPage({
   // 2. Persist session when critical state changes (quota-safe)
   useEffect(() => {
     try {
-      // If subtitle count is very large, save a lightweight version to prevent exceeding localStorage quota
-      const safeSubtitles = (subtitles || []).map(s => {
-        if (subtitles.length > 1000 && (!s.tokens || !s.tokens.some(t => t && t.gloss))) {
-          return {
-            id: s.id,
-            startTime: s.startTime,
-            endTime: s.endTime,
-            text: s.text,
-            tokens: [],
-            glosses: s.glosses || []
-          };
-        }
-        return s;
-      });
-
       const sessionData = {
         videoId,
         videoTitle,
@@ -735,7 +732,8 @@ export function YouTubeReaderPage({
         currentRecordId,
         lastPlaybackTime: latestPositionRef.current?.time ?? currentTime,
         lastSubtitleId: latestPositionRef.current?.subId ?? pendingScrollSubtitleId,
-        subtitles: safeSubtitles,
+        // The full subtitles and glosses are stored in transcript IndexedDB.
+        // Keep only a lightweight session pointer in localStorage.
         subtitleFormat,
         subtitleSource,
         preferences: {

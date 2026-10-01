@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '../services/chatService.js';
+import { recoverLocalStorageQuota } from '../services/storageQuotaRecovery.js';
 
 export const STORAGE_KEY_AUTH_TOKEN = 'linguaflow_session_token';
 
@@ -86,7 +87,16 @@ export function AuthProvider({ children }) {
 
       // Save real server-issued session token
       if (data.token) {
-        localStorage.setItem(STORAGE_KEY_AUTH_TOKEN, data.token);
+        // Release only verified legacy duplicates before the small auth write.
+        await recoverLocalStorageQuota();
+        try {
+          localStorage.setItem(STORAGE_KEY_AUTH_TOKEN, data.token);
+        } catch (storageError) {
+          console.error('Session storage error:', storageError);
+          const error = new Error('La cuenta fue verificada, pero no se pudo guardar la sesión en este dispositivo. Liberá espacio del sitio e inténtalo nuevamente.');
+          error.code = 'LOCAL_STORAGE_QUOTA';
+          throw error;
+        }
       }
       setUser(data.user);
       return data.user;
@@ -94,7 +104,11 @@ export function AuthProvider({ children }) {
       console.error('Backend verification error:', err);
       setError(err.message || 'Error al autenticar con el servidor.');
       setUser(null);
-      localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+      // A quota error is not an OAuth failure; retain any previously valid
+      // session instead of deleting it while reporting the storage problem.
+      if (err?.code !== 'LOCAL_STORAGE_QUOTA') {
+        localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+      }
       throw err;
     } finally {
       setIsLoading(false);

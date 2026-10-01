@@ -64,6 +64,29 @@ export async function getDurableChatSessions() {
   }
 }
 
+// Imports the legacy localStorage mirror only after every complete session has
+// reached IndexedDB. This safely releases quota without dropping history.
+export async function migrateLegacyChatSessionHistory() {
+  const legacy = getChatSessionHistory();
+  if (legacy.length === 0) return 0;
+
+  let migrated = 0;
+  for (const session of legacy) {
+    if (await saveDurableChatSession(session)) migrated += 1;
+    else return 0;
+  }
+
+  if (migrated === legacy.length) {
+    try { localStorage.removeItem(STORAGE_KEY_CHAT_SESSION_HISTORY); } catch (_) {}
+  }
+  return migrated;
+}
+
+export async function getAllChatSessionHistory() {
+  await migrateLegacyChatSessionHistory();
+  return getDurableChatSessions();
+}
+
 export async function deleteDurableChatSession(sessionId) {
   if (!sessionId) return false;
   try {
@@ -117,16 +140,14 @@ export function getChatSessionHistory() {
 }
 
 /**
- * Saves a completed chat session.
- * Prepends the session to local storage immediately and dispatches a sync event.
+ * Normalizes a completed session. The caller saves the returned object in
+ * IndexedDB; large message payloads are intentionally not mirrored locally.
  *
  * @param {object} session
  * @returns {object} The saved session object
  */
 export function saveChatSession(session) {
   if (!session || typeof session !== 'object') return null;
-  const history = getChatSessionHistory();
-  const existingIdx = history.findIndex(s => s.id === session.id);
 
   const cleanSession = {
     id: session.id || `chat_session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -143,23 +164,6 @@ export function saveChatSession(session) {
       ...(session.metadata || {})
     }
   };
-
-  let updated;
-  if (existingIdx >= 0) {
-    updated = [...history];
-    updated[existingIdx] = cleanSession;
-  } else {
-    updated = [cleanSession, ...history];
-  }
-
-  try {
-    localStorage.setItem(STORAGE_KEY_CHAT_SESSION_HISTORY, JSON.stringify(updated));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('linguaflow-chat-session-sync'));
-    }
-  } catch (e) {
-    console.warn('[ChatSessionStorage] Failed to save session to localStorage:', e);
-  }
 
   return cleanSession;
 }
@@ -205,10 +209,14 @@ export function getChatSessionById(sessionId) {
  * Clears all chat session history.
  */
 export function clearChatSessionHistory() {
-  try {
-    localStorage.removeItem(STORAGE_KEY_CHAT_SESSION_HISTORY);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('linguaflow-chat-session-sync'));
-    }
-  } catch (e) {}
+  void (async () => {
+    const sessions = await getDurableChatSessions();
+    await Promise.all(sessions.map((session) => deleteDurableChatSession(session.id)));
+    try {
+      localStorage.removeItem(STORAGE_KEY_CHAT_SESSION_HISTORY);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('linguaflow-chat-session-sync'));
+      }
+    } catch (_) {}
+  })();
 }

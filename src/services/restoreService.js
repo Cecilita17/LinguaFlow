@@ -15,8 +15,9 @@
 import { saveTextDocument } from './textLibraryStorage.js';
 import { saveTranscriptToLibrary } from './transcriptLibraryStorage.js';
 import { saveImageDocument } from './imageReaderLibraryStorage.js';
+import { saveDurableChatHistory } from './chatHistoryStorage.js';
 import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION } from './backupService.js';
-import { getChatSessionHistory, STORAGE_KEY_CHAT_SESSION_HISTORY } from './chatSessionHistoryStorage.js';
+import { getAllChatSessionHistory, saveDurableChatSession } from './chatSessionHistoryStorage.js';
 
 /**
  * Validates the backup payload structure and version.
@@ -128,29 +129,26 @@ export async function restoreBackupData(payload) {
 
   // 5. Restore localStorage: Chat conversations
   if (data.chatHistory && typeof data.chatHistory === 'object') {
-    Object.entries(data.chatHistory).forEach(([langCode, messages]) => {
+    for (const [langCode, messages] of Object.entries(data.chatHistory)) {
       if (Array.isArray(messages) && messages.length > 0) {
-        try {
-          localStorage.setItem(`linguaflow_chat_${langCode}`, JSON.stringify(messages));
+        if (await saveDurableChatHistory(langCode, messages, { replace: true })) {
           summary.chatConversationsRestored++;
-        } catch (e) {}
+        }
       }
-    });
+    }
   }
 
-  // 5b. Restore localStorage: Completed Chat Session History (Deduplicated by session ID)
+  // 5b. Restore completed chat sessions to their durable IndexedDB source.
   if (Array.isArray(data.chatSessionHistory) && data.chatSessionHistory.length > 0) {
     try {
-      const existingSessions = getChatSessionHistory();
+      const existingSessions = await getAllChatSessionHistory();
       const existingIds = new Set(existingSessions.map(s => s.id));
-      const merged = [...existingSessions];
       for (const session of data.chatSessionHistory) {
         if (session && session.id && !existingIds.has(session.id)) {
           existingIds.add(session.id);
-          merged.push(session);
+          await saveDurableChatSession(session);
         }
       }
-      localStorage.setItem(STORAGE_KEY_CHAT_SESSION_HISTORY, JSON.stringify(merged));
       window.dispatchEvent(new CustomEvent('linguaflow-chat-session-sync'));
       summary.chatSessionsRestored = data.chatSessionHistory.length;
     } catch (e) {

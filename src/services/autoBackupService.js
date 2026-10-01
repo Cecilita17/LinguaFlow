@@ -27,7 +27,7 @@ import { findTranscriptsByVideoId } from './transcriptLibraryStorage.js';
 import { getImageDocumentById } from './imageReaderLibraryStorage.js';
 import { loadActiveDocumentDraft } from './textDocumentService.js';
 import { gatherAllHabitTrackerData } from './habitTrackerService.js';
-import { getChatSessionHistory } from './chatSessionHistoryStorage.js';
+import { getAllChatSessionHistory } from './chatSessionHistoryStorage.js';
 import {
   serializeBackupToBlob,
   saveLastBackupMeta,
@@ -326,7 +326,7 @@ async function fetchLocalResourceData(type, id) {
       return gatherChatHistory();
     }
     case 'chat-session-history': {
-      return getChatSessionHistory();
+      return await getAllChatSessionHistory();
     }
     case 'call-history': {
       try {

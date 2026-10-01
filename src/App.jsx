@@ -124,15 +124,16 @@ function saveChatToStorage(lang, messagesList, { replaceDurable = false } = {}) 
   try {
     if (messagesList.length > 0) {
       try {
-        localStorage.setItem(`${STORAGE_PREFIX}${lang}`, JSON.stringify(messagesList));
-      } catch (e) {
-        console.warn(`Failed to save chat for ${lang} in localStorage:`, e);
-      }
-      try {
         sessionStorage.setItem(`${SESSION_STORAGE_PREFIX}${lang}`, JSON.stringify(messagesList));
       } catch (_) {}
       saveDurableChatHistory(lang, messagesList, { replace: replaceDurable }).then((saved) => {
-        if (!saved) console.warn(`Failed to durably save chat for ${lang}.`);
+        if (!saved) {
+          console.warn(`Failed to durably save chat for ${lang}.`);
+          return;
+        }
+        // The legacy localStorage copy is released only after IndexedDB has
+        // accepted the complete conversation.
+        try { localStorage.removeItem(`${STORAGE_PREFIX}${lang}`); } catch (_) {}
       }).catch(() => {});
     } else {
       try {

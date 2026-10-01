@@ -1,6 +1,11 @@
 const DB_NAME = 'linguaflow_chat_history';
 const STORE_NAME = 'conversations';
 const DB_VERSION = 1;
+const LEGACY_CHAT_PREFIX = 'linguaflow_chat_';
+
+function normalizeLanguage(value) {
+  return String(value || '').toLowerCase().split('-')[0].trim();
+}
 
 function openChatHistoryDatabase() {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
@@ -104,6 +109,68 @@ export async function getDurableChatHistory(language) {
       resolve(null);
     }
   });
+}
+
+export async function getAllDurableChatHistories() {
+  const database = await openChatHistoryDatabase();
+  if (!database) return [];
+
+  return new Promise((resolve) => {
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readonly');
+      const request = transaction.objectStore(STORE_NAME).getAll();
+      request.onsuccess = () => {
+        const records = (Array.isArray(request.result) ? request.result : [])
+          .map((record) => ({
+            language: normalizeLanguage(record?.language),
+            messages: normalizeMessages(record?.messages),
+            updatedAt: Number(record?.updatedAt) || 0
+          }))
+          .filter((record) => record.language && record.messages.length > 0);
+        database.close();
+        resolve(records);
+      };
+      request.onerror = () => {
+        database.close();
+        resolve([]);
+      };
+    } catch (_) {
+      database.close();
+      resolve([]);
+    }
+  });
+}
+
+// One-time compatible migration for the large legacy mirrors. A key is removed
+// only after IndexedDB confirms the same messages were written successfully.
+export async function migrateLegacyChatHistoriesFromLocalStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) return 0;
+  const candidates = [];
+  try {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key || !key.startsWith(LEGACY_CHAT_PREFIX)) continue;
+      const language = key.slice(LEGACY_CHAT_PREFIX.length);
+      if (!language || language.startsWith('start_') || language.startsWith('session_') || language.startsWith('voice_')) continue;
+      const raw = localStorage.getItem(key);
+      let messages = [];
+      try { messages = normalizeMessages(JSON.parse(raw || '[]')); } catch (_) {}
+      if (messages.length > 0) candidates.push({ key, language: normalizeLanguage(language), messages });
+    }
+  } catch (_) {
+    return 0;
+  }
+
+  let migrated = 0;
+  for (const candidate of candidates) {
+    const saved = await saveDurableChatHistory(candidate.language, candidate.messages);
+    if (!saved) continue;
+    try {
+      localStorage.removeItem(candidate.key);
+      migrated += 1;
+    } catch (_) {}
+  }
+  return migrated;
 }
 
 export async function deleteDurableChatHistory(language) {

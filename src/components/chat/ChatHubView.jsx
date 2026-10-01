@@ -296,13 +296,12 @@ export function ChatHubView({
       if (durable.messages.length <= current.length) return;
 
       try {
-        const serialized = JSON.stringify(durable.messages);
-        localStorage.setItem(`${STORAGE_PREFIX}${language}`, serialized);
-        sessionStorage.setItem(`${SESSION_STORAGE_PREFIX}${language}`, serialized);
+        // IndexedDB remains the durable source. sessionStorage is a small-lived
+        // tab mirror only; never recreate the large localStorage duplicate.
+        sessionStorage.setItem(`${SESSION_STORAGE_PREFIX}${language}`, JSON.stringify(durable.messages));
+        localStorage.removeItem(`${STORAGE_PREFIX}${language}`);
         window.dispatchEvent(new CustomEvent('linguaflow-chat-sync'));
-      } catch (_) {
-        return;
-      }
+      } catch (_) { return; }
 
       if (!cancelled) refreshHistory();
     };

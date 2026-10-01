@@ -15,7 +15,7 @@ import { getAllTextDocuments } from './textLibraryStorage.js';
 import { getAllSavedTranscripts } from './transcriptLibraryStorage.js';
 import { getAllImageDocuments } from './imageReaderLibraryStorage.js';
 import { gatherAllHabitTrackerData } from './habitTrackerService.js';
-import { getChatSessionHistory } from './chatSessionHistoryStorage.js';
+import { getAllChatSessionHistory } from './chatSessionHistoryStorage.js';
 import {
   requestDriveAccessToken,
   getOrCreateBackupFolder,
@@ -766,7 +766,7 @@ export async function createBackupPayload(user = null) {
   } catch (e) {}
 
   // 4b. Completed Chat session history
-  const chatSessionHistory = getChatSessionHistory();
+  const chatSessionHistory = await getAllChatSessionHistory();
 
   // 7. Chats, gloss caches, and habit tracker data
   const chatHistory = gatherChatHistory();
