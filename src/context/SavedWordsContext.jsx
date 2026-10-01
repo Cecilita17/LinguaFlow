@@ -124,7 +124,11 @@ function getParagraphPresenceIndex(paragraphs, language) {
     })
     .join('\n');
 
-  const index = { tokenKeys, text };
+  // A document can be large and this index is consulted whenever the saved
+  // vocabulary changes. Cache the fallback text match per normalized key so a
+  // new save only evaluates its own word instead of searching the full book
+  // once for every saved word again.
+  const index = { tokenKeys, text, presenceByKey: new Map() };
   indexesByLanguage.set(language, index);
   return index;
 }
@@ -133,23 +137,26 @@ export function getSavedWordsInParagraphs(savedWords = [], paragraphs = [], targ
   const language = String(targetLang || '').toLowerCase().split('-')[0];
   if (!language || !Array.isArray(savedWords) || !Array.isArray(paragraphs)) return [];
 
-  const { tokenKeys, text } = getParagraphPresenceIndex(paragraphs, language);
+  const { tokenKeys, text, presenceByKey } = getParagraphPresenceIndex(paragraphs, language);
 
   const escapeRegExp = (value) => Array.from(String(value)).map((char) =>
     '\\^$.*+?()[]{}|/'.includes(char) ? '\\' + char : char
   ).join('');
-  const containsWord = (word) => {
+  const containsWord = (word, key) => {
+    if (presenceByKey.has(key)) return presenceByKey.get(key);
     const cleanWord = String(word || '').trim();
-    if (!cleanWord) return false;
-    if (language === 'zh' || language === 'ja') return text.includes(cleanWord);
-    return new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(cleanWord)}(?=$|[^\\p{L}\\p{N}])`, 'iu').test(text);
+    const present = cleanWord && (language === 'zh' || language === 'ja'
+      ? text.includes(cleanWord)
+      : new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(cleanWord)}(?=$|[^\\p{L}\\p{N}])`, 'iu').test(text));
+    presenceByKey.set(key, Boolean(present));
+    return Boolean(present);
   };
 
   const seen = new Set();
   return savedWords.filter((item) => {
     if (!item?.word || String(item.lang || '').toLowerCase().split('-')[0] !== language) return false;
     const key = getSavedWordKey(item.word, language);
-    if (seen.has(key) || (!tokenKeys.has(key) && !containsWord(item.word))) return false;
+    if (seen.has(key) || (!tokenKeys.has(key) && !containsWord(item.word, key))) return false;
     seen.add(key);
     return true;
   });
