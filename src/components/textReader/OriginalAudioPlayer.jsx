@@ -227,7 +227,9 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     setErrorMessage(null);
     console.log('[OriginalAudioPlayer] source=', streamUrl);
     audio.src = streamUrl;
-    audio.playbackRate = typeof playbackRate === 'number' ? playbackRate : 1.0;
+    const effectiveRate = typeof playbackRate === 'number' ? playbackRate : 1.0;
+    audio.defaultPlaybackRate = effectiveRate;
+    audio.playbackRate = effectiveRate;
     audio.load();
 
     return () => {
@@ -244,6 +246,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
   // Handle playbackRate changes
   useEffect(() => {
     if (audioRef.current && typeof playbackRate === 'number') {
+      audioRef.current.defaultPlaybackRate = playbackRate;
       audioRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
@@ -257,6 +260,14 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     setErrorMessage(null);
     console.log('[OriginalAudioPlayer] loadedmetadata duration=', dur);
 
+    // Loading/reloading a local Blob can reset the media element to its
+    // default 1× rate after the prop effect has already run. Reapply both the
+    // default and active rate once metadata is ready so the persisted value is
+    // the value actually heard when reopening an audio+transcript document.
+    const effectiveRate = typeof playbackRate === 'number' ? playbackRate : 1.0;
+    audio.defaultPlaybackRate = effectiveRate;
+    audio.playbackRate = effectiveRate;
+
     // Initial restoration is intentionally routed through the same seek
     // authority as every other programmatic position change. A paragraph click
     // received before metadata wins because seek() marks this as consumed.
@@ -265,7 +276,7 @@ export const OriginalAudioPlayer = forwardRef(function OriginalAudioPlayer({
     }
 
     if (onReady) onReady({ duration: dur });
-  }, [initialTime, onReady, seek]);
+  }, [initialTime, onReady, playbackRate, seek]);
 
   const handleSeeked = useCallback((e) => {
     const audio = e.target;
