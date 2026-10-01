@@ -8,6 +8,7 @@ import { getLanguageMeta } from '../constants/languages.js';
 import { API_BASE_URL } from './chatService.js';
 import { tokenizeAndGlossLineOffline } from './subtitleGlossService.js';
 import { transcribeAudio } from './transcription/transcriptionService.js';
+import { normalizeAudioSyncAnchors } from '../utils/audioSyncAnchors.js';
 import {
   saveTextDocument,
   getTextDocumentById,
@@ -748,6 +749,7 @@ export function createTextDocument({
   audioMimeType = null,
   audioSegments = null,
   audioDuration = null,
+  audioSyncAnchors = null,
   lastAudioPosition = null,
   lastAudioParagraphId = null,
   lastAudioPositionUpdatedAt = null,
@@ -826,6 +828,7 @@ export function createTextDocument({
     audioMimeType: audioMimeType || null,
     audioSegments: Array.isArray(audioSegments) ? audioSegments : [],
     audioDuration: typeof audioDuration === 'number' ? audioDuration : (Number(audioDuration) || 0),
+    audioSyncAnchors: normalizeAudioSyncAnchors(audioSyncAnchors),
     audioBookmark: resolveAudioBookmark({ audioBookmark: null, lastAudioPosition, lastAudioParagraphId, lastAudioPositionUpdatedAt }),
     lastAudioPosition: lastAudioPosition !== undefined ? lastAudioPosition : null,
     lastAudioParagraphId: lastAudioParagraphId || (typeof lastAudioPosition === 'object' ? lastAudioPosition?.paragraphId : null) || null,

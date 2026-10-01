@@ -11,6 +11,7 @@
 
 import { normalizeDocument, splitTextIntoParagraphs } from './textDocumentService.js';
 import { requestAutoBackup } from './autoBackupService.js';
+import { normalizeAudioSyncAnchors } from '../utils/audioSyncAnchors.js';
 
 const DB_NAME = 'LinguaFlow_TextDocuments_DB';
 const DB_VERSION = 1;
@@ -319,6 +320,9 @@ export async function saveTextDocument(rawDoc) {
   const effectiveEpubSimplifications = rawDoc.epubSimplifications && typeof rawDoc.epubSimplifications === 'object'
     ? rawDoc.epubSimplifications
     : (existing?.epubSimplifications && typeof existing.epubSimplifications === 'object' ? existing.epubSimplifications : {});
+  const effectiveAudioSyncAnchors = rawDoc.audioSyncAnchors !== undefined
+    ? normalizeAudioSyncAnchors(rawDoc.audioSyncAnchors)
+    : normalizeAudioSyncAnchors(existing?.audioSyncAnchors);
 
   // 6. Safe preservation of manual audioBookmark & legacy fields:
   let effectiveAudioBookmark = null;
@@ -382,6 +386,7 @@ export async function saveTextDocument(rawDoc) {
     audioMimeType: effectiveAudioMimeType,
     audioSegments: effectiveAudioSegments,
     audioDuration: effectiveAudioDuration,
+    audioSyncAnchors: effectiveAudioSyncAnchors,
     audioBookmark: effectiveAudioBookmark,
     lastAudioPosition: effectiveAudioBookmark ? effectiveAudioBookmark.time : (rawDoc.lastAudioPosition !== undefined ? rawDoc.lastAudioPosition : (existing?.lastAudioPosition ?? null)),
     lastAudioParagraphId: effectiveAudioBookmark ? effectiveAudioBookmark.paragraphId : (rawDoc.lastAudioParagraphId || existing?.lastAudioParagraphId || null),

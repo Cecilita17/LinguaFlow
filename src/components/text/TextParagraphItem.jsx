@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Square, Pause, AlertCircle, Languages, Loader2, Bookmark } from 'lucide-react';
+import { Play, Square, Pause, AlertCircle, Languages, Loader2, Bookmark, RefreshCw } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
@@ -34,6 +34,8 @@ function TextParagraphItemComponent({
   hasGloss = false,
   isAudioBookmark = false,
   isLastAudioPosition = false,
+  audioSyncAnchor = null,
+  isAudioSyncAvailable = false,
   translation = null,
   isTranslating = false,
   isTranslationVisible = false,
@@ -45,7 +47,9 @@ function TextParagraphItemComponent({
   onGloss = null,
   onGlossParagraph = null,
   onTranslate = null,
-  onTranslateParagraph = null
+  onTranslateParagraph = null,
+  onCreateAudioSyncAnchor = null,
+  onRemoveAudioSyncAnchor = null
 }) {
   const { wordHighlightEnabled } = useAudioSettings();
   const { isSpanish } = useSiteLanguage();
@@ -56,6 +60,9 @@ function TextParagraphItemComponent({
   const isComplete = hasGloss || isGlossComplete(paragraph, targetLang, nativeLang);
   const handleGloss = onGloss || onGlossParagraph;
   const handleTranslate = onTranslate || onTranslateParagraph;
+  const [isSyncMenuOpen, setIsSyncMenuOpen] = React.useState(false);
+  const longPressTimerRef = React.useRef(null);
+  const suppressNextParagraphClickRef = React.useRef(false);
 
   // Responsive font size classes
   const fontClassMap = {
@@ -77,8 +84,34 @@ function TextParagraphItemComponent({
   };
 
   const handleParagraphClick = () => {
+    if (isSyncMenuOpen) {
+      setIsSyncMenuOpen(false);
+      return;
+    }
+    if (suppressNextParagraphClickRef.current) {
+      suppressNextParagraphClickRef.current = false;
+      return;
+    }
     if (onParagraphClick) onParagraphClick(paragraph);
   };
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleParagraphPointerDown = (event) => {
+    if (!isAudioSyncAvailable || event.button > 0 || event.target.closest('button')) return;
+    clearLongPress();
+    longPressTimerRef.current = setTimeout(() => {
+      suppressNextParagraphClickRef.current = true;
+      setIsSyncMenuOpen(true);
+    }, 550);
+  };
+
+  React.useEffect(() => () => clearLongPress(), []);
 
   const tokenCharRanges = React.useMemo(() => {
     return computeTokenCharRanges(text, tokens, targetLang);
@@ -146,6 +179,16 @@ function TextParagraphItemComponent({
     <div
       data-paragraph-id={paragraph.id}
       onClick={handleParagraphClick}
+      onPointerDown={handleParagraphPointerDown}
+      onPointerUp={clearLongPress}
+      onPointerCancel={clearLongPress}
+      onPointerLeave={clearLongPress}
+      onContextMenu={(event) => {
+        if (!isAudioSyncAvailable || event.target.closest('button')) return;
+        event.preventDefault();
+        suppressNextParagraphClickRef.current = true;
+        setIsSyncMenuOpen(true);
+      }}
       className={`group/para relative p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl transition-all border select-text ${
         isPlaying
           ? 'bg-gradient-to-r from-rose-950/80 via-[#3a180e]/90 to-[#2c120a] border-rose-500/80 shadow-lg shadow-rose-950/40 ring-2 ring-rose-500/30 text-white'
@@ -154,6 +197,45 @@ function TextParagraphItemComponent({
             : 'bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border-[var(--border-primary)] hover:border-rose-500/50 shadow-sm shadow-black/5 dark:shadow-black/20 text-[var(--text-primary)]'
       }`}
     >
+      {audioSyncAnchor && (
+        <div
+          title={isSpanish ? 'Párrafo sincronizado manualmente' : 'Paragraph manually synchronized'}
+          className={`absolute -top-2.5 ${isRtl ? 'right-4 sm:right-6' : 'left-4 sm:left-6'} z-10 h-5 w-5 rounded-full bg-emerald-500 text-white shadow-sm flex items-center justify-center pointer-events-none`}
+        >
+          <RefreshCw className="w-3 h-3" />
+        </div>
+      )}
+      {isSyncMenuOpen && (
+        <div
+          className={`absolute z-30 top-3 ${isRtl ? 'left-3' : 'right-3'} rounded-xl border border-[var(--border-primary)] bg-[var(--surface-primary)] shadow-xl p-1.5 flex flex-col gap-1 text-xs`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              if (onCreateAudioSyncAnchor) onCreateAudioSyncAnchor(paragraph);
+              setIsSyncMenuOpen(false);
+            }}
+            className="px-2.5 py-1.5 rounded-lg text-left hover:bg-[var(--surface-hover)] text-[var(--text-primary)] font-medium cursor-pointer"
+          >
+            {audioSyncAnchor
+              ? (isSpanish ? 'Actualizar sincronización' : 'Update sync')
+              : (isSpanish ? 'Sincronizar aquí' : 'Synchronize here')}
+          </button>
+          {audioSyncAnchor && (
+            <button
+              type="button"
+              onClick={() => {
+                if (onRemoveAudioSyncAnchor) onRemoveAudioSyncAnchor(paragraph);
+                setIsSyncMenuOpen(false);
+              }}
+              className="px-2.5 py-1.5 rounded-lg text-left hover:bg-rose-500/10 text-rose-600 dark:text-rose-300 font-medium cursor-pointer"
+            >
+              {isSpanish ? 'Eliminar sincronización' : 'Remove sync'}
+            </button>
+          )}
+        </div>
+      )}
       {/* MANUAL AUDIO BOOKMARK — Discreet, clearly visible manual bookmark accent */}
       {isMarked && !isPlaying && (
         <div
@@ -472,6 +554,8 @@ function arePropsEqual(prevProps, nextProps) {
   if (prevProps.hasGloss !== nextProps.hasGloss) return false;
   if (prevProps.isAudioBookmark !== nextProps.isAudioBookmark) return false;
   if (prevProps.isLastAudioPosition !== nextProps.isLastAudioPosition) return false;
+  if (prevProps.audioSyncAnchor !== nextProps.audioSyncAnchor) return false;
+  if (prevProps.isAudioSyncAvailable !== nextProps.isAudioSyncAvailable) return false;
   if (prevProps.translation !== nextProps.translation) return false;
   if (prevProps.isTranslating !== nextProps.isTranslating) return false;
   if (prevProps.isTranslationVisible !== nextProps.isTranslationVisible) return false;

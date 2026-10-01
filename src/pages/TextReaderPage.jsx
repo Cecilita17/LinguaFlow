@@ -81,6 +81,14 @@ import {
 import { requestAutoBackup } from '../services/autoBackupService.js';
 import { useAudioSettings, SPEECH_RATE_OPTIONS, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 import { estimateSpeechDurationMs, createAudioWordSynchronizer } from '../utils/audioWordSync.js';
+import {
+  buildEffectiveAudioParagraphs,
+  findEffectiveAudioParagraph,
+  getEffectiveAudioTime,
+  normalizeAudioSyncAnchors,
+  removeAudioSyncAnchor,
+  upsertAudioSyncAnchor
+} from '../utils/audioSyncAnchors.js';
 
 /**
  * Resolves the initial chapter index for a document based on its saved reading/audio bookmarks.
@@ -954,6 +962,14 @@ export function TextReaderPage({
 
   // Active document language (falls back to selected targetLang if editing/new)
   const activeDocLang = (document && !isEditing && document.targetLang) ? document.targetLang : targetLang;
+  const audioSyncAnchors = useMemo(
+    () => normalizeAudioSyncAnchors(document?.audioSyncAnchors),
+    [document?.audioSyncAnchors]
+  );
+  const effectiveAudioParagraphs = useMemo(
+    () => buildEffectiveAudioParagraphs(document?.paragraphs || [], audioSyncAnchors),
+    [document?.paragraphs, audioSyncAnchors]
+  );
   const practiceVocabulary = useMemo(
     () => getSavedWordsInParagraphs(savedWords, document?.paragraphs || [], activeDocLang),
     [savedWords, document?.paragraphs, activeDocLang]
@@ -1248,18 +1264,18 @@ export function TextReaderPage({
  * Respects Whisper segment bounds and freezes during silence/pauses instead of
  * linearly interpolating across silence gaps.
  */
-function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
+function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = []) {
   if (!activePara || !activePara.text) return -1;
   const paraText = activePara.text;
-  const pStart = activePara.audioStart;
-  const pEnd = activePara.audioEnd;
+  const pStart = getEffectiveAudioTime(activePara.audioStart, anchors);
+  const pEnd = getEffectiveAudioTime(activePara.audioEnd, anchors);
   if (typeof pStart !== 'number' || typeof pEnd !== 'number' || pEnd <= pStart) return -1;
 
   const matchingSegs = (Array.isArray(activePara.audioSegments) && activePara.audioSegments.length > 0)
     ? activePara.audioSegments
     : (Array.isArray(audioSegments) ? audioSegments : []).filter(s =>
         typeof s.start === 'number' && typeof s.end === 'number' &&
-        s.end > (pStart - 0.05) && s.start < (pEnd + 0.05)
+        getEffectiveAudioTime(s.end, anchors) > (pStart - 0.05) && getEffectiveAudioTime(s.start, anchors) < (pEnd + 0.05)
       );
 
   // If no segment data is available, do not advance characters into silence
@@ -1289,8 +1305,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       }
     }
     return {
-      start: seg.start,
-      end: seg.end,
+      start: getEffectiveAudioTime(seg.start, anchors),
+      end: getEffectiveAudioTime(seg.end, anchors),
       startChar: startIdx,
       endChar: Math.max(startIdx + 1, endIdx)
     };
@@ -1332,10 +1348,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     const audioSegments = document?.audioSegments || [];
 
     if (Array.isArray(allParas) && allParas.length > 0) {
-      const activePara = allParas.find(p =>
-        typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
-        newTime >= p.audioStart && newTime < p.audioEnd
-      );
+      const timing = findEffectiveAudioParagraph(effectiveAudioParagraphs, newTime);
+      const activePara = timing?.paragraph || null;
       if (activePara) {
         latestAudioPositionRef.current.paragraphId = activePara.id;
         if (isPaginatedReader) {
@@ -1366,11 +1380,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         }
 
         // Calculate segment-aware character index without absorbing silence gaps
-        const charIndex = getSegmentAwareCharIndex(activePara, audioSegments, newTime);
+        const charIndex = getSegmentAwareCharIndex(activePara, audioSegments, newTime, audioSyncAnchors);
         setActiveAudioCharIndex(charIndex);
       } else {
         // newTime is outside speech (e.g. music/intro 0-30s or trailing audio)
-        const firstParaStart = allParas[0]?.audioStart;
+        const firstParaStart = effectiveAudioParagraphs[0]?.start;
         if (typeof firstParaStart === 'number' && newTime < firstParaStart) {
           if (playingParagraphIdRef.current) {
             setPlayingParagraphId(null);
@@ -1381,7 +1395,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       }
     }
 
-  }, [document?.paragraphs, document?.audioSegments, isPaginatedReader]);
+  }, [document?.paragraphs, document?.audioSegments, isPaginatedReader, effectiveAudioParagraphs, audioSyncAnchors]);
 
   const handleAudioPause = useCallback((pausedTime) => {
     if (typeof pausedTime === 'number') {
@@ -1437,13 +1451,13 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         playingParagraphIdRef.current = paragraph.id;
         latestAudioPositionRef.current.paragraphId = paragraph.id;
 
-        const startTime = Math.max(0, paragraph.audioStart);
+        const startTime = getEffectiveAudioTime(paragraph.audioStart, audioSyncAnchors);
         latestAudioPositionRef.current.time = startTime;
         setActiveAudioCharIndex(0);
 
         if (audioPlayerRef.current) {
           if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
-            audioPlayerRef.current.seekAndPlay(startTime, paragraph.audioEnd, paragraph.id);
+            audioPlayerRef.current.seekAndPlay(startTime);
           } else if (typeof audioPlayerRef.current.seek === 'function') {
             audioPlayerRef.current.seek(startTime, true);
           }
@@ -1572,7 +1586,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     } catch (speakErr) {
       console.warn('SpeechSynthesis speak call error:', speakErr);
     }
-  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate]);
+  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate, audioSyncAnchors]);
 
   handlePlayParagraphRef.current = handlePlayParagraph;
 
@@ -1619,11 +1633,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
 
     if (isAudioDocument) {
       if (explicitParagraphId && typeof targetPara.audioStart === 'number') {
-        targetTime = targetPara.audioStart;
+        targetTime = getEffectiveAudioTime(targetPara.audioStart, audioSyncAnchors);
       } else if (typeof audioCurrentTime === 'number' && !isNaN(audioCurrentTime) && audioCurrentTime > 0) {
         targetTime = audioCurrentTime;
       } else if (typeof targetPara.audioStart === 'number') {
-        targetTime = targetPara.audioStart;
+        targetTime = getEffectiveAudioTime(targetPara.audioStart, audioSyncAnchors);
       }
     }
 
@@ -1649,7 +1663,51 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       if (!prev || prev.id !== currentDoc.id) return prev;
       return updated;
     });
-  }, [document, isAudioDocument, audioCurrentTime, visibleParagraphs, audioBookmark, refreshLibraryCount]);
+  }, [document, isAudioDocument, audioCurrentTime, visibleParagraphs, audioBookmark, refreshLibraryCount, audioSyncAnchors]);
+
+  // A sync anchor is calibration metadata, not a bookmark and not a timestamp
+  // rewrite. Read the media element directly so React's throttled display state
+  // cannot shift the point the learner just heard.
+  const handleCreateAudioSyncAnchor = useCallback((paragraph) => {
+    const currentDoc = documentRef.current || document;
+    const actualTime = audioPlayerRef.current?.getCurrentTime?.();
+    if (!currentDoc || !paragraph?.id || !Number.isFinite(paragraph.audioStart) || !Number.isFinite(actualTime)) return;
+
+    const paragraphIndex = (currentDoc.paragraphs || []).findIndex((item) => item.id === paragraph.id);
+    const anchor = {
+      paragraphId: paragraph.id,
+      paragraphIndex,
+      originalTime: paragraph.audioStart,
+      actualTime,
+      offset: actualTime - paragraph.audioStart,
+      createdAt: new Date().toISOString()
+    };
+    const updated = {
+      ...currentDoc,
+      audioSyncAnchors: upsertAudioSyncAnchor(currentDoc.audioSyncAnchors, anchor),
+      updatedAt: new Date().toISOString()
+    };
+    try { saveActiveDocumentDraft(updated); } catch (_) {}
+    saveTextDocument(updated).then(() => refreshLibraryCount()).catch((error) => {
+      console.warn('Failed to save audio synchronization anchor:', error);
+    });
+    setDocument((previous) => previous?.id === currentDoc.id ? updated : previous);
+  }, [document, refreshLibraryCount]);
+
+  const handleRemoveAudioSyncAnchor = useCallback((paragraph) => {
+    const currentDoc = documentRef.current || document;
+    if (!currentDoc || !paragraph?.id) return;
+    const updated = {
+      ...currentDoc,
+      audioSyncAnchors: removeAudioSyncAnchor(currentDoc.audioSyncAnchors, paragraph.id),
+      updatedAt: new Date().toISOString()
+    };
+    try { saveActiveDocumentDraft(updated); } catch (_) {}
+    saveTextDocument(updated).then(() => refreshLibraryCount()).catch((error) => {
+      console.warn('Failed to remove audio synchronization anchor:', error);
+    });
+    setDocument((previous) => previous?.id === currentDoc.id ? updated : previous);
+  }, [document, refreshLibraryCount]);
 
   // Resume playback from manual audio bookmark
   const handleResumeAudioBookmark = useCallback(() => {
@@ -1661,7 +1719,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     if (isAudioDocument && audioPlayerRef.current) {
       const seekTime = typeof audioBookmark.time === 'number' && audioBookmark.time >= 0
         ? audioBookmark.time
-        : (typeof targetPara.audioStart === 'number' ? targetPara.audioStart : 0);
+        : (typeof targetPara.audioStart === 'number' ? getEffectiveAudioTime(targetPara.audioStart, audioSyncAnchors) : 0);
       userStoppedRef.current = false;
       setPlayingParagraphId(targetPara.id);
       playingParagraphIdRef.current = targetPara.id;
@@ -1678,7 +1736,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
       const el = window.document.querySelector(`[data-paragraph-id="${targetPara.id}"]`);
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (e) {}
-  }, [audioBookmark, isAudioDocument, document?.paragraphs, handlePlayParagraph]);
+  }, [audioBookmark, isAudioDocument, document?.paragraphs, handlePlayParagraph, audioSyncAnchors]);
 
   // Writes glosses to the currently displayed representation. Simplified EPUB
   // glosses are kept inside their cache block and can never overwrite original tokens.
@@ -2409,11 +2467,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
         ? latestAudioPositionRef.current.time
         : (typeof document?.lastAudioPosition === 'number' ? document.lastAudioPosition : 0);
 
-      const targetPara = paras.find(p =>
-          typeof p.audioStart === 'number' && typeof p.audioEnd === 'number' &&
-          resumeTime >= p.audioStart && resumeTime < p.audioEnd
-        )
-        || paras[0];
+      const targetPara = findEffectiveAudioParagraph(effectiveAudioParagraphs, resumeTime)?.paragraph || paras[0];
 
       if (targetPara) {
         setPlayingParagraphId(targetPara.id);
@@ -2434,7 +2488,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
     if (targetPara) {
       handlePlayParagraph(targetPara);
     }
-  }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, handlePlayParagraph]);
+  }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, handlePlayParagraph, effectiveAudioParagraphs]);
 
   // Edit title action from three-dots menu
   const handleEditTitle = useCallback(() => {
@@ -3186,6 +3240,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
                       isAudioBookmark={audioBookmark?.paragraphId === paragraph.id}
                       isLastAudioPosition={audioBookmark?.paragraphId === paragraph.id}
+                      audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
+                      isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
                       translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
                       isTranslating={Boolean(paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.isTranslating)}
                       isTranslationVisible={Boolean(paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.isVisible)}
@@ -3198,6 +3254,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
                       onGlossParagraph={handleGlossParagraph}
                       onTranslate={handleTranslateParagraph}
                       onTranslateParagraph={handleTranslateParagraph}
+                      onCreateAudioSyncAnchor={handleCreateAudioSyncAnchor}
+                      onRemoveAudioSyncAnchor={handleRemoveAudioSyncAnchor}
                     />
                   </React.Fragment>
                 );
