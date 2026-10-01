@@ -238,11 +238,11 @@ function TextParagraphItemComponent({
           )}
         </div>
       )}
-      {/* MANUAL AUDIO BOOKMARK — Discreet, clearly visible manual bookmark accent */}
+      {/* Saved reading or playback position */}
       {isMarked && !isPlaying && (
         <div
           aria-label={isSpanish ? 'Marcador de posición guardado' : 'Saved position bookmark'}
-          title={isSpanish ? 'Posición guardada manualmente' : 'Position saved manually'}
+          title={isSpanish ? 'Última posición guardada' : 'Last saved position'}
           className={`absolute -top-2.5 ${isRtl ? 'left-4 sm:left-6' : 'right-4 sm:right-6'} z-10 px-2.5 py-0.5 rounded-full bg-[var(--surface-primary)] border border-rose-500/50 shadow-sm flex items-center gap-1.5 text-[10px] font-medium text-rose-600 dark:text-rose-400 select-none pointer-events-none`}
         >
           <Bookmark className="w-2.5 h-2.5 text-rose-500 fill-rose-500 shrink-0" />

@@ -28,7 +28,6 @@ import {
   Plus,
   Headphones,
   AlertCircle,
-  Bookmark,
   X
 } from 'lucide-react';
 import { TextParagraphItem } from '../components/text/TextParagraphItem.jsx';
@@ -94,15 +93,15 @@ import {
 /**
  * Resolves the initial chapter index for a document based on its saved reading/audio bookmarks.
  * Fallback order:
- * 1. audioBookmark.paragraphId
- * 2. lastReadingPosition.paragraphId
+ * 1. lastReadingPosition.paragraphId
+ * 2. legacy audioBookmark.paragraphId
  * 3. lastReadingPosition.chapterIndex
  * 4. 0 (default first chapter)
  */
 function resolveChapterIndexForDoc(doc) {
   if (!doc || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
   const bookmark = resolveAudioBookmark(doc);
-  const targetId = bookmark?.paragraphId || doc.lastReadingPosition?.paragraphId;
+  const targetId = doc.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
   if (targetId) {
     const chIdx = doc.chapters.findIndex(ch => Array.isArray(ch.paragraphIds) && ch.paragraphIds.includes(targetId));
     if (chIdx !== -1) return chIdx;
@@ -119,20 +118,18 @@ const PRACTICE_TEXT_MAX_CHARACTERS = 6000;
 const PRACTICE_VOCABULARY_MAX = 30;
 
 /**
- * Resolves the initial 0-based paragraph page for an EPUB chapter based on
- * audioBookmark or lastReadingPosition paragraphId.
+ * Resolves the initial paragraph page for a text or EPUB chapter from the
+ * saved reading position, with legacy bookmark fallback.
  */
 function resolvePageIndexForDoc(doc, chapterIdx = 0) {
   if (!doc || !Array.isArray(doc.paragraphs) || doc.paragraphs.length === 0) return 0;
   const isEp = Boolean(
     doc.format === 'epub' || doc.sourceType === 'epub' || (Array.isArray(doc.chapters) && doc.chapters.length > 0)
   );
-  if (!isEp || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
-  const ch = doc.chapters[chapterIdx] || doc.chapters[0];
-  if (!ch) return 0;
-  const chapterParas = doc.paragraphs.filter(p => p.chapterId === ch.id);
+  const ch = isEp ? (doc.chapters?.[chapterIdx] || doc.chapters?.[0]) : null;
+  const chapterParas = ch ? doc.paragraphs.filter(p => p.chapterId === ch.id) : doc.paragraphs;
   const bookmark = resolveAudioBookmark(doc);
-  const targetId = bookmark?.paragraphId || doc.lastReadingPosition?.paragraphId;
+  const targetId = doc.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
   if (targetId) {
     const pIdx = chapterParas.findIndex(p => p.id === targetId);
     if (pIdx !== -1) {
@@ -321,9 +318,9 @@ export function TextReaderPage({
       const pageIdx = resolvePageIndexForDoc(document, idx);
       setCurrentParagraphPage(pageIdx);
     } else {
-      setCurrentParagraphPage(0);
+      setCurrentParagraphPage(resolvePageIndexForDoc(document));
     }
-  }, [document?.id, isEpub, chapters.length]);
+  }, [document?.id, document?.isMinimalDraft, isEpub, chapters.length]);
 
   // If initialized from minimal localStorage draft, hydrate full paragraphs and audio metadata from IndexedDB
   useEffect(() => {
@@ -695,10 +692,10 @@ export function TextReaderPage({
       previousScrollTopRef.current = currentScrollTop;
 
       // 5. Debounce saving last reading position (topmost visible paragraph)
-      if (!isProgrammaticScrollRef.current && element) {
+      if (!isProgrammaticScrollRef.current && (isAudioDocument || !playingParagraphIdRef.current) && element) {
         clearTimeout(saveReadingPositionTimeoutRef.current);
         saveReadingPositionTimeoutRef.current = setTimeout(() => {
-          if (!element) return;
+          if (!element || (!isAudioDocument && playingParagraphIdRef.current)) return;
           const containerRect = element.getBoundingClientRect();
           const paraEls = element.querySelectorAll('[data-paragraph-id]');
           for (const pEl of paraEls) {
@@ -714,11 +711,10 @@ export function TextReaderPage({
                     chapterId: currentChapter?.id,
                     updatedAt: Date.now()
                   };
-                  prev.lastReadingPosition = posData;
-                  saveActiveDocumentDraft(prev);
-                  if (prev.id) {
-                    saveTextDocument(prev).catch(() => {});
-                  }
+                  const updated = { ...prev, lastReadingPosition: posData };
+                  documentRef.current = updated;
+                  setDocument(updated);
+                  saveActiveDocumentDraft(updated);
                 }
               }
               break;
@@ -731,8 +727,9 @@ export function TextReaderPage({
     element.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       element.removeEventListener('scroll', handleScroll);
+      clearTimeout(saveReadingPositionTimeoutRef.current);
     };
-  }, [isEditing, viewMode]);
+  }, [isEditing, viewMode, document?.id, currentChapterIndex, currentChapter?.id, isAudioDocument]);
 
   // Navigate to another chapter (unmounts previous chapter, mounts new chapter, scrolls to top)
   const handleNavigateChapter = useCallback((newIndex) => {
@@ -888,7 +885,7 @@ export function TextReaderPage({
               setAudioBookmark(mergedBookmark);
             }
 
-            const targetPosId = mergedBookmark?.paragraphId || merged.lastReadingPosition?.paragraphId;
+            const targetPosId = merged.lastReadingPosition?.paragraphId || mergedBookmark?.paragraphId;
             if (targetPosId) {
               setPendingScrollParagraphId(targetPosId);
             }
@@ -902,7 +899,7 @@ export function TextReaderPage({
           setAudioBookmark(bookmark);
         }
 
-        const targetPosId = bookmark?.paragraphId || draft.lastReadingPosition?.paragraphId;
+        const targetPosId = draft.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
         if (targetPosId) {
           setPendingScrollParagraphId(targetPosId);
         }
@@ -1528,7 +1525,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       return;
     }
 
-    // 2. Fallback to 100% UNCHANGED SpeechSynthesis TTS for normal documents (TXT, EPUB, AI)
+    // 2. SpeechSynthesis TTS for normal documents (TXT, EPUB, AI)
     if (audioPlayerRef.current) {
       try { audioPlayerRef.current.pause(); } catch (e) {}
     }
@@ -1601,6 +1598,22 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
 
     utterance.onstart = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
+      const currentDoc = documentRef.current;
+      if (currentDoc?.id === document?.id) {
+        const chapterIndex = (currentDoc.chapters || []).findIndex(ch => ch.paragraphIds?.includes(paragraph.id));
+        const updated = {
+          ...currentDoc,
+          lastReadingPosition: {
+            paragraphId: paragraph.id,
+            chapterIndex: Math.max(0, chapterIndex),
+            chapterId: currentDoc.chapters?.[chapterIndex]?.id,
+            updatedAt: Date.now()
+          }
+        };
+        documentRef.current = updated;
+        saveActiveDocumentDraft(updated);
+        setDocument(updated);
+      }
       synchronizer.handleStart(event);
     };
 
@@ -1666,64 +1679,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     setActiveAudioCharIndex(-1);
   }, [clearAudioVisualTimer]);
 
-  // Manual Audio Bookmark Persistence — ONLY saved upon explicit user action
-  const handleSaveAudioBookmark = useCallback((explicitParagraphId = null) => {
-    const currentDoc = documentRef.current || document;
-    if (!currentDoc) return;
-    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (currentDoc.paragraphs || []);
-    if (allParas.length === 0) return;
-
-    let targetParaId = explicitParagraphId;
-    let targetTime = 0;
-
-    if (!targetParaId) {
-      if (playingParagraphIdRef.current) {
-        targetParaId = playingParagraphIdRef.current;
-      } else if (audioBookmark?.paragraphId) {
-        targetParaId = audioBookmark.paragraphId;
-      } else {
-        const firstVis = visibleParagraphs[0] || allParas[0];
-        targetParaId = firstVis?.id;
-      }
-    }
-
-    const targetPara = allParas.find(p => p.id === targetParaId) || allParas[0];
-    if (!targetPara) return;
-
-    if (isAudioDocument) {
-      if (explicitParagraphId && typeof targetPara.audioStart === 'number') {
-        targetTime = getEffectiveAudioTime(targetPara.audioStart, audioSyncAnchors);
-      } else if (typeof audioCurrentTime === 'number' && !isNaN(audioCurrentTime) && audioCurrentTime > 0) {
-        targetTime = audioCurrentTime;
-      } else if (typeof targetPara.audioStart === 'number') {
-        targetTime = getEffectiveAudioTime(targetPara.audioStart, audioSyncAnchors);
-      }
-    }
-
-    const newBookmark = {
-      paragraphId: targetPara.id,
-      time: Math.round(targetTime * 100) / 100,
-      savedAt: new Date().toISOString()
-    };
-
-    setAudioBookmark(newBookmark);
-
-    const updated = {
-      ...currentDoc,
-      audioBookmark: newBookmark,
-      updatedAt: new Date().toISOString()
-    };
-    try { saveActiveDocumentDraft(updated); } catch (e) {}
-    saveTextDocument(updated).then(() => {
-      refreshLibraryCount();
-    }).catch(err => console.warn('Failed to save audio bookmark to library:', err));
-
-    setDocument(prev => {
-      if (!prev || prev.id !== currentDoc.id) return prev;
-      return updated;
-    });
-  }, [document, isAudioDocument, audioCurrentTime, visibleParagraphs, audioBookmark, refreshLibraryCount, audioSyncAnchors]);
-
   // A sync anchor is calibration metadata, not a bookmark and not a timestamp
   // rewrite. Read the media element directly so React's throttled display state
   // cannot shift the point the learner just heard.
@@ -1767,35 +1722,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     });
     setDocument((previous) => previous?.id === currentDoc.id ? updated : previous);
   }, [document, refreshLibraryCount]);
-
-  // Resume playback from manual audio bookmark
-  const handleResumeAudioBookmark = useCallback(() => {
-    if (!audioBookmark?.paragraphId) return;
-    const allParas = chapterParagraphsRef.current?.length > 0 ? chapterParagraphsRef.current : (document?.paragraphs || []);
-    const targetPara = allParas.find(p => p.id === audioBookmark.paragraphId);
-    if (!targetPara) return;
-
-    if (isAudioDocument && audioPlayerRef.current) {
-      const seekTime = typeof audioBookmark.time === 'number' && audioBookmark.time >= 0
-        ? audioBookmark.time
-        : (typeof targetPara.audioStart === 'number' ? getEffectiveAudioTime(targetPara.audioStart, audioSyncAnchors) : 0);
-      userStoppedRef.current = false;
-      setPlayingParagraphId(targetPara.id);
-      playingParagraphIdRef.current = targetPara.id;
-      if (typeof audioPlayerRef.current.seekAndPlay === 'function') {
-        audioPlayerRef.current.seekAndPlay(seekTime);
-      } else if (typeof audioPlayerRef.current.seek === 'function') {
-        audioPlayerRef.current.seek(seekTime, true);
-      }
-    } else {
-      handlePlayParagraph(targetPara);
-    }
-
-    try {
-      const el = window.document.querySelector(`[data-paragraph-id="${targetPara.id}"]`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } catch (e) {}
-  }, [audioBookmark, isAudioDocument, document?.paragraphs, handlePlayParagraph, audioSyncAnchors]);
 
   // Writes glosses to the currently displayed representation. Simplified EPUB
   // glosses are kept inside their cache block and can never overwrite original tokens.
@@ -2171,7 +2097,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     );
 
     // Imported audio resumes from its last continuous media position. Other
-    // document types retain their explicit manual bookmark behavior.
+    // document types retain legacy bookmarks as a restoration fallback.
     const savedBookmark = isImportedAudio ? null : resolveAudioBookmark(doc);
     const isValidBookmark = Boolean(
       savedBookmark?.paragraphId &&
@@ -2203,10 +2129,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     const validReadingPosId = isValidReadingPos ? savedReadingPos.paragraphId : null;
 
     // Audio progress is continuous; other documents can prioritize a manual
-    // bookmark. Scroll to the active audio paragraph when it is known.
+    // reading position. Scroll to the active audio paragraph when it is known.
     const targetScrollId = isImportedAudio
       ? (doc.lastAudioParagraphId || validReadingPosId)
-      : (validBookmark?.paragraphId || validReadingPosId);
+      : (validReadingPosId || validBookmark?.paragraphId);
     if (targetScrollId) {
       setPendingScrollParagraphId(targetScrollId);
     } else {
@@ -2553,11 +2479,12 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       }
     }
 
-    const targetPara = paras[0];
+    const savedParagraphId = document?.lastReadingPosition?.paragraphId || audioBookmark?.paragraphId;
+    const targetPara = paras.find(p => p.id === savedParagraphId) || paras[0];
     if (targetPara) {
       handlePlayParagraph(targetPara);
     }
-  }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, handlePlayParagraph, effectiveAudioParagraphs]);
+  }, [isPlayingAnyAudio, handleStopAudio, isAudioDocument, document, visibleParagraphs, handlePlayParagraph, effectiveAudioParagraphs, audioBookmark]);
 
   // Edit title action from three-dots menu
   const handleEditTitle = useCallback(() => {
@@ -2976,21 +2903,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                     <span>{isSpanish ? 'Editar título' : 'Edit title'}</span>
                   </button>
 
-                  {/* Continuar desde marcador */}
-                  {!isAudioDocument && audioBookmark && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsActionsMenuOpen(false);
-                        handleResumeAudioBookmark();
-                      }}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-rose-600 dark:text-rose-400 font-semibold"
-                    >
-                      <Play className="w-4 h-4 text-rose-500 fill-rose-500 shrink-0 ml-0.5" />
-                      <span>{isSpanish ? 'Continuar desde marcador' : 'Resume from bookmark'}</span>
-                    </button>
-                  )}
-
                   {/* ⚙️ Configuraciones — UI-only submenu, reuses the same state/handlers as the bottom bar */}
                   <button
                     type="button"
@@ -3307,10 +3219,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isAudioError={audioErrorId === paragraph.id}
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
-                      isAudioBookmark={!isAudioDocument && audioBookmark?.paragraphId === paragraph.id}
+                      isAudioBookmark={false}
                       isLastAudioPosition={isAudioDocument
                         ? lastSavedAudioParagraphId === paragraph.id
-                        : audioBookmark?.paragraphId === paragraph.id}
+                        : (document?.lastReadingPosition?.paragraphId || audioBookmark?.paragraphId) === paragraph.id}
                       audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
                       isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
                       translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
@@ -3319,7 +3231,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       translationError={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.error || null}
                       onPlay={handlePlayParagraph}
                       onStop={handleStopAudio}
-                      onParagraphClick={isAudioDocument ? null : (selectedParagraph) => handleSaveAudioBookmark(selectedParagraph.id)}
+                      onParagraphClick={null}
                       onParagraphPress={isAudioDocument ? handlePlayParagraph : null}
                       onWordClick={onWordClick}
                       onGloss={handleGlossParagraph}
@@ -3462,8 +3374,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
           onPause={handleAudioPause}
           onEnded={handleAudioEnded}
           onError={handleAudioError}
-          onSaveBookmark={isAudioDocument ? null : handleSaveAudioBookmark}
-          isBookmarked={!isAudioDocument && Boolean(audioBookmark)}
+          onSaveBookmark={null}
+          isBookmarked={false}
           playbackRate={speechRate}
         />
       )}
@@ -3543,21 +3455,6 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
               <Sparkles className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500/30' : ''}`} />
             </button>
 
-            {!isAudioDocument && (
-              <button
-                type="button"
-                onClick={() => handleSaveAudioBookmark()}
-              title={audioBookmark ? (isSpanish ? 'Actualizar marcador' : 'Update bookmark') : (isSpanish ? 'Guardar marcador' : 'Save bookmark')}
-              aria-label={audioBookmark ? (isSpanish ? 'Actualizar marcador' : 'Update bookmark') : (isSpanish ? 'Guardar marcador' : 'Save bookmark')}
-              className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
-                audioBookmark
-                  ? 'text-rose-600 dark:text-rose-400 bg-rose-500/15'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
-              }`}
-            >
-              <Bookmark className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${audioBookmark ? 'fill-current' : ''}`} />
-              </button>
-            )}
           </div>
         </div>
       )}
