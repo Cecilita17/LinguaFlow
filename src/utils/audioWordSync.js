@@ -75,6 +75,39 @@ export function computeTokenCharRanges(rawCleanText, tokens, targetLang = 'es') 
   });
 }
 
+/** Split long TTS paragraphs at word boundaries, preserving original offsets. */
+export function splitSpeechParagraph(text, tokens = [], targetLang = 'es', maxLength = 120) {
+  const cleanText = normalizeAudioText(text);
+  if (!cleanText) return [];
+  let speechTokens = tokens;
+  if (!speechTokens.length) {
+    speechTokens = typeof Intl.Segmenter === 'function'
+      ? Array.from(new Intl.Segmenter(targetLang, { granularity: 'word' }).segment(cleanText), part => ({ word: part.segment }))
+      : (cleanText.match(/\S+|\s+/gu) || []).map(word => ({ word }));
+  }
+  const ranges = computeTokenCharRanges(cleanText, speechTokens, targetLang);
+  const chunks = [];
+  let start = 0;
+  while (start < cleanText.length) {
+    let end = cleanText.length;
+    if (end - start > maxLength) {
+      const candidates = ranges.filter(range => range.endChar > start && range.endChar <= start + maxLength);
+      const pause = candidates.filter(range => /[.!?;:,。！？；：，]$/.test(cleanText.slice(start, range.endChar)) && range.endChar - start >= 40).at(-1);
+      end = pause?.endChar || candidates.at(-1)?.endChar || ranges.find(range => range.endChar > start)?.endChar || cleanText.length;
+    }
+    const raw = cleanText.slice(start, end);
+    const offset = start + raw.length - raw.trimStart().length;
+    const chunkText = raw.trim();
+    if (chunkText) chunks.push({
+      text: chunkText,
+      offset,
+      tokens: speechTokens.filter((_, index) => ranges[index].startChar >= offset && ranges[index].endChar <= end)
+    });
+    start = end;
+  }
+  return chunks;
+}
+
 export function findActiveTokenIndex(charIndex, tokenRanges) {
   if (typeof charIndex !== 'number' || charIndex < 0 || !tokenRanges || tokenRanges.length === 0) {
     return -1;

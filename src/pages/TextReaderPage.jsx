@@ -80,7 +80,7 @@ import {
 } from '../services/epubSimplificationService.js';
 import { requestAutoBackup } from '../services/autoBackupService.js';
 import { useAudioSettings, SPEECH_RATE_OPTIONS, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
-import { estimateSpeechDurationMs, createAudioWordSynchronizer } from '../utils/audioWordSync.js';
+import { estimateSpeechDurationMs, createAudioWordSynchronizer, splitSpeechParagraph } from '../utils/audioWordSync.js';
 import {
   buildEffectiveAudioParagraphs,
   findEffectiveAudioParagraph,
@@ -1562,10 +1562,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
 
     const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
     const speechCode = paragraph.tts?.speechCode || getLanguageMeta(docLang)?.speechCode || 'zh-CN';
-    const cleanText = paragraph.text.replace(/<[^>]*>/g, '').trim();
-    const textLength = cleanText.length;
+    const chunks = splitSpeechParagraph(paragraph.text, paragraph.tokens || [], activeDocLang);
     const currentRate = speechRateRef.current || speechRate || 1.0;
-
+    chunks.forEach((chunk, chunkIndex) => {
+    const cleanText = chunk.text;
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = speechCode;
 
@@ -1586,7 +1586,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     let prevActiveCharIndex = -1;
     const synchronizer = createAudioWordSynchronizer({
       text: cleanText,
-      tokens: paragraph.tokens || [],
+      tokens: chunk.tokens,
       targetLang: activeDocLang,
       speechRate: currentRate,
       utteranceRate,
@@ -1604,14 +1604,13 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
           }
           prevActiveCharIndex = charIndex;
         }
-        setActiveAudioCharIndex(charIndex);
+        setActiveAudioCharIndex(charIndex < 0 ? -1 : chunk.offset + charIndex);
       },
       debug: process.env.NODE_ENV !== 'production'
     });
-    audioSynchronizerRef.current = synchronizer;
-
     utterance.onstart = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
+      audioSynchronizerRef.current = synchronizer;
       synchronizer.handleStart(event);
     };
 
@@ -1633,6 +1632,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     utterance.onend = (event) => {
       if (playbackId !== audioPlaybackIdRef.current) return;
       synchronizer.handleEnd(event);
+      if (chunkIndex < chunks.length - 1) return;
       setPlayingParagraphId(null);
       playingParagraphIdRef.current = null;
       setActiveAudioCharIndex(-1);
@@ -1656,6 +1656,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     } catch (speakErr) {
       console.warn('SpeechSynthesis speak call error:', speakErr);
     }
+    });
   }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate, audioSyncAnchors]);
 
   handlePlayParagraphRef.current = handlePlayParagraph;
