@@ -184,7 +184,7 @@ export function TextReaderPage({
   // TEMPORARY AUDIO DEBUG: observational state only; remove after diagnosing
   // imported audio/transcript timing without changing its stored timestamps.
   const [showAudioDebugPanel, setShowAudioDebugPanel] = useState(true);
-  const [audioDebug, setAudioDebug] = useState({ snapshot: {}, events: [] });
+  const [audioDebug, setAudioDebug] = useState({ snapshot: {}, events: [], syncPoints: [] });
 
   // Manual audio bookmark — persisted explicitly in document.audioBookmark { paragraphId, time, savedAt }
   const [audioBookmark, setAudioBookmark] = useState(
@@ -248,8 +248,32 @@ export function TextReaderPage({
   }, []);
 
   const clearAudioDebug = useCallback(() => {
-    setAudioDebug({ snapshot: {}, events: [] });
+    setAudioDebug({ snapshot: {}, events: [], syncPoints: [] });
   }, []);
+
+  const markAudioSyncPoint = useCallback((kind) => {
+    const snapshot = audioDebug.snapshot;
+    const actualObservedStart = typeof audioPlayerRef.current?.getCurrentTime === 'function'
+      ? audioPlayerRef.current.getCurrentTime()
+      : snapshot.currentTime;
+    const subtitleStart = snapshot.audioStart;
+    const point = {
+      kind,
+      capturedAt: new Date().toISOString(),
+      paragraphId: snapshot.paragraphId ?? null,
+      paragraphIndex: snapshot.paragraphIndex ?? null,
+      subtitleStart: typeof subtitleStart === 'number' ? subtitleStart : null,
+      actualObservedStart: typeof actualObservedStart === 'number' ? actualObservedStart : null,
+      offset: typeof subtitleStart === 'number' && typeof actualObservedStart === 'number'
+        ? actualObservedStart - subtitleStart
+        : null,
+      text: snapshot.text ?? ''
+    };
+    setAudioDebug((previous) => ({
+      ...previous,
+      syncPoints: [...(previous.syncPoints || []), point].slice(-20)
+    }));
+  }, [audioDebug.snapshot]);
 
   const copyAudioDebug = useCallback(async () => {
     const content = JSON.stringify({
@@ -3457,6 +3481,21 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime) {
           <div className="mt-2 flex gap-2">
             <button type="button" onClick={copyAudioDebug} className="rounded-md bg-amber-400 px-2 py-1 font-bold text-slate-950 active:scale-95">Copy Debug</button>
             <button type="button" onClick={clearAudioDebug} className="rounded-md border border-slate-500 px-2 py-1 text-slate-200 active:scale-95">Clear</button>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => markAudioSyncPoint('correct')} className="rounded-md bg-emerald-500/80 px-2 py-1 font-bold text-slate-950 active:scale-95">Mark correct</button>
+            <button type="button" onClick={() => markAudioSyncPoint('actual-start')} className="rounded-md bg-sky-400/80 px-2 py-1 font-bold text-slate-950 active:scale-95">Mark actual start</button>
+          </div>
+          <div className="mt-2 border-t border-white/10 pt-2">
+            <div className="mb-1 font-semibold text-slate-300">Sync points ({audioDebug.syncPoints?.length || 0})</div>
+            {!audioDebug.syncPoints?.length ? (
+              <div className="text-slate-500">Select a paragraph, then mark what you hear.</div>
+            ) : audioDebug.syncPoints.slice().reverse().map((point, index) => (
+              <div key={`${point.capturedAt}-${index}`} className="border-b border-white/5 py-1 font-mono text-[9px]">
+                <span className="text-emerald-200">{point.kind}</span>
+                {' · '}p{formatAudioDebugValue(point.paragraphIndex)} subtitle={formatAudioDebugValue(point.subtitleStart)} actual={formatAudioDebugValue(point.actualObservedStart)} offset={formatAudioDebugValue(point.offset)}
+              </div>
+            ))}
           </div>
           <div className="mt-2 border-t border-white/10 pt-2">
             <div className="mb-1 font-semibold text-slate-300">Last 10 events</div>
