@@ -1264,19 +1264,8 @@ export function TextReaderPage({
             }
           }, 250);
         }
-        // Let the completed utterance and its bookmark render settle before
-        // starting another voice. Cancelling/speaking inside onend can disturb
-        // Android speech boundary events for the next paragraph.
-        const completedPlaybackId = audioPlaybackIdRef.current;
-        const documentId = documentRef.current?.id;
+        handlePlayParagraphRef.current(nextPara);
         setTimeout(() => {
-          if (audioPlaybackIdRef.current !== completedPlaybackId ||
-              userStoppedRef.current || !autoPlayTextReaderRef.current ||
-              documentRef.current?.id !== documentId) return;
-          handlePlayParagraphRef.current?.(nextPara, { continuation: true });
-        }, 0);
-        setTimeout(() => {
-          if (userStoppedRef.current || documentRef.current?.id !== documentId) return;
           try {
             const el = window.document.querySelector(`[data-paragraph-id="${nextPara.id}"]`);
             if (el) {
@@ -1493,7 +1482,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
   }, []);
 
   // Handle single-paragraph playback (Original Audio if imported, window.speechSynthesis TTS otherwise)
-  const handlePlayParagraph = useCallback((paragraph, { continuation = false } = {}) => {
+  const handlePlayParagraph = useCallback((paragraph) => {
     if (!paragraph || !paragraph.text) return;
     const playbackId = ++audioPlaybackIdRef.current;
     userStoppedRef.current = false;
@@ -1549,13 +1538,10 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       return;
     }
 
-    // Manual selection replaces speech; a natural continuation has already
-    // ended and must not cancel the browser's speech queue again.
-    if (!continuation) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch (e) {}
-    }
+    // Cancel any current utterance
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
 
     setAudioErrorId(null);
     setPlayingParagraphId(paragraph.id);
