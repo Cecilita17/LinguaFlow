@@ -184,6 +184,9 @@ export function TextReaderPage({
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const latestAudioPositionRef = useRef({ time: 0, paragraphId: null });
   const audioSaveThrottlerRef = useRef({ lastSavedTime: 0, timer: null });
+  // Visual-only indicator for the last durable continuous-audio position.
+  // This is intentionally separate from the removed manual audio bookmark.
+  const [lastSavedAudioParagraphId, setLastSavedAudioParagraphId] = useState(null);
   // Manual audio bookmark — persisted explicitly in document.audioBookmark { paragraphId, time, savedAt }
   const [audioBookmark, setAudioBookmark] = useState(
     () => resolveAudioBookmark(loadActiveDocumentDraft())
@@ -252,6 +255,11 @@ export function TextReaderPage({
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
   const documentRef = useRef(document);
   documentRef.current = document;
+
+  useEffect(() => {
+    const isOriginalAudio = document?.sourceType === 'audio' || document?.format === 'audio';
+    setLastSavedAudioParagraphId(isOriginalAudio ? (document.lastAudioParagraphId || null) : null);
+  }, [document?.id]);
 
   // Paragraph translations are an in-memory view cache. Paragraph IDs can be
   // reused by different documents, so never carry a translation into another text.
@@ -1349,7 +1357,12 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     const { time, paragraphId } = latestAudioPositionRef.current;
     if (!currentDoc?.id || (currentDoc.sourceType !== 'audio' && currentDoc.format !== 'audio') || !Number.isFinite(time)) return;
     throttler.lastSavedTime = Date.now();
-    updateTextDocumentPlaybackPosition(currentDoc.id, time, paragraphId).catch(() => {});
+    const documentId = currentDoc.id;
+    updateTextDocumentPlaybackPosition(documentId, time, paragraphId).then((saved) => {
+      if (saved && documentRef.current?.id === documentId) {
+        setLastSavedAudioParagraphId(paragraphId || null);
+      }
+    }).catch(() => {});
   }, []);
 
   const scheduleAudioPlaybackPositionSave = useCallback(() => {
@@ -2164,6 +2177,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
         time: savedTime,
         paragraphId: doc.lastAudioParagraphId || null
       };
+      setLastSavedAudioParagraphId(doc.lastAudioParagraphId || null);
       if (audioPlayerRef.current) {
         audioPlayerRef.current.seek(savedTime);
       }
@@ -3283,7 +3297,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
                       isAudioBookmark={!isAudioDocument && audioBookmark?.paragraphId === paragraph.id}
-                      isLastAudioPosition={!isAudioDocument && audioBookmark?.paragraphId === paragraph.id}
+                      isLastAudioPosition={isAudioDocument
+                        ? lastSavedAudioParagraphId === paragraph.id
+                        : audioBookmark?.paragraphId === paragraph.id}
                       audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
                       isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
                       translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
