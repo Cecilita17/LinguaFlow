@@ -240,20 +240,6 @@ function TextParagraphItemComponent({
           )}
         </div>
       )}
-      {onSaveReadingBookmark && !isReadingBookmarkDisabled && (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onSaveReadingBookmark(paragraph);
-          }}
-          title={isSpanish ? 'Guardar posición (con la voz detenida)' : 'Save position (with speech stopped)'}
-          aria-label={isSpanish ? 'Guardar posición en este párrafo' : 'Save position at this paragraph'}
-          className="mb-2 inline-flex items-center justify-center w-7 h-7 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
-        >
-          <Bookmark className="w-3 h-3" />
-        </button>
-      )}
       {/* Saved reading or playback position */}
       {isMarked && !isPlaying && (
         <div
@@ -484,6 +470,20 @@ function TextParagraphItemComponent({
           dir="ltr"
           className="shrink-0 flex flex-col items-center gap-1.5 self-start pt-0.5"
         >
+          {onSaveReadingBookmark && !isReadingBookmarkDisabled && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSaveReadingBookmark(paragraph);
+              }}
+              title={isSpanish ? 'Guardar posición (con la voz detenida)' : 'Save position (with speech stopped)'}
+              aria-label={isSpanish ? 'Guardar posición en este párrafo' : 'Save position at this paragraph'}
+              className="inline-flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+            >
+              <Bookmark className="w-3 h-3" />
+            </button>
+          )}
           {/* Paragraph Audio Button (▶️ / ⏸️ / ⚠️) - Plays/pauses ONLY this paragraph */}
           <button
             type="button"
