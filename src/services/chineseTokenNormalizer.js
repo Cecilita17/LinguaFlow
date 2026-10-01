@@ -324,7 +324,13 @@ export function normalizeChineseTokens(originalText, groqTokens) {
 
   // If tokens are valid and complete, return as-is (with pinyin filled)
   if (validation.isValid) {
-    return sourceTokens.map(token => ensureTokenHasPinyin(token));
+    // A response can have complete coverage and Pinyin while still arriving
+    // as adjacent individual Hanzi (for example 我 / 们).  Coverage alone is
+    // not enough for the interlinear UI: merge only dictionary-confirmed
+    // compounds so those messages remain word-based without inventing terms.
+    return mergeSingleCharsUsingDict(
+      sourceTokens.map(token => ensureTokenHasPinyin(token))
+    ).map(token => ensureTokenHasPinyin(token));
   }
 
   console.warn('Chinese tokens validation issues:', validation.issues);
@@ -333,7 +339,11 @@ export function normalizeChineseTokens(originalText, groqTokens) {
   // response. It is not limited to a hand-maintained vocabulary list.
   const platformSegments = segmentFullChineseText(originalText, sourceTokens);
   if (platformSegments.length > 0) {
-    return platformSegments.map(token => ensureTokenHasPinyin(token));
+    // ICU segmentation differs slightly between browser versions.  Apply the
+    // same conservative dictionary merge afterwards so a browser that emits
+    // adjacent single Hanzi still produces stable lexical words.
+    return mergeSingleCharsUsingDict(platformSegments)
+      .map(token => ensureTokenHasPinyin(token));
   }
 
   // Older environments without Intl.Segmenter retain the deterministic

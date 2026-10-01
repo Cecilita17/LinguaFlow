@@ -916,12 +916,21 @@ export default function App() {
         updateConversation((previous) =>
           previous.map(m => {
             if (m.id === tempUserId) {
+              const correctedText = user_correction.corrected_text || m.text;
+              // User messages do not receive the bot response token array.
+              // Persist their own normalized Chinese tokens at correction time
+              // so rendering is not forced to reconstruct words from diff
+              // fragments after every reload.
+              const userTokens = conversationLang === 'zh'
+                ? normalizeChineseTokens(correctedText, user_correction.diff_tokens || [])
+                : m.tokens;
               return {
                 ...m,
                 originalText: cleanText,
-                correctedText: user_correction.corrected_text || m.text,
+                correctedText,
                 hasCorrection: user_correction.has_errors || user_correction.diff_tokens?.some(t => t.changed),
-                diffTokens: user_correction.diff_tokens || m.diffTokens
+                diffTokens: user_correction.diff_tokens || m.diffTokens,
+                ...(userTokens?.length ? { tokens: userTokens } : {})
               };
             }
             return m;
@@ -969,12 +978,17 @@ export default function App() {
         updateConversation((previous) =>
           previous.map(m => {
             if (m.id === tempUserId) {
+              const correctedText = cor.corrected_text || m.text;
+              const userTokens = conversationLang === 'zh'
+                ? normalizeChineseTokens(correctedText, cor.diff_tokens || [])
+                : m.tokens;
               return {
                 ...m,
                 originalText: cleanText,
-                correctedText: cor.corrected_text || m.text,
+                correctedText,
                 hasCorrection: cor.has_errors || cor.diff_tokens?.some(t => t.changed),
-                diffTokens: cor.diff_tokens || m.diffTokens
+                diffTokens: cor.diff_tokens || m.diffTokens,
+                ...(userTokens?.length ? { tokens: userTokens } : {})
               };
             }
             return m;

@@ -253,12 +253,17 @@ export function ChatMessage({
     if (targetLang !== 'zh') return rawTokens;
 
     const displayText = message.correctedText || message.text || '';
-    const normalized = normalizeChineseMessageTokens(displayText, rawTokens.map((token) => ({
+    // New messages persist their lexical tokens.  Older messages only have
+    // diff fragments, so normalize those as a compatible fallback.
+    const sourceTokens = Array.isArray(message.tokens) && message.tokens.length > 0
+      ? message.tokens
+      : rawTokens.map((token) => ({
       word: token?.text || token?.word || '',
       text: token?.text || token?.word || '',
       translit: token?.translit || token?.pinyin || null,
       pinyin: token?.pinyin || token?.translit || null
-    })));
+      }));
+    const normalized = normalizeChineseMessageTokens(displayText, sourceTokens);
 
     if (!normalized.length) return rawTokens;
 
