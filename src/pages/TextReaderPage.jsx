@@ -1783,12 +1783,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
             const completedCount = prog.completed;
             const totalCount = prog.total;
             const failedCount = (typeof prog.failed === 'number' && prog.failed >= 0) ? prog.failed : (totalCount - completedCount);
-            if (completedCount === totalCount) {
-              setGlossNotice({
-                message: `Glosado terminado: ${totalCount}/${totalCount}`,
-                type: 'success'
-              });
-            } else {
+            if (completedCount < totalCount) {
               setGlossNotice({
                 message: `Glosado terminado: ${completedCount}/${totalCount}. ${failedCount} pendientes.`,
                 type: 'warning'
