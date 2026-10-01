@@ -76,7 +76,7 @@ export function computeTokenCharRanges(rawCleanText, tokens, targetLang = 'es') 
 }
 
 /** Split long TTS paragraphs at word boundaries, preserving original offsets. */
-export function splitSpeechParagraph(text, tokens = [], targetLang = 'es', maxLength = 120) {
+export function splitSpeechParagraph(text, tokens = [], targetLang = 'es', maxLength = 50) {
   const cleanText = normalizeAudioText(text);
   if (!cleanText) return [];
   let speechTokens = tokens;
@@ -92,7 +92,7 @@ export function splitSpeechParagraph(text, tokens = [], targetLang = 'es', maxLe
     let end = cleanText.length;
     if (end - start > maxLength) {
       const candidates = ranges.filter(range => range.endChar > start && range.endChar <= start + maxLength);
-      const pause = candidates.filter(range => /[.!?;:,。！？；：，]$/.test(cleanText.slice(start, range.endChar)) && range.endChar - start >= 40).at(-1);
+      const pause = candidates.filter(range => /[.!?;:,。！？；：，]$/.test(cleanText.slice(start, range.endChar)) && range.endChar - start >= 15).at(-1);
       end = pause?.endChar || candidates.at(-1)?.endChar || ranges.find(range => range.endChar > start)?.endChar || cleanText.length;
     }
     const raw = cleanText.slice(start, end);
