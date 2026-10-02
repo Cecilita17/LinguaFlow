@@ -1775,9 +1775,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
         if (!prog.isGlossing && !prog.isPaused && notifyAtEnd) {
           setIsAutoGlossing(false);
           setGlossNotice({
-            message: isSpanish
-              ? `Glosado del capítulo: ${prog.completed}/${prog.total}`
-              : `Chapter glossed: ${prog.completed}/${prog.total}`,
+            message: notifyAtEnd === 'text'
+              ? (isSpanish ? `Glosado del texto: ${prog.completed}/${prog.total}` : `Text glossed: ${prog.completed}/${prog.total}`)
+              : (isSpanish ? `Glosado del capítulo: ${prog.completed}/${prog.total}` : `Chapter glossed: ${prog.completed}/${prog.total}`),
             type: prog.completed === prog.total ? 'success' : 'warning'
           });
         }
@@ -1788,7 +1788,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     applyGlossedParagraphs(enriched);
   }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs, isSpanish]);
 
-  // EPUB runs own the complete chapter; other texts follow the visible page.
+  // EPUB runs cover the chapter; AI-generated texts cover the full document.
+  // Other texts retain their page-scoped automatic glossing.
   const autoGlossScopeRef = useRef(null);
   const handleToggleAutoGlossing = useCallback(() => {
     if (isAutoGlossing) {
@@ -1810,22 +1811,28 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       setIsAutoGlossing(false);
       return;
     }
-    const paragraphs = isEpub ? chapterParagraphsRef.current : visibleParagraphsRef.current;
+    const completesScope = isEpub || isAiGeneratedDocument;
+    const paragraphs = completesScope ? chapterParagraphsRef.current : visibleParagraphsRef.current;
     if (paragraphs.some(paragraph => !isGlossComplete(paragraph, activeDocLang, nativeLang))) {
-      triggerGlossing(paragraphs, activeDocLang, isEpub);
+      triggerGlossing(paragraphs, activeDocLang, isEpub ? 'chapter' : (isAiGeneratedDocument ? 'text' : false));
     } else {
       setGlossingProgress({ total: paragraphs.length, completed: paragraphs.length,
         isGlossing: false, isPaused: false, isComplete: true, failed: 0 });
-      if (isEpub) {
+      if (completesScope) {
         setIsAutoGlossing(false);
-        setGlossNotice({ message: isSpanish ? `Glosado del capítulo: ${paragraphs.length}/${paragraphs.length}` : `Chapter glossed: ${paragraphs.length}/${paragraphs.length}`, type: 'success' });
+        setGlossNotice({
+          message: isEpub
+            ? (isSpanish ? `Glosado del capítulo: ${paragraphs.length}/${paragraphs.length}` : `Chapter glossed: ${paragraphs.length}/${paragraphs.length}`)
+            : (isSpanish ? `Glosado del texto: ${paragraphs.length}/${paragraphs.length}` : `Text glossed: ${paragraphs.length}/${paragraphs.length}`),
+          type: 'success'
+        });
       }
     }
     return () => {
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
     };
-  }, [isAutoGlossing, viewMode, document?.id, isEpub, currentChapter?.id, isEpub ? null : currentParagraphPage,
+  }, [isAutoGlossing, viewMode, document?.id, isEpub, isAiGeneratedDocument, currentChapter?.id, (isEpub || isAiGeneratedDocument) ? null : currentParagraphPage,
     activeDocLang, nativeLang, simplificationMode.kind, simplificationMode.level, triggerGlossing]);
 
   // Stop/Pause glossing
