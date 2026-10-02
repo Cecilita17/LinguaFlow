@@ -269,7 +269,7 @@ export function LiveCallView({
                       : isUser
                       ? 'text-white font-semibold'
                       : 'text-[var(--text-primary)] font-semibold'
-                  } ${isArabic ? 'font-arabic text-base sm:text-lg' : ''}`}
+                  } ${isArabic ? 'font-sans text-base sm:text-lg' : ''}`}
                 >
                   {word}
                 </span>

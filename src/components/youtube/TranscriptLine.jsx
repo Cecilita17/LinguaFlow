@@ -294,7 +294,7 @@ export function TranscriptLine({
                           <span
                             dir={textDirection}
                             className={`${
-                              isChinese ? 'font-medium tracking-normal' : isArabic ? 'font-semibold tracking-wide font-arabic' : 'font-semibold tracking-wide'
+                              isChinese ? 'font-medium tracking-normal' : isArabic ? 'font-semibold tracking-wide font-sans' : 'font-semibold tracking-wide'
                             } select-text leading-tight ${
                               isSaved
                                 ? 'bg-amber-300 text-stone-950 dark:bg-amber-400 dark:text-stone-950 rounded px-1 font-bold shadow-xs ring-1 ring-amber-400/60'

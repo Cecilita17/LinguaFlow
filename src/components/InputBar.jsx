@@ -298,7 +298,7 @@ export function InputBar({
                   : "Type or press and hold the mic to speak..."
               }
               className={`w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/15 rounded-2xl px-4 py-3 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm sm:text-base outline-none focus:ring-2 focus:ring-rose-500/50 backdrop-blur-xs transition-all ${
-                isArabic ? 'font-arabic text-right text-lg' : 'text-left'
+                isArabic ? 'font-sans text-right text-lg' : 'text-left'
               }`}
             />
           </div>

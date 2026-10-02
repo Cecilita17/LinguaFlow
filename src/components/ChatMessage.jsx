@@ -319,7 +319,7 @@ export function ChatMessage({
             dir={isArabic ? 'rtl' : 'ltr'}
             className={`${
               isArabic
-                ? 'font-arabic text-right text-[22px] sm:text-[26px] leading-loose tracking-normal'
+                ? 'font-sans text-right text-[22px] sm:text-[26px] leading-loose tracking-normal'
                 : 'text-left text-[17px] sm:text-[18.5px] leading-relaxed tracking-wide font-normal'
             }`}
           >
@@ -725,7 +725,7 @@ export function ChatMessage({
           dir={isArabic ? 'rtl' : 'ltr'}
           className={`${
             isArabic
-              ? 'font-arabic text-right text-[22px] sm:text-[26px] leading-loose tracking-normal'
+              ? 'font-sans text-right text-[22px] sm:text-[26px] leading-loose tracking-normal'
               : 'text-left text-[17px] sm:text-[18.5px] leading-relaxed tracking-wide font-normal'
           } text-[var(--text-primary)] flex flex-wrap items-baseline gap-x-0.5 gap-y-0.5 break-words [overflow-wrap:anywhere]`}
         >
