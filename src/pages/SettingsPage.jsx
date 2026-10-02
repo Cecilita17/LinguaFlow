@@ -16,7 +16,8 @@ import {
   Languages,
   User,
   ChevronRight,
-  Crown
+  Crown,
+  Mail
 } from 'lucide-react';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
@@ -484,6 +485,22 @@ export function SettingsPage({
 
         {/* SECTION 2.5: VOCES PARA LLAMADAS (CARTESIA) */}
         <CallVoiceSettingsSection onPreferencesChange={triggerNotice} />
+
+        <section className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm">
+          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Mail className="w-4 h-4 text-rose-500" />
+            <span>{t('support_title')}</span>
+          </h2>
+          <p className="text-sm text-[var(--text-muted)] mb-3">{t('support_description')}</p>
+          <a href="mailto:fceci.coder@gmail.com" className="flex items-center gap-3 p-4 rounded-2xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+            <Mail className="w-5 h-5 text-rose-500 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">{t('support_contact')}</span>
+              <span className="block text-xs sm:text-sm text-[var(--text-muted)] mt-1 break-all">fceci.coder@gmail.com</span>
+            </span>
+            <ChevronRight className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+          </a>
+        </section>
 
       </div>
     </div>
