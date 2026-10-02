@@ -1325,8 +1325,9 @@ export default function App() {
         handleTargetLangChange(doc.targetLang);
       }
       try {
-        window.location.hash = '#reader';
+        window.history.pushState({ tab: 'text', viewMode: 'reader' }, '', '/text#reader');
       } catch (e) {}
+      setChatViewMode('hub');
       setSelectedChatSessionData(null);
       setActiveTab('text');
     }

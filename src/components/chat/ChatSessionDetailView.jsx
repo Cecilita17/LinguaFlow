@@ -29,13 +29,11 @@ export function ChatSessionDetailView({
   const { savedWords } = useSavedWords();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  if (!sessionData) return null;
-
-  const targetLang = sessionData.targetLang || 'zh';
+  const targetLang = sessionData?.targetLang || 'zh';
   const langMeta = getLanguageMeta(targetLang);
   const localizedLangName = getLocalizedLanguageName(targetLang, langMeta.name || targetLang, isSpanish);
 
-  const messages = Array.isArray(sessionData.messages) ? sessionData.messages : [];
+  const messages = Array.isArray(sessionData?.messages) ? sessionData.messages : [];
 
   // Dynamically compute saved yellow words present in this specific session
   const sessionVocabulary = useMemo(
@@ -60,8 +58,8 @@ export function ChatSessionDetailView({
     }
   };
 
-  const formattedStartedAt = formatTimestamp(sessionData.startedAt);
-  const formattedEndedAt = formatTimestamp(sessionData.endedAt);
+  const formattedStartedAt = formatTimestamp(sessionData?.startedAt);
+  const formattedEndedAt = formatTimestamp(sessionData?.endedAt);
 
   const handleTextGenerated = useCallback(async ({ title, text, requiredVocabulary: selectedRequiredVocabulary }) => {
     const raw = (text || '').trim();
@@ -96,7 +94,9 @@ export function ChatSessionDetailView({
     } catch (err) {
       console.error('Failed to create text document from chat session:', err);
     }
-  }, [targetLang, nativeLang, sessionData.nativeLang, sessionData.id, isSpanish, onOpenGeneratedDocument]);
+  }, [targetLang, nativeLang, sessionData?.nativeLang, sessionData?.id, isSpanish, onOpenGeneratedDocument]);
+
+  if (!sessionData) return null;
 
   return (
     <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)] space-y-5 animate-fade-in">

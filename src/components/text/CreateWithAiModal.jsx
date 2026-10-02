@@ -13,13 +13,16 @@ import { LANGUAGE_METADATA } from '../../constants/languages.js';
 import { generateAiTextDocument } from '../../services/textDocumentService.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
+const MAX_PRACTICE_WORDS = 30;
+const EMPTY_VOCABULARY = [];
+
 export function CreateWithAiModal({
   isOpen,
   onClose,
   targetLang = 'es',
   apiKey = '',
   onTextGenerated,
-  requiredVocabulary = []
+  requiredVocabulary = EMPTY_VOCABULARY
 }) {
   const { isSpanish } = useSiteLanguage();
   const [topic, setTopic] = useState('');
@@ -30,15 +33,15 @@ export function CreateWithAiModal({
 
   const practiceVocabulary = React.useMemo(() => {
     if (!Array.isArray(requiredVocabulary)) return [];
-    return requiredVocabulary.map((item) => typeof item === 'string' ? item : item?.word).filter(Boolean);
+    return [...new Set(requiredVocabulary.map((item) => typeof item === 'string' ? item : item?.word).filter(Boolean))];
   }, [requiredVocabulary]);
 
-  const [selectedWords, setSelectedWords] = useState(() => new Set(practiceVocabulary));
+  const [selectedWords, setSelectedWords] = useState(() => new Set(practiceVocabulary.slice(0, MAX_PRACTICE_WORDS)));
 
   // Keep selectedWords synchronized whenever practiceVocabulary changes or modal opens
   React.useEffect(() => {
     if (isOpen) {
-      setSelectedWords(new Set(practiceVocabulary));
+      setSelectedWords(new Set(practiceVocabulary.slice(0, MAX_PRACTICE_WORDS)));
     }
   }, [practiceVocabulary, isOpen]);
 
@@ -55,7 +58,7 @@ export function CreateWithAiModal({
       const next = new Set(prev);
       if (next.has(word)) {
         next.delete(word);
-      } else {
+      } else if (next.size < MAX_PRACTICE_WORDS) {
         next.add(word);
       }
       return next;
@@ -63,7 +66,7 @@ export function CreateWithAiModal({
   };
 
   const handleSelectAll = () => {
-    setSelectedWords(new Set(practiceVocabulary));
+    setSelectedWords(new Set(practiceVocabulary.slice(0, MAX_PRACTICE_WORDS)));
   };
 
   const handleDeselectAll = () => {
@@ -176,10 +179,12 @@ export function CreateWithAiModal({
                 <button
                   type="button"
                   onClick={handleSelectAll}
-                  disabled={selectedCount === totalCount || isLoading}
+                  disabled={selectedCount === Math.min(totalCount, MAX_PRACTICE_WORDS) || isLoading}
                   className="font-semibold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {isSpanish ? 'Seleccionar todas' : 'Select all'}
+                  {totalCount > MAX_PRACTICE_WORDS
+                    ? (isSpanish ? 'Seleccionar 30' : 'Select 30')
+                    : (isSpanish ? 'Seleccionar todas' : 'Select all')}
                 </button>
                 <span className="text-amber-400 dark:text-amber-600">•</span>
                 <button
@@ -193,6 +198,11 @@ export function CreateWithAiModal({
               </div>
             </div>
 
+            {totalCount > MAX_PRACTICE_WORDS && (
+              <p className="text-xs text-[var(--text-secondary)]">
+                {isSpanish ? 'Elige hasta 30 palabras para esta historia.' : 'Choose up to 30 words for this story.'}
+              </p>
+            )}
             <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto custom-scrollbar pr-1">
               {practiceVocabulary.map((word) => {
                 const isSelected = selectedWords.has(word);
@@ -200,7 +210,7 @@ export function CreateWithAiModal({
                   <button
                     key={word}
                     type="button"
-                    disabled={isLoading}
+                    disabled={isLoading || (!isSelected && selectedCount >= MAX_PRACTICE_WORDS)}
                     onClick={() => toggleWordSelection(word)}
                     className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer active:scale-95 ${
                       isSelected

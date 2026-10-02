@@ -121,8 +121,6 @@ function resolveChapterIndexForDoc(doc) {
 
 const PARAGRAPHS_PER_PAGE = 6;
 const PRACTICE_TEXT_MAX_PARAGRAPHS = 35;
-const PRACTICE_TEXT_MAX_CHARACTERS = 6000;
-const PRACTICE_VOCABULARY_MAX = 30;
 
 /**
  * Resolves the initial paragraph page for a text or EPUB chapter from the
@@ -460,8 +458,10 @@ export function TextReaderPage({
   }, []);
 
   // Navigation mode: 'library' | 'importer' | 'reader'
-  // Default to 'library' when entering Text Reader
-  const [viewMode, setViewMode] = useState('library');
+  // Open documents linked from chat directly in the reader.
+  const [viewMode, setViewMode] = useState(() =>
+    window.location.hash === '#reader' && loadActiveDocumentDraft() ? 'reader' : 'library'
+  );
 
   // Navigation helper: change view mode and update browser history
   const navigateToView = useCallback((newMode) => {
@@ -1003,18 +1003,12 @@ export function TextReaderPage({
     () => getSavedWordsInParagraphs(savedWords, document?.paragraphs || [], activeDocLang),
     [savedWords, document?.paragraphs, activeDocLang]
   );
-  const practiceTextCharacterCount = useMemo(
-    () => (document?.rawText || (document?.paragraphs || []).map((paragraph) => paragraph.text || '').join('\n')).length,
-    [document?.rawText, document?.paragraphs]
-  );
   const canCreateVocabularyPractice = Boolean(
     document &&
     !isEpub &&
     Array.isArray(document.paragraphs) &&
     document.paragraphs.length <= PRACTICE_TEXT_MAX_PARAGRAPHS &&
-    practiceTextCharacterCount <= PRACTICE_TEXT_MAX_CHARACTERS &&
-    practiceVocabulary.length > 0 &&
-    practiceVocabulary.length <= PRACTICE_VOCABULARY_MAX
+    practiceVocabulary.length > 0
   );
 
   // EPUB practice is intentionally page-scoped: only words that appear in the
@@ -1027,8 +1021,7 @@ export function TextReaderPage({
     isEpub &&
     document?.id &&
     visibleParagraphs.length > 0 &&
-    pagePracticeVocabulary.length > 0 &&
-    pagePracticeVocabulary.length <= PRACTICE_VOCABULARY_MAX
+    pagePracticeVocabulary.length > 0
   );
 
   const handleOpenEpubPagePractice = useCallback(() => {
