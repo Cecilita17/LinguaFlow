@@ -93,6 +93,30 @@ export function getCachedSimplification(document, block, level) {
   return document.epubSimplifications?.[key] || null;
 }
 
+/** Restore the newest usable saved simplification when opening a document. */
+export function getDefaultSimplificationMode(document) {
+  const original = { kind: 'original', level: null };
+  if (!document || !Object.keys(document.epubSimplifications || {}).length) return original;
+  const chapters = new Map();
+  for (const paragraph of document.paragraphs || []) {
+    if (!chapters.has(paragraph.chapterId)) chapters.set(paragraph.chapterId, []);
+    chapters.get(paragraph.chapterId).push(paragraph);
+  }
+  let newest = null;
+  chapters.forEach((paragraphs, chapterId) => {
+    for (const block of buildEpubSimplificationBlocks(paragraphs, chapterId)) {
+      for (const level of EPUB_SIMPLIFICATION_LEVELS) {
+        const cached = getCachedSimplification(document, block, level);
+        if (!cached?.paragraphs?.some((paragraph) => paragraph?.text?.trim()
+          && block.sourceParagraphIds.includes(paragraph.sourceParagraphId))) continue;
+        const generatedAt = Date.parse(cached.generatedAt) || 0;
+        if (!newest || generatedAt > newest.generatedAt) newest = { level, generatedAt };
+      }
+    }
+  });
+  return newest ? { kind: 'simplified', level: newest.level } : original;
+}
+
 export function getParagraphRepresentationKey(paragraph, mode) {
   return mode?.kind === 'simplified'
     ? `${paragraph.id}::simplified::${mode.level}`

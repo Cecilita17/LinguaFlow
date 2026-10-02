@@ -77,6 +77,7 @@ import {
   EPUB_SIMPLIFICATION_LEVELS,
   buildEpubSimplificationBlocks,
   getCachedSimplification,
+  getDefaultSimplificationMode,
   getParagraphRepresentationKey,
   projectSimplifiedParagraphs,
   simplifyEpubParagraphApi,
@@ -254,7 +255,7 @@ export function TextReaderPage({
   const [paragraphTranslations, setParagraphTranslations] = useState({});
 
   // EPUB alternate representation. The original paragraphs remain canonical.
-  const [simplificationMode, setSimplificationMode] = useState({ kind: 'original', level: null });
+  const [simplificationMode, setSimplificationMode] = useState(() => getDefaultSimplificationMode(loadActiveDocumentDraft()));
   const [simplificationStatus, setSimplificationStatus] = useState({ isLoading: false, error: null, blockId: null });
   const [retryingSimplificationIds, setRetryingSimplificationIds] = useState(new Set());
   const simplificationParagraphRequestsRef = useRef(new Set());
@@ -262,6 +263,11 @@ export function TextReaderPage({
 
   // Load existing draft if available
   const [document, setDocument] = useState(() => loadActiveDocumentDraft());
+  // Restore once per opened document, including minimal-draft hydration.
+  // Cache updates during reading must not override an explicit Original selection.
+  useEffect(() => {
+    setSimplificationMode(getDefaultSimplificationMode(document));
+  }, [document?.id, document?.isMinimalDraft]);
   const documentRef = useRef(document);
   documentRef.current = document;
 
@@ -2151,6 +2157,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     setAudioErrorId(null);
     // Invalidate pending draft restoration before React renders the selection.
     documentRef.current = doc;
+    setSimplificationMode(getDefaultSimplificationMode(doc));
     setDocument(doc);
     const targetChapterIdx = resolveChapterIndexForDoc(doc);
     setCurrentChapterIndex(targetChapterIdx);
