@@ -557,26 +557,22 @@ export default function App() {
       initialBotMsg = {
         id: 'msg-init',
         sender: 'bot',
-        text: 'مَرْحَبًا بِكَ! أَنَا مُسْتَعِدٌّ لِمُمَارَسَةِ اللُّغَةِ الْعَرَبِيَّةِ مَعَكَ. كَيْفَ أُسَاعِدُكَ الْيَوْمَ؟',
-        translation: '¡Bienvenido! Estoy listo para practicar el idioma árabe contigo. ¿Cómo te ayudo hoy?',
+        text: 'مرحبًا! عن ماذا تريد أن تتحدث اليوم؟',
+        translation: '¡Hola! ¿De qué querés hablar hoy?',
         tokens: [
-          { word: 'مَرْحَبًا', translit: 'marḥaban', clean_word: 'مرحبا' },
-          { word: 'بِكَ!', translit: 'bika!', clean_word: 'بك' },
-          { word: 'أَنَا', translit: 'anā', clean_word: 'أنا' },
-          { word: 'مُسْتَعِدٌّ', translit: 'musta‘iddun', clean_word: 'مستعد' },
-          { word: 'لِمُمَارَسَةِ', translit: 'li-mumārasati', clean_word: 'لممارسة' },
-          { word: 'اللُّغَةِ', translit: 'al-lughati', clean_word: 'اللغة' },
-          { word: 'الْعَرَبِيَّةِ', translit: 'al-‘arabiyyah', clean_word: 'العربية' },
-          { word: 'مَعَكَ.', translit: 'ma‘aka.', clean_word: 'معك' },
-          { word: 'كَيْفَ', translit: 'kayfa', clean_word: 'كيف' },
-          { word: 'أُسَاعِدُكَ', translit: 'usā‘iduka', clean_word: 'أساعدك' },
-          { word: 'الْيَوْمَ؟', translit: 'al-yawma?', clean_word: 'اليوم' }
+          { word: 'مرحبًا!', translit: 'marḥaban!', clean_word: 'مرحبا' },
+          { word: 'عن', translit: 'ʿan', clean_word: 'عن' },
+          { word: 'ماذا', translit: 'mādhā', clean_word: 'ماذا' },
+          { word: 'تريد', translit: 'turīd', clean_word: 'تريد' },
+          { word: 'أن', translit: 'an', clean_word: 'أن' },
+          { word: 'تتحدث', translit: 'tataḥaddath', clean_word: 'تتحدث' },
+          { word: 'اليوم؟', translit: 'al-yawm?', clean_word: 'اليوم' }
         ],
         vocabulary: {
-          'مرحبا': { meaning: 'Hola / Bienvenido (saludo cordial)', part_of_speech: 'saludo', translit: 'marḥaban' },
-          'مستعد': { meaning: 'Preparado o listo para una actividad', part_of_speech: 'adjetivo', translit: 'musta‘idd' },
-          'أساعدك': { meaning: 'Te ayudo o te asisto', part_of_speech: 'verbo', translit: 'usā‘iduk' },
-          'اليوم': { meaning: 'Hoy (el día de hoy)', part_of_speech: 'sustantivo / adverbio', translit: 'al-yawm' }
+          'مرحبا': { meaning: 'Hola', part_of_speech: 'saludo', translit: 'marḥaban' },
+          'تريد': { meaning: 'Querés / quieres', part_of_speech: 'verbo', translit: 'turīd' },
+          'تتحدث': { meaning: 'Hablar', part_of_speech: 'verbo', translit: 'tataḥaddath' },
+          'اليوم': { meaning: 'Hoy', part_of_speech: 'adverbio', translit: 'al-yawm' }
         }
       };
     } else if (targetLang === 'ru') {
