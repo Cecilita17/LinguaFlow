@@ -89,10 +89,8 @@ function enrichArabicPayload(data, targetLang) {
   return data;
 }
 
-// The chat model provides the only complete source of word boundaries and
-// tone-marked Pinyin for arbitrary Chinese learner input.  Keep that data when
-// it exactly covers the corrected sentence; falling back to a character diff is
-// reserved for malformed model payloads only.
+// Preserve word-level correction flags when they cover the corrected sentence.
+// Chinese chat Pinyin is completed locally, so pronunciation is optional here.
 function normalizeChineseCorrectionTokens(rawTokens, correctedText) {
   if (!Array.isArray(rawTokens) || rawTokens.length === 0) return null;
 
@@ -114,12 +112,7 @@ function normalizeChineseCorrectionTokens(rawTokens, correctedText) {
   const compactTokens = tokens.map((token) => token.text).join('').replace(/\s+/g, '');
   if (compactTokens !== compactCorrected) return null;
 
-  const everyChineseTokenHasPinyin = tokens.every((token) => {
-    const containsHanzi = /[\u4E00-\u9FFF]/.test(token.text);
-    return !containsHanzi || (typeof token.translit === 'string' && token.translit.trim().length > 0);
-  });
-
-  return everyChineseTokenHasPinyin ? tokens : null;
+  return tokens;
 }
 
 /**
@@ -190,10 +183,8 @@ export function normalizeChatPayload(parsed, rawUserText = '', targetLang = 'es'
       ? rawCor.diff_tokens
       : (Array.isArray(rawCor.diffTokens) ? rawCor.diffTokens : (Array.isArray(rawCor.tokens) ? rawCor.tokens : null));
 
-    // Prefer the model's word-level Chinese correction tokens when they cover
-    // the corrected sentence and include Pinyin.  The old unconditional local
-    // character diff discarded that information and made user bubbles render
-    // isolated Hanzi without pronunciation.
+    // Keep complete Chinese correction tokens, including compact tokens without
+    // Pinyin, so local pronunciation recovery never discards correction flags.
     const chineseTokens = targetLang === 'zh'
       ? normalizeChineseCorrectionTokens(rawDiffTokens, corrText)
       : null;
@@ -528,7 +519,9 @@ export async function handleChat(req, res) {
     const targetLanguageName = langObj.englishName || langObj.name;
 
     // 1. Clean Separation: System Instruction (Role, Personality, Rules)
-    const systemInstruction = buildSystemInstruction(targetLanguageName, nativeObj.name, level);
+    const systemInstruction = buildSystemInstruction(targetLanguageName, nativeObj.name, level, {
+      localChineseAnnotations: targetLang === 'zh'
+    });
 
     // 2. Clean Separation: Raw Data Context (Prompt Window injection)
     const dataPrompt = buildDataContextPrompt({
@@ -539,7 +532,7 @@ export async function handleChat(req, res) {
       history
     });
 
-    // The primary prompt asks for richly annotated tokens. If the model returns
+    // Chinese word/Pinyin annotations are reconstructed locally. If the model returns
     // malformed JSON, the retry deliberately reduces that surface area: the
     // reader can safely reconstruct missing tokens client-side, but it cannot
     // recover an invalid conversation response.

@@ -19,7 +19,7 @@ export const GROQ_MODEL_CONFIG = {
 };
 
 /// 2. CORE PEDAGOGICAL CORRECTION RULES (Single Source of Truth for Chat and Live Calls)
-export function buildCorePedagogicalRules(targetLang, nativeLang, level = 'A2/B1') {
+export function buildCorePedagogicalRules(targetLang, nativeLang, level = 'A2/B1', { localChineseAnnotations = false } = {}) {
   const isChinese = (targetLang || '').toLowerCase().includes('chinese') || targetLang === 'zh';
   const isArabic = (targetLang || '').toLowerCase().includes('arabic') || targetLang === 'ar';
 
@@ -54,8 +54,12 @@ Student native language: [${nativeLang}].
    - If a sentence is completely correct in ${targetLang}, set "has_errors": false, keep "corrected_text" identical to "original_text", and mark all tokens "changed": false, "original": null.
 
 4. Tokenization & Transliteration in "diff_tokens":
-   - Break "corrected_text" into word tokens. Every token MUST match { "text": "string", "changed": boolean, "original": "string or null", "translit": "string or null" }.
-   - For Chinese (${isChinese ? 'target is Chinese' : 'zh'}): Provide accurate Pinyin with tone marks in "translit" for EVERY token (both changed and unchanged). All Chinese punctuation marks (，。！？；：) MUST be placed in "text", NEVER in "translit".
+   - Break "corrected_text" into word tokens. Every token MUST match ${localChineseAnnotations && isChinese
+     ? '{ "text": "string", "changed": boolean, "original": "string or null" }'
+     : '{ "text": "string", "changed": boolean, "original": "string or null", "translit": "string or null" }'}.
+   - For Chinese (${isChinese ? 'target is Chinese' : 'zh'}): ${localChineseAnnotations && isChinese
+     ? 'Omit \"translit\" and \"pinyin\" from correction tokens. The client generates Pinyin locally. Keep every corrected or translated word and its changed/original information.'
+     : 'Provide accurate Pinyin with tone marks in \"translit\" for EVERY token (both changed and unchanged). All Chinese punctuation marks (，。！？；：) MUST be placed in \"text\", NEVER in \"translit\".'}
    - For Arabic (${isArabic ? 'target is Arabic' : 'ar'}): Provide Latin romanization in "translit" for EVERY token.
    - For Russian, English, Spanish, German, French, Italian, Dutch, Polish, Turkish: Strictly set "translit": null (Cyrillic and Latin scripts must NEVER have transliteration).
    - For any corrected or translated token: "changed": true, "original": "[student's original word]".
@@ -63,7 +67,8 @@ Student native language: [${nativeLang}].
 }
 
 // 2.1 CONVERSATIONAL SYSTEM INSTRUCTION (Used by Chat / Conversations)
-export function buildSystemInstruction(targetLang, nativeLang, level = 'A2/B1') {
+export function buildSystemInstruction(targetLang, nativeLang, level = 'A2/B1', { localChineseAnnotations = false } = {}) {
+  const compactChinese = localChineseAnnotations && ((targetLang || '').toLowerCase().includes('chinese') || targetLang === 'zh');
   return `# ROLE & PERSONALITY
 You are LinguaBot, a warm, lively, and genuinely curious conversational partner and AI language tutor.
 You adapt your vocabulary, grammar complexity, and expressions to the student's proficiency level: [${level}].
@@ -101,14 +106,16 @@ Your goal is to engage the student in natural, authentic, and stimulating conver
 - NO FORMULAIC EMPATHY & VAGUE QUESTIONS: Never output canned empathy statements ("I completely understand where you are coming from", "That is a very good question") or detached, artificial therapy-style questions ("How does that make you feel?", "What do you think about that?") unless specifically and concretely grounded in the context.
 - NO GENERIC PRAISE FILLER: Never output empty, disconnected praise. Every word must be relevant and contribute to the authentic conversation.
 
-${buildCorePedagogicalRules(targetLang, nativeLang, level)}
+${buildCorePedagogicalRules(targetLang, nativeLang, level, { localChineseAnnotations: compactChinese })}
 
 # CONVERSATIONAL REPLY ("bot_response")
 1. "text": A natural, engaging reply in ${targetLang} directly addressing the substantive content of the student's message and carrying the conversation forward.
 2. "translation": Natural translation of your reply into ${nativeLang}.
-3. "tokens": Word and compound token breakdown (provide Pinyin transliteration for Chinese, romanization for Arabic; for Russian and Latin-alphabet languages, strictly set "translit": null).
+${compactChinese
+  ? '3. Do NOT include "tokens" or "word_tokens" in "bot_response". The client segments the complete reply into words and generates Pinyin locally. Keep your natural response length; only redundant annotations are omitted.'
+  : `3. "tokens": Word and compound token breakdown (provide Pinyin transliteration for Chinese, romanization for Arabic; for Russian and Latin-alphabet languages, strictly set "translit": null).
    * ABSOLUTE COVERAGE RULE: The "tokens" array MUST tokenize the ENTIRE "text" from the first character to the very last character. Concatenating every token.word in order MUST reproduce the "text" exactly. NEVER stop emitting tokens before reaching the final character of "text". If "text" is long, the "tokens" array must be equally long — do not truncate, summarize, or skip the trailing portion.
-   * For Chinese ("zh"): tokenize by natural WORDS or lexical units of 1-4 characters (e.g., "喜欢","学习","中文","一部分","加油"). Do NOT emit a whole sentence as a single token. Do NOT split known compound words into single characters. Every Chinese word in "tokens" MUST include a non-empty "translit" with Hanyu Pinyin (tone marks).
+   * For Chinese ("zh"): tokenize by natural WORDS or lexical units of 1-4 characters (e.g., "喜欢","学习","中文","一部分","加油"). Do NOT emit a whole sentence as a single token. Do NOT split known compound words into single characters. Every Chinese word in "tokens" MUST include a non-empty "translit" with Hanyu Pinyin (tone marks).`}
 4. "vocabulary": 2-4 key vocabulary words used in your reply with definitions and parts of speech in ${nativeLang}.
 
 # OUTPUT FORMAT
@@ -119,16 +126,18 @@ You MUST return strictly valid JSON matching this exact structure:
     "corrected_text": "string",
     "has_errors": boolean,
     "diff_tokens": [
-      { "text": "string", "changed": boolean, "original": "string or null", "translit": "string or null" }
+      ${compactChinese
+        ? '{ "text": "string", "changed": boolean, "original": "string or null" }'
+        : '{ "text": "string", "changed": boolean, "original": "string or null", "translit": "string or null" }'}
     ]
   },
   "bot_response": {
     "text": "string",
     "translation": "string",
-    "tokens": [
+    ${compactChinese ? '' : `"tokens": [
       { "word": "string", "clean_word": "string", "translit": "string or null" }
     ],
-    "vocabulary": {
+    `}"vocabulary": {
       "keyword": { "meaning": "string in ${nativeLang}", "part_of_speech": "string", "translit": "string or null" }
     }
   }
