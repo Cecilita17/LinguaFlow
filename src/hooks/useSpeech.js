@@ -1,3 +1,5 @@
+import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
+import { waitForArabicSpeechVoice } from '../utils/arabicSpeechVoice.js';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { transcribeAudioApi } from '../services/chatService.js';
 import { mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
@@ -135,6 +137,7 @@ export function useSpeech({
   handsFree = false,
   isProcessing = false
 }) {
+  const { t } = useSiteLanguage();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
@@ -433,7 +436,7 @@ export function useSpeech({
   }, [stopRecordingInternal]);
 
   // Text to Speech (TTS)
-  const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback) => {
+  const speakText = useCallback(async (text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback) => {
     const playbackId = ++playbackIdRef.current;
     if (!window.speechSynthesis) return;
 
@@ -441,6 +444,19 @@ export function useSpeech({
 
     const cleanText = text.replace(/<[^>]*>/g, '').trim();
     if (!cleanText) return;
+
+    let arabicVoice = null;
+    if (String(langCode).toLowerCase().replace(/_/g, '-').split('-')[0] === 'ar') {
+      setIsSpeaking(false);
+      setSpeakingCharIndex(-1);
+      setSpeakingText('');
+      arabicVoice = await waitForArabicSpeechVoice(window.speechSynthesis, langCode);
+      if (playbackId !== playbackIdRef.current) return;
+      if (!arabicVoice) {
+        window.alert(t('speech_arabic_voice_unavailable'));
+        return;
+      }
+    }
 
     setSpeakingText(cleanText);
     setSpeakingCharIndex(0);
@@ -450,7 +466,7 @@ export function useSpeech({
     utterance.rate = mapSpeechRateToUtteranceRate(rate);
 
     const voices = window.speechSynthesis.getVoices();
-    const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(langCode.slice(0, 2).toLowerCase()));
+    const matchingVoice = arabicVoice || voices.find(v => v.lang.toLowerCase().startsWith(langCode.slice(0, 2).toLowerCase()));
     if (matchingVoice) {
       utterance.voice = matchingVoice;
     }
@@ -487,7 +503,7 @@ export function useSpeech({
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [targetLangCode]);
+  }, [targetLangCode, t]);
 
   const stopSpeaking = useCallback(() => {
     playbackIdRef.current++;
