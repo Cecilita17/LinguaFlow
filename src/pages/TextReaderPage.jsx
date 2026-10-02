@@ -76,6 +76,7 @@ import {
   getCachedSimplification,
   getParagraphRepresentationKey,
   projectSimplifiedParagraphs,
+  simplifyEpubParagraphApi,
   simplifyEpubBlockApi
 } from '../services/epubSimplificationService.js';
 import { requestAutoBackup } from '../services/autoBackupService.js';
@@ -251,6 +252,8 @@ export function TextReaderPage({
   // EPUB alternate representation. The original paragraphs remain canonical.
   const [simplificationMode, setSimplificationMode] = useState({ kind: 'original', level: null });
   const [simplificationStatus, setSimplificationStatus] = useState({ isLoading: false, error: null, blockId: null });
+  const [retryingSimplificationIds, setRetryingSimplificationIds] = useState(new Set());
+  const simplificationParagraphRequestsRef = useRef(new Set());
   const [simplificationRetryNonce, setSimplificationRetryNonce] = useState(0);
 
   // Load existing draft if available
@@ -1861,6 +1864,58 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     setIsAutoGlossing(true);
   };
 
+  const handleRetryParagraphSimplification = useCallback(async (paragraph) => {
+    const currentDoc = documentRef.current;
+    if (!currentDoc || !isEpub || simplificationMode.kind !== 'simplified'
+      || paragraph.simplificationLevel !== simplificationMode.level) return;
+    const sourceParagraphs = currentDoc.paragraphs.filter(item => item.chapterId === paragraph.chapterId);
+    const block = buildEpubSimplificationBlocks(sourceParagraphs, paragraph.chapterId)
+      .find(item => item.sourceParagraphIds.includes(paragraph.id));
+    const cached = getCachedSimplification(currentDoc, block, simplificationMode.level);
+    if (!cached) return;
+    const requestId = `${currentDoc.id}::${simplificationMode.level}::${paragraph.id}`;
+    if (simplificationParagraphRequestsRef.current.has(requestId)) return;
+    simplificationParagraphRequestsRef.current.add(requestId);
+    setRetryingSimplificationIds(previous => new Set(previous).add(requestId));
+    handleStopGlossing();
+    if (playingParagraphIdRef.current === paragraph.id) handleStopAudio();
+    try {
+      const variant = await simplifyEpubParagraphApi({
+        paragraph, documentId: currentDoc.id, targetLang: currentDoc.targetLang,
+        nativeLang, level: simplificationMode.level, apiKey
+      });
+      if (documentRef.current?.id !== currentDoc.id) return;
+      if (playingParagraphIdRef.current === paragraph.id) handleStopAudio();
+      setDocument(previous => {
+        if (previous?.id !== currentDoc.id) return previous;
+        const previousBlock = previous.epubSimplifications?.[cached.key];
+        if (!previousBlock) return previous;
+        return { ...previous, epubSimplifications: {
+          ...previous.epubSimplifications,
+          [cached.key]: { ...previousBlock, paragraphs: previousBlock.paragraphs.map(item =>
+            item.sourceParagraphId === paragraph.id ? variant : item) }
+        } };
+      });
+      const translationKey = getParagraphRepresentationKey(paragraph, simplificationMode);
+      setParagraphTranslations(previous => {
+        const next = { ...previous };
+        delete next[translationKey];
+        return next;
+      });
+    } catch (error) {
+      if (documentRef.current?.id === currentDoc.id) {
+        setGlossNotice({ message: t('paragraph_simplification_error'), type: 'error' });
+      }
+    } finally {
+      simplificationParagraphRequestsRef.current.delete(requestId);
+      setRetryingSimplificationIds(previous => {
+        const next = new Set(previous);
+        next.delete(requestId);
+        return next;
+      });
+    }
+  }, [isEpub, simplificationMode, nativeLang, apiKey, handleStopAudio, t]);
+
   // Individual paragraph glossing (runs ONLY for that paragraph, works even when auto-glossing is OFF)
   const handleGlossParagraph = useCallback(async (paragraph) => {
     if (!paragraph || !paragraph.id) return;
@@ -3259,6 +3314,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       onGlossParagraph={handleGlossParagraph}
                       onTranslate={handleTranslateParagraph}
                       onTranslateParagraph={handleTranslateParagraph}
+                      onRetrySimplification={simplificationMode.kind === 'simplified' && paragraph.simplificationLevel === simplificationMode.level ? handleRetryParagraphSimplification : null}
+                      isRetryingSimplification={retryingSimplificationIds.has(`${document.id}::${simplificationMode.level}::${paragraph.id}`)}
                       onCreateAudioSyncAnchor={handleCreateAudioSyncAnchor}
                       onRemoveAudioSyncAnchor={handleRemoveAudioSyncAnchor}
                     />

@@ -52,11 +52,13 @@ function TextParagraphItemComponent({
   onGlossParagraph = null,
   onTranslate = null,
   onTranslateParagraph = null,
+  onRetrySimplification = null,
+  isRetryingSimplification = false,
   onCreateAudioSyncAnchor = null,
   onRemoveAudioSyncAnchor = null
 }) {
   const { wordHighlightEnabled } = useAudioSettings();
-  const { isSpanish } = useSiteLanguage();
+  const { t, isSpanish } = useSiteLanguage();
   const { text, tokens = [] } = paragraph;
   const isChinese = targetLang === 'zh';
   const isRtl = isRtlLanguage(targetLang);
@@ -130,7 +132,8 @@ function TextParagraphItemComponent({
 
   let runningChunkPos = 0;
 
-  const renderTranslateButton = () => (
+  const renderTranslateButton = () => {
+    const button = (
     <button
       type="button"
       onClick={(e) => {
@@ -139,7 +142,7 @@ function TextParagraphItemComponent({
           handleTranslate(paragraph);
         }
       }}
-      disabled={isTranslating}
+      disabled={isTranslating || isRetryingSimplification}
       aria-label={
         isTranslating
           ? (isSpanish ? 'Traduciendo párrafo...' : 'Translating paragraph...')
@@ -176,7 +179,27 @@ function TextParagraphItemComponent({
         </span>
       )}
     </button>
-  );
+    );
+    if (!paragraph.simplificationLevel || !onRetrySimplification) return button;
+    return (
+      <span className="inline-flex flex-col items-center align-middle gap-1">
+        {button}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!isRetryingSimplification) onRetrySimplification(paragraph);
+          }}
+          disabled={isRetryingSimplification || isTranslating || isGlossing}
+          aria-label={t(isRetryingSimplification ? 'paragraph_simplification_loading' : 'paragraph_simplification_retry')}
+          title={t(isRetryingSimplification ? 'paragraph_simplification_loading' : 'paragraph_simplification_retry')}
+          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full inline-flex items-center justify-center border border-[var(--border-primary)] bg-[var(--surface-secondary)] text-violet-600 dark:text-violet-400 hover:bg-violet-500/15 transition-colors disabled:opacity-60 disabled:cursor-wait ${isRtl ? 'mr-1 sm:mr-1.5' : 'ml-1 sm:ml-1.5'}`}
+        >
+          {isRetryingSimplification ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+        </button>
+      </span>
+    );
+  };
 
   const isMarked = !isPlaying && (isAudioBookmark || isLastAudioPosition);
 
@@ -493,6 +516,7 @@ function TextParagraphItemComponent({
           {/* Paragraph Audio Button (▶️ / ⏸️ / ⚠️) - Plays/pauses ONLY this paragraph */}
           <button
             type="button"
+            disabled={isRetryingSimplification}
             onClick={handleAudioClick}
             aria-label={
               isAudioError
@@ -537,7 +561,7 @@ function TextParagraphItemComponent({
                 handleGloss(paragraph);
               }
             }}
-            disabled={isGlossing || isComplete}
+            disabled={isGlossing || isComplete || isRetryingSimplification}
             aria-label={isSpanish ? 'Glosar este párrafo' : 'Gloss this paragraph'}
             title={
               isGlossing
@@ -588,6 +612,8 @@ function arePropsEqual(prevProps, nextProps) {
   if (prevProps.isTranslating !== nextProps.isTranslating) return false;
   if (prevProps.isTranslationVisible !== nextProps.isTranslationVisible) return false;
   if (prevProps.translationError !== nextProps.translationError) return false;
+  if (prevProps.onRetrySimplification !== nextProps.onRetrySimplification) return false;
+  if (prevProps.isRetryingSimplification !== nextProps.isRetryingSimplification) return false;
 
   // Only check character index if this paragraph is actively playing audio
   if (nextProps.isPlaying && prevProps.activeAudioCharIndex !== nextProps.activeAudioCharIndex) {

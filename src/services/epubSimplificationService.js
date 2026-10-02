@@ -135,14 +135,14 @@ export function projectSimplifiedParagraphs({ paragraphs = [], document, level, 
   });
 }
 
-export function isSuspiciousSimplification(sourceText, simplifiedText) {
+export function isSuspiciousSimplification(sourceText, simplifiedText, allowShortParagraph = false) {
   const sourceWords = countWords(sourceText);
   const simplifiedWords = countWords(simplifiedText);
-  if (sourceWords < 80) return simplifiedWords < Math.max(20, sourceWords * 0.45);
+  if (sourceWords < 80) return simplifiedWords < Math.max(allowShortParagraph ? Math.min(20, sourceWords) : 20, sourceWords * 0.45);
   return simplifiedWords < sourceWords * 0.58;
 }
 
-export async function simplifyEpubBlockApi({ block, documentId, targetLang, nativeLang = 'es', level, apiKey = '' }) {
+export async function simplifyEpubBlockApi({ block, documentId, targetLang, nativeLang = 'es', level, apiKey = '', allowShortParagraph = false }) {
   if (!block?.sourceText || !EPUB_SIMPLIFICATION_LEVELS.includes(level)) {
     throw new Error('El bloque de simplificación no es válido.');
   }
@@ -194,7 +194,7 @@ export async function simplifyEpubBlockApi({ block, documentId, targetLang, nati
       throw new Error('La simplificación no conservó suficientes párrafos del bloque.');
     }
     const text = variants.map((paragraph) => paragraph.text).join('\n\n');
-    if (isSuspiciousSimplification(block.sourceText, text)) {
+    if (isSuspiciousSimplification(block.sourceText, text, allowShortParagraph)) {
       throw new Error('La respuesta de IA parece un resumen y no se guardó.');
     }
     return {
@@ -215,4 +215,17 @@ export async function simplifyEpubBlockApi({ block, documentId, targetLang, nati
   } finally {
     inFlightRequests.delete(requestKey);
   }
+}
+
+/** Rewrites only the displayed paragraph; the caller merges it into its existing block. */
+export async function simplifyEpubParagraphApi({ paragraph, documentId, targetLang, nativeLang, level, apiKey }) {
+  const block = buildEpubSimplificationBlocks([paragraph], paragraph.chapterId)[0];
+  if (!block) throw new Error('Invalid paragraph');
+  block.id = `${block.id}_paragraph_${paragraph.id}`;
+  const result = await simplifyEpubBlockApi({
+    block, documentId, targetLang, nativeLang, level, apiKey, allowShortParagraph: true
+  });
+  const variant = result.paragraphs.find(item => item.sourceParagraphId === paragraph.id);
+  if (!variant) throw new Error('Missing simplified paragraph');
+  return variant;
 }

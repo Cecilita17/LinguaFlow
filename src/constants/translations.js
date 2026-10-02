@@ -70,6 +70,9 @@ export const TRANSLATIONS = {
 
     // Subscriptions preview
     gloss_error_stopped: 'No se pudo completar el glosado. Se detuvo para evitar más solicitudes a la API. Podés reintentarlo manualmente.',
+    paragraph_simplification_retry: 'Volver a simplificar este párrafo',
+    paragraph_simplification_loading: 'Simplificando este párrafo…',
+    paragraph_simplification_error: 'No se pudo simplificar el párrafo. Se conservó la versión anterior.',
     subscriptions_title: 'Suscripciones',
     subscriptions_description: 'Conocé los planes de LinguaFlow',
     subscriptions_soon: 'Próximamente',
@@ -344,6 +347,9 @@ export const TRANSLATIONS = {
 
     // Subscriptions preview
     gloss_error_stopped: 'Glossing could not be completed. It stopped to avoid further API requests. You can retry manually.',
+    paragraph_simplification_retry: 'Simplify this paragraph again',
+    paragraph_simplification_loading: 'Simplifying this paragraph…',
+    paragraph_simplification_error: 'Could not simplify the paragraph. The previous version was kept.',
     subscriptions_title: 'Subscriptions',
     subscriptions_description: 'Explore LinguaFlow plans',
     subscriptions_soon: 'Coming soon',
