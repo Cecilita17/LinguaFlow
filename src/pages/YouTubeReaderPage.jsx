@@ -419,6 +419,10 @@ export function YouTubeReaderPage({
       onProgress: (p) => {
         if (controller.signal.aborted || glossAbortControllerRef.current !== controller) return;
         setGlossProgress(p);
+        if (p.recoverableError) {
+          setGlossNotice({ message: formatGlossError(p.errorDetails, t, { continuing: true }), type: 'error' });
+          return;
+        }
         if (p.error) {
           setIsAutoGlossing(false);
           setGlossNotice({ message: formatGlossError(p.errorDetails, t), type: 'error' });
@@ -437,8 +441,8 @@ export function YouTubeReaderPage({
               });
             } else {
               setGlossNotice({
-                message: `Glosado terminado: ${completedCount}/${totalCount}. ${failedCount} pendientes.`,
-                type: 'warning'
+                message: `${t('gloss_completed_with_failures', { completed: completedCount, total: totalCount, failed: failedCount })}${p.lastErrorDetails ? ` · ${formatGlossError(p.lastErrorDetails, t, { continuing: true })}` : ''}`,
+                type: p.lastErrorDetails ? 'error' : 'warning'
               });
             }
           }

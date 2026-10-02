@@ -1,3 +1,4 @@
+import { buildGlossBatches, runGlossBatches } from '../utils/glossBatchPolicy.js';
 import { getGlossErrorDetails } from '../utils/glossErrors.js';
 /**
  * Standalone Text Gloss Service for LinguaFlow
@@ -84,7 +85,8 @@ export function enrichParagraphsWithGlosses({
   apiKey = '',
   abortSignal = null,
   onUpdate = null,
-  onProgress = null
+  onProgress = null,
+  failedParagraphIds = new Set()
 }) {
   if (!Array.isArray(paragraphs) || paragraphs.length === 0) {
     return paragraphs;
@@ -114,6 +116,8 @@ export function enrichParagraphsWithGlosses({
   }
 
   let currentParagraphs = [...prepared];
+  const failedIds = failedParagraphIds;
+  let lastErrorDetails = null;
   (async () => {
 
     const checkAborted = () => {
@@ -151,7 +155,7 @@ export function enrichParagraphsWithGlosses({
       return;
     }
 
-    const missingParagraphs = currentParagraphs.filter(p => !isGlossComplete(p, targetLang, nativeLang));
+    const missingParagraphs = currentParagraphs.filter(p => !failedIds.has(p.id) && !isGlossComplete(p, targetLang, nativeLang));
 
     if (onProgress) {
       onProgress({
@@ -163,13 +167,8 @@ export function enrichParagraphsWithGlosses({
       });
     }
 
-    const CHUNK_SIZE = 5;
     let actualAiRequestsCount = 0;
-
-    const initialChunks = [];
-    for (let i = 0; i < missingParagraphs.length; i += CHUNK_SIZE) {
-      initialChunks.push(missingParagraphs.slice(i, i + CHUNK_SIZE));
-    }
+    const initialChunks = buildGlossBatches(missingParagraphs, targetLang);
 
     // Helper to process a batch of paragraphs
     const processBatch = async (batch) => {
@@ -222,18 +221,28 @@ export function enrichParagraphsWithGlosses({
           completed,
           isGlossing: true,
           isComplete: completed === totalParagraphs,
-          failed: 0
+          failed: currentParagraphs.filter(line => failedIds.has(line.id) && !isGlossComplete(line, targetLang, nativeLang)).length
         });
       }
     };
 
-    // Process each chunk in a single pass (Fail-Cheap policy: no cascading retries)
-    for (const chunk of initialChunks) {
-      if (checkAborted()) return;
-      await processBatch(chunk);
-      if (checkAborted()) return;
-      await new Promise(r => setTimeout(r, 150));
-    }
+    // Each line is attempted once; local failures do not prevent later batches.
+    await runGlossBatches({
+      batches: initialChunks,
+      processBatch,
+      isAborted: checkAborted,
+      onRecoverableError: (error, batch) => {
+        const pending = batch.filter(line => !isGlossComplete(currentParagraphs.find(item => item.id === line.id), targetLang, nativeLang));
+        pending.forEach(line => failedIds.add(line.id));
+        lastErrorDetails = getGlossErrorDetails(error);
+        onProgress?.({
+          total: totalParagraphs, completed: getCompletedCount(currentParagraphs),
+          isGlossing: true, isComplete: false, failed: currentParagraphs.filter(line => failedIds.has(line.id) && !isGlossComplete(line, targetLang, nativeLang)).length,
+          recoverableError: true, errorDetails: lastErrorDetails
+        });
+      }
+    });
+    if (checkAborted()) return;
 
     const finalCompleted = getCompletedCount(currentParagraphs);
     if (onProgress) {
@@ -242,7 +251,8 @@ export function enrichParagraphsWithGlosses({
         completed: finalCompleted,
         isGlossing: false,
         isComplete: finalCompleted === totalParagraphs,
-        failed: totalParagraphs - finalCompleted
+        failed: totalParagraphs - finalCompleted,
+        lastErrorDetails
       });
     }
   })().catch(err => {

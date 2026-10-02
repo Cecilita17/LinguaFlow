@@ -238,6 +238,7 @@ export function TextReaderPage({
   const loadingParagraphIds = glossingParagraphIds; // Alias for backward compatibility
   const setLoadingParagraphIds = setGlossingParagraphIds;
   const abortControllerRef = useRef(null);
+  const failedGlossParagraphIdsRef = useRef(new Set());
 
   // Keep error diagnostics visible longer than completion notices
   useEffect(() => {
@@ -1766,6 +1767,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
 
     const enriched = enrichParagraphsWithGlosses({
       paragraphs: paragraphsToGloss,
+      failedParagraphIds: failedGlossParagraphIdsRef.current,
       targetLang: activeTargetLang,
       nativeLang,
       apiKey,
@@ -1777,18 +1779,24 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       onProgress: (prog) => {
         if (controller.signal.aborted || abortControllerRef.current !== controller) return;
         setGlossingProgress(prog);
+        if (prog.recoverableError) {
+          setGlossNotice({ message: formatGlossError(prog.errorDetails, t, { continuing: true }), type: 'error' });
+          return;
+        }
         if (prog.error) {
           setIsAutoGlossing(false);
           setGlossNotice({ message: formatGlossError(prog.errorDetails, t), type: 'error' });
           return;
         }
-        if (!prog.isGlossing && !prog.isPaused && notifyAtEnd) {
-          setIsAutoGlossing(false);
+        if (!prog.isGlossing && !prog.isPaused && (notifyAtEnd || prog.failed > 0)) {
+          if (notifyAtEnd) setIsAutoGlossing(false);
           setGlossNotice({
-            message: notifyAtEnd === 'text'
+            message: prog.failed > 0
+              ? `${t('gloss_completed_with_failures', prog)}${prog.lastErrorDetails ? ` · ${formatGlossError(prog.lastErrorDetails, t, { continuing: true })}` : ''}`
+              : notifyAtEnd === 'text'
               ? (isSpanish ? `Glosado del texto: ${prog.completed}/${prog.total}` : `Text glossed: ${prog.completed}/${prog.total}`)
               : (isSpanish ? `Glosado del capítulo: ${prog.completed}/${prog.total}` : `Chapter glossed: ${prog.completed}/${prog.total}`),
-            type: prog.completed === prog.total ? 'success' : 'warning'
+            type: prog.completed === prog.total ? 'success' : (prog.lastErrorDetails ? 'error' : 'warning')
           });
         }
       }
@@ -1801,6 +1809,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
   // EPUB runs cover the chapter; AI-generated texts cover the full document.
   // Other texts retain their page-scoped automatic glossing.
   const autoGlossScopeRef = useRef(null);
+  useEffect(() => {
+    failedGlossParagraphIdsRef.current = new Set();
+  }, [document?.id, activeDocLang, nativeLang, simplificationMode.kind, simplificationMode.level]);
   const handleToggleAutoGlossing = useCallback(() => {
     if (isAutoGlossing) {
       abortControllerRef.current?.abort();
@@ -1810,6 +1821,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       return;
     }
     if (!document?.id || visibleParagraphs.length === 0) return;
+    failedGlossParagraphIdsRef.current = new Set();
     autoGlossScopeRef.current = { documentId: document.id, chapterId: isEpub ? currentChapter?.id : null };
     setIsAutoGlossing(true);
   }, [isAutoGlossing, document?.id, visibleParagraphs.length, isEpub, currentChapter?.id]);
@@ -1862,6 +1874,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
   // Resume the current page and retain the same document/chapter scope.
   const handleResumeGlossing = () => {
     if (!document?.id) return;
+    failedGlossParagraphIdsRef.current = new Set();
     autoGlossScopeRef.current = { documentId: document.id, chapterId: isEpub ? currentChapter?.id : null };
     setIsAutoGlossing(true);
   };

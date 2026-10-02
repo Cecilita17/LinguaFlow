@@ -1,3 +1,4 @@
+import { buildGlossBatches, runGlossBatches } from '../utils/glossBatchPolicy.js';
 import { createGlossError, getGlossErrorDetails, glossErrorCodeForHttp } from '../utils/glossErrors.js';
 /**
  * Subtitle Gloss Service
@@ -1158,6 +1159,8 @@ export function enrichSubtitlesWithGlosses({
   }
 
   let currentSubtitles = [...prepared];
+  const failedIds = new Set();
+  let lastErrorDetails = null;
   (async () => {
 
     const checkAborted = () => {
@@ -1303,13 +1306,8 @@ export function enrichSubtitlesWithGlosses({
     }
 
     // Phase 2: Reliable batch processing in chunks of 5 lines (Fail-Cheap: 1 request per chunk, zero retry multiplication)
-    const CHUNK_SIZE = 5;
     let actualAiRequestsCount = 0;
-
-    const initialChunks = [];
-    for (let i = 0; i < missingLines.length; i += CHUNK_SIZE) {
-      initialChunks.push(missingLines.slice(i, i + CHUNK_SIZE));
-    }
+    const initialChunks = buildGlossBatches(missingLines, targetLang);
 
     // Helper to process a single batch of lines
     const processBatch = async (batch) => {
@@ -1395,20 +1393,29 @@ export function enrichSubtitlesWithGlosses({
           completed,
           isGlossing: true,
           isComplete: completed === totalSubtitles,
-          failed: 0
+          failed: failedIds.size
         });
       }
     };
 
-    // Process each chunk in a single pass (Fail-Cheap policy: no cascading retries)
-    for (const chunk of initialChunks) {
-      if (checkAborted()) return;
-      await processBatch(chunk);
-      if (checkAborted()) return;
-      await new Promise(r => setTimeout(r, 150));
-    }
+    // Each line is attempted once; local failures do not prevent later batches.
+    await runGlossBatches({
+      batches: initialChunks,
+      processBatch,
+      isAborted: checkAborted,
+      onRecoverableError: (error, batch) => {
+        const pending = batch.filter(line => !isGlossComplete(currentSubtitles.find(item => item.id === line.id), targetLang, nativeLang));
+        pending.forEach(line => failedIds.add(line.id));
+        lastErrorDetails = getGlossErrorDetails(error);
+        onProgress?.({
+          total: totalSubtitles, completed: getCompletedCount(currentSubtitles),
+          isGlossing: true, isComplete: false, failed: failedIds.size,
+          recoverableError: true, errorDetails: lastErrorDetails
+        });
+      }
+    });
+    if (checkAborted()) return;
 
-    // Final verified progress update and save
     const finalCompleted = getCompletedCount(currentSubtitles);
     const failed = totalSubtitles - finalCompleted;
 
@@ -1439,7 +1446,8 @@ export function enrichSubtitlesWithGlosses({
         completed: finalCompleted,
         isGlossing: false,
         isComplete: finalCompleted === totalSubtitles,
-        failed
+        failed,
+        lastErrorDetails
       });
     }
   })().catch(err => {

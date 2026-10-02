@@ -238,6 +238,12 @@ export function ImageReaderPage({
   // Glossing state
   const [glossingParagraphIds, setGlossingParagraphIds] = useState(new Set());
   const [isBatchGlossing, setIsBatchGlossing] = useState(false);
+  const [glossNotice, setGlossNotice] = useState(null);
+  useEffect(() => {
+    if (!glossNotice) return;
+    const timer = setTimeout(() => setGlossNotice(null), 12000);
+    return () => clearTimeout(timer);
+  }, [glossNotice]);
   const glossAbortControllerRef = useRef(null);
 
   // Clean audio playback helper
@@ -395,7 +401,7 @@ export function ImageReaderPage({
       });
     } catch (err) {
       console.warn('Failed to gloss paragraph with AI:', err);
-      window.alert(formatGlossError(err, t));
+      setGlossNotice(formatGlossError(err, t));
     } finally {
       setGlossingParagraphIds(prev => {
         const next = new Set(prev);
@@ -498,19 +504,24 @@ export function ImageReaderPage({
         },
         onProgress: (progress) => {
           if (controller.signal.aborted || glossAbortControllerRef.current !== controller) return;
+          if (progress?.recoverableError) {
+            setGlossNotice(formatGlossError(progress.errorDetails, t, { continuing: true }));
+            return;
+          }
           if (progress?.error) {
             setIsBatchGlossing(false);
-            window.alert(formatGlossError(progress.errorDetails, t));
+            setGlossNotice(formatGlossError(progress.errorDetails, t));
             return;
           }
           if (!progress || progress.isGlossing === false || progress.isComplete === true) {
             setIsBatchGlossing(false);
+            if (progress?.failed > 0) setGlossNotice(`${t('gloss_completed_with_failures', progress)}${progress.lastErrorDetails ? ` · ${formatGlossError(progress.lastErrorDetails, t, { continuing: true })}` : ''}`);
           }
         }
       });
     } catch (err) {
       console.warn('Batch glossing error:', err);
-      window.alert(formatGlossError(err, t));
+      setGlossNotice(formatGlossError(err, t));
       setIsBatchGlossing(false);
     }
   }, [isBatchGlossing, paragraphs, targetLang, nativeLang, apiKey, persistDocumentChanges, t]);
@@ -958,6 +969,16 @@ export function ImageReaderPage({
           </div>
         )}
       </main>
+
+      {glossNotice && (
+        <div role="alert" className="fixed bottom-20 left-4 right-4 sm:left-auto z-50 sm:max-w-sm px-4 py-3 rounded-xl shadow-xl border backdrop-blur-md flex items-center gap-3 bg-slate-900/95 text-white border-slate-700 dark:bg-slate-800/95 dark:border-slate-600">
+          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+          <span className="text-sm leading-relaxed">{glossNotice}</span>
+          <button type="button" onClick={() => setGlossNotice(null)} aria-label={t('gloss_notice_dismiss')} className="shrink-0 p-1 rounded-lg hover:bg-white/10">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <CreateWithAiModal
         isOpen={isPracticeAiModalOpen}

@@ -25,13 +25,13 @@ export function getGlossErrorDetails(error) {
   return result;
 }
 
-export function formatGlossError(error, t) {
+export function formatGlossError(error, t, { continuing = false } = {}) {
   const details = getGlossErrorDetails(error);
   const code = String(details.code).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
   const reasonKey = `gloss_reason_${code.toLowerCase()}`;
   let reason = t(reasonKey);
   if (reason === reasonKey) reason = t('gloss_reason_gloss_unknown');
-  const parts = [t('gloss_error_specific', { reason }), t('gloss_error_code', { code })];
+  const parts = [t(continuing ? 'gloss_error_skipped' : 'gloss_error_specific', { reason }), t('gloss_error_code', { code })];
   const status = details.providerStatus || details.status;
   if (Number.isInteger(status) && status >= 400) parts.push(`HTTP ${status}`);
   if (/^[A-Za-z0-9_-]{1,80}$/.test(details.providerCode || '')) parts.push(t('gloss_error_provider_code', { code: details.providerCode }));
