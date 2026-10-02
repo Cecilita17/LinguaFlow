@@ -69,6 +69,7 @@ export const TRANSLATIONS = {
     back_to_settings: 'Volver a Ajustes',
 
     // Subscriptions preview
+    gloss_error_stopped: 'No se pudo completar el glosado. Se detuvo para evitar más solicitudes a la API. Podés reintentarlo manualmente.',
     subscriptions_title: 'Suscripciones',
     subscriptions_description: 'Conocé los planes de LinguaFlow',
     subscriptions_soon: 'Próximamente',
@@ -342,6 +343,7 @@ export const TRANSLATIONS = {
     back_to_settings: 'Back to Settings',
 
     // Subscriptions preview
+    gloss_error_stopped: 'Glossing could not be completed. It stopped to avoid further API requests. You can retry manually.',
     subscriptions_title: 'Subscriptions',
     subscriptions_description: 'Explore LinguaFlow plans',
     subscriptions_soon: 'Coming soon',

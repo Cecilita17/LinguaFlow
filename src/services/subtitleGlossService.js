@@ -306,6 +306,7 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
       subtitleIds: lines.map(l => l.id),
       requestedCount: lines.length
     });
+    if (options.throwOnError) throw err;
   } finally {
     clearTimeout(timeoutId);
     if (abortSignal) {
@@ -313,6 +314,7 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
     }
   }
 
+  if (options.throwOnError) throw new Error('GLOSS_REQUEST_FAILED');
   return [];
 }
 
@@ -1062,27 +1064,21 @@ export async function glossSingleSubtitleLine({
   };
 
   try {
-    const aiResults = await fetchBatchGlossesApi([preparedSub], targetLang, nativeLang, apiKey, abortSignal, { forceFullLine: true });
+    const aiResults = await fetchBatchGlossesApi([preparedSub], targetLang, nativeLang, apiKey, abortSignal, { forceFullLine: true, throwOnError: true });
     if (Array.isArray(aiResults) && aiResults.length > 0) {
       const match = aiResults[0];
       if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
         const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang, preparedSub.text || sub.text || '', nativeLang);
-        return {
-          ...preparedSub,
-          tokens: mergedTokens,
-          glossStatus: 'glosado'
-        };
+        const updated = { ...preparedSub, tokens: mergedTokens };
+        if (!isGlossComplete(updated, targetLang, nativeLang)) throw new Error('GLOSS_INCOMPLETE');
+        return { ...updated, glossStatus: 'glosado' };
       }
     }
   } catch (err) {
-    console.warn('[LinguaFlow Gloss Engine] Error glossing single line:', err.message);
+    throw err;
   }
 
-  // Return with existing tokens if API call failed or had no results
-  return {
-    ...preparedSub,
-    glossStatus: isGlossComplete(preparedSub, targetLang, nativeLang) ? 'glosado' : 'sin glosar'
-  };
+  throw new Error('GLOSS_INCOMPLETE');
 }
 
 /**
@@ -1152,8 +1148,8 @@ export function enrichSubtitlesWithGlosses({
     return prepared;
   }
 
+  let currentSubtitles = [...prepared];
   (async () => {
-    let currentSubtitles = [...prepared];
 
     const checkAborted = () => {
       if (abortSignal && abortSignal.aborted) {
@@ -1312,7 +1308,7 @@ export function enrichSubtitlesWithGlosses({
       if (checkAborted()) return;
 
       actualAiRequestsCount++;
-      const aiResults = await fetchBatchGlossesApi(batch, targetLang, nativeLang, apiKey, abortSignal);
+      const aiResults = await fetchBatchGlossesApi(batch, targetLang, nativeLang, apiKey, abortSignal, { throwOnError: true });
       if (checkAborted()) return;
       let hasNewData = false;
 
@@ -1379,6 +1375,10 @@ export function enrichSubtitlesWithGlosses({
         }
       }
 
+      if (batch.some(line => !isGlossComplete(currentSubtitles.find(item => item.id === line.id), targetLang, nativeLang))) {
+        throw new Error('GLOSS_INCOMPLETE');
+      }
+
       if (onProgress) {
         const completed = getCompletedCount(currentSubtitles);
         onProgress({
@@ -1434,15 +1434,17 @@ export function enrichSubtitlesWithGlosses({
       });
     }
   })().catch(err => {
+    if (abortSignal?.aborted) return;
     console.warn('Background batch glossing notice:', err);
     if (onProgress) {
-      const finalCompleted = getCompletedCount(prepared);
+      const finalCompleted = getCompletedCount(currentSubtitles);
       onProgress({
         total: totalSubtitles,
         completed: finalCompleted,
         isGlossing: false,
         isComplete: finalCompleted === totalSubtitles,
-        failed: totalSubtitles - finalCompleted
+        failed: totalSubtitles - finalCompleted,
+        error: true
       });
     }
   });

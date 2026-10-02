@@ -105,7 +105,7 @@ export function YouTubeReaderPage({
   setActiveTab = null
 }) {
   const { user } = useAuth();
-  const { isSpanish } = useSiteLanguage();
+  const { t, isSpanish } = useSiteLanguage();
   const {
     speechRate,
     setSpeechRate,
@@ -416,7 +416,13 @@ export function YouTubeReaderPage({
         refreshLibraryCount();
       },
       onProgress: (p) => {
+        if (controller.signal.aborted || glossAbortControllerRef.current !== controller) return;
         setGlossProgress(p);
+        if (p.error) {
+          setIsAutoGlossing(false);
+          setGlossNotice({ message: t('gloss_error_stopped'), type: 'error' });
+          return;
+        }
         if (!p.isGlossing) {
           setIsAutoGlossing(false);
           if (!p.isPaused) {
@@ -441,7 +447,7 @@ export function YouTubeReaderPage({
 
     setSubtitles(enriched);
     refreshLibraryCount();
-  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount, abortGlossWithLog]);
+  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount, abortGlossWithLog, t]);
 
   // Toggle Global Auto-Glossing (ON / OFF)
   const handleToggleAutoGlossing = useCallback(() => {
@@ -524,6 +530,7 @@ export function YouTubeReaderPage({
       });
     } catch (err) {
       console.error('Failed to gloss single line:', err);
+      setGlossNotice({ message: t('gloss_error_stopped'), type: 'error' });
     } finally {
       setLoadingLineIds(prev => {
         const next = new Set(prev);
@@ -531,7 +538,7 @@ export function YouTubeReaderPage({
         return next;
       });
     }
-  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount]);
+  }, [targetLang, nativeLang, apiKey, videoId, videoTitle, videoUrl, subtitleSource, refreshLibraryCount, t]);
 
   // Individual subtitle line translation (Groq openai/gpt-oss-120b, cached in-memory per line)
   const handleTranslateLine = useCallback(async (line) => {
@@ -1846,7 +1853,7 @@ export function YouTubeReaderPage({
             {glossNotice.type === 'success' ? (
               <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             ) : (
-              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+              <AlertCircle className={`w-5 h-5 shrink-0 ${glossNotice.type === 'error' ? 'text-rose-400' : 'text-amber-400'}`} />
             )}
             <span>{glossNotice.message}</span>
           </div>

@@ -186,7 +186,7 @@ export function ImageReaderPage({
 }) {
   const { user } = useAuth();
   const { savedWords } = useSavedWords();
-  const { isSpanish } = useSiteLanguage();
+  const { t, isSpanish } = useSiteLanguage();
   const { speechRate } = useAudioSettings();
 
   // View mode state: 'library' (default) | 'uploader' | 'reader'
@@ -394,6 +394,7 @@ export function ImageReaderPage({
       });
     } catch (err) {
       console.warn('Failed to gloss paragraph with AI:', err);
+      window.alert(t('gloss_error_stopped'));
     } finally {
       setGlossingParagraphIds(prev => {
         const next = new Set(prev);
@@ -401,7 +402,7 @@ export function ImageReaderPage({
         return next;
       });
     }
-  }, [glossingParagraphIds, targetLang, nativeLang, apiKey, persistDocumentChanges]);
+  }, [glossingParagraphIds, targetLang, nativeLang, apiKey, persistDocumentChanges, t]);
 
   // Handle on-demand paragraph translation
   const handleTranslateParagraph = useCallback(async (paragraph) => {
@@ -495,6 +496,12 @@ export function ImageReaderPage({
           persistDocumentChanges({ paragraphs: updatedParas });
         },
         onProgress: (progress) => {
+          if (controller.signal.aborted || glossAbortControllerRef.current !== controller) return;
+          if (progress?.error) {
+            setIsBatchGlossing(false);
+            window.alert(t('gloss_error_stopped'));
+            return;
+          }
           if (!progress || progress.isGlossing === false || progress.isComplete === true) {
             setIsBatchGlossing(false);
           }
@@ -502,9 +509,10 @@ export function ImageReaderPage({
       });
     } catch (err) {
       console.warn('Batch glossing error:', err);
+      window.alert(t('gloss_error_stopped'));
       setIsBatchGlossing(false);
     }
-  }, [isBatchGlossing, paragraphs, targetLang, nativeLang, apiKey, persistDocumentChanges]);
+  }, [isBatchGlossing, paragraphs, targetLang, nativeLang, apiKey, persistDocumentChanges, t]);
 
   const practiceVocabulary = useMemo(
     () => getSavedWordsInParagraphs(savedWords, paragraphs, targetLang),

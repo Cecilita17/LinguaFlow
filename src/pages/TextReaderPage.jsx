@@ -1772,6 +1772,11 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       onProgress: (prog) => {
         if (controller.signal.aborted || abortControllerRef.current !== controller) return;
         setGlossingProgress(prog);
+        if (prog.error) {
+          setIsAutoGlossing(false);
+          setGlossNotice({ message: t('gloss_error_stopped'), type: 'error' });
+          return;
+        }
         if (!prog.isGlossing && !prog.isPaused && notifyAtEnd) {
           setIsAutoGlossing(false);
           setGlossNotice({
@@ -1786,7 +1791,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
 
     // Update document with immediately prepared offline tokens
     applyGlossedParagraphs(enriched);
-  }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs, isSpanish]);
+  }, [targetLang, nativeLang, apiKey, applyGlossedParagraphs, isSpanish, t]);
 
   // EPUB runs cover the chapter; AI-generated texts cover the full document.
   // Other texts retain their page-scoped automatic glossing.
@@ -1877,6 +1882,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       applyGlossedParagraphs([updatedParagraph]);
     } catch (err) {
       console.error('Failed to gloss single paragraph:', err);
+      setGlossNotice({ message: t('gloss_error_stopped'), type: 'error' });
     } finally {
       setGlossingParagraphIds(prev => {
         const next = new Set(prev);
@@ -1884,7 +1890,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
         return next;
       });
     }
-  }, [activeDocLang, nativeLang, apiKey, applyGlossedParagraphs]);
+  }, [activeDocLang, nativeLang, apiKey, applyGlossedParagraphs, t]);
 
   // Alias for backwards compatibility
   const handleGlossSingleParagraph = handleGlossParagraph;
@@ -3536,7 +3542,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
             {glossNotice.type === 'success' ? (
               <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             ) : (
-              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+              <AlertCircle className={`w-5 h-5 shrink-0 ${glossNotice.type === 'error' ? 'text-rose-400' : 'text-amber-400'}`} />
             )}
             <span>{glossNotice.message}</span>
           </div>

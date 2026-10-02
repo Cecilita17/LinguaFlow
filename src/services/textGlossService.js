@@ -111,8 +111,8 @@ export function enrichParagraphsWithGlosses({
     return prepared;
   }
 
+  let currentParagraphs = [...prepared];
   (async () => {
-    let currentParagraphs = [...prepared];
 
     const checkAborted = () => {
       if (abortSignal && abortSignal.aborted) {
@@ -175,7 +175,7 @@ export function enrichParagraphsWithGlosses({
       if (checkAborted()) return;
 
       actualAiRequestsCount++;
-      const aiResults = await fetchBatchGlossesApi(batch, targetLang, nativeLang, apiKey, abortSignal);
+      const aiResults = await fetchBatchGlossesApi(batch, targetLang, nativeLang, apiKey, abortSignal, { throwOnError: true });
       if (checkAborted()) return;
       let hasNewData = false;
 
@@ -209,6 +209,10 @@ export function enrichParagraphsWithGlosses({
         onUpdate([...currentParagraphs]);
       }
 
+      if (batch.some(paragraph => !isGlossComplete(currentParagraphs.find(item => item.id === paragraph.id), targetLang, nativeLang))) {
+        throw new Error('GLOSS_INCOMPLETE');
+      }
+
       if (onProgress) {
         const completed = getCompletedCount(currentParagraphs);
         onProgress({
@@ -240,15 +244,17 @@ export function enrichParagraphsWithGlosses({
       });
     }
   })().catch(err => {
+    if (abortSignal?.aborted) return;
     console.warn('Text glossing notice:', err);
     if (onProgress) {
-      const finalCompleted = getCompletedCount(prepared);
+      const finalCompleted = getCompletedCount(currentParagraphs);
       onProgress({
         total: totalParagraphs,
         completed: finalCompleted,
         isGlossing: false,
         isComplete: finalCompleted === totalParagraphs,
-        failed: totalParagraphs - finalCompleted
+        failed: totalParagraphs - finalCompleted,
+        error: true
       });
     }
   });
