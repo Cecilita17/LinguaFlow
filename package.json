@@ -23,6 +23,7 @@
     "express": "^4.19.2",
     "google-auth-library": "^11.0.2",
     "hanzi-writer": "^3.7.3",
+    "jieba-zh-cn": "^1.0.12",
     "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.2",
     "lucide-react": "^0.395.0",

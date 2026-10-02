@@ -8,10 +8,11 @@
  * 3. Incomplete text coverage
  * 4. Punctuation issues
  * 
- * Uses offline dictionary + Intl.Segmenter as fallback for resegmentation.
+ * Uses dictionary-based word segmentation and local Pinyin recovery.
  */
 
 import { pinyin as generatePinyin } from 'pinyin-pro';
+import { segmentChineseWords } from './chineseWordSegmentation.js';
 
 import { CHINESE_OFFLINE_DICT } from './languageGlossStrategies.js';
 
@@ -54,6 +55,12 @@ export function validateChineseTokens(text, tokens) {
   const coverage = (reconstructed.length / text.length) * 100;
   if (coverage < 95) {
     issues.push(`Low text coverage: ${coverage.toFixed(1)}% (expected ≥95%)`);
+  }
+
+  // Length alone cannot detect wrong or reordered words. Such tokens leave
+  // the chat renderer stuck at a mismatch and force character fallbacks.
+  if (reconstructed.replace(/\s+/g, '') !== text.replace(/\s+/g, '')) {
+    issues.push('Token text does not match the message');
   }
 
   // Check for oversized tokens (whole sentence as single token)
@@ -112,16 +119,16 @@ export function validateChineseTokens(text, tokens) {
     }
   }
 
-  // Detect any token boundary inside an ICU lexical word, including just
+  // Detect any token boundary inside a dictionary word, including just
   // two adjacent characters (压力) and partially split compounds.
-  if (_zhSegmenter) {
+  {
     const boundaries = new Set();
     let offset = 0;
     for (const token of tokens) {
       offset += (token.word || token.text || '').length;
       boundaries.add(offset);
     }
-    for (const segment of _zhSegmenter.segment(text)) {
+    for (const segment of segmentChineseWords(text)) {
       if (!segment.isWordLike || !/[\u4E00-\u9FFF]/.test(segment.segment)) continue;
       for (let i = segment.index + 1; i < segment.index + segment.segment.length; i++) {
         if (boundaries.has(i)) {
@@ -150,25 +157,9 @@ export function areTokensProblematic(text, tokens) {
   return !validation.isValid;
 }
 
-// Cached word segmenter (Intl.Segmenter is a native browser API with ICU-quality
-// Chinese word segmentation — no external dependency). Falls back to null when
-// Intl.Segmenter is not available (older environments / SSR).
-const _zhSegmenter = (() => {
-  try {
-    if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
-      return new Intl.Segmenter('zh', { granularity: 'word' });
-    }
-  } catch (e) {}
-  return null;
-})();
-
-/**
- * Segments a full Chinese text with the platform word segmenter. This is the
- * primary recovery path for malformed AI token arrays, because it recognizes
- * compounds beyond our offline dictionary (for example 老公, 借口, 负责人).
- */
+/** Recover malformed tokens using device-independent dictionary segmentation. */
 function segmentFullChineseText(text, sourceTokens = []) {
-  if (!_zhSegmenter || !text) return [];
+  if (!text) return [];
 
   const knownPinyin = new Map();
   const knownTokens = new Map(sourceTokens.map(token => [token?.word || token?.text, token]));
@@ -180,7 +171,7 @@ function segmentFullChineseText(text, sourceTokens = []) {
 
   const result = [];
   try {
-    for (const segment of _zhSegmenter.segment(text)) {
+    for (const segment of segmentChineseWords(text)) {
       const word = segment.segment;
       if (!word || /^\s+$/.test(word)) continue;
 
@@ -208,8 +199,8 @@ function segmentFullChineseText(text, sourceTokens = []) {
 }
 
 /**
- * Resegments oversized Chinese tokens using dictionary + Intl.Segmenter.
- * Strategy: dict longest-match first (gives pinyin), then Intl.Segmenter for
+ * Resegments oversized Chinese tokens using the offline vocabulary and full word dictionary.
+ * Strategy: dict longest-match first (gives pinyin), then the full word dictionary for
  * unknown words (gives word grouping even for proper nouns / rare vocabulary),
  * then single char with dict lookup.
  * @param {string} text - The oversized token word
@@ -257,17 +248,17 @@ function resegmentOversizedToken(text) {
     }
     if (dictMatched) continue;
 
-    // Intl.Segmenter fallback \u2014 groups CJK chars into words even when the dict
+    // Full word dictionary fallback \u2014 groups CJK chars into words even when the dict
     // does not know the compound (proper nouns like \u5E03\u5B9C\u8BFA\u65AF\u827E\u5229\u65AF, or idioms
     // like \u6D41\u8FDE\u5FD8\u8FD4). Pinyin comes from dict per token; if absent, stays null.
-    if (_zhSegmenter && /^[\u4E00-\u9FFF]/.test(remaining)) {
+    if (/^[\u4E00-\u9FFF]/.test(remaining)) {
       let runEnd = 0;
       while (runEnd < remaining.length && /[\u4E00-\u9FFF]/.test(remaining[runEnd])) {
         runEnd++;
       }
       const run = remaining.slice(0, runEnd);
       let firstSeg = null;
-      for (const s of _zhSegmenter.segment(run)) { firstSeg = s.segment; break; }
+      for (const s of segmentChineseWords(run)) { firstSeg = s.segment; break; }
       if (firstSeg && firstSeg.length >= 2) {
         const entry = CHINESE_OFFLINE_DICT[firstSeg];
         result.push({
@@ -374,19 +365,15 @@ export function normalizeChineseTokens(originalText, groqTokens) {
 
   console.warn('Chinese tokens validation issues:', validation.issues);
 
-  // Prefer ICU's Chinese word segmenter for every malformed/incomplete AI
-  // response. It is not limited to a hand-maintained vocabulary list.
+  // Recover malformed/incomplete AI responses with the full word dictionary.
   const platformSegments = segmentFullChineseText(originalText, sourceTokens);
   if (platformSegments.length > 0) {
-    // ICU segmentation differs slightly between browser versions.  Apply the
-    // same conservative dictionary merge afterwards so a browser that emits
-    // adjacent single Hanzi still produces stable lexical words.
+    // Keep the existing offline vocabulary merges after lexical segmentation.
     return mergeSingleCharsUsingDict(platformSegments)
       .map(token => ensureTokenHasPinyin(token));
   }
 
-  // Older environments without Intl.Segmenter retain the deterministic
-  // dictionary-based recovery path below.
+  // Keep the existing recovery path if dictionary segmentation fails.
   const normalizedTokens = [];
 
   for (const token of sourceTokens) {
@@ -465,7 +452,7 @@ function mergeSingleCharsUsingDict(tokens) {
       continue;
     }
 
-    // Longest-match walk over buf (dict first; Intl.Segmenter for unknown; then single char)
+    // Longest-match walk over buf (dict first; word dictionary for unknown; then single char)
     let p = 0;
     while (p < buf.length) {
       let matchedLen = 1;
@@ -492,11 +479,11 @@ function mergeSingleCharsUsingDict(tokens) {
         continue;
       }
 
-      // Intl.Segmenter fallback for unknown compound words
-      if (_zhSegmenter) {
+      // Full word dictionary fallback for unknown compound words
+      {
         const rest = buf.slice(p);
         let firstSeg = null;
-        for (const s of _zhSegmenter.segment(rest)) { firstSeg = s.segment; break; }
+        for (const s of segmentChineseWords(rest)) { firstSeg = s.segment; break; }
         if (firstSeg && firstSeg.length >= 2) {
           const entry = CHINESE_OFFLINE_DICT[firstSeg];
           result.push({
