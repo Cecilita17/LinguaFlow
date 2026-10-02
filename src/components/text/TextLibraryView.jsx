@@ -7,7 +7,6 @@ import {
   FileText,
   Plus,
   ArrowLeft,
-  ArrowRight,
   Clock,
   Layers,
   Loader2,
@@ -429,7 +428,7 @@ export function TextLibraryView({
 
                 {/* Document details */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
                     <span className="text-sm" title={getLocalizedLanguageName(doc.targetLang, langMeta.name, isSpanish)}>
                       {langMeta.flag}
                     </span>
@@ -452,6 +451,12 @@ export function TextLibraryView({
                       </span>
                     )}
 
+                    {isCurrent && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-bold tracking-wide">
+                        {isSpanish ? 'EN LECTURA' : 'CURRENT'}
+                      </span>
+                    )}
+
                     {isEpubDocument && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 font-mono font-bold tracking-wider">
                         EPUB
@@ -464,11 +469,6 @@ export function TextLibraryView({
                       </span>
                     )}
 
-                    {isCurrent && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-bold tracking-wide">
-                        {isSpanish ? 'EN LECTURA' : 'CURRENT'}
-                      </span>
-                    )}
                   </div>
 
                   <div className="flex items-baseline gap-2 flex-wrap mt-1">
@@ -488,18 +488,34 @@ export function TextLibraryView({
                     </p>
                   )}
 
-                  <div className="flex items-center gap-1.5 mt-2 text-[11px] text-[var(--text-muted)] font-medium">
-                    {doc.updatedAt && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 opacity-70" />
-                        {formatDate(doc.updatedAt)}
-                      </span>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex-1 min-w-0 flex items-center flex-wrap gap-1.5 text-[11px] text-[var(--text-muted)] font-medium">
+                      {doc.updatedAt && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 opacity-70" />
+                          {formatDate(doc.updatedAt)}
+                        </span>
+                      )}
+                      {doc.updatedAt && <span className="opacity-50">•</span>}
+                      <span>{paraCount} {isSpanish ? 'párrafos' : 'paragraphs'}</span>
+                    </div>
+                    {!isConfirming && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingDeleteId(doc.id);
+                          }}
+                          className="shrink-0 p-1.5 rounded-xl border border-[var(--border-primary)] hover:border-red-500/70 bg-[var(--surface-secondary)] text-[var(--text-muted)] hover:text-red-500 transition-all cursor-pointer"
+                          title={isSpanish ? 'Eliminar texto' : 'Delete text'}
+                          aria-label={isSpanish ? 'Eliminar texto' : 'Delete text'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                     )}
-                    {doc.updatedAt && <span className="opacity-50">•</span>}
-                    <span>{paraCount} {isSpanish ? 'párrafos' : 'paragraphs'}</span>
                   </div>
-                  <div className="mt-3 flex justify-end">
-                    {isConfirming ? (
+                  {isConfirming && (
+                    <div className="mt-3 flex justify-end">
                       <div
                         className="flex items-center gap-2 bg-red-500/10 border border-red-500/50 rounded-xl px-3 py-2 animate-fade-in text-xs"
                         onClick={(e) => e.stopPropagation()}
@@ -537,34 +553,8 @@ export function TextLibraryView({
                           )}
                         </button>
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectDocument(doc);
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shadow-xs"
-                        >
-                          <span>{isSpanish ? 'Abrir' : 'Open'}</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmingDeleteId(doc.id);
-                          }}
-                          className="p-1.5 rounded-xl border border-[var(--border-primary)] hover:border-red-500/70 bg-[var(--surface-secondary)] text-[var(--text-muted)] hover:text-red-500 transition-all cursor-pointer"
-                          title={isSpanish ? 'Eliminar texto' : 'Delete text'}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Reading Progress Bar */}
