@@ -17,7 +17,8 @@ import {
   User,
   ChevronRight,
   Crown,
-  Mail
+  Mail,
+  BookOpen
 } from 'lucide-react';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
@@ -26,6 +27,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
 import { SiteLanguageToggle } from '../components/SiteLanguageToggle.jsx';
 import { SubscriptionsSettingsView } from '../components/settings/SubscriptionsSettingsView.jsx';
+import { TutorialSettingsView } from '../components/settings/TutorialSettingsView.jsx';
 import { AccountSettingsView } from '../components/settings/AccountSettingsView.jsx';
 import { GoogleDriveBackupSection } from '../components/settings/GoogleDriveBackupSection.jsx';
 import { CallVoiceSettingsSection } from '../components/settings/CallVoiceSettingsSection.jsx';
@@ -58,7 +60,7 @@ export function SettingsPage({
     setAutoPlayTextReader
   } = useAudioSettings();
 
-  const [activeSubView, setActiveSubView] = useState('main'); // 'main' | 'account' | 'subscriptions'
+  const [activeSubView, setActiveSubView] = useState('main'); // 'main' | 'account' | 'subscriptions' | 'tutorial'
   const [subscriptionsBackView, setSubscriptionsBackView] = useState('main');
   const openSubscriptions = (from = 'main') => {
     setSubscriptionsBackView(from);
@@ -94,6 +96,14 @@ export function SettingsPage({
     setSavedNotice(true);
     setTimeout(() => setSavedNotice(false), 2000);
   };
+
+  if (activeSubView === 'tutorial') {
+    return (
+      <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 text-[var(--text-primary)]">
+        <TutorialSettingsView onBack={() => setActiveSubView('main')} />
+      </div>
+    );
+  }
 
   if (activeSubView === 'subscriptions') {
     return (
@@ -203,6 +213,12 @@ export function SettingsPage({
           <span className="w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-tr from-rose-500 to-amber-400 text-white flex items-center justify-center shadow-sm"><Crown className="w-5 h-5" /></span>
           <span className="flex-1 min-w-0"><span className="block font-bold">{t('subscriptions_title')}</span><span className="block text-sm text-[var(--text-muted)] mt-1">{t('subscriptions_description')}</span></span>
           <ChevronRight className="w-5 h-5 shrink-0 text-[var(--text-muted)]" />
+        </button>
+
+        <button type="button" onClick={() => setActiveSubView('tutorial')} className="w-full flex items-center gap-4 p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] hover:bg-[var(--surface-secondary)] transition-colors text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+          <span className="w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-tr from-rose-600 to-pink-500 text-white flex items-center justify-center shadow-sm"><BookOpen className="w-5 h-5" aria-hidden="true" /></span>
+          <span className="flex-1 min-w-0"><span className="block font-bold">{t('tutorial_title')}</span><span className="block text-sm text-[var(--text-muted)] mt-1">{t('tutorial_description')}</span></span>
+          <ChevronRight className="w-5 h-5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
         </button>
 
         {/* SECTION 0.5: GOOGLE DRIVE BACKUP & RESTORE */}
