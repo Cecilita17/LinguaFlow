@@ -549,7 +549,8 @@ export function ChatMessage({
     const concatenated = tokens.map(t => (t.word || t.text || '')).join('');
     console.log('[ChineseTokenDebug] rawText length:', rawText.length, 'tokens length:', tokens.length, 'concatenated length:', concatenated.length);
     const chineseValidation = isChinese ? validateChineseTokens(rawText, tokens) : null;
-    if (concatenated !== rawText || (chineseValidation && !chineseValidation.isValid)) {
+    // Chinese character reconciliation must never split words in other scripts.
+    if (isChinese && (concatenated !== rawText || !chineseValidation.isValid)) {
       const firstMismatchIdx = (() => {
         const minLen = Math.min(rawText.length, concatenated.length);
         for (let i = 0; i < minLen; i++) {
