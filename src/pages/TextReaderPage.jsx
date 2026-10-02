@@ -27,6 +27,7 @@ import {
   Home,
   Settings,
   Gauge,
+  Repeat2,
   Plus,
   Headphones,
   AlertCircle,
@@ -3500,6 +3501,22 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                 ))}
               </select>
             </div>
+
+            {/* Automatic paragraph advance — shared, persisted audio setting */}
+            <button
+              type="button"
+              onClick={() => setAutoPlayTextReader((enabled) => !enabled)}
+              title={t(autoPlayTextReader ? 'reader_autoplay_disable' : 'reader_autoplay_enable')}
+              aria-label={t('reader_autoplay_label')}
+              aria-pressed={autoPlayTextReader}
+              className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
+                autoPlayTextReader
+                  ? 'text-rose-600 dark:text-rose-400 bg-rose-500/15'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
+              }`}
+            >
+              <Repeat2 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            </button>
 
             {/* Translation / Glosses — same interlinearMode / setInterlinearMode */}
             <button
