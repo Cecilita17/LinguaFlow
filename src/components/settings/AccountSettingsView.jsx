@@ -10,12 +10,14 @@ import {
   LogOut,
   Sparkles,
   Info,
-  ExternalLink
+  ExternalLink,
+  Crown,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
-export function AccountSettingsView({ onBack }) {
+export function AccountSettingsView({ onBack, onOpenSubscriptions }) {
   const { user, isAuthenticated, isLoading, error, loginWithGoogle, logout, clearError } = useAuth();
   const { t, isSpanish } = useSiteLanguage();
 
@@ -305,6 +307,13 @@ export function AccountSettingsView({ onBack }) {
             </div>
           </div>
         </div>
+      )}
+      {onOpenSubscriptions && (
+        <button type="button" onClick={onOpenSubscriptions} className="w-full flex items-center gap-3 p-4 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)] hover:bg-[var(--surface-hover)] transition-colors text-left">
+          <Crown className="w-5 h-5 text-rose-500 shrink-0" />
+          <span className="flex-1"><span className="block font-semibold">{t('subscriptions_title')}</span><span className="block text-xs text-[var(--text-muted)] mt-1">{t('subscriptions_soon')}</span></span>
+          <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+        </button>
       )}
     </div>
   );

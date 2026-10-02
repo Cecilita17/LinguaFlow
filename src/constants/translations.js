@@ -68,6 +68,27 @@ export const TRANSLATIONS = {
     account_enter_section: 'Ver detalles de la cuenta',
     back_to_settings: 'Volver a Ajustes',
 
+    // Subscriptions preview
+    subscriptions_title: 'Suscripciones',
+    subscriptions_description: 'Conocé los planes de LinguaFlow',
+    subscriptions_soon: 'Próximamente',
+    subscriptions_intro: 'Elegí cómo acompañar tu aprendizaje. Las suscripciones estarán disponibles más adelante.',
+    subscriptions_free: 'Gratis',
+    subscriptions_free_description: 'Para empezar a aprender con LinguaFlow.',
+    subscriptions_premium_description: 'Para dar el próximo paso en tu aprendizaje.',
+    subscriptions_month: 'por mes',
+    subscriptions_free_price: 'Sin costo',
+    subscriptions_chat: 'Conversaciones para practicar',
+    subscriptions_vocabulary: 'Tu vocabulario en un solo lugar',
+    subscriptions_readers: 'Lectura y contenido para aprender',
+    subscriptions_includes_free: 'Todo lo que incluye el plan Gratis',
+    subscriptions_details_pending: 'Beneficios y límites por anunciar',
+    subscriptions_cta: 'Suscribirme a Premium',
+    subscriptions_free_cta: 'Plan Gratis',
+    subscriptions_notice: 'Los beneficios de cada plan se anunciarán antes del lanzamiento. Todavía no se aceptan suscripciones ni pagos.',
+    subscriptions_back_account: 'Volver a Cuenta',
+
+
     // Google Drive Backup & Restore
     backup_section_title: 'Copia de seguridad en Google Drive',
     backup_section_desc: 'Protege y recupera tus datos, biblioteca y progreso al cambiar de dispositivo',
@@ -284,6 +305,27 @@ export const TRANSLATIONS = {
     account_sync_ready_note: 'Architecture ready for cloud synchronization.',
     account_enter_section: 'View account details',
     back_to_settings: 'Back to Settings',
+
+    // Subscriptions preview
+    subscriptions_title: 'Subscriptions',
+    subscriptions_description: 'Explore LinguaFlow plans',
+    subscriptions_soon: 'Coming soon',
+    subscriptions_intro: 'Choose how to support your learning. Subscriptions will be available at a later date.',
+    subscriptions_free: 'Free',
+    subscriptions_free_description: 'Start learning with LinguaFlow.',
+    subscriptions_premium_description: 'Take the next step in your learning.',
+    subscriptions_month: 'per month',
+    subscriptions_free_price: 'No cost',
+    subscriptions_chat: 'Conversations to practice',
+    subscriptions_vocabulary: 'Your vocabulary in one place',
+    subscriptions_readers: 'Reading and content for learning',
+    subscriptions_includes_free: 'Everything in the Free plan',
+    subscriptions_details_pending: 'Benefits and limits to be announced',
+    subscriptions_cta: 'Subscribe to Premium',
+    subscriptions_free_cta: 'Free plan',
+    subscriptions_notice: 'Plan benefits will be announced before launch. Subscriptions and payments are not available yet.',
+    subscriptions_back_account: 'Back to Account',
+
 
     // Google Drive Backup & Restore
     backup_section_title: 'Google Drive Backup',
