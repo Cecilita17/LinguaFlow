@@ -15,6 +15,7 @@ import {
   tokenizeAndGlossLineOffline
 } from '../services/subtitleGlossService.js';
 import { translateParagraphTextApi } from '../services/textDocumentService.js';
+import { validateYouTubeUrl } from '../services/youtubeService.js';
 import { parseSubtitlesAuto } from '../services/subtitleService.js';
 import {
   getSavedTranscriptsCount,
@@ -147,6 +148,9 @@ export function YouTubeReaderPage({
   const [currentRecordId, setCurrentRecordId] = useState('');
   const [pendingScrollSubtitleId, setPendingScrollSubtitleId] = useState(null);
   const latestPositionRef = useRef({ videoId: '', recordId: '', time: 0, subId: null });
+  const sessionRevisionRef = useRef(0);
+  const restoredSessionRef = useRef(false);
+  const importUrlRef = useRef('');
   const saveThrottlerRef = useRef({ lastSavedTime: 0, timer: null });
 
   // Transcript view preferences
@@ -598,8 +602,11 @@ export function YouTubeReaderPage({
     }
   }, [lineTranslations, targetLang, nativeLang, apiKey, isSpanish]);
 
-  // 1. Restore previous session on initial mount
+  // Restore once; language changes must not reload a previous video session.
   useEffect(() => {
+    if (restoredSessionRef.current) return;
+    restoredSessionRef.current = true;
+    const revision = sessionRevisionRef.current;
     refreshLibraryCount();
     try {
       const saved = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -623,6 +630,7 @@ export function YouTubeReaderPage({
           // New sessions persist only lightweight metadata. The complete
           // transcript/glosses already live in IndexedDB.
           findTranscriptsByVideoId(parsed.videoId, targetLang).then((records) => {
+            if (sessionRevisionRef.current !== revision || activeVideoIdRef.current !== parsed.videoId) return;
             const record = records.find((item) => item.id === parsed.currentRecordId)
               || records.find((item) => String(item.nativeLanguage || item.nativeLang || '') === String(nativeLang || ''))
               || records[0];
@@ -677,6 +685,7 @@ export function YouTubeReaderPage({
   useEffect(() => {
     if (prevTargetLangRef.current !== targetLang) {
       prevTargetLangRef.current = targetLang;
+      const revision = ++sessionRevisionRef.current;
       
       const curTime = latestPositionRef.current?.time ?? currentTime;
       const curSubId = latestPositionRef.current?.subId ?? pendingScrollSubtitleId;
@@ -688,6 +697,7 @@ export function YouTubeReaderPage({
 
         // Check if a saved transcript already exists for the new target language ($0 Groq reuse)
         getTranscriptFromLibrary(videoId, subHash, targetLang, nativeLang).then((existing) => {
+          if (sessionRevisionRef.current !== revision || activeVideoIdRef.current !== videoId) return;
           if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
             setSubtitles(existing.subtitles);
             const actualCompleted = existing.subtitles.filter(s => isGlossComplete(s, targetLang, nativeLang)).length;
@@ -711,6 +721,7 @@ export function YouTubeReaderPage({
             updateTranscriptPlaybackPosition(newRecId, curTime, curSubId).catch(() => {});
           }
         }).catch(() => {
+          if (sessionRevisionRef.current !== revision || activeVideoIdRef.current !== videoId) return;
           const resetTokens = subtitles.map(s => ({ ...s, tokens: [] }));
           launchProgressiveTokenization(resetTokens, targetLang);
           if (curTime > 0) {
@@ -758,7 +769,7 @@ export function YouTubeReaderPage({
     }
     const { videoId: posVideoId, recordId: posRecordId, time, subId } = latestPositionRef.current;
     const effectiveVideoId = explicitVideoId || posVideoId || videoId;
-    const effectiveRecordId = explicitRecordId || posRecordId || currentRecordId;
+    const effectiveRecordId = explicitRecordId || (posVideoId ? posRecordId : currentRecordId);
 
     if (posVideoId && effectiveVideoId && posVideoId !== effectiveVideoId) {
       return;
@@ -776,6 +787,7 @@ export function YouTubeReaderPage({
   }, [currentRecordId, videoId]);
 
   const handleTimeUpdate = useCallback((newTime) => {
+    if (activeVideoIdRef.current !== videoId) return;
     if (typeof newTime !== 'number' || isNaN(newTime)) return;
 
     setCurrentTime(newTime);
@@ -866,6 +878,7 @@ export function YouTubeReaderPage({
 
   // Navigation helper: change view mode and update browser history
   const navigateToView = useCallback((newMode) => {
+    if (newMode === 'importer') importUrlRef.current = '';
     if (newMode === 'library') {
       flushPlaybackPosition();
     }
@@ -909,6 +922,8 @@ export function YouTubeReaderPage({
 
   const handleImportVideo = (newVideoId, newUrl) => {
     flushPlaybackPosition();
+    const revision = ++sessionRevisionRef.current;
+    importUrlRef.current = newUrl || '';
     abortGlossWithLog('handleImportVideo');
     if (progressiveTokenizeRef.current) {
       progressiveTokenizeRef.current.abort();
@@ -922,16 +937,26 @@ export function YouTubeReaderPage({
 
     setVideoId(newVideoId);
     setVideoUrl(newUrl);
-    setCurrentTime(0);
+    setSubtitles([]);
+    setSubtitleFormat(null);
+    setSubtitleSource('');
+    setGlossProgress(null);
+    setIsAutoGlossing(false);
+    const position = getSharedPlaybackPosition(newVideoId);
+    const initialTime = position?.lastPlaybackTime || 0;
+    const initialSubId = position?.lastSubtitleId || null;
+    setSeekToTime({ time: initialTime, autoPlay: false });
+    setPendingScrollSubtitleId(initialSubId);
+    setCurrentTime(initialTime);
     setCurrentRecordId('');
-    latestPositionRef.current = { videoId: newVideoId || '', recordId: '', time: 0, subId: null };
+    latestPositionRef.current = { videoId: newVideoId || '', recordId: '', time: initialTime, subId: initialSubId };
     setIsUrlImporterOpen(false);
 
     // Auto-check if a saved transcript exists in the library for this video
     findTranscriptsByVideoId(newVideoId, targetLang)
       .then((saved) => {
         // Prevent race conditions if user changed video during the async lookup
-        if (activeVideoIdRef.current !== newVideoId) return;
+        if (sessionRevisionRef.current !== revision || activeVideoIdRef.current !== newVideoId) return;
 
         if (saved && saved.length > 0) {
           const latest = saved[0];
@@ -946,7 +971,7 @@ export function YouTubeReaderPage({
       })
       .catch((err) => {
         console.warn('Error checking saved transcripts for video:', err);
-        if (activeVideoIdRef.current === newVideoId) {
+        if (sessionRevisionRef.current === revision && activeVideoIdRef.current === newVideoId) {
           setSubtitles([]);
           setGlossProgress(null);
           navigateToView('reader');
@@ -955,19 +980,41 @@ export function YouTubeReaderPage({
   };
 
   const handleSubtitlesLoaded = useCallback(async (newSubtitles, format, sourceName, videoContext = null) => {
-    flushPlaybackPosition();
+    // Caption imports have already flushed the previous video before switching.
+    if (!videoContext) flushPlaybackPosition();
     abortGlossWithLog('handleSubtitlesLoaded');
     if (progressiveTokenizeRef.current) {
       progressiveTokenizeRef.current.abort();
       progressiveTokenizeRef.current = null;
     }
 
+    const revision = ++sessionRevisionRef.current;
+    const draftUrl = importUrlRef.current.trim();
+    const draftVideo = draftUrl ? validateYouTubeUrl(draftUrl) : null;
+    // A pasted link belongs to this import even if its separate load button
+    // has not been pressed. Never attach a new standalone import to old media.
+    const importVideoId = videoContext?.videoId || (draftVideo?.isValid ? draftVideo.videoId : '')
+      || (viewMode === 'importer' ? 'novideo' : (activeVideoIdRef.current || 'novideo'));
+    const importVideoUrl = videoContext?.videoUrl || (draftVideo?.isValid ? draftUrl : '')
+      || (importVideoId !== 'novideo' ? `https://www.youtube.com/watch?v=${importVideoId}` : '');
+    const importVideoTitle = videoContext?.videoTitle
+      || (videoId === importVideoId && titleVideoIdRef.current === importVideoId ? videoTitle : '');
+    const initialPosition = importVideoId !== 'novideo' ? getSharedPlaybackPosition(importVideoId) : null;
+    const initialTime = initialPosition?.lastPlaybackTime || 0;
+    const initialSubId = initialPosition?.lastSubtitleId || null;
+    const playerVideoId = importVideoId === 'novideo' ? '' : importVideoId;
+    activeVideoIdRef.current = playerVideoId;
+    setVideoId(playerVideoId);
+    setVideoUrl(importVideoUrl);
+    setVideoTitle(importVideoTitle);
+    titleVideoIdRef.current = playerVideoId;
+    setCurrentTime(initialTime);
+    setSeekToTime({ time: initialTime, autoPlay: false });
+    setPendingScrollSubtitleId(initialSubId);
+    latestPositionRef.current = { videoId: playerVideoId, recordId: '', time: initialTime, subId: initialSubId };
     setSubtitleFormat(format);
     setSubtitleSource(sourceName);
     setIsAutoGlossing(false);
-    const importVideoId = videoContext?.videoId || videoId || 'novideo';
-    const importVideoUrl = videoContext?.videoUrl || videoUrl || (importVideoId !== 'novideo' ? `https://www.youtube.com/watch?v=${importVideoId}` : '');
-    const importVideoTitle = videoContext?.videoTitle || '';
 
     // Normalize safely (filters invalid/empty items and ensures all properties exist)
     const normalized = normalizeSubtitlesSafely(newSubtitles, format || 'sub');
@@ -980,10 +1027,12 @@ export function YouTubeReaderPage({
     const subHash = computeSubtitleHash(normalized);
     const recId = getLibraryKey(importVideoId, subHash, targetLang, nativeLang);
     setCurrentRecordId(recId);
+    latestPositionRef.current.recordId = recId;
 
     // Check if transcript already exists in library ($0 Groq cost reuse)
     try {
       const existing = await getTranscriptFromLibrary(importVideoId, subHash, targetLang, nativeLang);
+      if (sessionRevisionRef.current !== revision) return;
       if (existing && Array.isArray(existing.subtitles) && existing.subtitles.length > 0) {
         handleLoadFromLibrary(existing);
         return;
@@ -992,19 +1041,14 @@ export function YouTubeReaderPage({
       console.warn('Error checking library for existing transcript:', e);
     }
 
+    if (sessionRevisionRef.current !== revision) return;
     // Launch progressive non-blocking tokenization
     const initiallyTokenized = launchProgressiveTokenization(normalized, targetLang);
 
     // Persist initial record in library with position (uses shared position if existing)
     try {
-      const sharedPos = importVideoId !== 'novideo' ? getSharedPlaybackPosition(importVideoId) : null;
-      const initialTime = sharedPos?.lastPlaybackTime || 0;
-      const initialSubId = sharedPos?.lastSubtitleId || null;
-
       const effectiveVideoId = importVideoId;
-      const effectiveTitle = importVideoTitle || ((videoTitle && titleVideoIdRef.current === effectiveVideoId)
-        ? videoTitle
-        : `YouTube Video (${effectiveVideoId})`);
+      const effectiveTitle = importVideoTitle || `YouTube Video (${effectiveVideoId})`;
 
       await saveTranscriptToLibrary({
         id: recId,
@@ -1029,8 +1073,8 @@ export function YouTubeReaderPage({
     }
 
     // Navigate to Reader where the user can watch the video with the imported transcript
-    navigateToView('reader');
-  }, [videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition, navigateToView, abortGlossWithLog]);
+    if (sessionRevisionRef.current === revision) navigateToView('reader');
+  }, [viewMode, videoId, videoTitle, videoUrl, targetLang, nativeLang, launchProgressiveTokenization, refreshLibraryCount, flushPlaybackPosition, navigateToView, abortGlossWithLog]);
   const handleImportCaptions = useCallback(async (payload) => {
     if (!payload?.videoId || !Array.isArray(payload.subtitles)) return;
     flushPlaybackPosition();
@@ -1081,6 +1125,8 @@ export function YouTubeReaderPage({
 
   const handleLoadFromLibrary = (record) => {
     if (!record) return;
+    sessionRevisionRef.current++;
+    importUrlRef.current = record.videoUrl || '';
     const effectiveLang = record.targetLang || record.lang || targetLang;
     recordHabitActivityForToday({
       user,
@@ -1218,6 +1264,7 @@ export function YouTubeReaderPage({
   };
 
   const handleClearSubtitles = () => {
+    sessionRevisionRef.current++;
     flushPlaybackPosition();
     abortGlossWithLog('handleClearSubtitles');
     setSubtitles([]);
@@ -1230,6 +1277,9 @@ export function YouTubeReaderPage({
   };
 
   const handleResetSession = () => {
+    sessionRevisionRef.current++;
+    importUrlRef.current = '';
+    setSeekToTime(null);
     flushPlaybackPosition();
     abortGlossWithLog('handleResetSession');
     setVideoId('');
@@ -1299,6 +1349,7 @@ export function YouTubeReaderPage({
           <div className="space-y-4 max-w-2xl mx-auto w-full">
             <YouTubeImporter
               onImportVideo={handleImportVideo}
+              onUrlChange={(url) => { importUrlRef.current = url; }}
               onImportCaptions={handleImportCaptions}
               onImportModeChange={setYoutubeImportMode}
               initialUrl=""
@@ -1621,6 +1672,7 @@ export function YouTubeReaderPage({
               <div className="mb-2 shrink-0">
                 <YouTubeImporter
                   onImportVideo={handleImportVideo}
+                  onUrlChange={(url) => { importUrlRef.current = url; }}
                   initialUrl={videoUrl}
                   selectedLanguage={videoLanguage}
                   onLanguageChange={setVideoLanguage}
@@ -1632,6 +1684,7 @@ export function YouTubeReaderPage({
             {videoId && (
               <div className="w-full max-w-2xl mx-auto rounded-2xl overflow-hidden shadow-xl shadow-black/40 border border-[#4d2419] mb-2 shrink-0">
                 <YouTubePlayer
+                  key={videoId}
                   videoId={videoId}
                   onTimeUpdate={handleTimeUpdate}
                   onPlayerStateChange={handlePlayerStateChange}

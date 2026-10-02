@@ -23,6 +23,7 @@ const SUPPORTED_VIDEO_LANGUAGES = [
 
 export function YouTubeImporter({
   onImportVideo,
+  onUrlChange,
   onImportCaptions,
   onImportModeChange,
   initialUrl = '',
@@ -143,6 +144,7 @@ export function YouTubeImporter({
                 value={urlInput}
                 onChange={(e) => {
                   setUrlInput(e.target.value);
+                  onUrlChange?.(e.target.value);
                   if (error) setError(null);
                 }}
                 placeholder={
