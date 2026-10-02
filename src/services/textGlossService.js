@@ -1,3 +1,4 @@
+import { getGlossErrorDetails } from '../utils/glossErrors.js';
 /**
  * Standalone Text Gloss Service for LinguaFlow
  * Provides interlinear AI glossing for independent text documents and paragraphs.
@@ -18,7 +19,8 @@ import {
   isGlossComplete,
   getLanguageGlossStrategy,
   PUNCTUATION_REGEX,
-  glossSingleSubtitleLine
+  glossSingleSubtitleLine,
+  createIncompleteGlossError
 } from './subtitleGlossService.js';
 
 export {
@@ -210,7 +212,7 @@ export function enrichParagraphsWithGlosses({
       }
 
       if (batch.some(paragraph => !isGlossComplete(currentParagraphs.find(item => item.id === paragraph.id), targetLang, nativeLang))) {
-        throw new Error('GLOSS_INCOMPLETE');
+        throw createIncompleteGlossError(batch.map(paragraph => currentParagraphs.find(item => item.id === paragraph.id)), targetLang, nativeLang, aiResults);
       }
 
       if (onProgress) {
@@ -254,7 +256,8 @@ export function enrichParagraphsWithGlosses({
         isGlossing: false,
         isComplete: finalCompleted === totalParagraphs,
         failed: totalParagraphs - finalCompleted,
-        error: true
+        error: true,
+        errorDetails: getGlossErrorDetails(err)
       });
     }
   });

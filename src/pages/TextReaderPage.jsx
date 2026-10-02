@@ -1,3 +1,4 @@
+import { formatGlossError } from '../utils/glossErrors.js';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   FileText,
@@ -237,12 +238,12 @@ export function TextReaderPage({
   const setLoadingParagraphIds = setGlossingParagraphIds;
   const abortControllerRef = useRef(null);
 
-  // Auto-dismiss gloss notice toast after 5 seconds
+  // Keep error diagnostics visible longer than completion notices
   useEffect(() => {
     if (!glossNotice) return;
     const timer = setTimeout(() => {
       setGlossNotice(null);
-    }, 5000);
+    }, glossNotice.type === 'error' ? 12000 : 5000);
     return () => clearTimeout(timer);
   }, [glossNotice]);
 
@@ -1777,7 +1778,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
         setGlossingProgress(prog);
         if (prog.error) {
           setIsAutoGlossing(false);
-          setGlossNotice({ message: t('gloss_error_stopped'), type: 'error' });
+          setGlossNotice({ message: formatGlossError(prog.errorDetails, t), type: 'error' });
           return;
         }
         if (!prog.isGlossing && !prog.isPaused && notifyAtEnd) {
@@ -1937,7 +1938,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       applyGlossedParagraphs([updatedParagraph]);
     } catch (err) {
       console.error('Failed to gloss single paragraph:', err);
-      setGlossNotice({ message: t('gloss_error_stopped'), type: 'error' });
+      setGlossNotice({ message: formatGlossError(err, t), type: 'error' });
     } finally {
       setGlossingParagraphIds(prev => {
         const next = new Set(prev);

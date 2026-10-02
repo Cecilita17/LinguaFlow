@@ -1,3 +1,4 @@
+import { createGlossError, getGlossErrorDetails, glossErrorCodeForHttp } from '../utils/glossErrors.js';
 /**
  * Subtitle Gloss Service
  * Provides:
@@ -276,28 +277,18 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
         const linesResult = data.lines;
         linesResult.isComplete = Boolean(data.isComplete);
         linesResult.missingIds = data.missingIds || [];
+        linesResult.warningCode = data.warningCode;
+        linesResult.requestId = data.requestId;
+        linesResult.finishReason = data.finishReason;
+        if (!linesResult.length) throw createGlossError(data.warningCode || 'GLOSS_EMPTY_RESPONSE');
         return linesResult;
-      } else {
-        console.warn('[Gloss] batch response missing lines or unsuccessful (fail-cheap, no retry):', {
-          status: res.status,
-          targetLang,
-          nativeLang,
-          subtitleIds: lines.map(l => l.id),
-          requestedCount: lines.length,
-          payload: data
-        });
       }
-    } else {
-      const errText = await res.text().catch(() => '');
-      console.warn('[Gloss] batch request failed (fail-cheap, no retry):', {
-        status: res.status,
-        targetLang,
-        nativeLang,
-        subtitleIds: lines.map(l => l.id),
-        requestedCount: lines.length,
-        response: errText
-      });
+      throw createGlossError(data.code || 'GLOSS_INVALID_RESPONSE', getGlossErrorDetails({ ...data, status: res.status }));
     }
+    const errText = await res.text().catch(() => '');
+    let data = {};
+    try { data = JSON.parse(errText); } catch {}
+    throw createGlossError(data.code || glossErrorCodeForHttp(res.status, data.providerCode), getGlossErrorDetails({ ...data, status: res.status }));
   } catch (err) {
     console.warn(`[Gloss] Batch gloss request failed (fail-cheap, 0 retries):`, {
       error: err.message,
@@ -306,7 +297,12 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
       subtitleIds: lines.map(l => l.id),
       requestedCount: lines.length
     });
-    if (options.throwOnError) throw err;
+    if (options.throwOnError) {
+      if (typeof err.code === 'string' && err.code.startsWith('GLOSS_')) throw err;
+      if (abortSignal?.aborted) throw createGlossError('GLOSS_CANCELLED');
+      if (controller.signal.aborted) throw createGlossError('GLOSS_TIMEOUT', { timeoutSeconds: 28 });
+      throw createGlossError(err instanceof SyntaxError ? 'GLOSS_INVALID_RESPONSE' : 'GLOSS_NETWORK_ERROR');
+    }
   } finally {
     clearTimeout(timeoutId);
     if (abortSignal) {
@@ -314,7 +310,7 @@ export async function fetchBatchGlossesApi(lines, targetLang = 'zh', nativeLang 
     }
   }
 
-  if (options.throwOnError) throw new Error('GLOSS_REQUEST_FAILED');
+  if (options.throwOnError) throw createGlossError('GLOSS_UNKNOWN');
   return [];
 }
 
@@ -1036,6 +1032,19 @@ function tryChineseResegmentation(originalTokens, aiTokens, rawOriginalText = ''
  * @param {AbortSignal} [params.abortSignal=null]
  * @returns {Promise<Object>} The updated subtitle line object
  */
+export function createIncompleteGlossError(lines, targetLang, nativeLang, response = []) {
+  const strategy = getLanguageGlossStrategy(targetLang);
+  const words = lines.flatMap(line => (line?.tokens || []).filter(token =>
+    token && !token.isPunctuation && (token.word || token.text || '').trim() && !PUNCTUATION_REGEX.test((token.word || token.text).trim())));
+  const missing = words.filter(token => !strategy.isTokenComplete(token, nativeLang));
+  return createGlossError(response.warningCode || 'GLOSS_INCOMPLETE', {
+    lineIds: lines.filter(line => !isGlossComplete(line, targetLang, nativeLang)).map(line => line.id),
+    missingWordsCount: missing.length, totalWords: words.length,
+    missingWords: missing.slice(0, 3).map(token => String(token.word || token.text).slice(0, 50)),
+    requestId: response.requestId, finishReason: response.finishReason
+  });
+}
+
 export async function glossSingleSubtitleLine({
   sub,
   targetLang = 'zh',
@@ -1070,7 +1079,7 @@ export async function glossSingleSubtitleLine({
       if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
         const mergedTokens = mergeAiTokensWithSegmented(currentTokens, match.tokens, targetLang, preparedSub.text || sub.text || '', nativeLang);
         const updated = { ...preparedSub, tokens: mergedTokens };
-        if (!isGlossComplete(updated, targetLang, nativeLang)) throw new Error('GLOSS_INCOMPLETE');
+        if (!isGlossComplete(updated, targetLang, nativeLang)) throw createIncompleteGlossError([updated], targetLang, nativeLang, aiResults);
         return { ...updated, glossStatus: 'glosado' };
       }
     }
@@ -1078,7 +1087,7 @@ export async function glossSingleSubtitleLine({
     throw err;
   }
 
-  throw new Error('GLOSS_INCOMPLETE');
+  throw createGlossError('GLOSS_EMPTY_RESPONSE');
 }
 
 /**
@@ -1376,7 +1385,7 @@ export function enrichSubtitlesWithGlosses({
       }
 
       if (batch.some(line => !isGlossComplete(currentSubtitles.find(item => item.id === line.id), targetLang, nativeLang))) {
-        throw new Error('GLOSS_INCOMPLETE');
+        throw createIncompleteGlossError(batch.map(line => currentSubtitles.find(item => item.id === line.id)), targetLang, nativeLang, aiResults);
       }
 
       if (onProgress) {
@@ -1444,7 +1453,8 @@ export function enrichSubtitlesWithGlosses({
         isGlossing: false,
         isComplete: finalCompleted === totalSubtitles,
         failed: totalSubtitles - finalCompleted,
-        error: true
+        error: true,
+        errorDetails: getGlossErrorDetails(err)
       });
     }
   });

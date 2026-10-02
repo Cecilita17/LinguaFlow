@@ -1,3 +1,4 @@
+import { formatGlossError } from '../utils/glossErrors.js';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
@@ -129,12 +130,12 @@ export function YouTubeReaderPage({
   const [glossProgress, setGlossProgress] = useState(null);
   const [glossNotice, setGlossNotice] = useState(null); // { message: string, type: 'success' | 'warning' }
 
-  // Auto-dismiss gloss notice toast after 5 seconds
+  // Keep error diagnostics visible longer than completion notices
   useEffect(() => {
     if (!glossNotice) return;
     const timer = setTimeout(() => {
       setGlossNotice(null);
-    }, 5000);
+    }, glossNotice.type === 'error' ? 12000 : 5000);
     return () => clearTimeout(timer);
   }, [glossNotice]);
 
@@ -420,7 +421,7 @@ export function YouTubeReaderPage({
         setGlossProgress(p);
         if (p.error) {
           setIsAutoGlossing(false);
-          setGlossNotice({ message: t('gloss_error_stopped'), type: 'error' });
+          setGlossNotice({ message: formatGlossError(p.errorDetails, t), type: 'error' });
           return;
         }
         if (!p.isGlossing) {
@@ -530,7 +531,7 @@ export function YouTubeReaderPage({
       });
     } catch (err) {
       console.error('Failed to gloss single line:', err);
-      setGlossNotice({ message: t('gloss_error_stopped'), type: 'error' });
+      setGlossNotice({ message: formatGlossError(err, t), type: 'error' });
     } finally {
       setLoadingLineIds(prev => {
         const next = new Set(prev);

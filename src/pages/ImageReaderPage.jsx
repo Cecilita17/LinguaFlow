@@ -1,3 +1,4 @@
+import { formatGlossError } from '../utils/glossErrors.js';
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   ArrowLeft,
@@ -394,7 +395,7 @@ export function ImageReaderPage({
       });
     } catch (err) {
       console.warn('Failed to gloss paragraph with AI:', err);
-      window.alert(t('gloss_error_stopped'));
+      window.alert(formatGlossError(err, t));
     } finally {
       setGlossingParagraphIds(prev => {
         const next = new Set(prev);
@@ -499,7 +500,7 @@ export function ImageReaderPage({
           if (controller.signal.aborted || glossAbortControllerRef.current !== controller) return;
           if (progress?.error) {
             setIsBatchGlossing(false);
-            window.alert(t('gloss_error_stopped'));
+            window.alert(formatGlossError(progress.errorDetails, t));
             return;
           }
           if (!progress || progress.isGlossing === false || progress.isComplete === true) {
@@ -509,7 +510,7 @@ export function ImageReaderPage({
       });
     } catch (err) {
       console.warn('Batch glossing error:', err);
-      window.alert(t('gloss_error_stopped'));
+      window.alert(formatGlossError(err, t));
       setIsBatchGlossing(false);
     }
   }, [isBatchGlossing, paragraphs, targetLang, nativeLang, apiKey, persistDocumentChanges, t]);

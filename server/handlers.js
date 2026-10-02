@@ -1,3 +1,4 @@
+import { glossErrorCodeForHttp } from '../src/utils/glossErrors.js';
 import dotenv from 'dotenv';
 import { handleUpload } from '@vercel/blob/client';
 import { del, get, issueSignedToken, presignUrl } from '@vercel/blob';
@@ -1500,7 +1501,7 @@ export async function handleBatchGloss(req, res) {
     } = body;
 
     if (!Array.isArray(lines) || lines.length === 0) {
-      return res.status(400).json({ error: 'Se requiere una lista de líneas para glosar.' });
+      return res.status(400).json({ success: false, code: 'GLOSS_INVALID_REQUEST', error: 'Se requiere una lista de líneas para glosar.' });
     }
 
     const effectiveApiKey = (
@@ -1619,9 +1620,11 @@ Return STRICTLY valid JSON with no markdown formatting and no commentary:
 Subtitle lines to process:
 ${linesFormatted}`;
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      let finishReason = 'unknown';
+      let providerAnswered = false;
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
 
         const startTime = Date.now();
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -1649,9 +1652,10 @@ ${linesFormatted}`;
         clearTimeout(timeoutId);
 
         if (response.ok) {
+          providerAnswered = true;
           const data = await response.json();
           const requestId = response.headers.get('x-request-id') || 'no disponible directamente';
-          const finishReason = data?.choices?.[0]?.finish_reason || 'unknown';
+          finishReason = data?.choices?.[0]?.finish_reason || 'unknown';
           const rawText = data?.choices?.[0]?.message?.content || '';
           
           if (finishReason === 'length') {
@@ -1685,28 +1689,49 @@ ${linesFormatted}`;
               source: `groq (${GLOSS_GROQ_MODEL})`,
               lines: validLines,
               isComplete: missingIds.length === 0,
-              missingIds
+              missingIds,
+              finishReason,
+              requestId,
+              ...(finishReason === 'length' ? { warningCode: 'GLOSS_TRUNCATED' } : {})
             });
           } else {
             console.warn(`[BatchGlossWarning] Failed to extract valid gloss lines from Groq response. Finish reason: ${finishReason}, Raw text snippet: ${rawText.slice(0, 200)}`);
+            return res.status(502).json({ success: false, fallback: true,
+              code: finishReason === 'length' ? 'GLOSS_TRUNCATED' : (rawText.trim() ? 'GLOSS_INVALID_RESPONSE' : 'GLOSS_EMPTY_RESPONSE'),
+              finishReason, requestId });
           }
         } else {
           const errText = await response.text();
           console.warn(`Groq batch gloss responded with HTTP ${response.status}:`, errText);
+          let providerCode;
+          try { providerCode = JSON.parse(errText)?.error?.code; } catch {}
+          return res.status(response.status === 429 ? 429 : (response.status === 401 || response.status === 403 ? response.status : 502)).json({
+            success: false, fallback: true, code: glossErrorCodeForHttp(response.status, providerCode),
+            providerStatus: response.status,
+            providerCode: typeof providerCode === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(providerCode) ? providerCode : undefined,
+            requestId: response.headers.get('x-request-id') || undefined,
+            retryAfter: response.headers.get('retry-after') || undefined
+          });
         }
       } catch (err) {
         console.warn('Batch gloss API notice:', err.message);
+        return res.status(controller.signal.aborted ? 504 : 502).json({ success: false, fallback: true,
+          code: controller.signal.aborted ? 'GLOSS_TIMEOUT' : (finishReason === 'length' ? 'GLOSS_TRUNCATED' : (providerAnswered ? 'GLOSS_INVALID_RESPONSE' : 'GLOSS_NETWORK_ERROR')),
+          ...(controller.signal.aborted ? { timeoutSeconds: 25 } : {}), finishReason });
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 
     return res.status(200).json({
       success: false,
       fallback: true,
-      message: 'API key no configurada o respuesta demorada.'
+      code: 'GLOSS_API_KEY_MISSING',
+      message: 'API key no configurada.'
     });
   } catch (err) {
     console.error('Server error in /api/batch-gloss:', err);
-    res.status(500).json({ error: 'Error en el servidor al generar las glosas de subtítulos.' });
+    res.status(500).json({ success: false, code: 'GLOSS_SERVER_ERROR', error: 'Error en el servidor al generar las glosas de subtítulos.' });
   }
 }
 
