@@ -19,11 +19,12 @@ import {
   deleteDocument
 } from '../../services/textDocumentService.js';
 import { saveTextDocument } from '../../services/textLibraryStorage.js';
+import { getLocalizedLanguageName } from '../../constants/languages.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { DocumentCover } from './DocumentCover.jsx';
 
 const LANGUAGE_META = {
-  zh: { name: 'Chino Mandarín', flag: '🇨🇳' },
+  zh: { name: 'Chino', flag: '🇨🇳' },
   ar: { name: 'Árabe', flag: '🇸🇦' },
   pl: { name: 'Polaco', flag: '🇵🇱' },
   ru: { name: 'Ruso', flag: '🇷🇺' },
@@ -429,11 +430,11 @@ export function TextLibraryView({
                 {/* Document details */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                    <span className="text-sm" title={langMeta.name}>
+                    <span className="text-sm" title={getLocalizedLanguageName(doc.targetLang, langMeta.name, isSpanish)}>
                       {langMeta.flag}
                     </span>
                     <span className="text-xs font-semibold text-[var(--text-secondary)]">
-                      {langMeta.name}{' '}
+                      {getLocalizedLanguageName(doc.targetLang, langMeta.name, isSpanish)}{' '}
                       {doc.nativeLang ? (
                         <span className="text-[11px] opacity-70 font-mono font-normal">
                           → {doc.nativeLang.toUpperCase()}

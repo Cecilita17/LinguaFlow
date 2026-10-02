@@ -36,7 +36,7 @@ import { useSavedWords, getSavedWordsInParagraphs } from '../context/SavedWordsC
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 import { useReaderSettings } from '../context/ReaderSettingsContext.jsx';
 import { recordHabitActivityForToday } from '../services/habitTrackerService.js';
-import { getLanguageMeta, isRtlLanguage, getTextDirection } from '../constants/languages.js';
+import { getLocalizedLanguageName, getLanguageMeta, isRtlLanguage, getTextDirection } from '../constants/languages.js';
 import { createAudioWordSynchronizer } from '../utils/audioWordSync.js';
 
 /**
@@ -785,8 +785,8 @@ export function ImageReaderPage({
 
                 <p className="text-[11px] text-[var(--text-muted)] text-center mt-2.5">
                   {isSpanish
-                    ? `Generará una descripción adaptada a nivel ${level} en ${getLanguageMeta(targetLang)?.name || targetLang}.`
-                    : `Will generate a description adapted to level ${level} in ${getLanguageMeta(targetLang)?.name || targetLang}.`}
+                    ? `Generará una descripción adaptada a nivel ${level} en ${getLocalizedLanguageName(targetLang, getLanguageMeta(targetLang)?.name || targetLang, isSpanish)}.`
+                    : `Will generate a description adapted to level ${level} in ${getLocalizedLanguageName(targetLang, getLanguageMeta(targetLang)?.name || targetLang, isSpanish)}.`}
                 </p>
               </div>
             )}

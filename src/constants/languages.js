@@ -23,7 +23,7 @@ export const LANGUAGE_FLAGS = {
 export const ENGLISH_LANGUAGE_NAMES = {
   es: 'Spanish',
   en: 'English',
-  zh: 'Chinese Mandarin',
+  zh: 'Chinese',
   pl: 'Polish',
   de: 'German',
   fr: 'French',
@@ -38,6 +38,7 @@ export const ENGLISH_LANGUAGE_NAMES = {
 };
 
 export function getLocalizedLanguageName(code, fallbackName = '', isSpanish = true) {
+  if (String(code || '').toLowerCase().split('-')[0] === 'zh') return isSpanish ? 'Chino' : 'Chinese';
   if (isSpanish) return fallbackName || code;
   return ENGLISH_LANGUAGE_NAMES[String(code || '').toLowerCase()] || fallbackName || code;
 }
@@ -61,7 +62,7 @@ export const LANGUAGE_METADATA = {
   },
   zh: {
     code: 'zh',
-    name: 'Chino Mandarín',
+    name: 'Chino',
     nativeName: '中文',
     flag: '🇨🇳',
     speechCode: 'zh-CN',
@@ -188,7 +189,7 @@ export const NATIVE_LANG_OPTIONS = [
   { code: 'it', name: 'Italiano', nativeName: 'Italiano', flag: '🇮🇹' },
   { code: 'fr', name: 'Francés', nativeName: 'Français', flag: '🇫🇷' },
   { code: 'tr', name: 'Turco', nativeName: 'Türkçe', flag: '🇹🇷' },
-  { code: 'zh', name: 'Chino Mandarín', nativeName: '中文', flag: '🇨🇳' },
+  { code: 'zh', name: 'Chino', nativeName: '中文', flag: '🇨🇳' },
   { code: 'ar', name: 'Árabe', nativeName: 'العربية', flag: '🇸🇦' },
   { code: 'pt', name: 'Portugués', nativeName: 'Português', flag: '🇧🇷' }
 ];

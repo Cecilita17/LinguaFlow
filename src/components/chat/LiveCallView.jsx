@@ -16,7 +16,7 @@ import {
   Hand
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
-import { getLanguageMeta, getTextDirection, isRtlLanguage } from '../../constants/languages.js';
+import { getLocalizedLanguageName, getLanguageMeta, getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { usePipelineCall } from '../../hooks/usePipelineCall.js';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
@@ -313,7 +313,7 @@ export function LiveCallView({
           <span className="text-xl sm:text-2xl">{currentTargetMeta.flag}</span>
           <div className="text-left hidden xs:block">
             <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] block leading-tight">
-              {currentTargetMeta.name}
+              {getLocalizedLanguageName(targetLang, currentTargetMeta.name, isSpanish)}
             </span>
           </div>
           <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 shadow-xs">

@@ -11,7 +11,7 @@ import {
   Globe,
   ChevronDown
 } from 'lucide-react';
-import { LANGUAGE_METADATA } from '../../constants/languages.js';
+import { getLocalizedLanguageName, LANGUAGE_METADATA } from '../../constants/languages.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { requestAutoBackup } from '../../services/autoBackupService.js';
 
@@ -264,7 +264,7 @@ export function CallVoiceSettingsSection({ onPreferencesChange }) {
                 <span className="text-lg select-none">{meta.flag}</span>
                 <div>
                   <span className="text-xs font-bold text-[var(--text-primary)] block">
-                    {meta.name}
+                    {getLocalizedLanguageName(langCode, meta.name, isSpanish)}
                   </span>
                   <span className="text-[10px] text-[var(--text-muted)] font-mono">
                     {langCode.toUpperCase()}

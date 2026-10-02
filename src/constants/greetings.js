@@ -1,5 +1,5 @@
 export const STUDY_GREETINGS = {
-  zh: { text: '你好', translit: 'Nǐ hǎo', langName: 'Chino Mandarín' },
+  zh: { text: '你好', translit: 'Nǐ hǎo', langName: 'Chino' },
   pl: { text: 'Cześć', translit: null, langName: 'Polaco' },
   en: { text: 'Hello', translit: null, langName: 'Inglés' },
   es: { text: '¡Hola!', translit: null, langName: 'Español' },

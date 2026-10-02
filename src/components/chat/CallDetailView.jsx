@@ -11,7 +11,7 @@ import {
   Languages
 } from 'lucide-react';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
-import { getLanguageMeta } from '../../constants/languages.js';
+import { getLocalizedLanguageName, getLanguageMeta } from '../../constants/languages.js';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
 import { PUNCTUATION_REGEX } from '../../services/subtitleGlossService.js';
 import { tokenizeLiveCallTurn } from '../../services/liveCallGlossService.js';
@@ -253,7 +253,7 @@ export function CallDetailView({
             <span className="text-3xl">{langMeta.flag}</span>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
-                {langMeta.name}
+                {getLocalizedLanguageName(targetLang, langMeta.name, isSpanish)}
               </h3>
               <p className="text-xs text-[var(--text-muted)]">
                 {callData?.summary || (isSpanish ? 'Llamada de voz completada' : 'Completed voice call')}

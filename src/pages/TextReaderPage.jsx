@@ -36,7 +36,7 @@ import { CreateWithAiModal } from '../components/text/CreateWithAiModal.jsx';
 import { TextLibraryView } from '../components/text/TextLibraryView.jsx';
 import { OriginalAudioPlayer } from '../components/textReader/OriginalAudioPlayer.jsx';
 import { LanguageSelectDropdown } from '../components/LanguageSelectDropdown.jsx';
-import { getLanguageMeta } from '../constants/languages.js';
+import { getLocalizedLanguageName, getLanguageMeta } from '../constants/languages.js';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSavedWords, getSavedWordsInParagraphs } from '../context/SavedWordsContext.jsx';
@@ -1175,8 +1175,8 @@ export function TextReaderPage({
         const newMeta = getLanguageMeta(newLang);
         const confirmed = window.confirm(
           isSpanish
-            ? `El documento actual contiene glosas manuales.\n\nAl cambiar el idioma a "${newMeta.name}", el texto se retokenizará para ese idioma pero se conservarán automáticamente todas las glosas manuales de las palabras coincidentes.\n\n¿Deseas cambiar el idioma del documento?`
-            : `This document contains manual glosses.\n\nWhen changing the language to "${newMeta.name}", the text will be retokenized for that language while preserving matching manual glosses automatically.\n\nDo you want to change the document language?`
+            ? `El documento actual contiene glosas manuales.\n\nAl cambiar el idioma a "${getLocalizedLanguageName(newLang, newMeta.name, isSpanish)}", el texto se retokenizará para ese idioma pero se conservarán automáticamente todas las glosas manuales de las palabras coincidentes.\n\n¿Deseas cambiar el idioma del documento?`
+            : `This document contains manual glosses.\n\nWhen changing the language to "${getLocalizedLanguageName(newLang, newMeta.name, isSpanish)}", the text will be retokenized for that language while preserving matching manual glosses automatically.\n\nDo you want to change the document language?`
         );
         if (!confirmed) {
           return;

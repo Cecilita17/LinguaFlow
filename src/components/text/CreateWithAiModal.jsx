@@ -9,7 +9,7 @@ import {
   Layers,
   FileText
 } from 'lucide-react';
-import { LANGUAGE_METADATA } from '../../constants/languages.js';
+import { getLocalizedLanguageName, LANGUAGE_METADATA } from '../../constants/languages.js';
 import { generateAiTextDocument } from '../../services/textDocumentService.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
@@ -161,7 +161,7 @@ export function CreateWithAiModal({
               <span>{isSpanish ? 'Idioma de aprendizaje:' : 'Target language:'}</span>
               <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                 <span>{langMeta.flag}</span>
-                <span>{langMeta.name || langMeta.nativeName}</span>
+                <span>{getLocalizedLanguageName(targetLang, langMeta.name || langMeta.nativeName, isSpanish)}</span>
               </span>
             </div>
           </div>

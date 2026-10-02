@@ -47,7 +47,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'it', name: 'Italiano', speechCode: 'it-IT', hasTranslit: false },
   { code: 'ar', name: 'Árabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
   { code: 'tr', name: 'Turco', speechCode: 'tr-TR', hasTranslit: false },
-  { code: 'zh', name: 'Chino Mandarín', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
+  { code: 'zh', name: 'Chino', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
   { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: false }
 ];
 

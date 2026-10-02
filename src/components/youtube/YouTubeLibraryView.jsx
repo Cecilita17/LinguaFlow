@@ -16,10 +16,11 @@ import {
   ArrowLeft,
   Youtube
 } from 'lucide-react';
+import { getLocalizedLanguageName } from '../../constants/languages.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 const LANGUAGE_META = {
-  zh: { name: 'Chino Mandarín', flag: '🇨🇳' },
+  zh: { name: 'Chino', flag: '🇨🇳' },
   ar: { name: 'Árabe', flag: '🇸🇦' },
   pl: { name: 'Polaco', flag: '🇵🇱' },
   ru: { name: 'Ruso', flag: '🇷🇺' },
@@ -279,7 +280,7 @@ export function YouTubeLibraryView({
                     {/* Language Badge */}
                     <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs border border-white/10 text-xs font-semibold text-rose-100 shadow-xs">
                       <span>{langMeta.flag}</span>
-                      <span className="hidden sm:inline text-[10px]">{langMeta.name}</span>
+                      <span className="hidden sm:inline text-[10px]">{getLocalizedLanguageName(item.targetLanguage, langMeta.name, isSpanish)}</span>
                     </div>
 
                     {/* Status Badge */}

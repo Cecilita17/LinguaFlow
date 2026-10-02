@@ -21,7 +21,7 @@ import {
 } from '../../services/imageReaderLibraryStorage.js';
 import { LanguageSelectDropdown } from '../LanguageSelectDropdown.jsx';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
-import { getLanguageMeta } from '../../constants/languages.js';
+import { getLocalizedLanguageName, getLanguageMeta } from '../../constants/languages.js';
 
 export function ImageLibraryView({
   targetLang = 'zh',
@@ -189,8 +189,8 @@ export function ImageLibraryView({
             </h2>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5">
               {isSpanish
-                ? `Imágenes guardadas para ${currentLangMeta?.name || targetLang}`
-                : `Saved images for ${currentLangMeta?.name || targetLang}`}
+                ? `Imágenes guardadas para ${getLocalizedLanguageName(targetLang, currentLangMeta?.name || targetLang, isSpanish)}`
+                : `Saved images for ${getLocalizedLanguageName(targetLang, currentLangMeta?.name || targetLang, isSpanish)}`}
               {' · '}
               <span className="font-semibold text-rose-500">{languageFiltered.length}</span>
             </p>
@@ -232,8 +232,8 @@ export function ImageLibraryView({
               {searchQuery.trim()
                 ? (isSpanish ? 'Intenta con otro término de búsqueda.' : 'Try a different search term.')
                 : (isSpanish
-                    ? `Toma una foto o sube una imagen en ${currentLangMeta?.name || targetLang} para estudiarla con audio y glosado.`
-                    : `Snap a photo or upload an image in ${currentLangMeta?.name || targetLang} to study it with audio and glosses.`)}
+                    ? `Toma una foto o sube una imagen en ${getLocalizedLanguageName(targetLang, currentLangMeta?.name || targetLang, isSpanish)} para estudiarla con audio y glosado.`
+                    : `Snap a photo or upload an image in ${getLocalizedLanguageName(targetLang, currentLangMeta?.name || targetLang, isSpanish)} to study it with audio and glosses.`)}
             </p>
             {!searchQuery.trim() && (
               <button

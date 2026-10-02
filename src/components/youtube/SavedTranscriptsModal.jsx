@@ -13,10 +13,11 @@ import {
   Play,
   FileText
 } from 'lucide-react';
+import { getLocalizedLanguageName } from '../../constants/languages.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 
 const LANGUAGE_META = {
-  zh: { name: 'Chino Mandarín', flag: '🇨🇳' },
+  zh: { name: 'Chino', flag: '🇨🇳' },
   ar: { name: 'Árabe', flag: '🇸🇦' },
   pl: { name: 'Polaco', flag: '🇵🇱' },
   ru: { name: 'Ruso', flag: '🇷🇺' },
@@ -222,7 +223,7 @@ export function SavedTranscriptsModal({
                       {/* Language Flag Badge */}
                       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-[#140603] border border-[#482015] font-semibold text-rose-200">
                         <span>{langMeta.flag}</span>
-                        <span>{langMeta.name}</span>
+                        <span>{getLocalizedLanguageName(item.targetLanguage, langMeta.name, isSpanish)}</span>
                       </span>
 
                       {/* Status Badge */}
