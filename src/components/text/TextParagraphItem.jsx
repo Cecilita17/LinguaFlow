@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Square, Pause, AlertCircle, Languages, Loader2, Bookmark, RefreshCw } from 'lucide-react';
+import { Play, Square, Pause, AlertCircle, Languages, Loader2, Bookmark, RefreshCw, Sparkles } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
@@ -193,9 +193,9 @@ function TextParagraphItemComponent({
           disabled={isRetryingSimplification || isTranslating || isGlossing}
           aria-label={t(isRetryingSimplification ? 'paragraph_simplification_loading' : 'paragraph_simplification_retry')}
           title={t(isRetryingSimplification ? 'paragraph_simplification_loading' : 'paragraph_simplification_retry')}
-          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full inline-flex items-center justify-center border border-[var(--border-primary)] bg-[var(--surface-secondary)] text-violet-600 dark:text-violet-400 hover:bg-violet-500/15 transition-colors disabled:opacity-60 disabled:cursor-wait ${isRtl ? 'mr-1 sm:mr-1.5' : 'ml-1 sm:ml-1.5'}`}
+          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full inline-flex items-center justify-center border border-[var(--border-primary)] bg-[var(--surface-secondary)] text-amber-600 dark:text-amber-300 hover:bg-amber-500/15 transition-colors disabled:opacity-60 disabled:cursor-wait ${isRtl ? 'mr-1 sm:mr-1.5' : 'ml-1 sm:ml-1.5'}`}
         >
-          {isRetryingSimplification ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {isRetryingSimplification ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
         </button>
       </span>
     );
