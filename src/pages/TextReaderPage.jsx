@@ -1,3 +1,4 @@
+import { formatSimplificationError } from '../utils/simplificationErrors.js';
 import { formatGlossError } from '../utils/glossErrors.js';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -439,11 +440,11 @@ export function TextReaderPage({
     } catch (error) {
       setSimplificationStatus({
         isLoading: false,
-        error: error.message || 'No se pudo simplificar este bloque. El original sigue disponible.',
+        error: formatSimplificationError(error, t, false),
         blockId: block.id
       });
     }
-  }, [document, isEpub, simplificationMode, currentChapter, currentParagraphPage, apiKey, simplificationRetryNonce]);
+  }, [document, isEpub, simplificationMode, currentChapter, currentParagraphPage, apiKey, simplificationRetryNonce, t]);
 
   useEffect(() => {
     ensureCurrentSimplification();
@@ -1905,7 +1906,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       });
     } catch (error) {
       if (documentRef.current?.id === currentDoc.id) {
-        setGlossNotice({ message: t('paragraph_simplification_error'), type: 'error' });
+        setGlossNotice({ message: formatSimplificationError(error, t), type: 'error' });
       }
     } finally {
       simplificationParagraphRequestsRef.current.delete(requestId);

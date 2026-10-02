@@ -1955,6 +1955,7 @@ export async function handleSimplifyEpubBlock(req, res) {
     const body = parseRequestBody(req);
     const {
       sourceParagraphs = [],
+      paragraphRetry = false,
       targetLang = 'es',
       level = 'medium',
       apiKey: clientApiKey
@@ -1970,7 +1971,7 @@ export async function handleSimplifyEpubBlock(req, res) {
       : [];
 
     if (!acceptedLevels.includes(level) || paragraphs.length === 0) {
-      return res.status(400).json({ error: 'Bloque o nivel de simplificación inválido.' });
+      return res.status(400).json({ code: 'SIMPLIFY_INVALID_REQUEST', error: 'Bloque o nivel de simplificación inválido.' });
     }
 
     const effectiveApiKey = (
@@ -1979,7 +1980,7 @@ export async function handleSimplifyEpubBlock(req, res) {
       (req.headers['x-api-key'] || '')
     ).trim().replace(/^["']|["']$/g, '');
     if (!effectiveApiKey) {
-      return res.status(400).json({ error: 'Para simplificar EPUBs, configura tu GROQ_API_KEY en el servidor o en Ajustes.' });
+      return res.status(400).json({ code: 'SIMPLIFY_API_KEY_MISSING', error: 'Para simplificar EPUBs, configura tu GROQ_API_KEY en el servidor o en Ajustes.' });
     }
 
     const activeModel = getSanitizedGroqModel();
@@ -2011,8 +2012,10 @@ Return exactly ${paragraphs.length} rewritten paragraphs, with exactly ${Math.ma
 Input paragraphs:
 ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.text })))}`;
 
+    const singleParagraphRetry = paragraphRetry === true && paragraphs.length === 1;
+    const attemptLimit = singleParagraphRetry ? 1 : 2;
     let lastValidation = { returnedParagraphs: 0, outputWords: 0 };
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < attemptLimit; attempt += 1) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 45000);
       try {
@@ -2042,12 +2045,17 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
           const errorText = await response.text();
           // Groq can transiently reject a long generation. Retry once; the
           // server still validates every paragraph and the output length.
-          if (attempt === 0 && /json_validate_failed|failed_generation/i.test(errorText)) {
+          if (attempt === 0 && attemptLimit > 1 && /json_validate_failed|failed_generation/i.test(errorText)) {
             console.warn('[EpubSimplification] Groq JSON validation failed; retrying with server-side JSON validation.');
             continue;
           }
           const categorized = categorizeGroqError(response.status, errorText);
-          return res.status(response.status).json({ error: categorized.userMessage, error_type: categorized.type });
+          let providerCode;
+          try { providerCode = JSON.parse(errorText)?.error?.code; } catch {}
+          const code = /json_validate_failed|failed_generation/i.test(errorText)
+            ? 'SIMPLIFY_INVALID_RESPONSE'
+            : glossErrorCodeForHttp(response.status, providerCode).replace('GLOSS_', 'SIMPLIFY_');
+          return res.status(response.status).json({ code, error: categorized.userMessage, error_type: categorized.type });
         }
         const data = await response.json();
         const rawContent = String(data?.choices?.[0]?.message?.content || '').trim();
@@ -2060,7 +2068,10 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
             .split(/\r?\n?<<<LF_PARAGRAPH>>>\r?\n?/)
             .map((paragraph) => paragraph.trim())
             .filter(Boolean)
-          : (Array.isArray(parsed?.paragraphs) ? parsed.paragraphs : []);
+          : (Array.isArray(parsed?.paragraphs) ? parsed.paragraphs
+            : (singleParagraphRetry && rawContent && !/^[{\[`]/.test(rawContent)
+              ? [rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim()].filter(Boolean)
+              : []));
         const normalizedParagraphs = rebalanceSimplifiedParagraphs(rewritten, paragraphs.length);
         if (normalizedParagraphs.length !== rewritten.length) {
           console.warn(`[EpubSimplification] Recovered ${paragraphs.length - rewritten.length} missing paragraph boundaries using sentence endings.`);
@@ -2080,7 +2091,8 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
           && normalizedRewritten.every((paragraph) => paragraph.sourceParagraphId && paragraph.text);
         const resultText = normalizedRewritten.map((paragraph) => paragraph.text).join(' ');
         const resultWordCount = (resultText.match(/[\p{L}\p{N}]+/gu) || []).length;
-        const suspiciouslyShort = resultWordCount < Math.max(20, sourceWordCount * 0.58);
+        const minimumWords = singleParagraphRetry ? Math.min(20, Math.ceil(sourceWordCount * 0.58)) : 20;
+        const suspiciouslyShort = resultWordCount < Math.max(minimumWords, sourceWordCount * 0.58);
         lastValidation = {
           returnedParagraphs: normalizedRewritten.length,
           outputWords: resultWordCount
@@ -2100,19 +2112,22 @@ ${JSON.stringify(paragraphs.map((paragraph, index) => ({ index, text: paragraph.
         }
       } catch (error) {
         clearTimeout(timeoutId);
-        if (attempt === 1) {
+        if (attempt === attemptLimit - 1) {
           return res.status(error.name === 'AbortError' ? 408 : 500).json({
+            code: error.name === 'AbortError' ? 'SIMPLIFY_TIMEOUT' : (error instanceof SyntaxError ? 'SIMPLIFY_INVALID_RESPONSE' : 'SIMPLIFY_NETWORK_ERROR'),
             error: error.name === 'AbortError' ? 'Tiempo de espera agotado al simplificar el EPUB.' : `Error al simplificar el EPUB: ${error.message}`
           });
         }
       }
     }
     return res.status(422).json({
+      code: lastValidation.returnedParagraphs < minimumReturnedParagraphs ? 'SIMPLIFY_INCOMPLETE' : 'SIMPLIFY_TOO_SHORT',
+      ...lastValidation, expectedParagraphs: paragraphs.length, sourceWords: sourceWordCount,
       error: `La IA devolvió una versión demasiado corta o incompleta (párrafos: ${lastValidation.returnedParagraphs}/${paragraphs.length}, palabras: ${lastValidation.outputWords}/${sourceWordCount}). El texto original se conserva.`
     });
   } catch (error) {
     console.error('Server error in /api/simplify-epub-block:', error);
-    return res.status(500).json({ error: 'Error interno al simplificar el bloque EPUB.' });
+    return res.status(500).json({ code: 'SIMPLIFY_SERVER_ERROR', error: 'Error interno al simplificar el bloque EPUB.' });
   }
 }
 
