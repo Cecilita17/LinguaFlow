@@ -46,3 +46,17 @@ test('requested general fonts are selectable and Liberation Serif does not depen
   assert.equal(normalizeFontPreferences({ general: 'rounded' }).general, 'rounded');
   assert.equal(normalizeFontPreferences({ general: 'serif' }).general, 'serif');
 });
+
+test('Chinese platform fonts have matching fallbacks and remain independent', () => {
+  for (const name of ['Microsoft YaHei', 'SimSun', 'PingFang SC', 'Noto Sans CJK']) assert.ok(FONT_OPTIONS.chinese.some(option => option.name === name));
+  for (const chinese of ['yahei', 'simsun', 'pingfang', 'noto-cjk']) {
+    const config = getFontConfiguration({ general: 'poppins', chinese, arabic: 'traditional' });
+    assert.ok(config.family.startsWith("'Poppins'"));
+    assert.ok(config.family.includes("'Amiri'"));
+    assert.ok(config.family.includes(chinese === 'simsun' ? "'Noto Serif SC'" : "'Noto Sans SC'"));
+    assert.ok(!config.stylesheet.includes('Microsoft+YaHei'));
+    assert.ok(!config.stylesheet.includes('PingFang'));
+    assert.ok(!config.stylesheet.includes('family=SimSun'));
+    if (chinese === 'simsun') assert.ok(config.stylesheet.includes('family=Noto+Serif+SC:'));
+  }
+});

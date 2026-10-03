@@ -6,7 +6,6 @@ import { FONT_OPTIONS } from '../../utils/fontPreferences.js';
 
 const SAMPLES = {
   general: { es: 'Cada palabra abre una puerta.', en: 'Every word opens a door.' },
-  chinese: '每一个词都打开一扇门。',
   arabic: 'كل كلمة تفتح بابًا جديدًا.'
 };
 
@@ -25,9 +24,20 @@ export function FontSettingsSection() {
                 {options.map(option => <option key={option.id} value={option.id}>{option.name || t(option.label)}</option>)}
               </select>
             </label>
-            <p lang={script === 'arabic' ? 'ar' : script === 'chinese' ? 'zh' : isSpanish ? 'es' : 'en'} dir={script === 'arabic' ? 'rtl' : 'ltr'} className="mt-4 mb-1 text-lg leading-relaxed text-[var(--text-primary)] break-words">
+            {script === 'chinese' ? (
+              <div className="mt-4 space-y-2">
+                {[['你好', 'Nǐ hǎo', 'font_chinese_hello'], ['中国', 'Zhōngguó', 'font_chinese_china'], ['谢谢', 'Xièxiè', 'font_chinese_thanks']].map(([word, pinyin, meaning]) => (
+                  <p key={word} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 leading-relaxed">
+                    <span lang="zh" className="text-lg">{word}</span>
+                    <span lang="zh-Latn" className="text-xs text-[var(--text-muted)]">{pinyin}</span>
+                    <span className="text-xs text-[var(--text-secondary)]">— {t(meaning)}</span>
+                  </p>
+                ))}
+                <p className="pt-1 text-xs leading-relaxed text-[var(--text-muted)]">{t('font_chinese_system_note')}</p>
+              </div>
+            ) : <p lang={script === 'arabic' ? 'ar' : script === 'chinese' ? 'zh' : isSpanish ? 'es' : 'en'} dir={script === 'arabic' ? 'rtl' : 'ltr'} className="mt-4 mb-1 text-lg leading-relaxed text-[var(--text-primary)] break-words">
               {script === 'general' ? SAMPLES.general[isSpanish ? 'es' : 'en'] : SAMPLES[script]}
-            </p>
+            </p>}
           </div>
         ))}
       </div>
