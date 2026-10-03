@@ -152,6 +152,22 @@ rt {
   text-align: center;
 }
 
+/* Liberation Serif is bundled so it is available on mobile as well. */
+@font-face {
+  font-family: 'Liberation Serif';
+  src: url('/fonts/LiberationSerif-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Liberation Serif';
+  src: url('/fonts/LiberationSerif-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Font enhancements */
 .font-arabic {
   font-family: var(--app-font-family);

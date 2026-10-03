@@ -36,3 +36,13 @@ test('every combination supplies all script families with a safe fallback', () =
     assert.ok(config.family.endsWith('sans-serif'));
   }
 });
+
+test('requested general fonts are selectable and Liberation Serif does not depend on Google Fonts', () => {
+  const requested = ['Inter', 'Open Sans', 'Roboto', 'Noto Sans', 'Liberation Serif', 'Lora', 'Merriweather', 'Poppins'];
+  for (const family of requested) assert.ok(FONT_OPTIONS.general.some(option => option.name === family));
+  const config = getFontConfiguration({ general: 'liberation-serif' });
+  assert.ok(config.family.startsWith("'Liberation Serif'"));
+  assert.equal(config.stylesheet, null);
+  assert.equal(normalizeFontPreferences({ general: 'rounded' }).general, 'rounded');
+  assert.equal(normalizeFontPreferences({ general: 'serif' }).general, 'serif');
+});

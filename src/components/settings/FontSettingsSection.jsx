@@ -22,7 +22,7 @@ export function FontSettingsSection() {
           <div key={script} className="min-w-0 p-3 rounded-2xl bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
             <label className="block text-xs font-semibold"><span className="block mb-2">{t(`font_script_${script}`)}</span>
               <select value={fontPreferences[script]} onChange={event => setFontPreference(script, event.target.value)} className="w-full rounded-xl px-3 py-2 text-xs sm:text-sm bg-[var(--input-bg)] text-[var(--text-primary)] border border-[var(--input-border)] focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer">
-                {options.map(option => <option key={option.id} value={option.id}>{t(option.label)}</option>)}
+                {options.map(option => <option key={option.id} value={option.id}>{option.name || t(option.label)}</option>)}
               </select>
             </label>
             <p lang={script === 'arabic' ? 'ar' : script === 'chinese' ? 'zh' : isSpanish ? 'es' : 'en'} dir={script === 'arabic' ? 'rtl' : 'ltr'} className="mt-4 mb-1 text-lg leading-relaxed text-[var(--text-primary)] break-words">

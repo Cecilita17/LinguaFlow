@@ -1,9 +1,15 @@
 export const FONT_PREFERENCES_KEY = 'linguaflow_font_preferences';
 export const FONT_OPTIONS = {
   general: [
-    { id: 'sans', label: 'font_style_modern', family: 'Inter' },
-    { id: 'rounded', label: 'font_style_rounded', family: 'Nunito', load: true },
-    { id: 'serif', label: 'font_style_book', family: 'Lora', load: true }
+    { id: 'sans', name: 'Inter', family: 'Inter' },
+    { id: 'open-sans', name: 'Open Sans', family: 'Open Sans', load: true },
+    { id: 'roboto', name: 'Roboto', family: 'Roboto', load: true },
+    { id: 'noto-sans', name: 'Noto Sans', family: 'Noto Sans', load: true },
+    { id: 'liberation-serif', name: 'Liberation Serif', family: 'Liberation Serif' },
+    { id: 'serif', name: 'Lora', family: 'Lora', load: true },
+    { id: 'merriweather', name: 'Merriweather', family: 'Merriweather', load: true },
+    { id: 'poppins', name: 'Poppins', family: 'Poppins', load: true },
+    { id: 'rounded', name: 'Nunito', family: 'Nunito', load: true }
   ],
   chinese: [
     { id: 'sans', label: 'font_style_modern', family: 'Noto Sans SC' },
