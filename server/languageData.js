@@ -13,6 +13,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'ar', name: 'Árabe', englishName: 'Arabic', native: 'العربية', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
   { code: 'tr', name: 'Turco', englishName: 'Turkish', native: 'Türkçe', speechCode: 'tr-TR', hasTranslit: false },
   { code: 'zh', name: 'Chino Mandarín', englishName: 'Mandarin Chinese', native: '中文 (普通话)', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
+  { code: 'ko', name: 'Coreano', englishName: 'Korean', native: '한국어', speechCode: 'ko-KR', hasTranslit: true, translitName: 'Romanización' },
   { code: 'ru', name: 'Ruso', englishName: 'Russian', native: 'Русский', speechCode: 'ru-RU', hasTranslit: false }
 ];
 
@@ -34,7 +35,7 @@ export function computeWordDiff(original, corrected) {
   const orig = splitForDiff(original);
   const corr = splitForDiff(corrected);
 
-  const clean = w => (w || '').toLowerCase().replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
+  const clean = w => (w || '').toLowerCase().replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF]+$/g, '');
 
   const m = orig.length;
   const n = corr.length;

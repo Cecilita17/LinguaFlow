@@ -176,10 +176,12 @@ export const DEFAULT_TARGET_LANGUAGES = [
   LANGUAGE_METADATA.ar,
   LANGUAGE_METADATA.pt,
   LANGUAGE_METADATA.ja,
+  LANGUAGE_METADATA.ko,
   LANGUAGE_METADATA.tr
 ];
 
 export const NATIVE_LANG_OPTIONS = [
+  { code: 'ko', name: 'Coreano', nativeName: '한국어', flag: '🇰🇷' },
   { code: 'es', name: 'Español', nativeName: 'Español', flag: '🇪🇸' },
   { code: 'en', name: 'Inglés', nativeName: 'English', flag: '🇺🇸' },
   { code: 'de', name: 'Alemán', nativeName: 'Deutsch', flag: '🇩🇪' },

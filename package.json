@@ -12,7 +12,7 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test server/callMuteSubmission.test.js server/cartesiaVoices.test.js server/authSessionPersistence.test.js server/youtubeCaptionUtils.test.js server/chatCompactResponse.test.js server/glossErrors.test.js server/epubParagraphRetry.test.js server/glossBatchPolicy.test.js server/audioWordSync.test.js server/browserSpeechVoices.test.js server/fontPreferences.test.js server/readerPagePosition.test.js server/offlineFontService.test.js"
+    "test": "node --test server/koreanLanguage.test.js server/callMuteSubmission.test.js server/cartesiaVoices.test.js server/authSessionPersistence.test.js server/youtubeCaptionUtils.test.js server/chatCompactResponse.test.js server/glossErrors.test.js server/epubParagraphRetry.test.js server/glossBatchPolicy.test.js server/audioWordSync.test.js server/browserSpeechVoices.test.js server/fontPreferences.test.js server/readerPagePosition.test.js server/offlineFontService.test.js"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
@@ -20,6 +20,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "es-hangul": "^2.4.0",
     "express": "^4.19.2",
     "google-auth-library": "^11.0.2",
     "hanzi-writer": "^3.7.3",

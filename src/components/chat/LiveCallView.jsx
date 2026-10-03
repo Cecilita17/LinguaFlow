@@ -18,6 +18,7 @@ import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { getLocalizedLanguageName, getLanguageMeta, getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { usePipelineCall } from '../../hooks/usePipelineCall.js';
 import { InterlinearGloss } from '../common/InterlinearGloss.jsx';
+import { getKoreanTransliteration } from '../../services/koreanTransliteration.js';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { tokenizeLiveCallTurn } from '../../services/liveCallGlossService.js';
@@ -38,7 +39,7 @@ export function LiveCallView({
 
   const isChinese = targetLang === 'zh';
   const isArabic = targetLang === 'ar';
-  const hasTranslit = isChinese || isArabic;
+  const hasTranslit = isChinese || isArabic || targetLang === 'ko';
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
 
@@ -166,10 +167,10 @@ export function LiveCallView({
             : PUNCTUATION_REGEX.test(word);
 
           // Tier 1 (Transliteration / Pīnyīn): STRICTLY for Arabic ('ar') and Chinese ('zh')
-          const rawAux = (isChinese || isArabic) && tokenObj && typeof tokenObj === 'object'
+          const rawAux = targetLang === 'ko' ? getKoreanTransliteration(word) : (isChinese || isArabic) && tokenObj && typeof tokenObj === 'object'
             ? (tokenObj.auxiliary ?? tokenObj.translit ?? tokenObj.pinyin ?? (isArabic ? getArabicTransliteration(word) : null))
             : (isArabic ? getArabicTransliteration(word) : null);
-          const auxiliary = (isChinese || isArabic) && rawAux != null ? String(rawAux).trim() : null;
+          const auxiliary = (isChinese || isArabic || targetLang === 'ko') && rawAux != null ? String(rawAux).trim() : null;
 
           // Tier 3 (Word-by-word Gloss):
           const rawGlossVal = tokenObj && typeof tokenObj === 'object' ? tokenObj.gloss : null;

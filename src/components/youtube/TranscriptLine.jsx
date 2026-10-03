@@ -1,6 +1,7 @@
 import React from 'react';
 import { Volume2, Languages, Loader2 } from 'lucide-react';
 import { getLanguageGlossStrategy, PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
+import { getKoreanTransliteration } from '../../services/koreanTransliteration.js';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
@@ -230,7 +231,7 @@ export function TranscriptLine({
                   const word = rawWord != null ? String(rawWord) : '';
                   if (!word) return null;
 
-                  const rawAux = (isChinese || isArabic) && tokenObj && typeof tokenObj === 'object'
+                  const rawAux = targetLang === 'ko' ? getKoreanTransliteration(word) : (isChinese || isArabic) && tokenObj && typeof tokenObj === 'object'
                     ? (tokenObj.auxiliary ?? tokenObj.translit ?? tokenObj.pinyin ?? (isArabic ? getArabicTransliteration(word) : null))
                     : (isArabic ? getArabicTransliteration(word) : null);
                   const auxiliary = rawAux != null ? String(rawAux).trim() : null;
@@ -280,7 +281,7 @@ export function TranscriptLine({
                       }`}
                     >
                       {/* Tier 1 (TOP): Pinyin for Chinese / Transliteration for Arabic */}
-                      {(isChinese || isArabic) && auxiliary && (
+                      {(isChinese || isArabic || targetLang === 'ko') && auxiliary && (
                         <span dir="ltr" className="text-[12px] sm:text-[13px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                           {auxiliary}
                         </span>

@@ -10,6 +10,7 @@
 export const PUNCTUATION_REGEX = /^[，。！？；：、“”‘’（）《》…—,.!?;:'"()¿?¡!/\-_—\s\t،؛؟ـ]+$/;
 
 import { validateChineseAiSegmentation } from './subtitleGlossService.js';
+import { getKoreanTransliteration } from './koreanTransliteration.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
 import { ARABIC_OFFLINE_DICT } from './arabicOfflineDict.js';
 export { ARABIC_OFFLINE_DICT };
@@ -2168,8 +2169,24 @@ export class DefaultGlossStrategy {
   }
 }
 
+export class KoreanGlossStrategy extends DefaultGlossStrategy {
+  constructor() {
+    super('ko');
+    this.hasAuxiliary = true;
+    this.hasTranslit = true;
+    this.translitKey = 'translit';
+  }
+  tokenize(text, nativeLang = 'es') {
+    return super.tokenize(text, nativeLang).map(token => {
+      const translit = token.isPunctuation ? null : getKoreanTransliteration(token.word);
+      return { ...token, auxiliary: translit, translit, pinyin: null };
+    });
+  }
+}
+
 // Strategy Singleton Instances
 const strategyInstances = {
+  ko: new KoreanGlossStrategy(),
   zh: new ChineseGlossStrategy(),
   ar: new ArabicGlossStrategy(),
   pl: new PolishGlossStrategy(),

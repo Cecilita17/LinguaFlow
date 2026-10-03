@@ -48,6 +48,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'ar', name: 'Árabe', speechCode: 'ar-SA', hasTranslit: true, translitName: 'Romanización', rtl: true },
   { code: 'tr', name: 'Turco', speechCode: 'tr-TR', hasTranslit: false },
   { code: 'zh', name: 'Chino', speechCode: 'zh-CN', hasTranslit: true, translitName: 'Pinyin' },
+  { code: 'ko', name: 'Coreano', englishName: 'Korean', native: '한국어', speechCode: 'ko-KR', hasTranslit: true, translitName: 'Romanización' },
   { code: 'ru', name: 'Ruso', speechCode: 'ru-RU', hasTranslit: false }
 ];
 
@@ -499,7 +500,15 @@ export default function App() {
   // Initial greeting helper per target language
   function getInitialBotMsg(targetLang) {
     let initialBotMsg;
-    if (targetLang === 'pl') {
+    if (targetLang === 'ko') {
+      const text = '안녕하세요! 오늘은 무엇에 대해 이야기하고 싶으세요?';
+      initialBotMsg = {
+        id: 'msg-init', sender: 'bot', text,
+        translation: '¡Hola! ¿De qué querés hablar hoy?',
+        tokens: text.split(/\s+/).map(word => ({ word, clean_word: word.replace(/[!?]/g, '') })),
+        vocabulary: {}
+      };
+    } else if (targetLang === 'pl') {
       initialBotMsg = {
         id: 'msg-init',
         sender: 'bot',

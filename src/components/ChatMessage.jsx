@@ -4,6 +4,7 @@ import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { normalizeChineseMessageTokens, validateChineseTokens, resolveChinesePinyin } from '../services/chineseTokenNormalizer.js';
 import { useSavedWords } from '../context/SavedWordsContext.jsx';
+import { getKoreanTransliteration } from '../services/koreanTransliteration.js';
 import { getArabicTransliteration } from '../services/arabicTransliteration.js';
 
 export function ChatMessage({
@@ -84,7 +85,7 @@ export function ChatMessage({
   };
 
   const isChinese = targetLang === 'zh';
-  const allowsTransliteration = targetLang === 'zh' || targetLang === 'ar' || isArabic;
+  const allowsTransliteration = targetLang === 'ko' || targetLang === 'zh' || targetLang === 'ar' || isArabic;
 
   // Helper for rendering transliteration in user bubble (luminous, clear rose-tinted white)
   const renderUserRubyWord = (word, translit, key, token = null) => {
@@ -131,7 +132,7 @@ export function ChatMessage({
     }
 
     const isSaved = isWordSaved(word, targetLang);
-    const effectiveTranslit = (targetLang === 'ar' || (isArabic && targetLang !== 'ru'))
+    const effectiveTranslit = targetLang === 'ko' ? getKoreanTransliteration(word) : (targetLang === 'ar' || (isArabic && targetLang !== 'ru'))
       ? (translit || (/[\u0600-\u06FF]/.test(word) ? getArabicTransliteration(word) : null))
       : null;
 
@@ -204,6 +205,7 @@ export function ChatMessage({
 
   const resolveTranslit = (token) => {
     if (!token) return null;
+    if (targetLang === 'ko') return getKoreanTransliteration(typeof token === 'string' ? token : (token.text || token.word || token.clean_word || ''));
     // Strictly disable transliteration for Russian ('ru') and all languages except Chinese and Arabic
     if (targetLang === 'ru' || !allowsTransliteration) {
       return null;

@@ -12,6 +12,7 @@ import {
 } from './promptTemplates.js';
 import { SUPPORTED_LANGUAGES, computeWordDiff } from './languageData.js';
 import { processDeterministicLinguistics, processSmartConversation } from './conversationEngine.js';
+import { getKoreanTransliteration } from '../src/services/koreanTransliteration.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
 import { fetchConfiguredYouTubeCaptions } from './youtubeCaptionExtractorClient.js';
 
@@ -51,11 +52,12 @@ function enrichArabicPayload(data, targetLang) {
   if (!data || typeof data !== 'object') return data;
   const isArabic = targetLang === 'ar';
   const isChinese = targetLang === 'zh';
-  const allowsTranslit = isArabic || isChinese;
+  const allowsTranslit = isArabic || isChinese || targetLang === 'ko';
 
   if (data.user_correction?.diff_tokens && Array.isArray(data.user_correction.diff_tokens)) {
     data.user_correction.diff_tokens = data.user_correction.diff_tokens.map(token => {
       if (!token) return token;
+      if (targetLang === 'ko') return { ...token, translit: getKoreanTransliteration(token.word || token.text || token.clean_word || '') };
       if (!allowsTranslit) {
         return { ...token, translit: null };
       }
@@ -73,6 +75,7 @@ function enrichArabicPayload(data, targetLang) {
   if (data.bot_response?.tokens && Array.isArray(data.bot_response.tokens)) {
     data.bot_response.tokens = data.bot_response.tokens.map(token => {
       if (!token) return token;
+      if (targetLang === 'ko') return { ...token, translit: getKoreanTransliteration(token.word || token.text || token.clean_word || '') };
       if (!allowsTranslit) {
         return { ...token, translit: null };
       }
@@ -428,9 +431,10 @@ export async function handlePedagogicalCorrect(req, res) {
               : computeWordDiff(rawText, corrected);
 
             // Transliteration rules: strictly for Arabic and Chinese
-            const allowsTranslit = isArabic || isChinese;
+            const allowsTranslit = isArabic || isChinese || targetLang === 'ko';
             diffTokens = diffTokens.map(token => {
               if (!token) return token;
+              if (targetLang === 'ko') return { ...token, translit: getKoreanTransliteration(token.text || '') };
               if (!allowsTranslit) {
                 return { ...token, translit: null };
               }
@@ -695,7 +699,7 @@ export async function handleLookupWord(req, res) {
     const activeModel = getSanitizedGroqModel();
     const isChinese = targetLang === 'zh';
     const isArabic = targetLang === 'ar';
-    const hasTranslit = isChinese || isArabic;
+    const hasTranslit = isChinese || isArabic || targetLang === 'ko';
 
     if (word && effectiveApiKey) {
       console.log(`Groq model selected: ${activeModel}`);
@@ -705,6 +709,7 @@ Return ONLY the most natural, direct translation equivalent of the word "${word}
 Do NOT define, explain, give examples, list senses, or write full sentences. Prefer one short everyday translation; use at most 8 words only when a multi-word translation is essential.
 ${isChinese ? 'Provide the standard Pinyin with tone marks for this COMPLETE word in "translit" (e.g. "hěn gāoxìng", "nǐ hǎo").' : ''}
 ${isArabic ? 'Provide Latin romanization in "translit" or null.' : ''}
+${targetLang === 'ko' ? 'Provide Revised Romanization of the Hangul word in "translit".' : ''}
 ${!hasTranslit ? 'Set "translit" to null.' : ''}
 
 Format strictly as valid JSON with ONLY these fields:
@@ -791,7 +796,7 @@ Format strictly as valid JSON with ONLY these fields:
                 word: parsed?.word || word,
                 meaning: translation.trim(),
                 part_of_speech: parsed?.part_of_speech || parsed?.pos || null,
-                translit: parsed?.translit || parsed?.pinyin || null
+                translit: targetLang === 'ko' ? getKoreanTransliteration(word) : (parsed?.translit || parsed?.pinyin || null)
               }
             });
           }
@@ -1468,7 +1473,7 @@ export function normalizeBatchGlossPayload(parsed, requestedLines, targetLang = 
         }
         const w = String(t.word || t.text || '').trim();
         if (!w) return null;
-        const aux = isChinese
+        const aux = targetLang === 'ko' ? getKoreanTransliteration(w) : isChinese
           ? (t.auxiliary || t.pinyin || null)
           : (isArabic ? (t.auxiliary || t.translit || getArabicTransliteration(w) || null) : null);
         const gloss = t.gloss ? String(t.gloss).trim() : null;
@@ -1558,6 +1563,8 @@ export async function handleBatchGloss(req, res) {
   * In the "word" field, provide the Arabic script word corresponding to the input token.
   * In the "auxiliary" field, provide the clear Latin transliteration / romanization with vowels (e.g. "marḥaban", "kayfa", "al-kitāb", "as-salāmu"). Never leave it null for real Arabic words.
   * In the "gloss" field, provide the direct concise translation/meaning in ${nativeLangName} ("${nativeLang}").`;
+      } else if (targetLang === 'ko') {
+        languageRules = `- KOREAN RULES: Keep naturally spaced Hangul words intact. Provide Revised Romanization in auxiliary and a concise contextual translation in gloss. Never split words into individual syllables.`;
       } else {
         languageRules = `- RULES FOR ${targetLang.toUpperCase()} (${targetLangName}):
   * Do NOT generate pronunciation, transliteration, romanization, Pinyin, or any auxiliary text. STRICTLY set "auxiliary": null for all tokens.
@@ -1609,7 +1616,7 @@ Return STRICTLY valid JSON with no markdown formatting and no commentary:
       "tokens": [
         {
           "word": "string (exact word unit)",
-          "auxiliary": ${isChinese ? '"string with tone-marked Pinyin for the COMPLETE word"' : (isArabic ? '"string with clear Latin transliteration (e.g. marḥaban, al-kitāb)"' : 'null')},
+          "auxiliary": ${isChinese ? '"string with tone-marked Pinyin for the COMPLETE word"' : ((isArabic || targetLang === 'ko') ? '"string with Latin romanization"' : 'null')},
           "gloss": "string (direct concise meaning in ${nativeLangName})"
         }
       ]

@@ -1,3 +1,4 @@
+import { getKoreanTransliteration } from './koreanTransliteration.js';
 import { buildGlossBatches, runGlossBatches } from '../utils/glossBatchPolicy.js';
 import { createGlossError, getGlossErrorDetails, glossErrorCodeForHttp } from '../utils/glossErrors.js';
 /**
@@ -748,7 +749,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
       }
 
       // 2. TIER 2: AI GLOSS COMPLETION
-      const translitFallback = targetLang === 'ar' ? getArabicTransliteration(orig.word || orig.text) : (match.pinyin || match.translit || null);
+      const translitFallback = targetLang === 'ko' ? getKoreanTransliteration(orig.word || orig.text) : targetLang === 'ar' ? getArabicTransliteration(orig.word || orig.text) : (match.pinyin || match.translit || null);
       return {
         ...orig,
         targetLang: targetLang,
@@ -775,7 +776,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     // Check if an unassigned AI token can be applied positionally
     if (unassignedIdx < unassignedAiTokens.length) {
       const aiToken = unassignedAiTokens[unassignedIdx++];
-      const translitFallback = targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : (aiToken.pinyin || aiToken.translit || null);
+      const translitFallback = targetLang === 'ko' ? getKoreanTransliteration(token.word || token.text) : targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : (aiToken.pinyin || aiToken.translit || null);
       return {
         ...token,
         targetLang: targetLang,
@@ -792,7 +793,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     const w = (token.text || token.word || '').trim();
     const offlineEntry = strategy.lookupOffline(w, nativeLang);
     if (offlineEntry && offlineEntry.gloss) {
-      const translitFallback = targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : null;
+      const translitFallback = targetLang === 'ko' ? getKoreanTransliteration(token.word || token.text) : targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : null;
       return {
         ...token,
         targetLang: targetLang,
@@ -811,7 +812,7 @@ export function mergeAiTokensWithSegmented(originalTokens = [], aiTokens = [], t
     }
 
     // Otherwise, the token is unresolved for this targetLang/nativeLang pair
-    const translitFallback = targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : null;
+    const translitFallback = targetLang === 'ko' ? getKoreanTransliteration(token.word || token.text) : targetLang === 'ar' ? getArabicTransliteration(token.word || token.text) : null;
     return {
       ...token,
       targetLang: targetLang,

@@ -20,6 +20,7 @@ import {
   setCachedGloss,
   PUNCTUATION_REGEX
 } from './subtitleGlossService.js';
+import { getKoreanTransliteration } from './koreanTransliteration.js';
 import { getArabicTransliteration } from './arabicTransliteration.js';
 import { CHINESE_OFFLINE_DICT } from './languageGlossStrategies.js';
 import { computeWordDiff } from './diffUtils.js';
@@ -64,6 +65,11 @@ export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null,
         translit: null,
         isPunctuation: true
       };
+    }
+
+    if (targetLang === 'ko') {
+      const translit = getKoreanTransliteration(w);
+      return { ...token, auxiliary: translit, translit, pinyin: null };
     }
 
     if (isArabic) {
@@ -111,8 +117,8 @@ export function tokenizeLiveCallTurn(text, targetLang = 'es', diffTokens = null,
   }));
 }
 
-const cleanDiffWord = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '').toLowerCase();
-const cleanDiffOriginal = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]+$/g, '');
+const cleanDiffWord = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF]+$/g, '').toLowerCase();
+const cleanDiffOriginal = (w) => (w || '').replace(/^[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF]+|[^\w\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\uAC00-\uD7AF]+$/g, '');
 
 /**
  * Maps diffTokens annotations (changed, original) onto Chinese tokens with character-level precision.

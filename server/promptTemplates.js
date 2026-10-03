@@ -61,6 +61,7 @@ Student native language: [${nativeLang}].
      ? 'Omit \"translit\" and \"pinyin\" from correction tokens. The client generates Pinyin locally. Keep every corrected or translated word and its changed/original information.'
      : 'Provide accurate Pinyin with tone marks in \"translit\" for EVERY token (both changed and unchanged). All Chinese punctuation marks (，。！？；：) MUST be placed in \"text\", NEVER in \"translit\".'}
    - For Arabic (${isArabic ? 'target is Arabic' : 'ar'}): Provide Latin romanization in "translit" for EVERY token.
+   - For Korean (ko): Keep Hangul words together, separated by natural spaces, and provide Revised Romanization in "translit" for every Hangul token. Never split words into individual syllables.
    - For Russian, English, Spanish, German, French, Italian, Dutch, Polish, Turkish: Strictly set "translit": null (Cyrillic and Latin scripts must NEVER have transliteration).
    - For any corrected or translated token: "changed": true, "original": "[student's original word]".
    - For untouched correct tokens: "changed": false, "original": null.`;
@@ -113,7 +114,7 @@ ${buildCorePedagogicalRules(targetLang, nativeLang, level, { localChineseAnnotat
 2. "translation": Natural translation of your reply into ${nativeLang}.
 ${compactChinese
   ? '3. Do NOT include "tokens" or "word_tokens" in "bot_response". The client segments the complete reply into words and generates Pinyin locally. Keep your natural response length; only redundant annotations are omitted.'
-  : `3. "tokens": Word and compound token breakdown (provide Pinyin transliteration for Chinese, romanization for Arabic; for Russian and Latin-alphabet languages, strictly set "translit": null).
+  : `3. "tokens": Word and compound token breakdown (provide Pinyin transliteration for Chinese, romanization for Arabic and Korean; for Russian and Latin-alphabet languages, strictly set "translit": null).
    * ABSOLUTE COVERAGE RULE: The "tokens" array MUST tokenize the ENTIRE "text" from the first character to the very last character. Concatenating every token.word in order MUST reproduce the "text" exactly. NEVER stop emitting tokens before reaching the final character of "text". If "text" is long, the "tokens" array must be equally long — do not truncate, summarize, or skip the trailing portion.
    * For Chinese ("zh"): tokenize by natural WORDS or lexical units of 1-4 characters (e.g., "喜欢","学习","中文","一部分","加油"). Do NOT emit a whole sentence as a single token. Do NOT split known compound words into single characters. Every Chinese word in "tokens" MUST include a non-empty "translit" with Hanyu Pinyin (tone marks).`}
 4. "vocabulary": 2-4 key vocabulary words used in your reply with definitions and parts of speech in ${nativeLang}.

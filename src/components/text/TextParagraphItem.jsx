@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Square, Pause, AlertCircle, Languages, Loader2, Bookmark, RefreshCw, Sparkles } from 'lucide-react';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
+import { getKoreanTransliteration } from '../../services/koreanTransliteration.js';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
 import { getTextDirection, isRtlLanguage } from '../../constants/languages.js';
 import { isGlossComplete } from '../../services/subtitleGlossService.js';
@@ -299,7 +300,7 @@ function TextParagraphItemComponent({
                 const isPunctuation = typeof tokenObj === 'object'
                   ? tokenObj.isPunctuation
                   : PUNCTUATION_REGEX.test(word);
-                const auxiliary = (isChinese || isArabic)
+                const auxiliary = targetLang === 'ko' ? getKoreanTransliteration(word) : (isChinese || isArabic)
                   ? (tokenObj.auxiliary || tokenObj.translit || tokenObj.pinyin || (isArabic && word && !isPunctuation ? getArabicTransliteration(word) : null))
                   : null;
                 const rawGloss = typeof tokenObj === 'object' ? tokenObj.gloss : null;
@@ -347,7 +348,7 @@ function TextParagraphItemComponent({
                     title={cleanGloss ? `"${word}": ${cleanGloss}` : word}
                   >
                     {/* Tier 1 (TOP): Pinyin for Chinese / Transliteration for Arabic */}
-                    {(isChinese || isArabic) && auxiliary && (
+                    {(isChinese || isArabic || targetLang === 'ko') && auxiliary && (
                       <span className="text-[12px] sm:text-[13px] text-[var(--text-muted)] dark:text-stone-400 font-mono font-medium tracking-tight leading-none mb-0.5 select-text opacity-85 group-hover/token:opacity-100 group-hover/token:text-[var(--text-secondary)] transition-opacity">
                         {auxiliary}
                       </span>
