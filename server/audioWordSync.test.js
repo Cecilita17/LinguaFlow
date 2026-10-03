@@ -61,3 +61,60 @@ test('closing quotes and supplied token identities remain aligned', () => {
   const quoted = splitSpeechParagraph('Una frase abbastanza lunga per iniziare.» Poi continuiamo con altre parole.', [], 'it');
   assert.ok(quoted[0].text.endsWith('.»'));
 });
+
+function createSyncHarness(lang = 'zh', android = true) {
+  let now = 100;
+  let tick = () => {};
+  const { createAudioWordSynchronizer } = runInNewContext(
+    source.replace(/^import .*;$/mg, '').replaceAll('export ', '') + '\n({ createAudioWordSynchronizer });',
+    {
+      Intl, PUNCTUATION_REGEX: /^[\p{P}\s]+$/u,
+      performance: { now: () => now },
+      setInterval: callback => { tick = callback; return 1; },
+      clearInterval: () => { tick = () => {}; },
+      console: { log() {}, warn() {} }
+    }
+  );
+  const words = lang === 'ar' ? ['مرحبا', 'كيف', 'حالك'] : ['你好', '中国', '谢谢'];
+  const text = words.join(' ');
+  const sync = createAudioWordSynchronizer({ text, tokens: words.map(word => ({ word })), targetLang: lang, isAndroid: android });
+  return { sync, index: i => text.indexOf(words[i]), advance(ms) { now += ms; tick(); } };
+}
+
+test('sparse word events recover pacing on mobile and desktop', () => {
+  for (const android of [true, false]) {
+    const h = createSyncHarness('zh', android);
+    h.sync.handleStart();
+    h.sync.handleBoundary({ charIndex: 0, name: 'word' });
+    h.advance(200);
+    assert.equal(h.sync.getActiveTokenPos(), 0, 'fresh events retain control');
+    h.advance(1000);
+    assert.ok(h.sync.getActiveTokenPos() > 0, 'missing events do not freeze the highlight');
+    h.sync.handleBoundary({ charIndex: 0, name: 'word' });
+    assert.equal(h.sync.getActiveTokenPos(), 0, 'a real event corrects fallback drift');
+    h.sync.stop();
+  }
+});
+
+test('Arabic word events correct the highlight immediately', () => {
+  const h = createSyncHarness('ar');
+  h.sync.handleStart();
+  h.sync.handleBoundary({ charIndex: h.index(2), name: 'word' });
+  assert.equal(h.sync.getActiveTokenPos(), 2);
+  h.advance(100);
+  assert.equal(h.sync.getActiveTokenPos(), 2);
+  h.sync.stop();
+});
+
+test('paused speech cannot advance fallback highlighting', () => {
+  const h = createSyncHarness();
+  h.sync.handleStart();
+  h.sync.handleBoundary({ charIndex: 0, name: 'word' });
+  h.sync.handlePause();
+  h.advance(5000);
+  assert.equal(h.sync.getActiveTokenPos(), 0);
+  h.sync.handleResume();
+  h.advance(100);
+  assert.equal(h.sync.getActiveTokenPos(), 0);
+  h.sync.stop();
+});

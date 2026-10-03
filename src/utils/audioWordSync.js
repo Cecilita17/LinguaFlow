@@ -432,14 +432,17 @@ new activeCharIndex: ${newActiveChar}`);
     if (!isRunning || isPaused || wordTokens.length === 0) return;
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
-    // Once real word events arrive, the audible word owns the highlight.
-    // An estimate must not race ahead or override a corrective boundary.
-    if (hasConfirmedBoundary && !isArabic) return;
+    // Prefer real word events while they are fresh. Some voices stop emitting
+    // them mid-utterance, so resume calibrated pacing after a word-sized grace period.
+    if (hasConfirmedBoundary) {
+      const range = cumulativeRanges[lastBoundaryWordPos];
+      const wordDuration = range ? (range.endFraction - range.startFraction) * calibratedDurationMs : 0;
+      const boundaryGraceMs = Math.max(350, Math.min(1500, wordDuration * 1.6));
+      if (now - lastBoundaryTime < boundaryGraceMs) return;
+    }
 
     // --- ANDROID SPECIFIC ANTI-SKIP STRATEGY ---
-    // Android Arabic voices can report boundary positions ahead of the audible word.
-    // Keep Arabic on the paced path below; boundary intervals still calibrate its speed.
-    if (isAndroid && !isArabic) {
+    if (isAndroid) {
       // 1. Confirmed boundary catch-up:
       const targetPos = Math.max(targetBoundaryWordPos, lastConfirmedWordPos);
       if (targetPos > highestVisitedTokenPos) {
@@ -451,8 +454,8 @@ new activeCharIndex: ${newActiveChar}`);
         return;
       }
 
-      // 2. Conservative temporal pacing only before the first boundary arrives:
-      if (!hasConfirmedBoundary && highestVisitedTokenPos < wordTokens.length - 1) {
+      // 2. Conservative pacing when word events are absent or stale:
+      if (highestVisitedTokenPos < wordTokens.length - 1) {
         const elapsedSinceAnchor = Math.max(0, now - clockBaseTime);
         const safeDuration = Math.max(400, calibratedDurationMs);
         const dFrac = elapsedSinceAnchor / safeDuration;
@@ -627,19 +630,14 @@ word="${matchedWord}"`);
       lastBoundaryWordPos = matchedWordPos;
       lastBoundaryTime = now;
 
-      // Some Android Arabic speech engines emit logical boundary positions ahead of
-      // the audible word. Use their intervals only to calibrate pacing, rather than
-      // allowing a boundary to jump the visual highlight forward.
-      if (!isArabic) {
-        clockBaseTime = now;
-        clockBaseFraction = boundaryFraction;
-
-        // Set smooth catch-up target: do NOT snap directly, let tick() visit intermediate words
-        hasConfirmedBoundary = true;
-        lastConfirmedWordPos = Math.max(lastConfirmedWordPos, matchedWordPos);
-        targetBoundaryWordPos = matchedWordPos;
-        setActiveTokenPos(matchedWordPos, 'boundary');
-      }
+      // Every language uses the same character positions reported by its voice.
+      // A fresh boundary also corrects any drift from fallback pacing.
+      clockBaseTime = now;
+      clockBaseFraction = boundaryFraction;
+      hasConfirmedBoundary = true;
+      lastConfirmedWordPos = matchedWordPos;
+      targetBoundaryWordPos = matchedWordPos;
+      setActiveTokenPos(matchedWordPos, 'boundary');
     }
 
     const calAfter = Math.round(calibratedDurationMs);
