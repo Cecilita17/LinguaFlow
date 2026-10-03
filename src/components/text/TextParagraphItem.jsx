@@ -300,7 +300,7 @@ function TextParagraphItemComponent({
             <div
               dir={textDirection}
               style={{ direction: textDirection }}
-              className={`flex flex-wrap items-center ${
+              className={`flex flex-wrap ${isChinese ? 'items-start' : 'items-center'} ${
                 isChinese
                   ? 'gap-x-1 sm:gap-x-1.5 gap-y-3 sm:gap-y-3.5'
                   : 'gap-x-1.5 sm:gap-x-2 gap-y-2.5 sm:gap-y-3'
