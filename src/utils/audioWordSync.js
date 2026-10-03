@@ -357,8 +357,10 @@ export function createAudioWordSynchronizer({
   let totalPausedDuration = 0;
   let prevBoundaryWordPos = -1;
 
-  // Pace estimates with the rate actually sent to the speech engine.
-  const effectiveRate = Math.max(0.2, Math.min(2.0, typeof utteranceRate === 'number' ? utteranceRate : 1.0));
+  // The engine rate is a nonlinear voice-control value, not a duration ratio.
+  // Start from the user's playback speed; completed speech and word events
+  // calibrate the estimate for the actual selected voice.
+  const effectiveRate = Math.max(0.2, Math.min(2.0, typeof speechRate === 'number' ? speechRate : 1.0));
   const estimatedDurationMs = estimateSpeechDurationMs(cleanText, targetLang, effectiveRate);
   let calibratedDurationMs = estimatedDurationMs;
 

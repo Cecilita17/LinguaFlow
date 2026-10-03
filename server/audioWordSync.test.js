@@ -164,3 +164,15 @@ test('cancelled speech never trains the duration estimate', () => {
   h.sync.handleEnd();
   assert.equal(measured, false);
 });
+
+
+test('slow playback does not apply the nonlinear engine rate to the visual clock', () => {
+  for (const speed of [0.75, 0.80, 0.85, 1]) {
+    const engineRate = speed < 1 ? Math.round((0.35 + ((speed - 0.60) / 0.40) * 0.65) * 1000) / 1000 : 1;
+    const h = createSyncHarness('zh', true, { speechRate: speed, utteranceRate: engineRate });
+    h.sync.handleStart();
+    h.advance(1250 / speed);
+    assert.equal(h.sync.getActiveTokenPos(), 2, `visual progress at ${speed}x must scale with playback speed`);
+    h.sync.stop();
+  }
+});
