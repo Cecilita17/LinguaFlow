@@ -3479,20 +3479,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
               </div>
             )}
 
-            {/* FOOTER: Placed at the end of the text inside scroll container, never fixed/sticky */}
-            <footer className="mt-10 py-6 border-t border-[var(--border-subtle)] text-center text-xs text-[var(--text-muted)] flex items-center justify-center space-x-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
-              <span className="truncate">
-                {isEpub && chapters.length > 1
-                  ? (isSpanish
-                    ? `Capítulo ${currentChapterIndex + 1} de ${chapters.length} • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación`
-                    : `Chapter ${currentChapterIndex + 1} of ${chapters.length} • Click ▶️ on any paragraph to hear its pronunciation`)
-                  : (isSpanish
-                    ? 'Fin del texto • Haz clic en ▶️ en cualquier párrafo para escuchar su pronunciación'
-                    : 'End of text • Click ▶️ on any paragraph to hear its pronunciation')}
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500/60 shrink-0"></span>
-            </footer>
+
 
           </div>
           </main>
