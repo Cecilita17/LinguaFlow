@@ -196,6 +196,7 @@ export function TextReaderPage({
   const audioPlaybackIdRef = useRef(0);
   const audioSynchronizerRef = useRef(null);
   const ttsTimingSamplesRef = useRef(new Map());
+  const pendingReadingBookmarkRef = useRef(null);
   const audioPlayerRef = useRef(null);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const latestAudioPositionRef = useRef({ time: 0, paragraphId: null });
@@ -2625,18 +2626,46 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
   const handleSaveReadingBookmark = useCallback((paragraph) => {
     const currentDoc = documentRef.current;
     if (isPaginatedReader || isAudioDocument || playingParagraphIdRef.current || window.speechSynthesis?.speaking || !currentDoc?.id || !paragraph?.id) return;
-    const updated = {
-      ...currentDoc,
-      manualReadingBookmark: { documentId: currentDoc.id, paragraphId: paragraph.id }
+    // Capture the selection without normalizing or saving the whole document
+    // immediately before speech starts.
+    pendingReadingBookmarkRef.current = {
+      document: currentDoc,
+      bookmark: { documentId: currentDoc.id, paragraphId: paragraph.id }
     };
-    documentRef.current = updated;
-    saveActiveDocumentDraft(updated);
-    setDocument(updated);
   }, [isAudioDocument, isPaginatedReader]);
 
+  useEffect(() => {
+    const pending = pendingReadingBookmarkRef.current;
+    if (!pending || playingParagraphId) return;
+    pendingReadingBookmarkRef.current = null;
+    const currentDoc = documentRef.current;
+    const sameDocument = currentDoc?.id === pending.bookmark.documentId;
+    const updated = {
+      ...(sameDocument ? currentDoc : pending.document),
+      manualReadingBookmark: pending.bookmark
+    };
+    if (sameDocument) {
+      documentRef.current = updated;
+      setDocument(updated);
+    } else {
+      saveTextDocument(updated).catch(() => {});
+    }
+  }, [playingParagraphId, document?.id]);
+
+  useEffect(() => () => {
+    const pending = pendingReadingBookmarkRef.current;
+    if (!pending) return;
+    pendingReadingBookmarkRef.current = null;
+    const currentDoc = documentRef.current;
+    saveTextDocument({
+      ...(currentDoc?.id === pending.bookmark.documentId ? currentDoc : pending.document),
+      manualReadingBookmark: pending.bookmark
+    }).catch(() => {});
+  }, []);
+
   const handleParagraphPress = useCallback((paragraph) => {
-    // Save a deliberate selection before playback starts; automatic playback
-    // and word lookups never invoke this handler.
+    // Capture a deliberate selection before playback; persist it when speech stops.
+    // Automatic playback and word lookups never invoke this handler.
     handleSaveReadingBookmark(paragraph);
     handlePlayParagraph(paragraph);
   }, [handleSaveReadingBookmark, handlePlayParagraph]);

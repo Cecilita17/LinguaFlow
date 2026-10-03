@@ -43,3 +43,51 @@ test('minimal persisted draft includes visited page and keeps the manual marker'
  assert.deepEqual(restored.manualReadingBookmark,doc.manualReadingBookmark);
  assert.equal(restored.isMinimalDraft,true);
 });
+
+function bookmarkHarness() {
+ const effects = [], saved = [], updates = [];
+ const context = {
+  document: { id: 'text', paragraphs: [{ id: 'p', text: 'hello' }] },
+  documentRef: { current: { id: 'text', paragraphs: [{ id: 'p', text: 'hello' }] } },
+  pendingReadingBookmarkRef: { current: null }, playingParagraphIdRef: { current: null },
+  playingParagraphId: null, isPaginatedReader: false, isAudioDocument: false,
+  window: { speechSynthesis: { speaking: false } },
+  useCallback: callback => callback, useEffect: callback => effects.push(callback),
+  setDocument: doc => updates.push(doc),
+  saveTextDocument: doc => { saved.push(doc); return Promise.resolve(); }
+ };
+ const select = runInNewContext(pageSource.slice(pageSource.indexOf('  const handleSaveReadingBookmark ='), pageSource.indexOf('  const handleParagraphPress =')) + '\nhandleSaveReadingBookmark;', context);
+ return { context, effects, saved, updates, select };
+}
+
+test('paragraph selection avoids document writes during speech and preserves new glosses when stopped', () => {
+ const h = bookmarkHarness();
+ h.select({ id: 'p' });
+ assert.equal(h.updates.length, 0);
+ assert.equal(h.saved.length, 0);
+ h.context.playingParagraphId = 'p';
+ h.effects[0]();
+ assert.equal(h.updates.length, 0);
+ h.context.documentRef.current = { ...h.context.documentRef.current, glossUpdated: true };
+ h.context.playingParagraphId = null;
+ h.effects[0]();
+ assert.equal(h.updates[0].manualReadingBookmark.paragraphId, 'p');
+ assert.equal(h.updates[0].glossUpdated, true);
+});
+
+test('closing the reader saves the pending manual bookmark', () => {
+ const h = bookmarkHarness();
+ h.select({ id: 'p' });
+ h.effects[1]()();
+ assert.equal(h.saved[0].manualReadingBookmark.paragraphId, 'p');
+ assert.equal(h.updates.length, 0);
+});
+
+test('pending bookmarks never replace a different opened document', () => {
+ const h = bookmarkHarness();
+ h.select({ id: 'p' });
+ h.context.documentRef.current = { id: 'other' };
+ h.effects[0]();
+ assert.equal(h.saved[0].id, 'text');
+ assert.equal(h.updates.length, 0);
+});
