@@ -2608,7 +2608,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
 
   const handleSaveReadingBookmark = useCallback((paragraph) => {
     const currentDoc = documentRef.current;
-    if (isAudioDocument || playingParagraphIdRef.current || window.speechSynthesis?.speaking || !currentDoc?.id || !paragraph?.id) return;
+    if (isPaginatedReader || isAudioDocument || playingParagraphIdRef.current || window.speechSynthesis?.speaking || !currentDoc?.id || !paragraph?.id) return;
     const updated = {
       ...currentDoc,
       manualReadingBookmark: { documentId: currentDoc.id, paragraphId: paragraph.id }
@@ -2616,7 +2616,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     documentRef.current = updated;
     saveActiveDocumentDraft(updated);
     setDocument(updated);
-  }, [isAudioDocument]);
+  }, [isAudioDocument, isPaginatedReader]);
 
   const handleParagraphPress = useCallback((paragraph) => {
     // Save a deliberate selection before playback starts; automatic playback
@@ -3358,8 +3358,8 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       isAudioError={audioErrorId === paragraph.id}
                       isGlossing={glossingParagraphIds.has(paragraph.id)}
                       hasGloss={isGlossComplete(paragraph, activeDocLang, nativeLang)}
-                      isAudioBookmark={!isAudioDocument && document?.manualReadingBookmark?.documentId === document?.id && document?.manualReadingBookmark?.paragraphId === paragraph.id}
-                      isLastAudioPosition={isAudioDocument && playingParagraphId !== paragraph.id && lastSavedAudioParagraphId === paragraph.id}
+                      isAudioBookmark={!isPaginatedReader && !isAudioDocument && document?.manualReadingBookmark?.documentId === document?.id && document?.manualReadingBookmark?.paragraphId === paragraph.id}
+                      isLastAudioPosition={!isPaginatedReader && isAudioDocument && playingParagraphId !== paragraph.id && lastSavedAudioParagraphId === paragraph.id}
                       audioSyncAnchor={audioSyncAnchors.find((anchor) => anchor.paragraphId === paragraph.id) || null}
                       isAudioSyncAvailable={Boolean(isAudioDocument && typeof paragraph.audioStart === 'number')}
                       translation={paragraphTranslations[getParagraphRepresentationKey(paragraph, simplificationMode)]?.text || null}
@@ -3370,7 +3370,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                       onStop={handleStopAudio}
                       onSaveReadingBookmark={null}
                       isReadingBookmarkDisabled={Boolean(playingParagraphId)}
-                      isReadingBookmarked={!isAudioDocument && document?.manualReadingBookmark?.documentId === document?.id && document?.manualReadingBookmark?.paragraphId === paragraph.id}
+                      isReadingBookmarked={!isPaginatedReader && !isAudioDocument && document?.manualReadingBookmark?.documentId === document?.id && document?.manualReadingBookmark?.paragraphId === paragraph.id}
                       onParagraphClick={null}
                       onParagraphPress={handleParagraphPress}
                       onWordClick={onWordClick}
