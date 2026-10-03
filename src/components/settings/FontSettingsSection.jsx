@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Type, Download, Check, Loader2 } from 'lucide-react';
+import { Type, Download, Check, Loader2, ChevronDown } from 'lucide-react';
 import { useReaderSettings } from '../../context/ReaderSettingsContext.jsx';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { downloadFontForOffline, isFontDownloaded, offlineFontSupported, FONT_DOWNLOAD_EVENT } from '../../services/offlineFontService.js';
@@ -56,8 +56,12 @@ export function FontSettingsSection() {
     }
   };
   return (
-    <section className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm">
-      <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-3 flex items-center gap-2"><Type className="w-4 h-4 text-rose-500" aria-hidden="true" />{t('font_settings_title')}</h2>
+    <details className="group p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm">
+      <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+        <span className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2"><Type className="w-4 h-4 text-rose-500" aria-hidden="true" />{t('font_settings_title')}</span>
+        <ChevronDown className="w-4 h-4 shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="mt-4">
       <p className="text-sm text-[var(--text-secondary)] mb-4">{t('font_settings_description')}</p>
       <div className="grid md:grid-cols-3 gap-3">
         {Object.entries(FONT_OPTIONS).map(([script, options]) => {
@@ -97,6 +101,7 @@ export function FontSettingsSection() {
       {downloadError && <p role="alert" className="mt-3 text-xs text-rose-600 dark:text-rose-300">{t(downloadError)}</p>}
       {!supported && <p className="mt-3 text-xs text-[var(--text-muted)]">{t('font_download_unsupported')}</p>}
       <p className="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">{t('font_settings_saved')}</p>
-    </section>
+      </div>
+    </details>
   );
 }
