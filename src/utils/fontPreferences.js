@@ -17,7 +17,8 @@ export const FONT_OPTIONS = {
     { id: 'yahei', name: 'Microsoft YaHei', family: 'Microsoft YaHei', fallbackFamilies: ['Noto Sans SC'], system: true },
     { id: 'simsun', name: 'SimSun', family: 'SimSun', fallbackFamilies: ['Noto Serif SC'], fallbackLoad: 'Noto Serif SC', system: true },
     { id: 'pingfang', name: 'PingFang SC', family: 'PingFang SC', fallbackFamilies: ['Noto Sans SC'], system: true },
-    { id: 'noto-cjk', name: 'Noto Sans CJK', family: 'Noto Sans CJK SC', fallbackFamilies: ['Noto Sans CJK', 'Noto Sans SC'] }
+    { id: 'noto-cjk', name: 'Noto Sans CJK', family: 'Noto Sans CJK SC', fallbackFamilies: ['Noto Sans CJK', 'Noto Sans SC'] },
+    { id: 'kaishu', name: 'Kaishu', family: 'KaiTi', fallbackFamilies: ['STKaiti', 'Kaiti SC', 'BiauKai', 'LXGW WenKai TC', 'Noto Sans SC'], fallbackLoad: 'LXGW WenKai TC', fallbackWeights: '400' }
   ],
   arabic: [
     { id: 'system', label: 'font_style_current', family: 'system-ui' },
@@ -39,6 +40,10 @@ export function getFontConfiguration(preferences) {
   // Latin, Chinese and Arabic glyphs each resolve to their selected family.
   const family = selected.flatMap(option => [option.family, ...(option.fallbackFamilies || [])]).map(name => name === 'system-ui' ? 'system-ui' : `'${name}'`).join(', ') + ', -apple-system, sans-serif';
   const additionalFamilies = new Set(selected.flatMap(option => [...(option.load ? [option.family] : []), ...(option.fallbackLoad ? [option.fallbackLoad] : [])]));
-  const extraFamilies = [...additionalFamilies].map(name => `family=${encodeURIComponent(name).replaceAll('%20', '+')}:wght@400;500;600;700`);
+  const extraFamilies = [...additionalFamilies].map(name => {
+    const option = selected.find(item => item.family === name || item.fallbackLoad === name);
+    const weights = option?.fallbackLoad === name ? (option.fallbackWeights || '400;500;600;700') : '400;500;600;700';
+    return `family=${encodeURIComponent(name).replaceAll('%20', '+')}:wght@${weights}`;
+  });
   return { family, stylesheet: extraFamilies.length ? `https://fonts.googleapis.com/css2?${extraFamilies.join('&')}&display=swap` : null };
 }

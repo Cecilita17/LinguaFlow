@@ -7,7 +7,7 @@ export const TRANSLATIONS = {
     font_chinese_hello: "Hola",
     font_chinese_china: "China",
     font_chinese_thanks: "Gracias",
-    font_chinese_system_note: "Microsoft YaHei, SimSun y PingFang SC dependen de las fuentes instaladas en tu dispositivo. Si no están disponibles, se usa una alternativa Noto del mismo estilo. Noto Sans CJK usa Noto Sans SC como respaldo para chino simplificado.",
+    font_chinese_system_note: "Microsoft YaHei, SimSun y PingFang SC dependen de las fuentes instaladas en tu dispositivo. Si no están disponibles, se usa una alternativa Noto del mismo estilo. Noto Sans CJK usa Noto Sans SC como respaldo para chino simplificado. Kaishu usa KaiTi si está instalada, o la fuente caligráfica WenKai como alternativa.",
 
     font_settings_title: "Estilo de fuente",
     font_settings_description: "Elegí el estilo para toda LinguaFlow: chat, llamadas, historial y lectores. Chino y árabe tienen fuentes propias.",
@@ -418,7 +418,7 @@ export const TRANSLATIONS = {
     font_chinese_hello: "Hello",
     font_chinese_china: "China",
     font_chinese_thanks: "Thank you",
-    font_chinese_system_note: "Microsoft YaHei, SimSun and PingFang SC depend on fonts installed on your device. If unavailable, a Noto alternative of the same style is used. Noto Sans CJK uses Noto Sans SC as a fallback for Simplified Chinese.",
+    font_chinese_system_note: "Microsoft YaHei, SimSun and PingFang SC depend on fonts installed on your device. If unavailable, a Noto alternative of the same style is used. Noto Sans CJK uses Noto Sans SC as a fallback for Simplified Chinese. Kaishu uses KaiTi when installed, or the calligraphic WenKai font as an alternative.",
 
     font_settings_title: "Font style",
     font_settings_description: "Choose the style across LinguaFlow: chat, calls, history and readers. Chinese and Arabic have their own fonts.",

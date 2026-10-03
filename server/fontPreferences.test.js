@@ -60,3 +60,13 @@ test('Chinese platform fonts have matching fallbacks and remain independent', ()
     if (chinese === 'simsun') assert.ok(config.stylesheet.includes('family=Noto+Serif+SC:'));
   }
 });
+
+test('Kaishu persists and loads a compatible calligraphic font on other devices', () => {
+  const preferences = normalizeFontPreferences(JSON.parse(JSON.stringify({ chinese: 'kaishu' })));
+  assert.equal(preferences.chinese, 'kaishu');
+  const config = getFontConfiguration(preferences);
+  assert.ok(config.family.includes("'KaiTi'"));
+  assert.ok(config.family.includes("'LXGW WenKai TC'"));
+  assert.ok(config.stylesheet.includes('family=LXGW+WenKai+TC:wght@400&'));
+  assert.ok(!config.stylesheet.includes('family=KaiTi'));
+});
