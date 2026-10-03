@@ -1,5 +1,7 @@
 import React from 'react';
 import { Play, Square, Pause, AlertCircle, Languages, Loader2, Bookmark, RefreshCw, Sparkles } from 'lucide-react';
+import { resolveChinesePinyin } from '../../services/chineseTokenNormalizer.js';
+import { tokenizeAndGlossLineOffline } from '../../services/subtitleGlossService.js';
 import { PUNCTUATION_REGEX } from '../../services/languageGlossStrategies.js';
 import { getKoreanTransliteration } from '../../services/koreanTransliteration.js';
 import { getArabicTransliteration } from '../../services/arabicTransliteration.js';
@@ -60,8 +62,20 @@ function TextParagraphItemComponent({
 }) {
   const { wordHighlightEnabled } = useAudioSettings();
   const { t, isSpanish } = useSiteLanguage();
-  const { text, tokens = [] } = paragraph;
+  const { text, tokens: storedTokens } = paragraph;
   const isChinese = targetLang === 'zh';
+  // Display-only preparation: pinyin is local and does not mark glosses complete.
+  const tokens = React.useMemo(() => {
+    if (!isChinese) return storedTokens || [];
+    const baseTokens = Array.isArray(storedTokens) && storedTokens.length > 0
+      ? storedTokens : tokenizeAndGlossLineOffline(text, targetLang, nativeLang);
+    return baseTokens.map(token => {
+      const pinyin = resolveChinesePinyin(token);
+      return typeof token === 'string'
+        ? { word: token, text: token, pinyin, auxiliary: pinyin }
+        : { ...token, pinyin, auxiliary: pinyin };
+    });
+  }, [storedTokens, text, isChinese, targetLang, nativeLang]);
   const isRtl = isRtlLanguage(targetLang);
   const textDirection = getTextDirection(targetLang);
   const isComplete = hasGloss || isGlossComplete(paragraph, targetLang, nativeLang);
