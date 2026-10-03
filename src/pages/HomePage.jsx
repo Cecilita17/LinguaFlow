@@ -110,11 +110,17 @@ export default function HomePage({
             { mode: 'habits', title: t('home_activity_progress_title'), description: 'home_activity_progress_description', badge: 'home_activity_streak' }
           ].map(activity => (
             <button key={activity.mode} type="button" onClick={() => onSelectMode(activity.mode)} className={`home-activity-card home-grid-card home-card-${activity.mode} group`}>
-              <span className="home-activity-badge">{activity.badgeText || t(activity.badge)}</span>
+              <span className="home-activity-badge">
+                {activity.mode === 'habits' ? `${habitStats.completed} / ${habitStats.total}` : (activity.badgeText || t(activity.badge))}
+              </span>
               <HomeActivityIcon kind={activity.mode} progress={activity.mode === 'habits' ? habitStats.pct : 0} className="home-activity-illustration" />
               <span className="home-activity-copy">
                 <span className="home-activity-title">{activity.title}</span>
-                <span className="home-activity-description">{t(activity.description)}</span>
+                <span className="home-activity-description">
+                  {activity.mode === 'habits' && habitStats.completed > 0
+                    ? t(habitStats.completed === 1 ? 'home_activity_completed_one' : 'home_activity_completed_many').replace('{count}', habitStats.completed)
+                    : t(activity.description)}
+                </span>
               </span>
             </button>
           ))}
