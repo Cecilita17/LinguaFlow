@@ -15,12 +15,21 @@ import {
 } from 'lucide-react';
 import {
   getAllDocuments,
+  getDocumentById,
   deleteDocument
 } from '../../services/textDocumentService.js';
-import { saveTextDocument } from '../../services/textLibraryStorage.js';
+import { saveTextDocument, onDocumentSaved } from '../../services/textLibraryStorage.js';
 import { getLocalizedLanguageName } from '../../constants/languages.js';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { DocumentCover } from './DocumentCover.jsx';
+
+// Session-only display cache. IndexedDB remains the source of truth.
+let cachedDocuments = null;
+onDocumentSaved((saved) => {
+  if (cachedDocuments === null) return;
+  cachedDocuments = [saved, ...cachedDocuments.filter(doc => doc.id !== saved.id)]
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+});
 
 const LANGUAGE_META = {
   zh: { name: 'Chino', flag: '🇨🇳' },
@@ -45,9 +54,9 @@ export function TextLibraryView({
   currentDocumentId = ''
 }) {
   const { isSpanish } = useSiteLanguage();
-  const [documents, setDocuments] = useState([]);
+  const [documents, setDocuments] = useState(() => cachedDocuments || []);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedDocuments === null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [notification, setNotification] = useState(null);
@@ -55,22 +64,32 @@ export function TextLibraryView({
   const [coverUploadingId, setCoverUploadingId] = useState(null);
   const coverFileInputRef = useRef(null);
 
-  const loadDocuments = useCallback(async () => {
-    setLoading(true);
+  const loadDocuments = useCallback(async (isActive = () => true) => {
+    if (cachedDocuments === null) setLoading(true);
     try {
       const items = await getAllDocuments();
-      setDocuments(items || []);
+      if (!isActive()) return;
+      cachedDocuments = items || [];
+      setDocuments(cachedDocuments);
     } catch (e) {
       console.warn('[TextLibraryView] Error loading text documents from IndexedDB:', e);
-      setDocuments([]);
+      if (isActive() && cachedDocuments === null) setDocuments([]);
     } finally {
-      setLoading(false);
+      if (isActive()) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadDocuments();
+    let active = true;
+    loadDocuments(() => active);
+    return () => { active = false; };
   }, [loadDocuments]);
+
+  const handleSelectDocument = async (doc) => {
+    const latest = await getDocumentById(doc.id);
+    if (latest) onSelectDocument(latest);
+    else await loadDocuments();
+  };
 
   const handleAddCover = (doc, event) => {
     event.stopPropagation();
@@ -145,6 +164,8 @@ export function TextLibraryView({
           message: isSpanish ? '✓ Texto eliminado de la biblioteca' : '✓ Text deleted from library'
         });
         setConfirmingDeleteId(null);
+        cachedDocuments = (cachedDocuments || []).filter(doc => doc.id !== id);
+        setDocuments(cachedDocuments);
         await loadDocuments();
 
         if (onDeleteDocument) {
@@ -412,7 +433,7 @@ export function TextLibraryView({
             return (
               <div
                 key={doc.id}
-                onClick={() => !isConfirming && onSelectDocument(doc)}
+                onClick={() => !isConfirming && handleSelectDocument(doc)}
                 className={`min-h-[112px] p-3 rounded-2xl border transition-all flex gap-3 group relative overflow-hidden ${
                   isCurrent
                     ? 'bg-rose-500/10 border-rose-500/80 shadow-md shadow-rose-950/20'
