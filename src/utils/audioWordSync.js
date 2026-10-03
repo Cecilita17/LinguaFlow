@@ -75,7 +75,7 @@ export function computeTokenCharRanges(rawCleanText, tokens, targetLang = 'es') 
   });
 }
 
-/** Split long TTS paragraphs at word boundaries, preserving original offsets. */
+/** Split long TTS paragraphs only at punctuation, preserving original offsets. */
 export function splitSpeechParagraph(text, tokens = [], targetLang = 'es', maxLength = 50) {
   const cleanText = normalizeAudioText(text);
   if (!cleanText) return [];
@@ -86,14 +86,28 @@ export function splitSpeechParagraph(text, tokens = [], targetLang = 'es', maxLe
       : (cleanText.match(/\S+|\s+/gu) || []).map(word => ({ word }));
   }
   const ranges = computeTokenCharRanges(cleanText, speechTokens, targetLang);
+  // The length target is soft: extending a phrase is preferable to inserting
+  // an utterance pause between words. Keep closing quotes with the punctuation.
+  const pauseEnds = Array.from(cleanText.matchAll(/[.!?;:,。！？；：，،؛؟…]+[»”’"')\]}]*/gu))
+    .filter((match) => {
+      const before = cleanText[match.index - 1] || '';
+      const after = cleanText[match.index + match[0].length] || '';
+      // Numbers such as 3.14, 1,000 and 14:30 are not phrase boundaries.
+      if (/^[.,:]$/.test(match[0]) && /\p{N}/u.test(before) && /\p{N}/u.test(after)) return false;
+      // Do not cut inside dotted abbreviations or URLs.
+      if (match[0] === '.' && /[\p{L}\p{N}]/u.test(after)) return false;
+      return true;
+    })
+    .map((match) => match.index + match[0].length);
   const chunks = [];
   let start = 0;
   while (start < cleanText.length) {
     let end = cleanText.length;
     if (end - start > maxLength) {
-      const candidates = ranges.filter(range => range.endChar > start && range.endChar <= start + maxLength);
-      const pause = candidates.filter(range => /[.!?;:,。！？；：，]$/.test(cleanText.slice(start, range.endChar)) && range.endChar - start >= 15).at(-1);
-      end = pause?.endChar || candidates.at(-1)?.endChar || ranges.find(range => range.endChar > start)?.endChar || cleanText.length;
+      const pausesBeforeTarget = pauseEnds.filter(pauseEnd => pauseEnd - start >= 15 && pauseEnd <= start + maxLength);
+      end = pausesBeforeTarget.at(-1)
+        || pauseEnds.find(pauseEnd => pauseEnd > start + maxLength)
+        || cleanText.length;
     }
     const raw = cleanText.slice(start, end);
     const offset = start + raw.length - raw.trimStart().length;
