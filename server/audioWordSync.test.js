@@ -176,3 +176,18 @@ test('slow playback does not apply the nonlinear engine rate to the visual clock
     h.sync.stop();
   }
 });
+
+
+test('Chinese speech positions include the first characters independently of partial glosses', () => {
+  const text = '这是第一段中文内容，我们现在开始阅读这个故事。';
+  const partialGlossTokens = [{ word: '我们' }, { word: '现在' }];
+  const completeSpeech = splitSpeechParagraph(text, [], 'zh');
+  const ranges = runInNewContext(
+    source.slice(source.indexOf('export function normalizeAudioText'), source.indexOf('export function findActiveTokenIndex')).replaceAll('export ', '')
+      + '\ncomputeTokenCharRanges(text, tokens, "zh");',
+    { Intl, PUNCTUATION_REGEX: /^[\p{P}\s]+$/u, text: completeSpeech[0].text, tokens: completeSpeech[0].tokens }
+  );
+  assert.equal(ranges[0].startChar, 0);
+  assert.equal(completeSpeech[0].tokens.map(token => token.word).join(''), text);
+  assert.notEqual(completeSpeech[0].tokens[0].word, partialGlossTokens[0].word);
+});

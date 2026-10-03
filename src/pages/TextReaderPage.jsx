@@ -1613,7 +1613,9 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
 
     const docLang = paragraph.tts?.speechCode ? null : activeDocLang;
     const speechCode = paragraph.tts?.speechCode || getLanguageMeta(docLang)?.speechCode || 'zh-CN';
-    const chunks = splitSpeechParagraph(paragraph.text, paragraph.tokens || [], activeDocLang);
+    // Speech positions must cover the original text, independently of gloss
+    // tokens that can be incomplete or regrouped while audio is playing.
+    const chunks = splitSpeechParagraph(paragraph.text, [], activeDocLang);
     const currentRate = speechRateRef.current || speechRate || 1.0;
     chunks.forEach((chunk, chunkIndex) => {
     const cleanText = chunk.text;
