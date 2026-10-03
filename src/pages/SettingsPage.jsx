@@ -30,6 +30,7 @@ import { SubscriptionsSettingsView } from '../components/settings/SubscriptionsS
 import { TutorialSettingsView } from '../components/settings/TutorialSettingsView.jsx';
 import { AccountSettingsView } from '../components/settings/AccountSettingsView.jsx';
 import { GoogleDriveBackupSection } from '../components/settings/GoogleDriveBackupSection.jsx';
+import { BrowserVoiceSettingsSection } from '../components/settings/BrowserVoiceSettingsSection.jsx';
 import { CallVoiceSettingsSection } from '../components/settings/CallVoiceSettingsSection.jsx';
 import { NATIVE_LANG_OPTIONS } from '../constants/languages.js';
 
@@ -498,6 +499,9 @@ export function SettingsPage({
             </button>
           </div>
         </div>
+
+        {/* Free browser voices shared by chat and readers */}
+        <BrowserVoiceSettingsSection targetLang={targetLang} />
 
         {/* SECTION 2.5: VOCES PARA LLAMADAS (CARTESIA) */}
         <CallVoiceSettingsSection onPreferencesChange={triggerNotice} />

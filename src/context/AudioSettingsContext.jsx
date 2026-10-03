@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { BROWSER_VOICE_STORAGE_KEY, speechLanguageKey, resolveBrowserVoice, normalizeBrowserVoicePreferences } from '../utils/browserSpeechVoices.js';
 import { requestAutoBackup } from '../services/autoBackupService.js';
 
 export const SPEECH_RATE_OPTIONS = [
@@ -55,10 +56,44 @@ const AudioSettingsContext = createContext({
   setAutoPlayTextReader: () => {},
   wordHighlightEnabled: true,
   setWordHighlightEnabled: () => {},
-  speechRateOptions: SPEECH_RATE_OPTIONS
+  speechRateOptions: SPEECH_RATE_OPTIONS,
+  browserVoices: [],
+  browserVoicePreferences: {},
+  setBrowserVoicePreference: () => {},
+  getBrowserVoice: () => null
 });
 
 export function AudioSettingsProvider({ children }) {
+  const [browserVoices, setBrowserVoices] = useState([]);
+  const [browserVoicePreferences, setBrowserVoicePreferences] = useState(() => {
+    try { return normalizeBrowserVoicePreferences(JSON.parse(localStorage.getItem(BROWSER_VOICE_STORAGE_KEY) || '{}')); }
+    catch { return {}; }
+  });
+  useEffect(() => {
+    const synthesis = typeof window !== 'undefined' ? window.speechSynthesis : null;
+    if (!synthesis) return;
+    const refresh = () => setBrowserVoices(synthesis.getVoices());
+    refresh();
+    synthesis.addEventListener('voiceschanged', refresh);
+    return () => synthesis.removeEventListener('voiceschanged', refresh);
+  }, []);
+  const setBrowserVoicePreference = useCallback((language, id) => {
+    const key = speechLanguageKey(language);
+    if (!/^[a-z]{2,3}$/.test(key)) return;
+    setBrowserVoicePreferences(previous => {
+      const next = { ...previous };
+      if (id) next[key] = id; else delete next[key];
+      try {
+        localStorage.setItem(BROWSER_VOICE_STORAGE_KEY, JSON.stringify(next));
+        requestAutoBackup({ type: 'settings', reason: 'audio-settings-updated' });
+      } catch {}
+      return next;
+    });
+  }, []);
+  const getBrowserVoice = useCallback((language, voices) => {
+    const available = voices || (typeof window !== 'undefined' ? window.speechSynthesis?.getVoices() : []) || [];
+    return resolveBrowserVoice(available, language, browserVoicePreferences);
+  }, [browserVoicePreferences]);
   const [speechRate, setSpeechRateState] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_RATE);
@@ -178,7 +213,11 @@ export function AudioSettingsProvider({ children }) {
         setAutoPlayTextReader,
         wordHighlightEnabled,
         setWordHighlightEnabled,
-        speechRateOptions: SPEECH_RATE_OPTIONS
+        speechRateOptions: SPEECH_RATE_OPTIONS,
+        browserVoices,
+        browserVoicePreferences,
+        setBrowserVoicePreference,
+        getBrowserVoice
       }}
     >
       {children}

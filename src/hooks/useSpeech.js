@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { transcribeAudioApi } from '../services/chatService.js';
-import { mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
+import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 
 /**
  * Strips secondary subtitle/translation artifacts produced by STT engines when transcribing
@@ -135,6 +135,7 @@ export function useSpeech({
   handsFree = false,
   isProcessing = false
 }) {
+  const { getBrowserVoice } = useAudioSettings();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
@@ -450,7 +451,7 @@ export function useSpeech({
     utterance.rate = mapSpeechRateToUtteranceRate(rate);
 
     const voices = window.speechSynthesis.getVoices();
-    const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(langCode.slice(0, 2).toLowerCase()));
+    const matchingVoice = getBrowserVoice(langCode, voices);
     if (matchingVoice) {
       utterance.voice = matchingVoice;
     }
@@ -487,7 +488,7 @@ export function useSpeech({
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [targetLangCode]);
+  }, [targetLangCode, getBrowserVoice]);
 
   const stopSpeaking = useCallback(() => {
     playbackIdRef.current++;

@@ -165,6 +165,7 @@ export function TextReaderPage({
     speechRate,
     setSpeechRate,
     autoPlayTextReader,
+    getBrowserVoice,
     setAutoPlayTextReader,
     wordHighlightEnabled,
     setWordHighlightEnabled,
@@ -1581,7 +1582,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     // Select suitable voice if available
     try {
       const voices = window.speechSynthesis.getVoices();
-      const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(speechCode.slice(0, 2).toLowerCase()));
+      const matchingVoice = getBrowserVoice(speechCode, voices);
       if (matchingVoice) {
         utterance.voice = matchingVoice;
       }
@@ -1663,7 +1664,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       console.warn('SpeechSynthesis speak call error:', speakErr);
     }
     });
-  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate, audioSyncAnchors]);
+  }, [activeDocLang, advanceToNextParagraph, clearAudioVisualTimer, document, speechRate, audioSyncAnchors, getBrowserVoice]);
 
   handlePlayParagraphRef.current = handlePlayParagraph;
 

@@ -12,7 +12,7 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test server/youtubeCaptionUtils.test.js server/chatCompactResponse.test.js server/glossErrors.test.js server/epubParagraphRetry.test.js server/glossBatchPolicy.test.js server/audioWordSync.test.js"
+    "test": "node --test server/youtubeCaptionUtils.test.js server/chatCompactResponse.test.js server/glossErrors.test.js server/epubParagraphRetry.test.js server/glossBatchPolicy.test.js server/audioWordSync.test.js server/browserSpeechVoices.test.js"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

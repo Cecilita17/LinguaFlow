@@ -188,7 +188,7 @@ export function ImageReaderPage({
   const { user } = useAuth();
   const { savedWords } = useSavedWords();
   const { t, isSpanish } = useSiteLanguage();
-  const { speechRate } = useAudioSettings();
+  const { speechRate, getBrowserVoice } = useAudioSettings();
 
   // View mode state: 'library' (default) | 'uploader' | 'reader'
   const [viewMode, setViewMode] = useState('library');
@@ -308,7 +308,7 @@ export function ImageReaderPage({
     // Pick appropriate voice
     try {
       const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.lang.toLowerCase().startsWith(speechCode.slice(0, 2).toLowerCase()));
+      const match = getBrowserVoice(speechCode, voices);
       if (match) utterance.voice = match;
     } catch (e) {}
 
@@ -359,7 +359,7 @@ export function ImageReaderPage({
       console.warn('SpeechSynthesis speak failed:', err);
       setAudioErrorId(paragraph.id);
     }
-  }, [targetLang, speechRate, clearAudioVisualTimer]);
+  }, [targetLang, speechRate, clearAudioVisualTimer, getBrowserVoice]);
 
   // Auto-persist updates (new glosses or translations) to the active document in IndexedDB
   const persistDocumentChanges = useCallback(async (updatedFields = {}) => {

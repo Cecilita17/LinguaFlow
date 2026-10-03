@@ -4,6 +4,21 @@
 
 export const TRANSLATIONS = {
   es: {
+    browser_voice_title: "Voces gratuitas del chat y lectores",
+    browser_voice_description: "Elegí una voz por idioma para el chat, Text Reader y otros controles de lectura que usan la voz del navegador.",
+    browser_voice_language: "Idioma de la voz",
+    browser_voice_selection: "Voz",
+    browser_voice_automatic: "Automática",
+    browser_voice_unavailable: "Voz guardada no disponible",
+    browser_voice_preview: "Escuchar muestra",
+    browser_voice_stop: "Detener muestra",
+    browser_voice_unsupported: "Este navegador no ofrece síntesis de voz.",
+    browser_voice_empty: "No hay voces disponibles para este idioma. La lista se actualiza cuando el navegador las carga.",
+    browser_voice_fallback: "La voz guardada no está disponible aquí. Se usará una voz compatible automáticamente.",
+    browser_voice_saved: "Tu elección se guarda automáticamente por idioma.",
+    browser_voice_preview_error: "No se pudo reproducir la muestra. Probá otra voz.",
+    browser_voice_device_note: "Las voces dependen del dispositivo y del navegador. Esta selección no cambia las voces de Live Call ni el audio original de vídeos o archivos importados.",
+
     // Tutorial & help
     tutorial_title: "Tutorial y ayuda",
     tutorial_description: "Aprendé a usar el chat, los lectores y tu vocabulario.",
@@ -383,6 +398,21 @@ export const TRANSLATIONS = {
     habit_card_action: 'Abrir seguimiento de hábitos'
   },
   en: {
+    browser_voice_title: "Free voices for chat & readers",
+    browser_voice_description: "Choose a voice per language for chat, Text Reader and other reading controls that use browser speech.",
+    browser_voice_language: "Voice language",
+    browser_voice_selection: "Voice",
+    browser_voice_automatic: "Automatic",
+    browser_voice_unavailable: "Saved voice unavailable",
+    browser_voice_preview: "Listen to sample",
+    browser_voice_stop: "Stop sample",
+    browser_voice_unsupported: "This browser does not support speech synthesis.",
+    browser_voice_empty: "No voices are available for this language. The list updates when the browser loads them.",
+    browser_voice_fallback: "The saved voice is unavailable here. A compatible voice will be used automatically.",
+    browser_voice_saved: "Your choice is saved automatically per language.",
+    browser_voice_preview_error: "Could not play the sample. Try another voice.",
+    browser_voice_device_note: "Available voices depend on your device and browser. This selection does not change Live Call voices or the original audio of videos or imported files.",
+
     // Tutorial & help
     tutorial_title: "Tutorial & help",
     tutorial_description: "Learn how to use chat, readers and your vocabulary.",
