@@ -29,6 +29,7 @@ import {
   Settings,
   Gauge,
   Repeat2,
+  Bookmark,
   Plus,
   Headphones,
   AlertCircle,
@@ -184,7 +185,7 @@ export function TextReaderPage({
   const visibleParagraphsRef = useRef([]);
   const chapterParagraphsRef = useRef([]);
   const currentParagraphPageRef = useRef(0);
-  const openedPageSessionRef = useRef(null);
+  const [isSavingPageBookmark, setIsSavingPageBookmark] = useState(false);
   const handlePlayParagraphRef = useRef(null);
 
   // Audio TTS states & visual synchronizer ref
@@ -943,38 +944,40 @@ export function TextReaderPage({
     return () => { cancelled = true; };
   }, [refreshLibraryCount]);
 
-  // Save page navigation separately from manual paragraph and audio bookmarks.
-  useEffect(() => {
-    if (document?.isMinimalDraft) { openedPageSessionRef.current = null; return; }
-    if (!document?.id || viewMode !== 'reader' || isEditing) return;
-    const sessionKey = `${document.id}::${Boolean(document.isMinimalDraft)}`;
-    if (openedPageSessionRef.current?.key !== sessionKey) {
-      openedPageSessionRef.current = { key: sessionKey, ready: false };
-    }
-    if (!openedPageSessionRef.current.ready) {
-      const chapterIndex = resolveChapterIndexForDoc(document);
-      if (currentChapterIndex !== chapterIndex || currentParagraphPage !== resolvePageIndexForDoc(document, chapterIndex)) return;
-      openedPageSessionRef.current.ready = true;
-    }
+  // Page navigation never changes the bookmark; only the dock button saves it.
+  const savedPageBookmark = resolveOpenedPage(document);
+  const isCurrentPageBookmarked = Boolean(isPaginatedReader && savedPageBookmark
+    && savedPageBookmark.chapterIndex === currentChapterIndex
+    && savedPageBookmark.pageIndex === currentParagraphPage);
+
+  const handleSavePageBookmark = useCallback(async () => {
+    const currentDoc = documentRef.current;
     const firstParagraph = visibleParagraphs[0];
-    if (!firstParagraph) return;
-    const previous = documentRef.current;
-    if (previous?.id !== document.id) return;
-    const saved = previous.lastOpenedPage;
-    if (saved?.chapterIndex === currentChapterIndex && saved?.pageIndex === currentParagraphPage
-      && saved?.paragraphId === firstParagraph.id) return;
-    const updated = { ...previous, lastOpenedPage: {
+    if (!isPaginatedReader || isSavingPageBookmark || !currentDoc?.id
+      || currentDoc.isMinimalDraft || !firstParagraph || viewMode !== 'reader' || isEditing) return;
+    const lastOpenedPage = {
       chapterIndex: currentChapterIndex,
       chapterId: currentChapter?.id || null,
       pageIndex: currentParagraphPage,
       paragraphId: firstParagraph.id,
-      updatedAt: Math.max(Date.now(), (saved?.updatedAt || 0) + 1)
-    } };
-    documentRef.current = updated;
-    saveActiveDocumentDraft(updated);
-    saveTextDocument(updated).catch(() => {});
-    setDocument(updated);
-  }, [document?.id, document?.isMinimalDraft, currentChapterIndex, currentParagraphPage, viewMode, isEditing]);
+      updatedAt: Math.max(Date.now(), (currentDoc.lastOpenedPage?.updatedAt || 0) + 1)
+    };
+    setIsSavingPageBookmark(true);
+    try {
+      const saved = await saveTextDocument({ ...currentDoc, lastOpenedPage });
+      if (!saved) throw new Error('Page bookmark was not persisted');
+      if (documentRef.current?.id !== currentDoc.id) return;
+      const updated = { ...documentRef.current, lastOpenedPage: saved.lastOpenedPage };
+      documentRef.current = updated;
+      saveActiveDocumentDraft(updated);
+      setDocument(updated);
+    } catch (_) {
+      setGlossNotice({ message: t('reader_page_bookmark_error'), type: 'error' });
+    } finally {
+      setIsSavingPageBookmark(false);
+    }
+  }, [isPaginatedReader, isSavingPageBookmark, visibleParagraphs, currentChapterIndex,
+    currentChapter?.id, currentParagraphPage, viewMode, isEditing, t]);
 
   // Save active document state whenever document changes (syncs draft + IndexedDB)
   useEffect(() => {
@@ -3516,7 +3519,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
           <div className="pointer-events-auto w-full max-w-md mx-auto py-2 px-3 sm:px-5 rounded-2xl sm:rounded-full bg-white/80 dark:bg-[#2b1710]/85 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-xl shadow-black/10 dark:shadow-black/40 flex items-center justify-around gap-1 sm:gap-3 transition-all">
             {/* Playback speed — Select dropdown directly selecting from SPEECH_RATE_OPTIONS */}
             <div
-              className="relative inline-flex items-center justify-center py-1.5 px-3 rounded-xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group"
+              className="relative inline-flex items-center justify-center py-1.5 px-2 sm:px-3 rounded-xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group"
               title={isSpanish ? `Velocidad de reproducción (${Number(speechRate).toFixed(2)}×)` : `Playback speed (${Number(speechRate).toFixed(2)}×)`}
             >
               <Gauge className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors shrink-0" />
@@ -3544,7 +3547,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
               title={t(autoPlayTextReader ? 'reader_autoplay_disable' : 'reader_autoplay_enable')}
               aria-label={t('reader_autoplay_label')}
               aria-pressed={autoPlayTextReader}
-              className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
+              className={`py-1.5 px-2 sm:px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                 autoPlayTextReader
                   ? 'text-rose-600 dark:text-rose-400 bg-rose-500/15'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
@@ -3562,7 +3565,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                 : (isSpanish ? 'Activar traducción / glosado interlineal' : 'Enable interlinear translation / glossing')}
               aria-label={isSpanish ? 'Traducción y glosado interlineal' : 'Interlinear translation and glossing'}
               aria-pressed={interlinearMode}
-              className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none ${
+              className={`py-1.5 px-2 sm:px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none ${
                 interlinearMode
                   ? 'text-rose-600 dark:text-rose-400 font-extrabold bg-rose-500/15'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold'
@@ -3577,7 +3580,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
               onClick={cycleFontSize}
               title={isSpanish ? `Tamaño de texto: ${fontSize} — clic para cambiar` : `Text size: ${fontSize} — click to change`}
               aria-label={isSpanish ? 'Tamaño de texto' : 'Text size'}
-              className="py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold"
+              className="py-1.5 px-2 sm:px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 font-semibold"
             >
               <span className="text-[12px] sm:text-sm leading-none tracking-tight">A±</span>
             </button>
@@ -3591,7 +3594,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
                 : (isSpanish ? 'Activar glosado automático' : 'Enable automatic glossing')}
               aria-label={isSpanish ? 'Glosado automático' : 'Automatic glossing'}
               aria-pressed={isAutoGlossing}
-              className={`py-1.5 px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
+              className={`py-1.5 px-2 sm:px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                 isAutoGlossing
                   ? 'text-emerald-500 dark:text-emerald-400 bg-emerald-500/15'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
@@ -3599,6 +3602,26 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
             >
               <Sparkles className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isAutoGlossing ? 'text-emerald-500 fill-emerald-500/30' : ''}`} />
             </button>
+
+            {isPaginatedReader && (
+              <button
+                type="button"
+                onClick={handleSavePageBookmark}
+                disabled={isSavingPageBookmark || document.isMinimalDraft}
+                title={t(isCurrentPageBookmarked ? 'reader_page_bookmarked' : 'reader_page_bookmark_save')}
+                aria-label={t('reader_page_bookmark_save')}
+                aria-pressed={isCurrentPageBookmarked}
+                className={`py-1.5 px-2 sm:px-3 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
+                  isCurrentPageBookmarked
+                    ? 'text-rose-600 dark:text-rose-400 bg-rose-500/15'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+              >
+                {isSavingPageBookmark
+                  ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                  : <Bookmark className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isCurrentPageBookmarked ? 'fill-current' : ''}`} aria-hidden="true" />}
+              </button>
+            )}
 
           </div>
         </div>
