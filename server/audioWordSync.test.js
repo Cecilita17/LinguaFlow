@@ -118,3 +118,20 @@ test('paused speech cannot advance fallback highlighting', () => {
   assert.equal(h.sync.getActiveTokenPos(), 0);
   h.sync.stop();
 });
+
+test('Android catches up to elapsed speech time after a delayed timer', () => {
+  const h = createSyncHarness('zh', true);
+  h.sync.handleStart();
+  h.advance(1300);
+  assert.equal(h.sync.getActiveTokenPos(), 2, 'a delayed tick must not leave the visual position one word behind');
+  h.sync.stop();
+});
+
+test('fallback does not add a long grace delay after the estimated word end', () => {
+  const h = createSyncHarness('zh', true);
+  h.sync.handleStart();
+  h.sync.handleBoundary({ charIndex: 0, name: 'word' });
+  h.advance(650);
+  assert.equal(h.sync.getActiveTokenPos(), 1);
+  h.sync.stop();
+});

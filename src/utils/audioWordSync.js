@@ -437,51 +437,12 @@ new activeCharIndex: ${newActiveChar}`);
     if (hasConfirmedBoundary) {
       const range = cumulativeRanges[lastBoundaryWordPos];
       const wordDuration = range ? (range.endFraction - range.startFraction) * calibratedDurationMs : 0;
-      const boundaryGraceMs = Math.max(350, Math.min(1500, wordDuration * 1.6));
+      const boundaryGraceMs = Math.max(100, Math.min(800, wordDuration));
       if (now - lastBoundaryTime < boundaryGraceMs) return;
     }
 
-    // --- ANDROID SPECIFIC ANTI-SKIP STRATEGY ---
-    if (isAndroid) {
-      // 1. Confirmed boundary catch-up:
-      const targetPos = Math.max(targetBoundaryWordPos, lastConfirmedWordPos);
-      if (targetPos > highestVisitedTokenPos) {
-        const nextStepPos = highestVisitedTokenPos + 1;
-        if (debug) {
-          console.log(`[TextReaderSync:android] confirmedWordPos=${targetPos} visualWordPos=${nextStepPos}`);
-        }
-        setActiveTokenPos(nextStepPos, 'boundary_catchup');
-        return;
-      }
-
-      // 2. Conservative pacing when word events are absent or stale:
-      if (highestVisitedTokenPos < wordTokens.length - 1) {
-        const elapsedSinceAnchor = Math.max(0, now - clockBaseTime);
-        const safeDuration = Math.max(400, calibratedDurationMs);
-        const dFrac = elapsedSinceAnchor / safeDuration;
-        const currentFraction = Math.min(1.0, clockBaseFraction + dFrac);
-        const currentRange = cumulativeRanges[highestVisitedTokenPos];
-
-        // Advance to next word only when current word's end fraction is reached
-        if (currentRange && currentFraction >= currentRange.endFraction) {
-          const nextStepPos = highestVisitedTokenPos + 1;
-          if (debug) {
-            console.log(`[TextReaderSync:android:initial] visualWordPos=${nextStepPos}`);
-          }
-          setActiveTokenPos(nextStepPos, 'temporal_estimate');
-        }
-      }
-      return;
-    }
-
-    // --- DESKTOP AND ARABIC PACED STRATEGY ---
-    // 1. If a boundary arrived ahead of our current visual position, smoothly step towards it
-    if (targetBoundaryWordPos > highestVisitedTokenPos) {
-      const nextStepPos = highestVisitedTokenPos + 1;
-      setActiveTokenPos(nextStepPos, 'boundary_catchup');
-      return;
-    }
-
+    // Use the elapsed-time position on every device. Stepping only one word
+    // per tick leaves Android behind after a delayed timer or a long main-thread task.
     // 2. Absolute continuous time progression from calibrated anchor
     const elapsedSinceAnchor = Math.max(0, now - clockBaseTime);
     const safeDuration = Math.max(400, calibratedDurationMs);
@@ -617,7 +578,7 @@ word="${matchedWord}"`);
           const minSafe = estimatedDurationMs * 0.35;
           const maxSafe = estimatedDurationMs * 2.8;
           const clamped = Math.max(minSafe, Math.min(maxSafe, boundaryEstimatedTotal));
-          calibratedDurationMs = 0.6 * calibratedDurationMs + 0.4 * clamped;
+          calibratedDurationMs = 0.2 * calibratedDurationMs + 0.8 * clamped;
         }
       } else if (!isArabic && boundaryFraction > 0.05 && elapsed > 150) {
         const empiricalDuration = elapsed / boundaryFraction;
