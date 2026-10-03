@@ -251,6 +251,9 @@ export async function restoreBackupData(payload) {
         localStorage.setItem('linguaflow_config', JSON.stringify(mergedConfig));
       }
 
+      if (s.fontPreferences && typeof s.fontPreferences === 'object' && !Array.isArray(s.fontPreferences)) {
+        localStorage.setItem('linguaflow_font_preferences', JSON.stringify(s.fontPreferences));
+      }
       if (s.browserVoicePreferences && typeof s.browserVoicePreferences === 'object' && !Array.isArray(s.browserVoicePreferences)) {
         localStorage.setItem('linguaflow_browser_voice_preferences', JSON.stringify(s.browserVoicePreferences));
       }

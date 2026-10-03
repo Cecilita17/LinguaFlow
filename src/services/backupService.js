@@ -686,6 +686,11 @@ export function gatherCleanSettings() {
       } catch (e) {}
     }
 
+    const fontPreferences = localStorage.getItem('linguaflow_font_preferences');
+    if (fontPreferences) {
+      try { settings.fontPreferences = JSON.parse(fontPreferences); } catch {}
+    }
+
     const browserVoicePreferences = localStorage.getItem('linguaflow_browser_voice_preferences');
     if (browserVoicePreferences) {
       try { settings.browserVoicePreferences = JSON.parse(browserVoicePreferences); } catch {}

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useLayoutEffect } from 'react';
+import { FONT_PREFERENCES_KEY, DEFAULT_FONT_PREFERENCES, FONT_OPTIONS, normalizeFontPreferences, getFontConfiguration } from '../utils/fontPreferences.js';
 import { requestAutoBackup } from '../services/autoBackupService.js';
 
 export const GLOBAL_FONT_SIZE_KEY = 'linguaflow_global_font_size';
@@ -9,10 +10,43 @@ const ReaderSettingsContext = createContext({
   fontSize: DEFAULT_FONT_SIZE,
   setFontSize: () => {},
   cycleFontSize: () => {},
-  fontSizeOptions: FONT_SIZE_OPTIONS
+  fontSizeOptions: FONT_SIZE_OPTIONS,
+  fontPreferences: DEFAULT_FONT_PREFERENCES,
+  setFontPreference: () => {}
 });
 
 export function ReaderSettingsProvider({ children }) {
+  const [fontPreferences, setFontPreferences] = useState(() => {
+    try { return normalizeFontPreferences(JSON.parse(localStorage.getItem(FONT_PREFERENCES_KEY) || '{}')); }
+    catch { return { ...DEFAULT_FONT_PREFERENCES }; }
+  });
+  useLayoutEffect(() => {
+    const { family, stylesheet } = getFontConfiguration(fontPreferences);
+    document.documentElement.style.setProperty('--app-font-family', family);
+    // Load only the additional families chosen by the user.
+    const linkId = 'linguaflow-selected-fonts';
+    let link = document.getElementById(linkId);
+    if (stylesheet) {
+      if (!link) {
+        link = document.createElement('link');
+        link.id = linkId;
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+      }
+      if (link.getAttribute('href') !== stylesheet) link.setAttribute('href', stylesheet);
+    } else if (link) link.remove();
+  }, [fontPreferences]);
+  const setFontPreference = useCallback((script, id) => {
+    if (!FONT_OPTIONS[script]?.some(option => option.id === id)) return;
+    setFontPreferences(previous => {
+      const next = { ...previous, [script]: id };
+      try {
+        localStorage.setItem(FONT_PREFERENCES_KEY, JSON.stringify(next));
+        requestAutoBackup({ type: 'settings', reason: 'reader-font-updated' });
+      } catch {}
+      return next;
+    });
+  }, []);
   const [fontSize, setFontSizeState] = useState(() => {
     try {
       const saved = localStorage.getItem(GLOBAL_FONT_SIZE_KEY);
@@ -58,7 +92,9 @@ export function ReaderSettingsProvider({ children }) {
     fontSize,
     setFontSize,
     cycleFontSize,
-    fontSizeOptions: FONT_SIZE_OPTIONS
+    fontSizeOptions: FONT_SIZE_OPTIONS,
+    fontPreferences,
+    setFontPreference
   };
 
   return (
@@ -75,7 +111,9 @@ export function useReaderSettings() {
       fontSize: DEFAULT_FONT_SIZE,
       setFontSize: () => {},
       cycleFontSize: () => {},
-      fontSizeOptions: FONT_SIZE_OPTIONS
+      fontSizeOptions: FONT_SIZE_OPTIONS,
+      fontPreferences: DEFAULT_FONT_PREFERENCES,
+      setFontPreference: () => {}
     };
   }
   return context;

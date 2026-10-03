@@ -38,7 +38,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['var(--app-font-family)'],
+        serif: ['var(--app-font-family)'],
+        mono: ['var(--app-font-family)'],
       },
     },
   },

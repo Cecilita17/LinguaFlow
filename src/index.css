@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 /* ============================================================ */
+:root {
+  --app-font-family: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+}
+
 /* LINGUAFLOW THEME SYSTEM: CSS VARIABLES                       */
 /* ============================================================ */
 
@@ -150,11 +154,11 @@ rt {
 
 /* Font enhancements */
 .font-arabic {
-  font-family: 'Amiri', 'Traditional Arabic', 'Scheherazade New', Tahoma, serif;
+  font-family: var(--app-font-family);
 }
 
 .font-chinese {
-  font-family: 'Noto Sans SC', sans-serif;
+  font-family: var(--app-font-family);
 }
 
 /* Custom Scrollbars */

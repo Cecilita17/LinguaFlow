@@ -4,6 +4,18 @@
 
 export const TRANSLATIONS = {
   es: {
+    font_settings_title: "Estilo de fuente",
+    font_settings_description: "Elegí el estilo para toda LinguaFlow: chat, llamadas, historial y lectores. Chino y árabe tienen fuentes propias.",
+    font_script_general: "General y otros idiomas",
+    font_script_chinese: "Chino",
+    font_script_arabic: "Árabe",
+    font_style_modern: "Moderna",
+    font_style_rounded: "Redondeada",
+    font_style_book: "Estilo libro",
+    font_style_current: "Actual (sistema)",
+    font_style_traditional: "Tradicional",
+    font_settings_saved: "Se guarda automáticamente y se incluye en tus copias de seguridad. Algunas fuentes necesitan internet para cargarse por primera vez.",
+
     browser_voice_title: "Voces gratuitas del chat y lectores",
     browser_voice_description: "Elegí una voz por idioma para el chat, Text Reader y otros controles de lectura que usan la voz del navegador.",
     browser_voice_language: "Idioma de la voz",
@@ -398,6 +410,18 @@ export const TRANSLATIONS = {
     habit_card_action: 'Abrir seguimiento de hábitos'
   },
   en: {
+    font_settings_title: "Font style",
+    font_settings_description: "Choose the style across LinguaFlow: chat, calls, history and readers. Chinese and Arabic have their own fonts.",
+    font_script_general: "General & other languages",
+    font_script_chinese: "Chinese",
+    font_script_arabic: "Arabic",
+    font_style_modern: "Modern",
+    font_style_rounded: "Rounded",
+    font_style_book: "Book style",
+    font_style_current: "Current (system)",
+    font_style_traditional: "Traditional",
+    font_settings_saved: "Saved automatically and included in your backups. Some fonts need internet to load for the first time.",
+
     browser_voice_title: "Free voices for chat & readers",
     browser_voice_description: "Choose a voice per language for chat, Text Reader and other reading controls that use browser speech.",
     browser_voice_language: "Voice language",
