@@ -451,12 +451,6 @@ export function TextLibraryView({
                       </span>
                     )}
 
-                    {isCurrent && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500 text-white font-bold tracking-wide">
-                        {isSpanish ? 'EN LECTURA' : 'CURRENT'}
-                      </span>
-                    )}
-
                     {isEpubDocument && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 font-mono font-bold tracking-wider">
                         EPUB
