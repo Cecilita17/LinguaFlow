@@ -646,86 +646,112 @@ export async function handleListCartesiaVoices(req, res) {
   setCorsHeaders(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const rawKey = process.env.CARTESIA_API_KEY;
-  const trimmedKey = (rawKey || '').trim();
+  const trimmedKey = (process.env.CARTESIA_API_KEY || '').trim();
+  const voicesById = new Map();
+  const warnings = [];
+  let completedQueries = 0;
+  const log = (details) => console.info('[BackendPipelineVoices]', JSON.stringify(details));
+  // Temporary diagnostics: allowlisted voice metadata only, never raw bodies,
+  // authentication headers, keys, or exception messages from upstream.
+  const safeString = (value) => typeof value === 'string'
+    ? value.replaceAll(trimmedKey || '\0', '[REDACTED]').slice(0, 200) : null;
 
-  // If no API key, return default catalog and mapping
-  if (!trimmedKey) {
-    return res.status(200).json({
-      success: true,
-      hasApiKey: false,
-      voices: DEFAULT_CARTESIA_CATALOG,
-      defaults: CARTESIA_VOICES
-    });
+  if (trimmedKey) {
+    const signal = AbortSignal.timeout(20000);
+    // Explicitly discover owned voices first, independently of the public catalog.
+    for (const ownedOnly of [true, false]) {
+      const query = ownedOnly ? 'owned' : 'catalog';
+      let cursor = null;
+      const seenCursors = new Set();
+      try {
+        for (let page = 1; page <= 50; page++) {
+          const url = new URL('https://api.cartesia.ai/voices');
+          url.searchParams.set('limit', '100');
+          if (ownedOnly) url.searchParams.set('is_owner', 'true');
+          if (cursor) url.searchParams.set('starting_after', cursor);
+          const response = await fetch(url.toString(), {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${trimmedKey}`,
+              'Cartesia-Version': '2026-08-14',
+              Accept: 'application/json'
+            },
+            signal
+          });
+          log({ event: 'http', query, page, status: response.status, cursor: safeString(cursor) });
+          if (!response.ok) throw new Error(`HTTP_${response.status}`);
+          const json = await response.json();
+          const rawVoices = Array.isArray(json) ? json : json?.data;
+          if (!Array.isArray(rawVoices)) throw new Error('INVALID_RESPONSE_SHAPE');
+          log({
+            event: 'page', query, page,
+            topLevel: Array.isArray(json) ? 'array' : Object.keys(json),
+            count: rawVoices.length, has_more: json.has_more === true,
+            next_page: safeString(json.next_page),
+            voices: rawVoices.map(v => ({
+              id: safeString(v?.id), name: safeString(v?.name),
+              is_owner: typeof v?.is_owner === 'boolean' ? v.is_owner : null,
+              isOwner: typeof v?.isOwner === 'boolean' ? v.isOwner : null,
+              visibility: safeString(v?.visibility), access: safeString(v?.access),
+              is_pro: typeof v?.is_pro === 'boolean' ? v.is_pro : null,
+              status: safeString(v?.status)
+            }))
+          });
+          for (const v of rawVoices) {
+            if (!v || typeof v.id !== 'string' || !UUID_REGEX.test(v.id)) continue;
+            // The documented owned-only query is authoritative, including shared clones.
+            // An explicit false from the unfiltered catalog must not override ownership.
+            const isOwner = ownedOnly || v.is_owner === true || v.isOwner === true
+              || (v.is_owner == null && (v.visibility === 'owner' || v.access === 'private'));
+            const nativeAccent = Array.isArray(v.accents)
+              ? (v.accents.find(accent => accent?.is_native) || v.accents[0]) : null;
+            voicesById.set(v.id, {
+              id: v.id,
+              name: v.name || 'Voz de Cartesia',
+              description: v.description || v.tagline || '',
+              language: v.language || nativeAccent?.locale || nativeAccent?.language || '',
+              is_owner: isOwner || voicesById.get(v.id)?.is_owner === true,
+              gender: v.gender || 'neutral',
+              status: v.status || 'active'
+            });
+          }
+          if (json.has_more !== true) { completedQueries++; break; }
+          const next = json.next_page || rawVoices.at(-1)?.id;
+          if (typeof next !== 'string' || !UUID_REGEX.test(next) || seenCursors.has(next)) {
+            throw new Error('INVALID_PAGINATION_CURSOR');
+          }
+          if (page === 50) throw new Error('PAGINATION_LIMIT');
+          seenCursors.add(next);
+          cursor = next;
+        }
+      } catch (err) {
+        // Only our fixed diagnostic codes are safe to print, not arbitrary errors.
+        const reason = /^(HTTP_\d{3}|INVALID_RESPONSE_SHAPE|INVALID_PAGINATION_CURSOR|PAGINATION_LIMIT)$/.test(err?.message)
+          ? err.message : signal.aborted ? 'TIMEOUT' : 'NETWORK_OR_JSON_ERROR';
+        warnings.push(`${query}:${reason}`);
+        console.warn('[BackendPipelineVoices]', JSON.stringify({ event: 'query_failed', query, reason }));
+      }
+    }
+  } else {
+    warnings.push('MISSING_API_KEY');
   }
 
-  try {
-    const response = await fetch('https://api.cartesia.ai/voices', {
-      method: 'GET',
-      headers: {
-        'X-API-Key': trimmedKey,
-        'Cartesia-Version': '2026-08-14',
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      console.warn(`[BackendPipelineVoices] Cartesia returned HTTP ${response.status}. Falling back to default catalog.`);
-      return res.status(200).json({
-        success: true,
-        hasApiKey: true,
-        voices: DEFAULT_CARTESIA_CATALOG,
-        defaults: CARTESIA_VOICES,
-        warning: `Cartesia API returned HTTP ${response.status}`
-      });
-    }
-
-    const json = await response.json();
-    const rawVoices = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
-
-    // Sanitize and extract only safe metadata
-    const sanitizedVoices = rawVoices.map(v => {
-      const isOwner = Boolean(v.is_owner || v.isOwner || v.visibility === 'owner' || v.access === 'private');
-      let lang = v.language || '';
-      if (!lang && Array.isArray(v.accents) && v.accents.length > 0) {
-        lang = v.accents[0]?.locale || v.accents[0]?.language || '';
-      }
-      return {
-        id: v.id,
-        name: v.name || 'Voz de Cartesia',
-        description: v.description || v.tagline || '',
-        language: lang,
-        is_owner: isOwner,
-        gender: v.gender || 'neutral',
-        status: v.status || 'active'
-      };
-    }).filter(v => Boolean(v.id && UUID_REGEX.test(v.id)));
-
-    // Merge in default catalog if missing
-    const existingIds = new Set(sanitizedVoices.map(v => v.id));
-    const mergedVoices = [...sanitizedVoices];
-    for (const defVoice of DEFAULT_CARTESIA_CATALOG) {
-      if (!existingIds.has(defVoice.id)) {
-        mergedVoices.push(defVoice);
-        existingIds.add(defVoice.id);
-      }
-    }
-
-    return res.status(200).json({
-      success: true,
-      hasApiKey: true,
-      voices: mergedVoices,
-      defaults: CARTESIA_VOICES
-    });
-
-  } catch (err) {
-    console.error('[BackendPipelineVoices] Error querying Cartesia voices:', err);
-    return res.status(200).json({
-      success: true,
-      hasApiKey: true,
-      voices: DEFAULT_CARTESIA_CATALOG,
-      defaults: CARTESIA_VOICES,
-      warning: 'Fallback used due to network error'
-    });
+  const realCount = voicesById.size;
+  const ownedCount = [...voicesById.values()].filter(v => v.is_owner).length;
+  let defaultCount = 0;
+  for (const voice of DEFAULT_CARTESIA_CATALOG) {
+    if (!voicesById.has(voice.id)) { voicesById.set(voice.id, voice); defaultCount++; }
   }
+  const catalogSource = realCount === 0 ? 'DEFAULT_CARTESIA_CATALOG'
+    : defaultCount > 0 ? 'cartesia+DEFAULT_CARTESIA_CATALOG' : 'cartesia';
+  log({ event: 'catalog_result', source: catalogSource, realCount, ownedCount,
+    defaultCount, returnedCount: voicesById.size, complete: completedQueries === 2, warnings });
+  return res.status(200).json({
+    success: true,
+    hasApiKey: Boolean(trimmedKey),
+    voices: [...voicesById.values()],
+    defaults: CARTESIA_VOICES,
+    catalogSource,
+    ...(warnings.length ? { warning: warnings.join('; ') } : {})
+  });
 }
