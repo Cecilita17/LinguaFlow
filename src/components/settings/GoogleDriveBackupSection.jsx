@@ -24,7 +24,8 @@ import {
   FileJson,
   X,
   ShieldCheck,
-  HardDrive
+  HardDrive,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
@@ -254,9 +255,10 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
   };
 
   return (
-    <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md space-y-4">
+    <>
+    <details className="group p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
         <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
           <Cloud className="w-4 h-4 text-rose-500" />
           <span>{t('backup_section_title')}</span>
@@ -273,7 +275,9 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
             <span>{t('backup_status_not_connected')}</span>
           </span>
         )}
-      </div>
+        <ChevronDown className="w-4 h-4 shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="mt-4 space-y-4">
 
       <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
         {t('backup_section_desc')}
@@ -454,6 +458,9 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
         )}
       </div>
 
+      </div>
+    </details>
+
       {/* RESTORE MODAL */}
       {restoreModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
@@ -566,7 +573,7 @@ export function GoogleDriveBackupSection({ onNavigateToAccount }) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

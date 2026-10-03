@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Volume2, Square, Info } from 'lucide-react';
+import { Volume2, Square, Info, ChevronDown } from 'lucide-react';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../../context/AudioSettingsContext.jsx';
 import { useSiteLanguage } from '../../context/SiteLanguageContext.jsx';
 import { LANGUAGE_METADATA, getLocalizedLanguageName } from '../../constants/languages.js';
@@ -64,8 +64,12 @@ export function BrowserVoiceSettingsSection({ targetLang = 'es' }) {
 
   const selectClass = 'w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl px-3 py-2 text-xs sm:text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer disabled:opacity-50';
   return (
-    <section className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm">
-      <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-3 flex items-center gap-2"><Volume2 className="w-4 h-4 text-rose-500" aria-hidden="true" />{t('browser_voice_title')}</h2>
+    <details className="group p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm">
+      <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+        <span className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2"><Volume2 className="w-4 h-4 text-rose-500" aria-hidden="true" />{t('browser_voice_title')}</span>
+        <ChevronDown className="w-4 h-4 shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="mt-4">
       <p className="text-sm text-[var(--text-secondary)] mb-4">{t('browser_voice_description')}</p>
       <div className="grid sm:grid-cols-2 gap-3">
         <label className="block text-xs font-semibold text-[var(--text-primary)]"><span className="block mb-1.5">{t('browser_voice_language')}</span>
@@ -90,6 +94,7 @@ export function BrowserVoiceSettingsSection({ targetLang = 'es' }) {
       </div>
       {previewError && <p role="alert" className="mt-3 text-xs text-rose-600 dark:text-rose-300">{t('browser_voice_preview_error')}</p>}
       <p className="flex items-start gap-2 mt-4 text-xs leading-relaxed text-[var(--text-muted)]"><Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />{t('browser_voice_device_note')}</p>
-    </section>
+      </div>
+    </details>
   );
 }

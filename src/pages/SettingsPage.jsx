@@ -16,6 +16,7 @@ import {
   Languages,
   User,
   ChevronRight,
+  ChevronDown,
   Crown,
   Mail,
   BookOpen
@@ -227,11 +228,15 @@ export function SettingsPage({
         <GoogleDriveBackupSection onNavigateToAccount={() => setActiveSubView('account')} />
 
         {/* SECTION 1: IDIOMA Y TEMA */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <details className="group p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
+          <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+            <span className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
             <Globe className="w-4 h-4 text-rose-500" />
             <span>{isSpanish ? 'Idioma y Apariencia' : 'Language & Appearance'}</span>
-          </h2>
+          </span>
+            <ChevronDown className="w-4 h-4 shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="mt-4">
 
           <div className="space-y-4">
             {/* Website Language */}
@@ -331,15 +336,20 @@ export function SettingsPage({
             </div>
           </div>
         </div>
+        </details>
 
         <FontSettingsSection />
 
         {/* SECTION 2: VOZ Y REPRODUCCIÓN */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <details className="group p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-md">
+          <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+            <span className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
             <Volume2 className="w-4 h-4 text-rose-500" />
             <span>{isSpanish ? 'Voz y Reproducción' : 'Voice & Playback'}</span>
-          </h2>
+          </span>
+            <ChevronDown className="w-4 h-4 shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="mt-4">
 
           <div className="space-y-3.5">
             {/* Transliteration */}
@@ -502,6 +512,7 @@ export function SettingsPage({
             </button>
           </div>
         </div>
+        </details>
 
         {/* Free browser voices shared by chat and readers */}
         <BrowserVoiceSettingsSection targetLang={targetLang} />
@@ -509,11 +520,15 @@ export function SettingsPage({
         {/* SECTION 2.5: VOCES PARA LLAMADAS (CARTESIA) */}
         <CallVoiceSettingsSection onPreferencesChange={triggerNotice} />
 
-        <section className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm">
-          <h2 className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <details className="group p-4 sm:p-5 rounded-3xl bg-[var(--surface-primary)] border border-[var(--border-primary)] shadow-sm">
+          <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+            <span className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-300 uppercase tracking-wider flex items-center gap-2">
             <Mail className="w-4 h-4 text-rose-500" />
             <span>{t('support_title')}</span>
-          </h2>
+          </span>
+            <ChevronDown className="w-4 h-4 shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="mt-4">
           <p className="text-sm text-[var(--text-muted)] mb-3">{t('support_description')}</p>
           <a href="mailto:fceci.coder@gmail.com" className="flex items-center gap-3 p-4 rounded-2xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
             <Mail className="w-5 h-5 text-rose-500 shrink-0" />
@@ -523,7 +538,8 @@ export function SettingsPage({
             </span>
             <ChevronRight className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
           </a>
-        </section>
+        </div>
+        </details>
 
       </div>
     </div>
