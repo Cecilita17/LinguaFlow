@@ -1,3 +1,4 @@
+import { latestOpenedPage } from '../utils/readerPagePosition.js';
 /**
  * Persistent Text Documents Library Storage (IndexedDB)
  * 
@@ -395,6 +396,7 @@ export async function saveTextDocument(rawDoc) {
     lastAudioParagraphId: effectiveAudioBookmark ? effectiveAudioBookmark.paragraphId : (rawDoc.lastAudioParagraphId || existing?.lastAudioParagraphId || null),
     lastAudioPositionUpdatedAt: effectiveAudioBookmark?.savedAt ? new Date(effectiveAudioBookmark.savedAt).getTime() : (rawDoc.lastAudioPositionUpdatedAt || existing?.lastAudioPositionUpdatedAt || null),
     manualReadingBookmark: rawDoc.manualReadingBookmark !== undefined ? rawDoc.manualReadingBookmark : (existing?.manualReadingBookmark || null),
+    lastOpenedPage: latestOpenedPage(rawDoc.lastOpenedPage, existing?.lastOpenedPage),
     lastReadingPosition: effectiveLastReadingPosition,
     createdAt: existing?.createdAt || rawDoc.createdAt || now,
     updatedAt: now
@@ -418,22 +420,33 @@ export async function saveTextDocument(rawDoc) {
     try {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.put(toSave);
+      // Compare page metadata inside the write transaction so delayed saves
+      // cannot restore an older page after a newer navigation was committed.
+      const read = store.get(toSave.id);
+      read.onsuccess = () => {
+        toSave.lastOpenedPage = latestOpenedPage(toSave.lastOpenedPage, read.result?.lastOpenedPage);
+        memoryStore.set(toSave.id, toSave);
+        const request = store.put(toSave);
 
-      request.onsuccess = () => {
-        registerSaveEnd();
-        notifyDocumentSaved(toSave);
-        try {
-          requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-updated' });
-        } catch (_) {}
-        resolve(toSave);
+        request.onsuccess = () => {
+          registerSaveEnd();
+          notifyDocumentSaved(toSave);
+          try {
+            requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-updated' });
+          } catch (_) {}
+          resolve(toSave);
+        };
+        request.onerror = (e) => {
+          registerSaveEnd();
+          console.warn('[TextLibraryStorage] Error saving document to IndexedDB:', e.target.error);
+          try {
+            requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-persistence-failed' });
+          } catch (_) {}
+          resolve(null);
+        };
       };
-      request.onerror = (e) => {
+      read.onerror = () => {
         registerSaveEnd();
-        console.warn('[TextLibraryStorage] Error saving document to IndexedDB:', e.target.error);
-        try {
-          requestAutoBackup({ type: 'text-document', id: toSave.id, reason: 'document-persistence-failed' });
-        } catch (_) {}
         resolve(null);
       };
     } catch (err) {

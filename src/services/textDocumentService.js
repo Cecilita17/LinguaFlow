@@ -1,3 +1,4 @@
+import { latestOpenedPage } from '../utils/readerPagePosition.js';
 /**
  * Text Document Service
  * Handles data structures, paragraph segmentation, active draft, and
@@ -669,6 +670,7 @@ export function normalizeDocument(rawDoc) {
       : (typeof rawDoc.lastAudioPosition === 'object' && typeof rawDoc.lastAudioPosition?.updatedAt === 'number'
         ? rawDoc.lastAudioPosition.updatedAt
         : null)),
+    lastOpenedPage: rawDoc.lastOpenedPage || null,
     manualReadingBookmark: rawDoc.manualReadingBookmark || null,
     lastReadingPosition,
     createdAt: rawDoc.createdAt || now,
@@ -930,6 +932,7 @@ export function extractMinimalDraft(doc) {
       : (typeof doc.lastAudioPosition === 'object' && typeof doc.lastAudioPosition?.updatedAt === 'number'
         ? doc.lastAudioPosition.updatedAt
         : null),
+    lastOpenedPage: doc.lastOpenedPage || null,
     manualReadingBookmark: doc.manualReadingBookmark || null,
     lastReadingPosition: doc.lastReadingPosition || null,
     createdAt: doc.createdAt || null,
@@ -1038,6 +1041,7 @@ export async function loadActiveDocumentFull() {
           lastAudioPosition: mergedBookmark ? mergedBookmark.time : (draft.lastAudioPosition !== undefined ? draft.lastAudioPosition : fullDoc.lastAudioPosition),
           lastAudioParagraphId: mergedBookmark ? mergedBookmark.paragraphId : (draft.lastAudioParagraphId || fullDoc.lastAudioParagraphId || (typeof (draft.lastAudioPosition || fullDoc.lastAudioPosition) === 'object' ? (draft.lastAudioPosition || fullDoc.lastAudioPosition)?.paragraphId : null) || null),
           lastAudioPositionUpdatedAt: mergedBookmark?.savedAt ? new Date(mergedBookmark.savedAt).getTime() : (draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null),
+          lastOpenedPage: latestOpenedPage(draft.lastOpenedPage, fullDoc.lastOpenedPage),
           lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
         };
         // A library selection may have replaced the draft while IndexedDB loaded.

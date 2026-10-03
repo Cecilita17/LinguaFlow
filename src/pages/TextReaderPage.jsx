@@ -1,3 +1,4 @@
+import { resolveOpenedPage, latestOpenedPage } from '../utils/readerPagePosition.js';
 import { formatSimplificationError } from '../utils/simplificationErrors.js';
 import { formatGlossError } from '../utils/glossErrors.js';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -111,6 +112,8 @@ function resolveManualReadingBookmarkId(doc) {
  * 4. 0 (default first chapter)
  */
 function resolveChapterIndexForDoc(doc) {
+  const openedPage = resolveOpenedPage(doc);
+  if (openedPage) return openedPage.chapterIndex;
   if (!doc || !Array.isArray(doc.chapters) || doc.chapters.length === 0) return 0;
   const bookmark = resolveAudioBookmark(doc);
   const targetId = resolveManualReadingBookmarkId(doc) || doc.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
@@ -132,6 +135,8 @@ const PRACTICE_TEXT_MAX_PARAGRAPHS = 35;
  * saved reading position, with legacy bookmark fallback.
  */
 function resolvePageIndexForDoc(doc, chapterIdx = 0) {
+  const openedPage = resolveOpenedPage(doc);
+  if (openedPage && openedPage.chapterIndex === chapterIdx) return openedPage.pageIndex;
   if (!doc || !Array.isArray(doc.paragraphs) || doc.paragraphs.length === 0) return 0;
   const isEp = Boolean(
     doc.format === 'epub' || doc.sourceType === 'epub' || (Array.isArray(doc.chapters) && doc.chapters.length > 0)
@@ -179,6 +184,7 @@ export function TextReaderPage({
   const visibleParagraphsRef = useRef([]);
   const chapterParagraphsRef = useRef([]);
   const currentParagraphPageRef = useRef(0);
+  const openedPageSessionRef = useRef(null);
   const handlePlayParagraphRef = useRef(null);
 
   // Audio TTS states & visual synchronizer ref
@@ -905,6 +911,7 @@ export function TextReaderPage({
               lastAudioPosition: mergedBookmark ? mergedBookmark.time : (draft.lastAudioPosition !== undefined ? draft.lastAudioPosition : fullDoc.lastAudioPosition),
               lastAudioParagraphId: mergedBookmark ? mergedBookmark.paragraphId : (draft.lastAudioParagraphId || fullDoc.lastAudioParagraphId || (typeof (draft.lastAudioPosition || fullDoc.lastAudioPosition) === 'object' ? (draft.lastAudioPosition || fullDoc.lastAudioPosition)?.paragraphId : null) || null),
               lastAudioPositionUpdatedAt: mergedBookmark?.savedAt ? new Date(mergedBookmark.savedAt).getTime() : (draft.lastAudioPositionUpdatedAt || fullDoc.lastAudioPositionUpdatedAt || null),
+              lastOpenedPage: latestOpenedPage(draft.lastOpenedPage, fullDoc.lastOpenedPage),
               lastReadingPosition: draft.lastReadingPosition || fullDoc.lastReadingPosition
             };
             setDocument(merged);
@@ -913,7 +920,7 @@ export function TextReaderPage({
               setAudioBookmark(mergedBookmark);
             }
 
-            const targetPosId = resolveManualReadingBookmarkId(merged) || merged.lastReadingPosition?.paragraphId || mergedBookmark?.paragraphId;
+            const targetPosId = resolveOpenedPage(merged)?.paragraphId || resolveManualReadingBookmarkId(merged) || merged.lastReadingPosition?.paragraphId || mergedBookmark?.paragraphId;
             if (targetPosId) {
               setPendingScrollParagraphId(targetPosId);
             }
@@ -927,7 +934,7 @@ export function TextReaderPage({
           setAudioBookmark(bookmark);
         }
 
-        const targetPosId = resolveManualReadingBookmarkId(draft) || draft.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
+        const targetPosId = resolveOpenedPage(draft)?.paragraphId || resolveManualReadingBookmarkId(draft) || draft.lastReadingPosition?.paragraphId || bookmark?.paragraphId;
         if (targetPosId) {
           setPendingScrollParagraphId(targetPosId);
         }
@@ -935,6 +942,39 @@ export function TextReaderPage({
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [refreshLibraryCount]);
+
+  // Save page navigation separately from manual paragraph and audio bookmarks.
+  useEffect(() => {
+    if (document?.isMinimalDraft) { openedPageSessionRef.current = null; return; }
+    if (!document?.id || viewMode !== 'reader' || isEditing) return;
+    const sessionKey = `${document.id}::${Boolean(document.isMinimalDraft)}`;
+    if (openedPageSessionRef.current?.key !== sessionKey) {
+      openedPageSessionRef.current = { key: sessionKey, ready: false };
+    }
+    if (!openedPageSessionRef.current.ready) {
+      const chapterIndex = resolveChapterIndexForDoc(document);
+      if (currentChapterIndex !== chapterIndex || currentParagraphPage !== resolvePageIndexForDoc(document, chapterIndex)) return;
+      openedPageSessionRef.current.ready = true;
+    }
+    const firstParagraph = visibleParagraphs[0];
+    if (!firstParagraph) return;
+    const previous = documentRef.current;
+    if (previous?.id !== document.id) return;
+    const saved = previous.lastOpenedPage;
+    if (saved?.chapterIndex === currentChapterIndex && saved?.pageIndex === currentParagraphPage
+      && saved?.paragraphId === firstParagraph.id) return;
+    const updated = { ...previous, lastOpenedPage: {
+      chapterIndex: currentChapterIndex,
+      chapterId: currentChapter?.id || null,
+      pageIndex: currentParagraphPage,
+      paragraphId: firstParagraph.id,
+      updatedAt: Math.max(Date.now(), (saved?.updatedAt || 0) + 1)
+    } };
+    documentRef.current = updated;
+    saveActiveDocumentDraft(updated);
+    saveTextDocument(updated).catch(() => {});
+    setDocument(updated);
+  }, [document?.id, document?.isMinimalDraft, currentChapterIndex, currentParagraphPage, viewMode, isEditing]);
 
   // Save active document state whenever document changes (syncs draft + IndexedDB)
   useEffect(() => {
@@ -2212,7 +2252,7 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
     // reading position. Scroll to the active audio paragraph when it is known.
     const targetScrollId = isImportedAudio
       ? (doc.lastAudioParagraphId || validReadingPosId)
-      : (resolveManualReadingBookmarkId(doc) || validReadingPosId || validBookmark?.paragraphId);
+      : (resolveOpenedPage(doc)?.paragraphId || resolveManualReadingBookmarkId(doc) || validReadingPosId || validBookmark?.paragraphId);
     if (targetScrollId) {
       setPendingScrollParagraphId(targetScrollId);
     } else {
