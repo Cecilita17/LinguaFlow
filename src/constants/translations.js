@@ -4,10 +4,17 @@
 
 export const TRANSLATIONS = {
   es: {
+    font_download_unsupported: "Este navegador no permite guardar fuentes para usarlas sin conexión. Podés seguir usándolas con internet.",
+    font_download_space_error: "No hay suficiente espacio para guardar esta fuente. Liberá espacio y volvé a intentarlo.",
+    font_download_error: "No se pudo completar la descarga. Revisá tu conexión y volvé a intentarlo.",
+    font_download_progress: "Archivos de fuente: {completed}/{total}.",
+    font_downloaded: "Disponible sin conexión",
+    font_downloading: "Descargando…",
+    font_download_action: "Descargar para usar sin conexión",
     font_chinese_hello: "Hola",
     font_chinese_china: "China",
     font_chinese_thanks: "Gracias",
-    font_chinese_system_note: "Microsoft YaHei, SimSun y PingFang SC dependen de las fuentes instaladas en tu dispositivo. Si no están disponibles, se usa una alternativa Noto del mismo estilo. Noto Sans CJK usa Noto Sans SC como respaldo para chino simplificado. Kaishu usa KaiTi si está instalada, o la fuente caligráfica WenKai como alternativa.",
+    font_chinese_system_note: "Noto Sans SC es moderna, Noto Serif SC tiene remates y WenKai es caligráfica. Son alternativas gratuitas a las fuentes de sistema.",
 
     font_settings_title: "Estilo de fuente",
     font_settings_description: "Elegí el estilo para toda LinguaFlow: chat, llamadas, historial y lectores. Chino y árabe tienen fuentes propias.",
@@ -19,7 +26,7 @@ export const TRANSLATIONS = {
     font_style_book: "Estilo libro",
     font_style_current: "Actual (sistema)",
     font_style_traditional: "Tradicional",
-    font_settings_saved: "Se guarda automáticamente y se incluye en tus copias de seguridad. Algunas fuentes necesitan internet para cargarse por primera vez.",
+    font_settings_saved: "Tu elección se guarda automáticamente y se incluye en las copias de seguridad. Las descargas se guardan en este dispositivo, dentro de LinguaFlow; si borrás los datos de la app, tendrás que descargarlas otra vez. No se instalan como fuentes del sistema.",
 
     browser_voice_title: "Voces gratuitas del chat y lectores",
     browser_voice_description: "Elegí una voz por idioma para el chat, Text Reader y otros controles de lectura que usan la voz del navegador.",
@@ -415,10 +422,17 @@ export const TRANSLATIONS = {
     habit_card_action: 'Abrir seguimiento de hábitos'
   },
   en: {
+    font_download_unsupported: "This browser does not support saving fonts for offline use. You can still use them online.",
+    font_download_space_error: "There is not enough space to save this font. Free up storage and try again.",
+    font_download_error: "Could not finish downloading. Check your connection and try again.",
+    font_download_progress: "Font files: {completed}/{total}.",
+    font_downloaded: "Available offline",
+    font_downloading: "Downloading…",
+    font_download_action: "Download for offline use",
     font_chinese_hello: "Hello",
     font_chinese_china: "China",
     font_chinese_thanks: "Thank you",
-    font_chinese_system_note: "Microsoft YaHei, SimSun and PingFang SC depend on fonts installed on your device. If unavailable, a Noto alternative of the same style is used. Noto Sans CJK uses Noto Sans SC as a fallback for Simplified Chinese. Kaishu uses KaiTi when installed, or the calligraphic WenKai font as an alternative.",
+    font_chinese_system_note: "Noto Sans SC is modern, Noto Serif SC is serif and WenKai is calligraphic. They are free alternatives to system fonts.",
 
     font_settings_title: "Font style",
     font_settings_description: "Choose the style across LinguaFlow: chat, calls, history and readers. Chinese and Arabic have their own fonts.",
@@ -430,7 +444,7 @@ export const TRANSLATIONS = {
     font_style_book: "Book style",
     font_style_current: "Current (system)",
     font_style_traditional: "Traditional",
-    font_settings_saved: "Saved automatically and included in your backups. Some fonts need internet to load for the first time.",
+    font_settings_saved: "Your choice is saved automatically and included in backups. Downloads are stored on this device within LinguaFlow; if you clear app data, you will need to download them again. They are not installed as system fonts.",
 
     browser_voice_title: "Free voices for chat & readers",
     browser_voice_description: "Choose a voice per language for chat, Text Reader and other reading controls that use browser speech.",

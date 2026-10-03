@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useLayoutEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useLayoutEffect, useEffect } from 'react';
 import { FONT_PREFERENCES_KEY, DEFAULT_FONT_PREFERENCES, FONT_OPTIONS, normalizeFontPreferences, getFontConfiguration } from '../utils/fontPreferences.js';
+import { createOfflineFontStyles, FONT_DOWNLOAD_EVENT } from '../services/offlineFontService.js';
 import { requestAutoBackup } from '../services/autoBackupService.js';
 
 export const GLOBAL_FONT_SIZE_KEY = 'linguaflow_global_font_size';
@@ -36,6 +37,33 @@ export function ReaderSettingsProvider({ children }) {
       if (link.getAttribute('href') !== stylesheet) link.setAttribute('href', stylesheet);
     } else if (link) link.remove();
   }, [fontPreferences]);
+  const [offlineFontsVersion, setOfflineFontsVersion] = useState(0);
+  useEffect(() => {
+    const refresh = () => setOfflineFontsVersion(version => version + 1);
+    window.addEventListener(FONT_DOWNLOAD_EVENT, refresh);
+    return () => window.removeEventListener(FONT_DOWNLOAD_EVENT, refresh);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    let installed = null;
+    let style = null;
+    const selected = Object.entries(FONT_OPTIONS).map(([script, options]) => options.find(option => option.id === fontPreferences[script]).family);
+    createOfflineFontStyles(selected).then(result => {
+      if (cancelled) { result.dispose(); return; }
+      installed = result;
+      if (result.css) {
+        style = document.createElement('style');
+        style.dataset.linguaflowOfflineFonts = 'true';
+        style.textContent = result.css;
+        document.head.appendChild(style);
+      }
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      style?.remove();
+      installed?.dispose();
+    };
+  }, [fontPreferences, offlineFontsVersion]);
   const setFontPreference = useCallback((script, id) => {
     if (!FONT_OPTIONS[script]?.some(option => option.id === id)) return;
     setFontPreferences(previous => {

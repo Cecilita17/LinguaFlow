@@ -47,17 +47,13 @@ test('requested general fonts are selectable and Liberation Serif does not depen
   assert.equal(normalizeFontPreferences({ general: 'serif' }).general, 'serif');
 });
 
-test('Chinese platform fonts have matching fallbacks and remain independent', () => {
-  for (const name of ['Microsoft YaHei', 'SimSun', 'PingFang SC', 'Noto Sans CJK']) assert.ok(FONT_OPTIONS.chinese.some(option => option.name === name));
-  for (const chinese of ['yahei', 'simsun', 'pingfang', 'noto-cjk']) {
-    const config = getFontConfiguration({ general: 'poppins', chinese, arabic: 'traditional' });
-    assert.ok(config.family.startsWith("'Poppins'"));
-    assert.ok(config.family.includes("'Amiri'"));
-    assert.ok(config.family.includes(chinese === 'simsun' ? "'Noto Serif SC'" : "'Noto Sans SC'"));
-    assert.ok(!config.stylesheet.includes('Microsoft+YaHei'));
-    assert.ok(!config.stylesheet.includes('PingFang'));
-    assert.ok(!config.stylesheet.includes('family=SimSun'));
-    if (chinese === 'simsun') assert.ok(config.stylesheet.includes('family=Noto+Serif+SC:'));
+test('licensed Chinese choices migrate to free equivalents without affecting other scripts', () => {
+  assert.deepEqual([...new Set(FONT_OPTIONS.chinese.map(option => option.family))], ['Noto Sans SC', 'Noto Serif SC', 'LXGW WenKai TC']);
+  for (const [old, replacement] of Object.entries({ yahei: 'sans', pingfang: 'sans', 'noto-cjk': 'noto-cjk', simsun: 'serif' })) {
+    const preferences = normalizeFontPreferences({ general: 'poppins', chinese: old, arabic: 'traditional' });
+    assert.equal(preferences.chinese, replacement);
+    assert.equal(preferences.general, 'poppins');
+    assert.equal(preferences.arabic, 'traditional');
   }
 });
 
@@ -65,7 +61,7 @@ test('Kaishu persists and loads a compatible calligraphic font on other devices'
   const preferences = normalizeFontPreferences(JSON.parse(JSON.stringify({ chinese: 'kaishu' })));
   assert.equal(preferences.chinese, 'kaishu');
   const config = getFontConfiguration(preferences);
-  assert.ok(config.family.includes("'KaiTi'"));
+  assert.ok(!config.family.includes("'KaiTi'"));
   assert.ok(config.family.includes("'LXGW WenKai TC'"));
   assert.ok(config.stylesheet.includes('family=LXGW+WenKai+TC:wght@400&'));
   assert.ok(!config.stylesheet.includes('family=KaiTi'));
