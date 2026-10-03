@@ -1311,6 +1311,11 @@ export default function App() {
   const handleStartCall = () => {
     // Synchronously initiate SpeechRecognition in direct response to user gesture
     pipelineCall.startCall();
+    recordHabitActivityForToday({
+      user,
+      langCode: targetLang,
+      activityKey: 'conversation'
+    });
     setChatViewMode('call');
   };
 
