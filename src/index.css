@@ -112,7 +112,7 @@ rt {
 /* ============================================================ */
 .audio-word-active {
   text-decoration: none !important;
-  background-color: rgba(217, 119, 87, 0.15) !important;
+  background-color: rgba(217, 119, 87, 0.22) !important;
   border-radius: 4px !important;
   padding-left: 2px !important;
   padding-right: 2px !important;
