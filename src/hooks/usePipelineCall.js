@@ -403,6 +403,7 @@ export function usePipelineCall({
 
   // Start or ensure active MediaRecorder audio chunk recording for the current user turn
   const startTurnAudioCapture = useCallback(() => {
+    if (isMutedRef.current) return;
     if (!micStreamRef.current || !micStreamRef.current.active) {
       console.log('[PipelineMic] MediaRecorder capture skipped: micStream inactive or null');
       return;
@@ -537,6 +538,7 @@ export function usePipelineCall({
 
     return Boolean(
       isRecognitionActiveRef.current &&
+      !isMutedRef.current &&
       recognitionRef.current &&
       !isSttPausedRef.current &&
       !isEchoGuardActiveRef.current &&
@@ -1829,6 +1831,7 @@ export function usePipelineCall({
       callStateRef.current = 'listening';
       setErrorMessage(null);
       setLiveTranscript([]);
+      isMutedRef.current = false;
       setIsMuted(false);
 
       // Initialize session metrics
@@ -1886,6 +1889,7 @@ export function usePipelineCall({
             }
             micStreamRef.current = stream;
             const tracks = stream.getAudioTracks();
+            tracks.forEach(track => { track.enabled = !isMutedRef.current; });
             const track = tracks[0];
             console.log(`[PipelineMic] getUserMedia acquired: tracks=${tracks.length}, readyState=${track?.readyState}, enabled=${track?.enabled}, muted=${track?.muted}`);
             startTurnAudioCapture();
@@ -1915,16 +1919,41 @@ export function usePipelineCall({
     }
   }, [isSpanish, cleanupResources, initSpeechRecognition, cancelAssistantInternally, startSpeechRecognitionIfReady, startTurnAudioCapture, startMobileVAD]);
 
-  // Toggle Mute / Unmute
+  // Muting explicitly submits the current turn before stopping further capture.
   const toggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      if (next) {
-        if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    const next = !isMutedRef.current;
+    isMutedRef.current = next;
+    setIsMuted(next);
+    if (next) {
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
       }
-      return next;
-    });
-  }, []);
+      const activeTurn = currentTurnRef.current;
+      if (isMobileDevice && isUserSpeakingMobileRef.current) {
+        isUserSpeakingMobileRef.current = false;
+        finalizeMobileTurn();
+      } else if (!isMobileDevice && activeTurn.text?.trim() && !activeTurn.finalized) {
+        finalizeUserSpeechTurn(activeTurn.text, activeTurn.id);
+      } else if (!isFinalizingMobileTurnRef.current
+        && !(activeTurn.id && processedUserTurnIdsRef.current.has(activeTurn.id))) {
+        // No pending speech: discard capture without sending silence to Whisper.
+        stopTurnAudioCapture();
+      }
+      if (!isMobileDevice && isSpeechRecognitionRunningRef.current) {
+        try { recognitionRef.current?.abort(); } catch (_) {}
+      }
+    }
+    // Preserve the already recorded audio, then physically silence the stream.
+    micStreamRef.current?.getAudioTracks().forEach(track => { track.enabled = !next; });
+    if (!next && callStateRef.current === 'listening'
+      && !isSttPausedRef.current && !isEchoGuardActiveRef.current
+      && !isFinalizingMobileTurnRef.current) {
+      startTurnAudioCapture();
+      if (!isMobileDevice) startSpeechRecognitionIfReady();
+    }
+  }, [isMobileDevice, finalizeMobileTurn, finalizeUserSpeechTurn, stopTurnAudioCapture,
+    startTurnAudioCapture, startSpeechRecognitionIfReady]);
 
   // End Pipeline Call: teardown and return session record
   const endCall = useCallback(() => {
