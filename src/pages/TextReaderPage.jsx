@@ -195,6 +195,7 @@ export function TextReaderPage({
   const [audioErrorId, setAudioErrorId] = useState(null);
   const audioPlaybackIdRef = useRef(0);
   const audioSynchronizerRef = useRef(null);
+  const ttsTimingSamplesRef = useRef(new Map());
   const audioPlayerRef = useRef(null);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const latestAudioPositionRef = useRef({ time: 0, paragraphId: null });
@@ -1631,12 +1632,22 @@ function getSegmentAwareCharIndex(activePara, audioSegments, newTime, anchors = 
       }
     } catch (voiceErr) {}
 
+    const timingKey = JSON.stringify([activeDocLang, utterance.voice?.voiceURI || utterance.voice?.name || speechCode, utteranceRate]);
     // Create encapsulated Audio Word Synchronizer for boundary-anchored local token progression
     const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
     let prevActiveCharIndex = -1;
     const synchronizer = createAudioWordSynchronizer({
       text: cleanText,
       tokens: chunk.tokens,
+      getDurationScale: () => {
+        const samples = ttsTimingSamplesRef.current.get(timingKey) || [];
+        const expected = samples.reduce((sum, sample) => sum + sample.estimatedDurationMs, 0);
+        return expected > 0 ? samples.reduce((sum, sample) => sum + sample.actualDurationMs, 0) / expected : 1;
+      },
+      onDurationMeasured: (sample) => {
+        const samples = ttsTimingSamplesRef.current.get(timingKey) || [];
+        ttsTimingSamplesRef.current.set(timingKey, [...samples, sample].slice(-8));
+      },
       targetLang: activeDocLang,
       speechRate: currentRate,
       utteranceRate,

@@ -299,6 +299,8 @@ export function createAudioWordSynchronizer({
   paragraphId = '',
   playbackId = '',
   onActiveCharChange = () => {},
+  getDurationScale = () => 1,
+  onDurationMeasured = () => {},
   isAndroid = (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')),
   debug = false
 }) {
@@ -490,7 +492,9 @@ new activeCharIndex: ${newActiveChar}`);
     lastBoundaryTime = 0;
     totalPausedDuration = 0;
     prevBoundaryWordPos = -1;
-    calibratedDurationMs = estimatedDurationMs;
+    const learnedScale = getDurationScale();
+    calibratedDurationMs = estimatedDurationMs * (Number.isFinite(learnedScale)
+      ? Math.max(0.2, Math.min(4, learnedScale)) : 1);
     startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     clockBaseTime = startTime;
     clockBaseFraction = 0;
@@ -668,12 +672,16 @@ highestVisitedTokenPos=${highestVisitedTokenPos}`);
   }
 
   function handleEnd(event) {
+    const completed = isRunning;
     isRunning = false;
     isPaused = false;
     clearTimer();
 
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const actualDurationMs = startTime > 0 ? Math.round(Math.max(0, now - startTime - totalPausedDuration)) : 0;
+    if (completed && actualDurationMs >= 250 && cleanText.length >= 10 && estimatedDurationMs > 0) {
+      onDurationMeasured({ actualDurationMs, estimatedDurationMs });
+    }
     const estDur = Math.round(estimatedDurationMs);
     const calDur = Math.round(calibratedDurationMs);
     const durationRatio = estDur > 0 ? (actualDurationMs / estDur).toFixed(3) : 'N/A';

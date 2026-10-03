@@ -62,7 +62,7 @@ test('closing quotes and supplied token identities remain aligned', () => {
   assert.ok(quoted[0].text.endsWith('.»'));
 });
 
-function createSyncHarness(lang = 'zh', android = true) {
+function createSyncHarness(lang = 'zh', android = true, options = {}) {
   let now = 100;
   let tick = () => {};
   const { createAudioWordSynchronizer } = runInNewContext(
@@ -77,7 +77,7 @@ function createSyncHarness(lang = 'zh', android = true) {
   );
   const words = lang === 'ar' ? ['مرحبا', 'كيف', 'حالك'] : ['你好', '中国', '谢谢'];
   const text = words.join(' ');
-  const sync = createAudioWordSynchronizer({ text, tokens: words.map(word => ({ word })), targetLang: lang, isAndroid: android });
+  const sync = createAudioWordSynchronizer({ text, tokens: words.map(word => ({ word })), targetLang: lang, isAndroid: android, ...options });
   return { sync, index: i => text.indexOf(words[i]), advance(ms) { now += ms; tick(); } };
 }
 
@@ -134,4 +134,33 @@ test('fallback does not add a long grace delay after the estimated word end', ()
   h.advance(650);
   assert.equal(h.sync.getActiveTokenPos(), 1);
   h.sync.stop();
+});
+
+
+test('completed speech measures real duration and applies it when the next queued chunk starts', () => {
+  let scale = 1;
+  const options = {
+    getDurationScale: () => scale,
+    onDurationMeasured: sample => { scale = sample.actualDurationMs / sample.estimatedDurationMs; }
+  };
+  const first = createSyncHarness('ar', true, options);
+  const queued = createSyncHarness('ar', true, options);
+  first.sync.handleStart();
+  first.advance(700);
+  first.sync.handleEnd();
+  assert.ok(scale < 1, 'a faster real voice reduces the next estimated duration');
+  queued.sync.handleStart();
+  queued.advance(550);
+  assert.equal(queued.sync.getActiveTokenPos(), 2);
+  queued.sync.stop();
+});
+
+test('cancelled speech never trains the duration estimate', () => {
+  let measured = false;
+  const h = createSyncHarness('ar', true, { onDurationMeasured: () => { measured = true; } });
+  h.sync.handleStart();
+  h.advance(500);
+  h.sync.stop();
+  h.sync.handleEnd();
+  assert.equal(measured, false);
 });
