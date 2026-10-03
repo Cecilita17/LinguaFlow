@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  ArrowLeft,
   Mic,
   MicOff,
   PhoneOff,
@@ -298,31 +297,22 @@ export function LiveCallView({
   return (
     <div className="flex-1 overflow-hidden w-full flex flex-col min-h-0 bg-[var(--app-bg)] text-[var(--text-primary)] animate-fade-in relative">
       {/* 1. TOP HEADER & CONTROLS BAR */}
-      <header className="px-4 sm:px-6 py-3 border-b border-[var(--border-primary)] bg-[var(--surface-primary)] shadow-xs flex items-center justify-between z-10">
-        <button
-          type="button"
-          onClick={handleEndCallAction}
-          className="px-3.5 py-1.5 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-xs active:scale-95"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{t('back_to_hub')}</span>
-        </button>
-
-        {/* Center: Language & Duration */}
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <span className="text-xl sm:text-2xl">{currentTargetMeta.flag}</span>
-          <div className="text-left hidden xs:block">
-            <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] block leading-tight">
+      <header className="px-4 sm:px-6 py-3 border-b border-[var(--border-primary)] bg-[var(--surface-primary)] shadow-xs flex items-center justify-between gap-3 flex-wrap z-10">
+        {/* Left: Language & Duration */}
+        <div className="flex flex-1 min-w-0 items-center gap-2 sm:gap-3">
+          <span className="text-xl sm:text-2xl shrink-0">{currentTargetMeta.flag}</span>
+          <div className="text-left min-w-0">
+            <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] block leading-tight truncate">
               {getLocalizedLanguageName(targetLang, currentTargetMeta.name, isSpanish)}
             </span>
           </div>
-          <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 shadow-xs">
+          <span className="shrink-0 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 shadow-xs">
             {formattedDuration}
           </span>
         </div>
 
         {/* Right: Toggle Buttons */}
-        <div className="flex items-center space-x-2">
+        <div className="flex shrink-0 items-center gap-2 ml-auto">
           {showLiveTranscript && (
             <button
               type="button"
