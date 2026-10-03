@@ -19,50 +19,57 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const tokenClientRef = useRef(null);
+  const sessionVerificationRef = useRef({ pending: false, retry: false });
 
   const clearError = useCallback(() => setError(null), []);
 
   // 1. Verify and restore real session on initial load or refresh from backend
   const verifySessionOnMount = useCallback(async () => {
+    if (sessionVerificationRef.current.pending) return;
+    sessionVerificationRef.current.pending = true;
+    sessionVerificationRef.current.retry = false;
     try {
       const storedToken = localStorage.getItem(STORAGE_KEY_AUTH_TOKEN);
       if (!storedToken) {
         setUser(null);
-        setIsLoading(false);
         return;
       }
 
-      // Query the backend endpoint /api/auth/me to cryptographically verify token
       const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${storedToken}`
-        }
+        headers: { Authorization: `Bearer ${storedToken}` }
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.authenticated && data.user) {
-          setUser(data.user);
-        } else {
-          localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
-          setUser(null);
-        }
-      } else {
+      // A login or logout may have happened while this request was running.
+      if (localStorage.getItem(STORAGE_KEY_AUTH_TOKEN) !== storedToken) return;
+      if (res.status === 401) {
         localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
         setUser(null);
+        return;
       }
+      if (!res.ok) throw new Error(`Session verification failed: HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.authenticated || !data.user) throw new Error('Invalid session verification response');
+      if (localStorage.getItem(STORAGE_KEY_AUTH_TOKEN) === storedToken) setUser(data.user);
     } catch (e) {
       console.warn('Session verification notice:', e);
-      // If server unreachable or error, do not assume authenticated
-      localStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
-      setUser(null);
+      // Preserve the credential without treating an unverified session as valid.
+      sessionVerificationRef.current.retry = true;
     } finally {
+      sessionVerificationRef.current.pending = false;
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     verifySessionOnMount();
+    const retryVerification = () => {
+      if (sessionVerificationRef.current.retry) verifySessionOnMount();
+    };
+    window.addEventListener('online', retryVerification);
+    window.addEventListener('focus', retryVerification);
+    return () => {
+      window.removeEventListener('online', retryVerification);
+      window.removeEventListener('focus', retryVerification);
+    };
   }, [verifySessionOnMount]);
 
   // 2. Exchange Google token with backend for real verification and session creation
