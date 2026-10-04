@@ -140,6 +140,9 @@ export function useSpeech({
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isSpeechPaused, setIsSpeechPaused] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState(null);
+  const activeSpeechRef = useRef(null);
   const [speakingCharIndex, setSpeakingCharIndex] = useState(-1);
   const [speakingText, setSpeakingText] = useState('');
   const [speechSupported, setSpeechSupported] = useState(true);
@@ -340,6 +343,9 @@ export function useSpeech({
     // Cancel any active bot speaking
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
+      activeSpeechRef.current = null;
+      setIsSpeechPaused(false);
+      setSpeakingMessageId(null);
       setIsSpeaking(false);
       setSpeakingCharIndex(-1);
       setSpeakingText('');
@@ -434,15 +440,23 @@ export function useSpeech({
   }, [stopRecordingInternal]);
 
   // Text to Speech (TTS)
-  const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback) => {
+  const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback, messageId = null) => {
     const playbackId = ++playbackIdRef.current;
     if (!window.speechSynthesis) return;
 
     window.speechSynthesis.cancel();
+    // Cancellation does not clear the engine's global paused state on all browsers.
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    activeSpeechRef.current = null;
+    setIsSpeechPaused(false);
+    setSpeakingMessageId(null);
 
     const cleanText = text.replace(/<[^>]*>/g, '').trim();
     if (!cleanText) return;
 
+    activeSpeechRef.current = { text: cleanText, langCode, messageId, paused: false };
+    setIsSpeechPaused(false);
+    setSpeakingMessageId(messageId);
     setSpeakingText(cleanText);
     setSpeakingCharIndex(0);
 
@@ -474,6 +488,9 @@ export function useSpeech({
 
     utterance.onend = () => {
       if (playbackId !== playbackIdRef.current) return;
+      activeSpeechRef.current = null;
+      setIsSpeechPaused(false);
+      setSpeakingMessageId(null);
       setIsSpeaking(false);
       setSpeakingCharIndex(-1);
       setSpeakingText('');
@@ -482,6 +499,9 @@ export function useSpeech({
 
     utterance.onerror = (e) => {
       if (playbackId !== playbackIdRef.current) return;
+      activeSpeechRef.current = null;
+      setIsSpeechPaused(false);
+      setSpeakingMessageId(null);
       setIsSpeaking(false);
       setSpeakingCharIndex(-1);
       setSpeakingText('');
@@ -490,11 +510,29 @@ export function useSpeech({
     window.speechSynthesis.speak(utterance);
   }, [targetLangCode, getBrowserVoice]);
 
+  const toggleMessageSpeech = useCallback((text, langCode = targetLangCode, rate = 0.95, messageId = null) => {
+    const engine = window.speechSynthesis;
+    if (!engine || !text) return;
+    const cleanText = text.replace(/<[^>]*>/g, '').trim();
+    const active = activeSpeechRef.current;
+    if (active && active.text === cleanText && active.langCode === langCode && active.messageId === messageId) {
+      if (active.paused) engine.resume();
+      else engine.pause();
+      active.paused = !active.paused;
+      setIsSpeechPaused(active.paused);
+      return;
+    }
+    speakText(text, langCode, rate, undefined, undefined, messageId);
+  }, [speakText, targetLangCode]);
+
   const stopSpeaking = useCallback(() => {
     playbackIdRef.current++;
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+    activeSpeechRef.current = null;
+    setIsSpeechPaused(false);
+    setSpeakingMessageId(null);
     setIsSpeaking(false);
     setSpeakingCharIndex(-1);
     setSpeakingText('');
@@ -505,6 +543,8 @@ export function useSpeech({
     recordingSeconds,
     isTranscribingAudio,
     isSpeaking,
+    isSpeechPaused,
+    speakingMessageId,
     speakingCharIndex,
     speakingText,
     speechSupported,
@@ -513,6 +553,7 @@ export function useSpeech({
     stopRecording,
     cancelRecording,
     speakText,
+    toggleMessageSpeech,
     stopSpeaking
   };
 }

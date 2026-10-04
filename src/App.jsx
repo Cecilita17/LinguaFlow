@@ -419,6 +419,8 @@ export default function App() {
     recordingSeconds,
     isTranscribingAudio,
     isSpeaking,
+    isSpeechPaused,
+    speakingMessageId,
     speakingCharIndex,
     speakingText,
     interimTranscript,
@@ -426,6 +428,7 @@ export default function App() {
     stopRecording,
     cancelRecording,
     speakText,
+    toggleMessageSpeech,
     stopSpeaking
   } = useSpeech({
     targetLangCode: currentLangObj.speechCode,
@@ -440,9 +443,9 @@ export default function App() {
     }
   });
 
-  const handlePlayAudio = (textToSpeak) => {
+  const handlePlayAudio = (textToSpeak, messageId) => {
     if (!textToSpeak) return;
-    speakText(textToSpeak, currentLangObj.speechCode, speechRate);
+    toggleMessageSpeech(textToSpeak, currentLangObj.speechCode, speechRate, messageId);
   };
 
   // Save config
@@ -983,7 +986,7 @@ export default function App() {
         if (activeLangRef.current === conversationLang && (autoPlayAi || handsFree) && bot_response.text) {
           if (!playedBotMsgIdsRef.current.has(botMsg.id)) {
             playedBotMsgIdsRef.current.add(botMsg.id);
-            speakText(bot_response.text, currentLangObj.speechCode, speechRate);
+            speakText(bot_response.text, currentLangObj.speechCode, speechRate, undefined, undefined, botMsg.id);
           }
         }
       }
@@ -1478,11 +1481,13 @@ export default function App() {
             }}
             onWordClick={handleWordClick}
             onOpenGrammarBreakdown={(msg) => handleOpenGrammarBreakdown(msg, selectedChatSessionData?.targetLang)}
-            onPlayAudio={(text) => {
+            onPlayAudio={(text, messageId) => {
               const sessionLang = selectedChatSessionData?.targetLang || targetLang;
               const meta = getLanguageMeta(sessionLang);
-              speakText(text, meta.speechCode || sessionLang, speechRate);
+              toggleMessageSpeech(text, meta.speechCode || sessionLang, speechRate, messageId);
             }}
+            isAudioPaused={isSpeechPaused}
+            speakingMessageId={speakingMessageId}
             onOpenGeneratedDocument={handleOpenGeneratedDocument}
             showTransliteration={showTransliteration}
           />
@@ -1721,6 +1726,8 @@ export default function App() {
                   onWordClick={handleWordClick}
                   onPlayAudio={handlePlayAudio}
                   isAudioPlaying={isSpeaking}
+                  isAudioPaused={isSpeechPaused}
+                  speakingMessageId={speakingMessageId}
                   speakingCharIndex={speakingCharIndex}
                   speakingText={speakingText}
                   onOpenGrammarBreakdown={handleOpenGrammarBreakdown}

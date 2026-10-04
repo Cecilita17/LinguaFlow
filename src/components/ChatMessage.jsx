@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Volume2, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'lucide-react';
+import { Volume2, Pause, Globe, CheckCircle2, Copy, Check, BookOpen, Trash2 } from 'lucide-react';
 import { ChineseWritingPractice } from './ChineseWritingPractice.jsx';
 import { useSiteLanguage } from '../context/SiteLanguageContext.jsx';
 import { normalizeChineseMessageTokens, validateChineseTokens, resolveChinesePinyin } from '../services/chineseTokenNormalizer.js';
@@ -15,6 +15,8 @@ export function ChatMessage({
   onWordClick,
   onPlayAudio,
   isAudioPlaying,
+  isAudioPaused = false,
+  speakingMessageId = null,
   speakingCharIndex = -1,
   speakingText = '',
   onOpenGrammarBreakdown,
@@ -29,6 +31,10 @@ export function ChatMessage({
   const [writingPracticeOpen, setWritingPracticeOpen] = useState(false);
   const [writingPracticeMode, setWritingPracticeMode] = useState('words'); // 'words' | 'sentence'
   const isUser = message.sender === 'user';
+  const isMessageSpeaking = speakingMessageId != null && speakingMessageId === message.id;
+  const audioLabel = isMessageSpeaking
+    ? t(isAudioPaused ? 'chat_audio_resume' : 'chat_audio_pause')
+    : t('chat_audio_listen');
 
   const handleOpenWritingPractice = (mode) => {
     setWritingPracticeMode(mode);
@@ -471,12 +477,12 @@ export function ChatMessage({
 
             <div className="flex items-center space-x-1">
               <button
-                onClick={() => onPlayAudio(message.correctedText || message.text)}
+                onClick={() => onPlayAudio(message.correctedText || message.text, message.id)}
                 className="p-1.5 hover:text-white hover:bg-white/20 rounded-md transition-colors cursor-pointer"
-                title={isSpanish ? "Escuchar pronunciación correcta" : "Listen to correct pronunciation"}
-                aria-label={isSpanish ? "Escuchar pronunciación correcta" : "Listen to correct pronunciation"}
+                title={audioLabel}
+                aria-label={audioLabel}
               >
-                <Volume2 className="w-3.5 h-3.5" />
+                {isMessageSpeaking && !isAudioPaused ? <Pause className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
               </button>
               <button
                 type="button"
@@ -881,12 +887,12 @@ export function ChatMessage({
           <div className="flex items-center space-x-1.5">
             {/* Audio Button */}
             <button
-              onClick={() => onPlayAudio(message.text)}
+              onClick={() => onPlayAudio(message.text, message.id)}
               className="p-1.5 rounded-lg bg-stone-100 dark:bg-[var(--surface-primary)] hover:bg-rose-100 hover:text-rose-900 dark:hover:bg-rose-950/60 dark:hover:text-rose-200 text-stone-700 dark:text-[var(--text-secondary)] transition-colors cursor-pointer border border-transparent dark:border-[var(--border-primary)]"
-              title={isSpanish ? "Escuchar en voz alta" : "Listen aloud"}
-              aria-label={isSpanish ? "Escuchar en voz alta" : "Listen aloud"}
+              title={audioLabel}
+              aria-label={audioLabel}
             >
-              <Volume2 className="w-3.5 h-3.5 text-rose-600" />
+              {isMessageSpeaking && !isAudioPaused ? <Pause className="w-3.5 h-3.5 text-rose-600" /> : <Volume2 className="w-3.5 h-3.5 text-rose-600" />}
             </button>
 
             {/* Translate Button */}

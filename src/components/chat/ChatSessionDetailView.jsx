@@ -22,6 +22,8 @@ export function ChatSessionDetailView({
   onWordClick,
   onOpenGrammarBreakdown,
   onPlayAudio,
+  isAudioPaused = false,
+  speakingMessageId = null,
   onOpenGeneratedDocument,
   showTransliteration = true
 }) {
@@ -218,6 +220,8 @@ export function ChatSessionDetailView({
               showTransliteration={showTransliteration}
               onWordClick={onWordClick}
               onPlayAudio={onPlayAudio}
+              isAudioPaused={isAudioPaused}
+              speakingMessageId={speakingMessageId}
               onOpenGrammarBreakdown={onOpenGrammarBreakdown}
               onDeleteMessage={null}
             />

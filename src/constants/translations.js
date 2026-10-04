@@ -4,6 +4,9 @@
 
 export const TRANSLATIONS = {
   es: {
+    chat_audio_pause: "Pausar mensaje",
+    chat_audio_resume: "Reanudar mensaje",
+    chat_audio_listen: "Escuchar mensaje",
     font_download_unsupported: "Este navegador no permite guardar fuentes para usarlas sin conexión. Podés seguir usándolas con internet.",
     font_download_space_error: "No hay suficiente espacio para guardar esta fuente. Liberá espacio y volvé a intentarlo.",
     font_download_error: "No se pudo completar la descarga. Revisá tu conexión y volvé a intentarlo.",
@@ -438,6 +441,9 @@ export const TRANSLATIONS = {
     habit_card_action: 'Abrir seguimiento de hábitos'
   },
   en: {
+    chat_audio_pause: "Pause message",
+    chat_audio_resume: "Resume message",
+    chat_audio_listen: "Listen to message",
     font_download_unsupported: "This browser does not support saving fonts for offline use. You can still use them online.",
     font_download_space_error: "There is not enough space to save this font. Free up storage and try again.",
     font_download_error: "Could not finish downloading. Check your connection and try again.",
