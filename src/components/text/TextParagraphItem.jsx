@@ -568,37 +568,39 @@ function TextParagraphItemComponent({
           </button>
 
           {/* Paragraph Gloss Button (🔤) - Glosses ONLY this paragraph */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isComplete && !isGlossing && handleGloss) {
-                handleGloss(paragraph);
+          {interlinearMode && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isComplete && !isGlossing && handleGloss) {
+                  handleGloss(paragraph);
+                }
+              }}
+              disabled={isGlossing || isComplete || isRetryingSimplification}
+              aria-label={isSpanish ? 'Glosar este párrafo' : 'Gloss this paragraph'}
+              title={
+                isGlossing
+                  ? (isSpanish ? 'Glosando este párrafo...' : 'Glossing this paragraph...')
+                  : isComplete
+                  ? (isSpanish ? 'Párrafo glosado' : 'Paragraph glossed')
+                  : (isSpanish ? 'Glosar este párrafo con IA' : 'Gloss this paragraph with AI')
               }
-            }}
-            disabled={isGlossing || isComplete || isRetryingSimplification}
-            aria-label={isSpanish ? 'Glosar este párrafo' : 'Gloss this paragraph'}
-            title={
-              isGlossing
-                ? (isSpanish ? 'Glosando este párrafo...' : 'Glossing this paragraph...')
-                : isComplete
-                ? (isSpanish ? 'Párrafo glosado' : 'Paragraph glossed')
-                : (isSpanish ? 'Glosar este párrafo con IA' : 'Gloss this paragraph with AI')
-            }
-            className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer ${
-              isGlossing
-                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/50 cursor-wait'
-                : isComplete
-                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 cursor-default'
-                : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            {isGlossing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Languages className={`w-4 h-4 ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`} />
-            )}
-          </button>
+              className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer ${
+                isGlossing
+                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/50 cursor-wait'
+                  : isComplete
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 cursor-default'
+                  : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-hover)] border border-[var(--border-primary)] hover:border-rose-500/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {isGlossing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Languages className={`w-4 h-4 ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`} />
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>
