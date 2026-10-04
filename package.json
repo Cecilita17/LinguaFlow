@@ -12,7 +12,7 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test server/chatAudioPause.test.js server/koreanLanguage.test.js server/callMuteSubmission.test.js server/cartesiaVoices.test.js server/authSessionPersistence.test.js server/youtubeCaptionUtils.test.js server/chatCompactResponse.test.js server/glossErrors.test.js server/epubParagraphRetry.test.js server/glossBatchPolicy.test.js server/audioWordSync.test.js server/browserSpeechVoices.test.js server/fontPreferences.test.js server/readerPagePosition.test.js server/offlineFontService.test.js"
+    "test": "node --test server/portugueseLanguage.test.js server/chatAudioPause.test.js server/koreanLanguage.test.js server/callMuteSubmission.test.js server/cartesiaVoices.test.js server/authSessionPersistence.test.js server/youtubeCaptionUtils.test.js server/chatCompactResponse.test.js server/glossErrors.test.js server/epubParagraphRetry.test.js server/glossBatchPolicy.test.js server/audioWordSync.test.js server/browserSpeechVoices.test.js server/fontPreferences.test.js server/readerPagePosition.test.js server/offlineFontService.test.js"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

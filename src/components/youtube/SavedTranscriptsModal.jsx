@@ -26,6 +26,7 @@ const LANGUAGE_META = {
   de: { name: 'Alemán', flag: '🇩🇪' },
   fr: { name: 'Francés', flag: '🇫🇷' },
   it: { name: 'Italiano', flag: '🇮🇹' },
+  pt: { name: 'Portugués', flag: '🇧🇷' },
   nl: { name: 'Nederlands', flag: '🇳🇱' },
   tr: { name: 'Turco', flag: '🇹🇷' }
 };
