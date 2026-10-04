@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { estimateSpeechDurationMs } from '../utils/audioWordSync.js';
 import { transcribeAudioApi } from '../services/chatService.js';
 import { useAudioSettings, mapSpeechRateToUtteranceRate } from '../context/AudioSettingsContext.jsx';
 
@@ -440,7 +441,7 @@ export function useSpeech({
   }, [stopRecordingInternal]);
 
   // Text to Speech (TTS)
-  const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback, messageId = null) => {
+  const speakText = useCallback((text, langCode = targetLangCode, rate = 0.95, onEndCallback, onBoundaryCallback, messageId = null, resumeOffset = 0) => {
     const playbackId = ++playbackIdRef.current;
     if (!window.speechSynthesis) return;
 
@@ -454,13 +455,18 @@ export function useSpeech({
     const cleanText = text.replace(/<[^>]*>/g, '').trim();
     if (!cleanText) return;
 
-    activeSpeechRef.current = { text: cleanText, langCode, messageId, paused: false };
+    const offset = Math.max(0, Math.min(cleanText.length - 1, resumeOffset));
+    activeSpeechRef.current = {
+      text: cleanText, langCode, messageId, rate, paused: false,
+      offset, charIndex: offset, hasBoundary: false, startedAt: 0,
+      onEndCallback, onBoundaryCallback
+    };
     setIsSpeechPaused(false);
     setSpeakingMessageId(messageId);
     setSpeakingText(cleanText);
-    setSpeakingCharIndex(0);
+    setSpeakingCharIndex(offset);
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
+    const utterance = new SpeechSynthesisUtterance(cleanText.slice(offset));
     utterance.lang = langCode;
     utterance.rate = mapSpeechRateToUtteranceRate(rate);
 
@@ -472,17 +478,20 @@ export function useSpeech({
 
     utterance.onstart = () => {
       if (playbackId !== playbackIdRef.current) return;
+      activeSpeechRef.current.startedAt = Date.now();
       setIsSpeaking(true);
-      setSpeakingCharIndex(0);
+      setSpeakingCharIndex(offset);
     };
 
     utterance.onboundary = (event) => {
       if (playbackId !== playbackIdRef.current) return;
       if (typeof event.charIndex === 'number' && event.charIndex >= 0) {
-        setSpeakingCharIndex(event.charIndex);
+        activeSpeechRef.current.charIndex = offset + event.charIndex;
+        activeSpeechRef.current.hasBoundary = true;
+        setSpeakingCharIndex(offset + event.charIndex);
       }
       if (onBoundaryCallback) {
-        onBoundaryCallback(event);
+        onBoundaryCallback({ charIndex: offset + event.charIndex, charLength: event.charLength, name: event.name, elapsedTime: event.elapsedTime });
       }
     };
 
@@ -516,10 +525,41 @@ export function useSpeech({
     const cleanText = text.replace(/<[^>]*>/g, '').trim();
     const active = activeSpeechRef.current;
     if (active && active.text === cleanText && active.langCode === langCode && active.messageId === messageId) {
-      if (active.paused) engine.resume();
-      else engine.pause();
-      active.paused = !active.paused;
-      setIsSpeechPaused(active.paused);
+      const needsRestart = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+      if (active.paused) {
+        if (needsRestart) {
+          speakText(active.text, active.langCode, active.rate, active.onEndCallback,
+            active.onBoundaryCallback, active.messageId, active.charIndex);
+        } else {
+          engine.resume();
+          active.paused = false;
+          setIsSpeechPaused(false);
+        }
+      } else {
+        active.paused = true;
+        if (needsRestart) {
+          if (!active.hasBoundary && active.startedAt > 0) {
+            // Mobile voices may provide no word events. Estimate progress only
+            // in that case, then round back to a word start to avoid cutting it.
+            const remainingText = active.text.slice(active.offset);
+            const duration = estimateSpeechDurationMs(remainingText, active.langCode.split('-')[0], active.rate);
+            const elapsed = Math.max(0, Date.now() - active.startedAt);
+            const estimatedChar = Math.min(remainingText.length - 1, Math.floor(remainingText.length * elapsed / Math.max(400, duration)));
+            const parts = typeof Intl.Segmenter === 'function'
+              ? Array.from(new Intl.Segmenter(active.langCode, { granularity: 'word' }).segment(remainingText))
+              : Array.from(remainingText.matchAll(/\S+/gu), match => ({ index: match.index }));
+            const wordStart = parts.filter(part => part.index <= estimatedChar && part.isWordLike !== false).at(-1)?.index || 0;
+            active.charIndex = active.offset + wordStart;
+          }
+          // Android pause/resume is unreliable: cancel the native utterance,
+          // retaining our message and position for the next button press.
+          playbackIdRef.current++;
+          engine.cancel();
+        } else {
+          engine.pause();
+        }
+        setIsSpeechPaused(true);
+      }
       return;
     }
     speakText(text, langCode, rate, undefined, undefined, messageId);
